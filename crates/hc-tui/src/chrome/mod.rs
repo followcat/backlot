@@ -15,6 +15,7 @@ pub mod endpoints;
 pub(crate) mod help;
 pub(crate) mod help_launcher;
 pub(crate) mod help_picker;
+pub(crate) mod history;
 pub(crate) mod lot;
 pub(crate) mod menu;
 pub mod mobile;

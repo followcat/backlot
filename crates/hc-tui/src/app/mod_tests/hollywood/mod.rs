@@ -13,6 +13,7 @@ mod liveness;
 mod menu;
 mod mouse;
 mod opening;
+mod s1_compose;
 mod setup;
 mod stage;
 
@@ -374,10 +375,12 @@ async fn alt_y_cycles_strip_then_panel_then_strip() {
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
-    // From hidden the toggle shows the strip again.
+    // From hidden the toggle expands straight into Compose (S1).
     app.hollywood.mode = LayerMode::Hidden;
     alt_y(&mut app);
-    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
     // Nothing reached the program through any of it.
     assert_eq!(app.pane.input_backlog().0, 0, "the toggle leaked");
 }

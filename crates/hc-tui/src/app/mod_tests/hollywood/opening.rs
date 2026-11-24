@@ -82,9 +82,8 @@ async fn the_cards_h_opens_the_tell_line_over_the_page() {
     assert!(text.contains("H O L L Y W O O D"), "{text}");
 }
 
-/// A calm sheet opens as a dialog: the `tell` line edits at once,
-/// typed letters land in it — Esc, not a key hunt, is the way out.
-/// A sheet with a waiting item keeps its letters instead.
+/// S1: expanding with `[hollywood]` set always opens Compose on `Target::Input`
+/// even when waiting cards exist (which stay visible above).
 #[tokio::test]
 async fn a_calm_sheet_opens_editing_a_waiting_one_does_not() {
     let mut app = page_app();
@@ -98,23 +97,32 @@ async fn a_calm_sheet_opens_editing_a_waiting_one_does_not() {
     alt_y(&mut busy);
     assert_eq!(busy.hollywood.mode, LayerMode::Expanded);
     assert!(
-        !busy.hollywood.editing,
-        "a waiting card keeps its a/x letters"
+        busy.hollywood.editing,
+        "S1: Alt+Y lands ready to type even with waits"
     );
+    assert_eq!(busy.hollywood.selected, Some(Target::Input));
     assert_eq!(busy.hollywood.input.as_str(), "");
 }
 
-/// `↑` out of a composing line rests it a row up, draft kept; `↓`
-/// steps back onto the `›` row still `Resting` — walking onto the
-/// line never arms `Compose`, `Enter` does. `Esc` in `Compose`
-/// rests; the resting `Esc` collapses the sheet (R3-2/R3-B2).
+/// In Compose, `↑` stays on the `›` line (recalling history) and `Esc` rests on
+/// `Input` keeping the draft; from Resting, `↑` walks rows, `↓` returns to
+/// `Input` Resting, `Enter` re-arms Compose, and `Esc` collapses (S1).
 #[tokio::test]
 async fn up_rests_a_row_up_and_esc_rest_then_collapse() {
     let mut app = page_app();
     alt_y(&mut app);
     assert!(app.hollywood.editing);
     key(&mut app, hc_vt::Key::Char('h'));
-    // A draft survives the step out: `↑` rests the line a row up.
+    // In Compose, `↑` stays on the line without leaving Compose.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert!(app.hollywood.editing);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // `Esc` rests on `Input`, keeping the draft; then `↑` steps up a row.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert_eq!(app.hollywood.input.as_str(), "h");
     key(&mut app, hc_vt::Key::ArrowUp);
     assert!(!app.hollywood.editing);
     assert!(app.hollywood.selected != Some(Target::Input));

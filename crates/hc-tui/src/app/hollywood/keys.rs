@@ -33,48 +33,9 @@ impl App {
         if self.hollywood.confirm.is_some() {
             return;
         }
-        // `Tab` / `Shift+Tab` switches between the upper studio frames
-        // and the lower waiting/exchange/input band, even from `Compose`
-        // (resting the input line while preserving any draft).
-        if matches!(code, KeyCode::Tab | KeyCode::BackTab)
-            && (modifiers.is_empty() || modifiers == KeyModifiers::SHIFT)
-            && matches!(
-                key.input.action,
-                hc_vt::Action::Press | hc_vt::Action::Repeat
-            )
-        {
-            self.hollywood_switch_section();
-            return;
-        }
-        // `Compose` (R3-B2/R3-2): the `›` line owns every key —
-        // `⏎` sends and stays in Compose for the next `tell
-        // hollywood`, `esc` rests the line keeping its draft, `↑`
-        // rests and steps up one row, the rest is the editor's.
-        if self.hollywood.editing {
-            if code == KeyCode::Esc && modifiers.is_empty() {
-                // One Esc out of Compose rests the line — draft and
-                // all. The Esc that collapses the sheet is the
-                // resting one below, a press later.
-                self.hollywood.editing = false;
-                return;
-            }
-            if code == KeyCode::Enter && modifiers.is_empty() {
-                self.hollywood_input_submit();
-                return;
-            }
-            // `↑` is how a composing line steps out into the rows —
-            // Esc no longer doubles as vertical navigation.
-            if code == KeyCode::Up && modifiers.is_empty() {
-                self.hollywood.editing = false;
-                self.hollywood_row_move(-1);
-                return;
-            }
-            let _ = self.hollywood.input.handle_key(key);
-            return;
-        }
-        // Prefix plumbing while the layer owns the keys: an armed
-        // prefix that is not the layer's own chord (that was
-        // intercepted by the caller) disarms and is eaten.
+        // Prefix plumbing while the layer owns the keys: `prefix` arms
+        // even from `Compose` (matching the focused Studio Dock), so
+        // chords like `Ctrl+B y` stay reachable.
         if self.prefix.armed() {
             self.prefix.reset();
             self.prefix.swallow(key);
@@ -82,6 +43,67 @@ impl App {
         }
         if self.live.matches_prefix(&combo) {
             let _ = self.prefix.feed(key, &self.live);
+            return;
+        }
+        // `Tab` / `Shift+Tab` cycles the 3-zone Call Sheet ring
+        // (`Compose → Waiting/Exchange → Studios`), skipping empty zones.
+        if matches!(code, KeyCode::Tab | KeyCode::BackTab)
+            && (modifiers.is_empty() || modifiers == KeyModifiers::SHIFT)
+            && matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            )
+        {
+            let forward = code == KeyCode::Tab;
+            self.hollywood_switch_zone(forward);
+            return;
+        }
+        // `Compose` (R3-B2/R3-2 + S1): the `›` line owns every key —
+        // `⏎` sends and stays in Compose, `esc` rests on `›` keeping its
+        // draft (even when empty), plain `↑`/`↓` step input history
+        // without leaving Compose, the rest is the editor's.
+        if self.hollywood.editing {
+            if !matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            ) {
+                return;
+            }
+            if code == KeyCode::Esc && modifiers.is_empty() {
+                if key.input.action != hc_vt::Action::Press {
+                    return;
+                }
+                // One Esc out of Compose rests on `›` — draft (even
+                // empty) intact. The second Esc in Resting collapses.
+                self.hollywood.editing = false;
+                self.hollywood.history.reset_nav();
+                return;
+            }
+            if code == KeyCode::Enter && modifiers.is_empty() {
+                if key.input.action != hc_vt::Action::Press {
+                    return;
+                }
+                self.hollywood_input_submit();
+                return;
+            }
+            if code == KeyCode::Up && modifiers.is_empty() {
+                self.sync_hollywood_history();
+                let current = self.hollywood.input.as_str().to_owned();
+                if let Some(entry) = self.hollywood.history.step_up(&current) {
+                    self.hollywood.input.clear();
+                    let _ = self.hollywood.input.insert(&entry);
+                }
+                return;
+            }
+            if code == KeyCode::Down && modifiers.is_empty() {
+                self.sync_hollywood_history();
+                if let Some(entry) = self.hollywood.history.step_down() {
+                    self.hollywood.input.clear();
+                    let _ = self.hollywood.input.insert(&entry);
+                }
+                return;
+            }
+            let _ = self.hollywood.input.handle_key(key);
             return;
         }
         let plain = modifiers.is_empty();
@@ -170,6 +192,7 @@ impl App {
     pub(crate) fn hollywood_collapse(&mut self) {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
+        self.hollywood.history.reset_nav();
         self.hollywood.view = None;
         self.hollywood.confirm = None;
     }

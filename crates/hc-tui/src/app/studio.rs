@@ -35,6 +35,8 @@ impl App {
             self.last_current_studio = self.studio.current.clone();
             self.shell_state.reveal_studio_row = true;
         }
+        self.hollywood_sync_history_from(&machines);
+        self.panel.sync_histories(&machines);
         self.sync_lot(&machines);
         // W1b: the empty lot's line — no document lists a studio, but a
         // stopped machine's ledger does. Read here so the panel, its

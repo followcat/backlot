@@ -86,6 +86,10 @@ pub(crate) struct Panel {
     /// Resting on the row keeps the draft for the next `Compose`.
     pub drafts:
         std::collections::HashMap<crate::studio::StudioKey, crate::chrome::text_editor::TextEditor>,
+    /// Per-studio `›` input history seeded from `StudioSummary.exchange`
+    /// plus local submits in this session.
+    pub histories:
+        std::collections::HashMap<crate::studio::StudioKey, crate::chrome::history::ComposeHistory>,
     /// Whether the `›` line owns the keys — `Compose` vs `Resting`
     /// on a `Target::Input` row. Only `Enter`/`i`/`/`/a click arms
     /// it; selection movement, `Esc`, `↑` and a send all clear it.
@@ -132,6 +136,7 @@ impl Panel {
             accepted_folds: Default::default(),
             finish_confirm: None,
             drafts: std::collections::HashMap::new(),
+            histories: std::collections::HashMap::new(),
             editing: false,
             spin: 0,
             drag_width: None,
@@ -175,5 +180,38 @@ impl Panel {
     /// Drop the studio's draft — a send already did its work.
     pub(crate) fn clear_draft(&mut self, key: &crate::studio::StudioKey) {
         self.drafts.remove(key);
+    }
+
+    /// Per-studio Compose history entry, created on first access.
+    pub(crate) fn history_mut(
+        &mut self,
+        key: &crate::studio::StudioKey,
+    ) -> &mut crate::chrome::history::ComposeHistory {
+        self.histories.entry(key.clone()).or_default()
+    }
+
+    /// Sync every visible studio's history from `StudioSummary.exchange`.
+    pub(crate) fn sync_histories(&mut self, machines: &[crate::panel::data::MachineSummary]) {
+        for m in machines {
+            for studio in &m.summary.studios {
+                let key = crate::studio::StudioKey {
+                    machine: m.machine.clone(),
+                    id: studio.id.clone(),
+                };
+                self.history_mut(&key).sync(
+                    studio
+                        .exchange
+                        .iter()
+                        .map(|e| (e.seq, e.who.as_str(), e.text.as_str())),
+                );
+            }
+        }
+    }
+
+    /// Reset active history navigation cursors/stashes across every studio.
+    pub(crate) fn reset_history_nav(&mut self) {
+        for history in self.histories.values_mut() {
+            history.reset_nav();
+        }
     }
 }

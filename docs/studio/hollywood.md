@@ -60,9 +60,12 @@ up — and a studio that arrives later never pulls the bar open. Neither the car
 draws before that first read settles (two seconds at most), so a client with studios never
 flashes the welcome card.
 
-The key is **`alt+y`**, a direct key with no prefix, plus the `Ctrl+B i` chord tail. It switches
-collapsed and expanded and shows the layer when hidden; `x` in the expanded bar hides it; `Esc`
-collapses it. `[keys] call_sheet` rebinds the direct key and `[keys] prefix_call_sheet` the
+The key is **`alt+y`**, a direct key with no prefix, plus the `Ctrl+B i` chord tail. From Hidden
+or Collapsed it expands straight into Compose (`›`) when `[hollywood]` is set (waiting items stay
+visible above; unconfigured keeps wait/frame landing), and from Expanded it collapses keeping any
+draft; `Esc` in Compose rests on `›` keeping the draft, and a second `Esc` in Resting collapses
+it. Toast jumps (`Ctrl+B o` or click) still land on their named target in Resting. `[keys]
+call_sheet` rebinds the direct key and `[keys] prefix_call_sheet` the
 chord tail — an empty string unbinds that slot; `[hollywood] key` fills whichever slot `[keys]`
 leaves unset (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
 bound in studio mode with or without a `[hollywood]` table; under `--plain` it is not bound, so
@@ -79,10 +82,12 @@ notice that names the file and never echoes the value. Known costs, said plainly
 
 The studio panel keeps `prefix+y`.
 
-Inside the expanded bar: `←` `→` (or `h` `l`) move between the frames, the new-studio frame
-included; `↓` `↑` (or `j` `k`) leave the frames for the waiting rows and come back;
-`PageUp` / `PageDown` scroll the waiting list; `1`–`9` jump to a frame and `0` to the
-new-studio frame; `Enter` activates the selection. Each waiting row has its own keys: on a
+Inside the expanded bar: `Tab` / `Shift+Tab` cycles the three zones — `Compose (›)` →
+`Waiting/Exchange` (first waiting item, or newest exchange row) → `Studios` (upper frames) —
+skipping empty zones (`Shift+Tab` reverses); in Resting, `←` `→` (or `h` `l`) move between the
+frames (new-studio included) or action chips, `↓` `↑` (or `j` `k`) walk within the active section,
+`PageUp` / `PageDown` scroll the waiting list, `1`–`9` jump to a frame and `0` to the
+new-studio frame, and `Enter` activates the selection. Each waiting row has its own keys: on a
 **prompt** row `y` answers `allow` and `d` answers `deny` (`backlot approve --person <role>
 --decision <d>` on the prompt's own machine), `p` peeks at the role's live screen read-only;
 on a **stage** row `s` runs `backlot stage start` on that machine, and an offline machine's
@@ -102,9 +107,14 @@ the pane. Right-click on the title or a row opens the same context menu `m` open
 `s` on any card opens `backlot card show <id>` in the read-only view. The view owns its keys
 until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.
 
-The input line (`i` or a click) is one line sent with `backlot tell hollywood "<line>"` as the
-user — never written into Hollywood's terminal. Empty sends nothing; `Esc` leaves the line;
-Enter sends and leaves it.
+The input line (`Alt+Y` open, `i`, `Enter` on `›`, or a click) sends one line with
+`backlot tell hollywood "<line>"` as the user — never written into Hollywood's terminal. While
+composing, plain `↑`/`↓` step through `user` exchange history (`HollywoodSummary.exchange` plus
+local sends, consecutive repeats collapsed), saving and restoring any unsent draft; `Alt+arrows`
+remain studio/role navigation; `Enter` on non-empty text sends and stays in Compose (empty
+rests); `Esc` always rests on `›` keeping the draft (never collapsing), and a second `Esc`
+collapses. While composing, the footer names `⏎ send   ↑↓ history   tab waiting   esc rows   alt+y close`
+(or `tab studios` when nothing waits), fitting narrower widths down to `⏎ ↑↓ esc`.
 
 Under the newest `user ›` line the band shows what Hollywood is doing with it, for as long as
 that line has no `hollywood` reply after it: `… sending to hollywood` while the line is still in

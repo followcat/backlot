@@ -145,6 +145,7 @@ impl App {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
         self.panel.editing = false;
+        self.panel.reset_history_nav();
         self.panel.selected = None;
         self.panel.selected_row = None;
         self.panel.drawer = None;
@@ -155,6 +156,7 @@ impl App {
     /// closes (the pane becomes visible), beside stays open unfocused.
     pub(super) fn panel_leave(&mut self) {
         self.panel.editing = false;
+        self.panel.reset_history_nav();
         if self.panel_fullscreen() {
             self.panel_close();
         } else {

@@ -74,7 +74,9 @@ async fn up_down_and_esc_preserve_panel_editing_invariant_across_talk_rows() {
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
     assert!(app.panel_editing());
 
-    // `Up` steps onto the newest Talk row (#12) and exits editing mode.
+    // `Esc` exits editing onto `Input` (Resting); `Up` steps onto the newest Talk row (#12).
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel_editing());
     key(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(
         app.panel.selected,

@@ -116,6 +116,7 @@ pub(crate) struct Hollywood {
     /// keys (`i` or a click opens it, `Esc` leaves it).
     pub input: TextEditor,
     pub editing: bool,
+    pub history: crate::chrome::history::ComposeHistory,
     /// A card's "Show me" read — `card show <id>` output in a
     /// read-only box over the layer.
     pub view: Option<CardView>,
@@ -152,6 +153,7 @@ impl Hollywood {
             scroll: 0,
             input: TextEditor::new("", false),
             editing: false,
+            history: Default::default(),
             view: None,
             confirm: None,
             pending: None,

@@ -16,6 +16,7 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   and inline (merged in order with a deferred-notice footer), filters closed/`info`/duplicate card
   notices, supports `--answers` (`message.seen`) to prevent re-delivering answered messages, and
   refreshes `AGENTS.md` on adopt.
+- **Call Sheet `Alt+Y` Compose landing, universal `›` history, `Esc` resting, and 3-zone `Tab` ring.** Call Sheet `Alt+Y` now opens straight into Compose from Hidden or Collapsed, adds shell-like `↑`/`↓` message history to every `›` line (Call Sheet and Studio Dock), uses `Esc` to leave Compose, and cycles `Tab` across Compose → Waiting → Studios.
 
 ## 0.4.1 — 2026-11-25
 

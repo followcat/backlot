@@ -107,7 +107,20 @@ pub(crate) fn for_row(
     width: usize,
 ) -> String {
     if editing && matches!(selected, Some(Target::Input)) {
-        return ["⏎ send   ↑/tab/esc done", "⏎ ↑/esc", "esc"]
+        let tiers = if waits.is_empty() {
+            [
+                "⏎ send   ↑↓ history   tab studios   esc rows   alt+y close",
+                "⏎ send  ↑↓ hist  tab studios  esc rows",
+                "⏎ ↑↓ esc",
+            ]
+        } else {
+            [
+                "⏎ send   ↑↓ history   tab waiting   esc rows   alt+y close",
+                "⏎ send  ↑↓ hist  tab waits  esc rows",
+                "⏎ ↑↓ esc",
+            ]
+        };
+        return tiers
             .into_iter()
             .find(|tier| display_width(tier) <= width)
             .unwrap_or_default()

@@ -11,7 +11,7 @@ async fn apply_and_cancel_run_the_exact_argv() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood_select(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('a'));
     key(&mut app, hc_vt::Key::Char('x'));
     assert!(app.studio_dialog.is_some(), "the cancel reason dialog");
@@ -45,7 +45,7 @@ async fn enter_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
     }));
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c4".into()));
+    app.hollywood_select(Target::Card("c4".into()));
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
@@ -78,7 +78,7 @@ async fn the_view_applies_and_cancels_the_card_it_shows() {
     }));
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood_select(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Enter);
     let result = app.action_rx.recv().await.expect("the view");
     app.on_action_reply(result);
@@ -166,7 +166,7 @@ async fn enter_runs_card_show_on_any_card() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood_select(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
@@ -179,7 +179,7 @@ async fn enter_on_the_title_focuses_bl_hollywood() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Title);
+    app.hollywood_select(Target::Title);
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused.as_deref(), Some("t10"));
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
@@ -190,7 +190,7 @@ async fn enter_on_a_studio_row_focuses_its_producer() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Studio("acme-shop".into()));
+    app.hollywood_select(Target::Studio("acme-shop".into()));
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused.as_deref(), Some("t1"));
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
@@ -203,8 +203,7 @@ async fn the_input_line_sends_tell_hollywood_and_empty_sends_nothing() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
-    key(&mut app, hc_vt::Key::Char('i'));
-    // Empty input: Enter sends nothing and still leaves the line.
+    // Empty input: Enter sends nothing and still leaves Compose.
     key(&mut app, hc_vt::Key::Enter);
     assert!(recorded.lock().unwrap().is_empty());
     assert!(!app.hollywood.editing);
@@ -257,7 +256,7 @@ async fn a_prompt_peek_answers_y_and_d() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Prompt("acme-shop".into(), "producer".into()));
+    app.hollywood_select(Target::Prompt("acme-shop".into(), "producer".into()));
     key(&mut app, hc_vt::Key::Char('p'));
     assert!(app.peek.is_some(), "the peek opened on the producer");
     // The prompt footer advertises the answers.
@@ -316,7 +315,7 @@ async fn y_on_the_hollywood_prompt_row_sends_the_one_time_allow() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Hollywood);
+    app.hollywood_select(Target::Hollywood);
     key(&mut app, hc_vt::Key::Char('y'));
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
@@ -364,7 +363,7 @@ async fn a_prompt_the_runner_cannot_answer_sends_nothing() {
             .any(|t| matches!(t, Target::Prompt(_, role) if role == "producer")),
         "the needs-you entry stays: {targets:?}"
     );
-    app.hollywood.selected = Some(Target::Prompt("acme-shop".into(), "producer".into()));
+    app.hollywood_select(Target::Prompt("acme-shop".into(), "producer".into()));
     key(&mut app, hc_vt::Key::Char('y'));
     key(&mut app, hc_vt::Key::Char('d'));
     assert!(
@@ -385,7 +384,7 @@ async fn a_frame_peek_opens_the_on_set_role_without_a_phantom_prompt() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Studio("acme-shop".into()));
+    app.hollywood_select(Target::Studio("acme-shop".into()));
     key(&mut app, hc_vt::Key::Char('p'));
     let Some(peek) = app.peek.as_ref() else {
         panic!("p on a studio frame peeks the on-set role");
@@ -455,7 +454,7 @@ async fn enter_on_talk_and_headline_opens_read_only_card_view_and_esc_preserves_
 
     // Enter on `Target::Talk(8)` runs `hollywood show 8` instead of focusing `bl-hollywood`.
     let focused_before = app.focused.clone();
-    app.hollywood.selected = Some(Target::Talk(8));
+    app.hollywood_select(Target::Talk(8));
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused, focused_before, "raw terminal not focused");
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
@@ -487,7 +486,7 @@ async fn enter_on_talk_and_headline_opens_read_only_card_view_and_esc_preserves_
     );
 
     // Enter on `Target::Headline` resolves `headline_seq` (9) and opens `hollywood show 9`.
-    app.hollywood.selected = Some(Target::Headline);
+    app.hollywood_select(Target::Headline);
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().last().unwrap().as_slice(),

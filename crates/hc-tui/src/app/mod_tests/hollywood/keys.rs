@@ -38,6 +38,7 @@ async fn a_configured_chord_toggles_through_the_prefix() {
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     prefix(&mut app);
     key(&mut app, hc_vt::Key::Char('h'));
@@ -72,8 +73,11 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // Opening lands in the lower section on the most urgent item —
-    // the first waiting card (S1 A2.1).
+    // S1: Alt+Y lands in Compose; first `Tab` lands on first waiting item (`c3`) Resting.
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
+    key(&mut app, hc_vt::Key::Tab);
+    assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
     // In `Lower`, ↑/↓ walk strictly within the band and clamp at the
     // top (Headline) without jumping into the studio frames.
@@ -119,8 +123,10 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
         Some(Target::Studio("beta-tools".into()))
     );
 
-    // `Tab` returns to `Lower` and restores the remembered lower row,
-    // then `Tab` again returns to the remembered upper frame.
+    // 3-zone ring from `Upper`: `Tab` -> `Compose` -> `Waiting` (`c3`) -> `Upper` (`beta-tools`).
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
     key(&mut app, hc_vt::Key::Tab);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
     key(&mut app, hc_vt::Key::Tab);
@@ -137,25 +143,30 @@ async fn tab_switches_sections_from_compose_while_keeping_draft_and_section_memo
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    key(&mut app, hc_vt::Key::Char('i'));
     key(&mut app, hc_vt::Key::Char('h'));
     key(&mut app, hc_vt::Key::Char('i'));
     assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "hi");
 
-    // `Tab` out of `Compose` rests editing, keeps the draft, and moves to `Upper`.
+    // `Tab` out of `Compose` rests editing, keeps the draft, and hits first Wait (`c3`),
+    // then `Studios` (`Upper`), then back into `Compose`.
     key(&mut app, hc_vt::Key::Tab);
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "hi");
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Tab);
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("acme-shop".into()))
     );
 
-    // `Shift+Tab` (`BackTab`) brings back the remembered `Input` row without
+    // `Shift+Tab` (`BackTab`) reverses back to `Waiting` (`c3`), then `Compose` (`Input`) without
     // losing the draft.
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "hi");
 }
 
@@ -180,8 +191,9 @@ async fn lower_section_arrows_walk_hollywood_ask_live_and_input_without_looping(
     app.reconcile_published_view();
     app.area = (120, 30);
     alt_y(&mut app);
+    // `Tab` from Compose lands on the first waiting item (`Wait::Hollywood`).
+    key(&mut app, hc_vt::Key::Tab);
 
-    // Opening lands on `Wait::Hollywood` (not `Row::Live`).
     assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
     // ↓ walks past Talk(8) -> HollywoodLive -> Input and clamps at Input.
     let mut visited = vec![app.hollywood.selected.clone().unwrap()];
@@ -218,10 +230,11 @@ async fn esc_collapses_and_x_is_the_card_cancel() {
     app.area = (120, 24);
     alt_y(&mut app);
     key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     // `x` is no hide now — on a selected card it is its cancel.
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood_select(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('x'));
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     key(&mut app, hc_vt::Key::Enter);
@@ -249,8 +262,6 @@ async fn the_input_line_edits_then_esc_leaves() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    key(&mut app, hc_vt::Key::Char('i'));
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
     // Typing lands in the editor, not the pane.
@@ -267,7 +278,7 @@ async fn i_from_a_non_input_row_moves_selection_to_input() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Studio("acme-shop".into()));
+    app.hollywood_select(Target::Studio("acme-shop".into()));
     assert!(!app.hollywood.editing);
 
     key(&mut app, hc_vt::Key::Char('i'));
@@ -298,6 +309,7 @@ async fn n_opens_the_new_studio_wizard_and_collapses_the_bar() {
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Escape);
     key(&mut app, hc_vt::Key::Char('n'));
     assert_eq!(
         app.hollywood.mode,
@@ -313,7 +325,7 @@ async fn enter_on_the_new_studio_frame_opens_the_wizard() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::NewStudio);
+    app.hollywood_select(Target::NewStudio);
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     assert!(app.new_studio.is_some(), "the native dialog opened");
@@ -328,7 +340,7 @@ async fn esc_on_a_sheet_menu_keeps_the_bar_owning_keys() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood_select(Target::Card("c3".into()));
     let before = app.pane.input_backlog().0;
     key(&mut app, hc_vt::Key::Char('m'));
     let studio_menu = matches!(
@@ -358,6 +370,7 @@ async fn question_mark_opens_the_help_launcher_over_the_band() {
     app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
     app.area = (140, 40);
     alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
     key(&mut app, hc_vt::Key::Char('?'));
     assert!(app.help, "`?` reached the help");
     let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
@@ -373,6 +386,7 @@ async fn a_kitty_shifted_question_mark_opens_the_help_too() {
     app.area = (140, 40);
     app.host_reports_all_keys = true;
     alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
     key_mods(&mut app, hc_vt::Key::Char('?'), hc_vt::Mods::SHIFT);
     assert!(app.help, "Shift+? is `?` on a kitty host");
     let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
@@ -387,7 +401,6 @@ async fn paste_and_ime_land_only_in_a_composing_line() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
-    key(&mut app, hc_vt::Key::Char('i'));
     assert!(app.hollywood.editing);
     app.on_input(UiEvent::Paste(b"via paste".to_vec()), 120);
     assert_eq!(app.hollywood.input.as_str(), "via paste");
@@ -410,6 +423,7 @@ async fn home_end_move_the_sheet_or_the_lines_cursor() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
     // Resting: End lands on the band's last row (the `›` line),
     // Home on the first frame — never arms Compose.
     key(&mut app, hc_vt::Key::End);

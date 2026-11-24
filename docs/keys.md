@@ -90,11 +90,12 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
 | `s`/`f` | Start the stage / finish the studio |
+| `i` / `/` | Edit the selected studio's `›` line (`Enter` sends and rests; `↑`/`↓` step that studio's `user` history and restore any unsent draft; `Esc` rests keeping the draft) |
 | `m` | The row's context menu — same list a right-click opens |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open this help |
-| `Esc` | Beside the panes: unfocus the dock. As an overlay: close |
+| `Esc` | While composing on `›`: rest keeping any draft. Otherwise beside the panes: unfocus the dock. As an overlay: close |
 
 Right-click on a dock row selects it and opens the same menu `m` opens on the selection.
 While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second
@@ -122,8 +123,11 @@ never covers the studios: it opens the new-studio dialog directly instead.
 
 ## The Hollywood bar
 
-`Alt+Y` — a direct key, no prefix — toggles the film-strip band dropped from the top. Collapsed,
-the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
+`Alt+Y` — a direct key, no prefix — toggles the film-strip band dropped from the top. From Hidden
+or Collapsed, one `Alt+Y` expands straight into Compose (`›`) when `[hollywood]` is configured
+(waiting items remain visible above; unconfigured keeps wait/frame landing). From Expanded, one
+`Alt+Y` collapses back keeping any draft. Toast jumps (`Ctrl+B o` or click) still land on their
+named item in Resting. Collapsed, the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
 the tab bar — or of the one-row studio header on a studio workspace — that counts the urgent
 items (`U`: your prompts, stopped stages, ledger errors), the open cards and studios ready to
 finish (`C`), and the studios (`✦`). In studio mode the bar exists even with no `[hollywood]`
@@ -132,15 +136,16 @@ program. `[keys] call_sheet` rebinds the direct key (empty string unbinds it), `
 prefix_call_sheet` the prefix-chord tail (`Ctrl+B i` by default), and `[hollywood] key` fills
 whichever slot `[keys]` leaves unset. `[hollywood] start` picks the start policy: `collapsed`
 (the default — the bar no longer opens by itself), `when_waiting` (expanded only while U > 0),
-or `expanded`. While the band is expanded it owns these keys:
+or `expanded`. While the band is expanded it owns these keys (`Alt+arrows` still step studio and
+role navigation cleanly from Compose):
 
 | Keys | Action |
 |---|---|
-| `Tab`/`Shift+Tab` | Switch focus between the upper studio frames section and the lower waiting / exchange / input section |
+| `Tab`/`Shift+Tab` | Cycle the 3-zone ring (`Compose ›` → `Waiting/Exchange` first wait or newest exchange → `Studios`), skipping empty zones; `Shift+Tab` reverses |
 | `←`/`→`, `h`/`l` | In the upper section: move between studio frames (including `+ new studio`); in the lower section: move the highlighted action chip across a waiting row |
-| `↓`/`↑`, `j`/`k` | Move strictly within the active section (frame rows in the upper section; headline, waiting items, exchange lines and the input line in the lower section) |
+| `↓`/`↑`, `j`/`k` | In Compose: plain `↑`/`↓` recall prior `user` messages to Hollywood (consecutive repeats collapsed, live draft saved/restored past newest). In Resting: move within the active section |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
-| `Enter` | On a waiting row: run the highlighted action chip (`allow y` by default on a prompt, `show ↵` on a card, `open ↵` focuses the role terminal); on a studio frame, headline or talk row: open or read it |
+| `Enter` | In Compose: send `tell hollywood` and stay ready on `›` (empty rests). On a waiting row: run the highlighted action chip (`allow y` by default on a prompt, `show ↵` on a card, `open ↵` focuses the role terminal); on a studio frame, headline or talk row: open or read it |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine — only when the runner can answer (a runner with no approval key shows `answer in its terminal` and these keys do nothing there) |
 | `p` | On a prompt row: peek at the role's live screen, read-only |
 | `s` | On a stage row or a stopped-stage frame: `backlot stage start` on that machine |
@@ -152,7 +157,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `m` | The selected row's context menu |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
-| `Esc` | Collapse it to the pill |
+| `Esc` | In Compose: rest on `›` keeping any draft (even when empty). In Resting: collapse to the pill |
 
 A click on a row selects it and acts like `Enter`; a click on a chip runs that chip's action.
 A right-click on the title or a row opens the context menu; a click on the input line opens it

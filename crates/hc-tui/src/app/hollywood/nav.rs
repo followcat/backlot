@@ -29,46 +29,86 @@ impl App {
         self.hollywood_sync_editing();
     }
 
-    /// `Tab` / `Shift+Tab`: toggle between `Upper` (studio frames) and
-    /// `Lower` (waiting items, exchange lines, and input), remembering
-    /// each section's last item and resting any active `Input` compose.
-    pub(crate) fn hollywood_switch_section(&mut self) {
-        match self.hollywood_active_section() {
-            Section::Upper => {
-                let band = self.hollywood_band();
-                if band.is_empty() {
-                    return;
+    /// `Tab` / `Shift+Tab`: 3-zone Call Sheet cycle skipping empty zones:
+    /// `Compose (›) → Waiting/Exchange (first wait, else newest exchange) → Studios (Upper)`.
+    /// `Shift+Tab` (`forward == false`) reverses the ring.
+    pub(crate) fn hollywood_switch_zone(&mut self, forward: bool) {
+        #[derive(Clone, Copy)]
+        enum Zone {
+            Compose,
+            Waiting,
+            Studios,
+        }
+        let current = match self.hollywood.selected.as_ref() {
+            Some(Target::Input) => Zone::Compose,
+            Some(target) if Section::of(target) == Section::Upper => Zone::Studios,
+            Some(_) => Zone::Waiting,
+            None => match self.hollywood.section {
+                Section::Upper => Zone::Studios,
+                Section::Lower => Zone::Waiting,
+            },
+        };
+        let next_two = match (current, forward) {
+            (Zone::Compose, true) => [Zone::Waiting, Zone::Studios],
+            (Zone::Waiting, true) => [Zone::Studios, Zone::Compose],
+            (Zone::Studios, true) => [Zone::Compose, Zone::Waiting],
+            (Zone::Compose, false) => [Zone::Studios, Zone::Waiting],
+            (Zone::Waiting, false) => [Zone::Compose, Zone::Studios],
+            (Zone::Studios, false) => [Zone::Waiting, Zone::Compose],
+        };
+        let band = self.hollywood_band();
+        let waits = self.hollywood_waits();
+        let frames = self.hollywood_frames();
+        let current_studio = self.studio.current.clone().map(Target::Studio);
+
+        for zone in next_two {
+            match zone {
+                Zone::Compose => {
+                    if self.has_hollywood_cfg
+                        && let Some(index) = band.iter().position(|t| matches!(t, Target::Input))
+                    {
+                        self.hollywood_select(Target::Input);
+                        self.hollywood.editing = true;
+                        self.hollywood_reveal_card(&band, index);
+                        return;
+                    }
                 }
-                let next = self
-                    .hollywood
-                    .last_lower
-                    .clone()
-                    .filter(|t| band.contains(t))
-                    .or_else(|| self.hollywood_waits().into_iter().next())
-                    .or_else(|| band.last().cloned());
-                if let Some(target) = next {
-                    let index = band.iter().position(|r| r == &target).unwrap_or(0);
-                    self.hollywood_select(target);
-                    self.hollywood_reveal_card(&band, index);
+                Zone::Waiting => {
+                    let target = waits
+                        .iter()
+                        .find(|t| band.contains(t))
+                        .cloned()
+                        .or_else(|| band.iter().rfind(|t| matches!(t, Target::Talk(_))).cloned())
+                        .or_else(|| {
+                            (!self.has_hollywood_cfg)
+                                .then(|| band.last().cloned())
+                                .flatten()
+                        });
+                    if let Some(target) = target {
+                        let index = band.iter().position(|r| r == &target).unwrap_or(0);
+                        self.hollywood_select(target);
+                        self.hollywood_reveal_card(&band, index);
+                        return;
+                    }
                 }
-            }
-            Section::Lower => {
-                self.hollywood.editing = false;
-                let frames = self.hollywood_frames();
-                if frames.is_empty() {
-                    return;
-                }
-                let current_studio = self.studio.current.clone().map(Target::Studio);
-                let next = self
-                    .hollywood
-                    .last_upper
-                    .clone()
-                    .filter(|t| frames.contains(t))
-                    .or_else(|| current_studio.filter(|t| frames.contains(t)))
-                    .or_else(|| frames.first().cloned());
-                if let Some(target) = next {
-                    self.hollywood_select(target);
-                    self.hollywood_keep_frame_visible();
+                Zone::Studios => {
+                    let target = self
+                        .hollywood
+                        .last_upper
+                        .clone()
+                        .filter(|t| frames.contains(t))
+                        .or_else(|| {
+                            current_studio
+                                .as_ref()
+                                .filter(|t| frames.contains(t))
+                                .cloned()
+                        })
+                        .or_else(|| frames.first().cloned());
+                    if let Some(target) = target {
+                        self.hollywood_select(target);
+                        self.hollywood_keep_frame_visible();
+                        return;
+                    }
                 }
             }
         }
@@ -253,6 +293,7 @@ impl App {
     pub(crate) fn hollywood_leave(&mut self) {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
+        self.hollywood.history.reset_nav();
         self.hollywood.view = None;
     }
 }

@@ -76,27 +76,60 @@ impl App {
             }
         }
         // `Compose`: the `›` line owns every key — `⏎` sends (or runs
-        // a `/verb`) back to `Resting`, `esc` rests the line keeping
-        // its draft, `↑` rests and steps up one row, `Tab` completes
-        // the `/verb`, the rest is text for the studio's draft.
+        // a `/verb`) back to `Resting`, `esc` rests on `›` keeping its
+        // draft (even if empty), plain `↑`/`↓` step per-studio history
+        // without leaving Compose, `Tab` completes `/verb`, the rest is
+        // text for the studio's draft.
         if self.panel_editing() {
-            if key.input.action != hc_vt::Action::Press {
+            if !matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            ) {
                 return;
             }
             match code {
                 crossterm::event::KeyCode::Esc if modifiers.is_empty() => {
+                    if key.input.action != hc_vt::Action::Press {
+                        return;
+                    }
                     self.panel.editing = false;
+                    self.panel.reset_history_nav();
                 }
                 crossterm::event::KeyCode::Up if modifiers.is_empty() => {
-                    self.panel_move(-1);
+                    if let Some(Target::Input(studio_key)) = self.panel.selected.clone() {
+                        self.panel_sync_history(&studio_key);
+                        let current = self
+                            .panel
+                            .draft(&studio_key)
+                            .map(|d| d.as_str().to_owned())
+                            .unwrap_or_default();
+                        if let Some(entry) = self.panel.history_mut(&studio_key).step_up(&current) {
+                            let draft = self.panel.draft_mut(&studio_key);
+                            draft.clear();
+                            let _ = draft.insert(&entry);
+                        }
+                    }
                 }
                 crossterm::event::KeyCode::Down if modifiers.is_empty() => {
-                    self.panel_move(1);
+                    if let Some(Target::Input(studio_key)) = self.panel.selected.clone() {
+                        self.panel_sync_history(&studio_key);
+                        if let Some(entry) = self.panel.history_mut(&studio_key).step_down() {
+                            let draft = self.panel.draft_mut(&studio_key);
+                            draft.clear();
+                            let _ = draft.insert(&entry);
+                        }
+                    }
                 }
                 crossterm::event::KeyCode::Enter if modifiers.is_empty() => {
+                    if key.input.action != hc_vt::Action::Press {
+                        return;
+                    }
                     self.panel_input_submit();
                 }
                 crossterm::event::KeyCode::Tab if modifiers.is_empty() => {
+                    if key.input.action != hc_vt::Action::Press {
+                        return;
+                    }
                     self.panel_input_complete();
                 }
                 _ => {
