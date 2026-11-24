@@ -147,9 +147,10 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   `needs you · …` / `asks you · …` / `stuck · …` line; an `info` attention adds none and shows
   only in the drawer and the sheet, dimmed.
 - A **working** person with no prompt/attention/failure detail row adds one dim row underneath (`x + 4`):
-  `working <dur> · "<progress>" <age> ago · <doing> <dur>` (time in `working`, newest `role.progress` text,
-  and deepest active descendant command while `work == working`). Absent parts omit their `·` separator;
-  narrow panels fit in order: full line → shorten `<progress>` inside quotes with `…` → drop `<doing>` →
+  `working <dur> · "<progress>" <age> ago · <running> <dur>` (elapsed time from client wall clock at draw time,
+  newest `role.progress` text, and deepest active descendant command from `RoleSummary.running` while
+  `work == working`; `RoleSummary.doing` stays unchanged for older clients). Absent parts omit their `·` separator;
+  narrow panels fit in order: full line → shorten `<progress>` inside quotes with `…` → drop `<running>` →
   shorten or drop `<progress>` → truncate `working <dur>`. Non-working roles keep their existing single line.
 - **Task rows** list work no live actor carries — uncast, dependency-gated (`waits t0`),
   paused (`=`), blocked or at rework cap, and accepted (`✓`) — each as `· <task> <title>`.

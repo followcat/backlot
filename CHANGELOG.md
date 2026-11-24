@@ -15,16 +15,17 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - **One-line role progress & live descendant command display (D5 / R7e).** Added
   `backlot progress "<line>"` (`--file`, `--text`, `--stdin`) recording `role.progress`
   (control chars stripped, collapsed to one line, capped at 200 chars) in `backlot-model`
-  (`progress.rs`, `RoleProgress`, `RoleDoing`, `EventKind::RoleProgress`, `HollywoodKind::RoleProgress`)
+  (`progress.rs`, `RoleProgress`, `RoleRunning`, `EventKind::RoleProgress`, `HollywoodKind::RoleProgress`)
   and `backlot-stage` (`args_studio.rs`, `commands.rs`, `cli.rs`, allowed across all role prompts
   and runner base rules; returns `Fail::Usage` naming `BACKLOT_ROLE`/`BACKLOT_STUDIO` outside a role env,
   with no stall/nudge obligations). Extended D4 process-tree probing (`liveness_diff.rs`, `liveness.rs`,
-  `live.rs`, `daemon.rs`) to track `deepest_descendant` `argv` (capped at 60 chars) as `RoleSummary.doing`
-  only while `work == working`, migrating the legacy display string to `RoleSummary.activity` with
-  backward-compatible wire deserialization (`RoleSummaryWire`). Updated `backlot status`,
-  `backlot status --json`, `hc-tui` panel (`panel/working_line.rs`, `PersonLine::Working`), and
-  studio docs to show `working <dur> · "<progress>" <age> ago · <doing> <dur>` with progressive
-  narrow-width fitting.
+  `live.rs`, `daemon.rs`) to track `deepest_descendant` `argv` (capped at 60 chars) under
+  `RoleSummary.running` / `LiveRole.running` / `RoleState.running` only while `work == working`;
+  `RoleSummary.doing` and `LiveRole.doing` stay unchanged (`Option<String>`) for older clients.
+  Updated `backlot status`, `backlot status --json` (per-role `progress` and `running`, once each),
+  `hc-tui` panel (`panel/working_line.rs`, `PersonLine::Working`, client wall-clock ages via
+  `update_state::now_ms()`), and studio docs to show `working <dur> · "<progress>" <age> ago · <running> <dur>`
+  with progressive narrow-width fitting.
 
 - **Unified six-source liveness evidence replacing separate stall clocks (D4 / R7d1).** Added
   `backlot-stage/src/liveness.rs`, `liveness_probe.rs`, `liveness_diff.rs`, `liveness_work.rs`, and

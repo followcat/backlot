@@ -224,8 +224,8 @@ with control characters stripped and length capped at 200 chars). Only roles run
 environment (`BACKLOT_ROLE` + `BACKLOT_STUDIO`) append it; `backlot progress` outside a role
 environment exits with a usage error naming the variables it requires. The stage never requires it
 and never raises nudges or attentions if unused; `RoleState.progress` keeps the latest `{ text,
-ts_ms }` and `RoleSummary` exposes it alongside live descendant `doing` (`{ cmd, since_ms }`,
-published only while `work == working`).
+ts_ms }` and `RoleSummary` exposes it alongside live descendant `running` (`{ cmd, since_ms }`,
+published only while `work == working`); `doing` (`Option<String>`) stays unchanged for older clients.
 
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director

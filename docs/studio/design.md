@@ -217,7 +217,7 @@ Instead of separate screen, signal, and revision clocks, the stage keeps one per
 1. **Hook signal** (`Stage.last_signal`): any new state-mapping hook event (`ts_ms`).
 2. **Activity revision**: `activity.revision` movement while terminal status is `working`, for runners whose revision advances mid-turn (`backlot_model::caps::revision_stalls`).
 3. **Normalised screen**: `terminal.read` after stripping per-runner spinner animations (braille glyphs, Claude/cmd spinner symbols, elapsed timers, `Thought for …` headers, token counters, and status clocks). The delivery gate keeps using the raw screen.
-4. **Process tree** (local machine only, sampled at most every 10 s): walks descendants from `term.pid` via `/proc/<pid>/task/*/children` (with `/proc/*/stat` `ppid` fallback on Linux; `ps` CPU-only on macOS). Any new child PID, descendant CPU or `rchar+wchar` growth, or waited child CPU (`cutime+cstime` on root) counts, and the walk records the deepest active descendant command (`argv` joined, capped at 60 chars, with start time `since_ms`) so working roles publish `RoleSummary.doing`. The agent root's own CPU and I/O counters (`depth == 0`) count strictly above `8 jiffies/s` CPU or `16 KB/s` I/O — floors measured on `agy` only in R7a (`2-4 jiffies/s` and `1-7 KB/s` idle noise) — and **only when `last_signal` is absent for the current session** (no hook signals wired or no signal yet); when hook signals are active (`last_signal` is `Some`), they govern the root's own turn so TUI render redraw CPU/I/O never overrides a stale hook, while descendants and `cutime+cstime` still count.
+4. **Process tree** (local machine only, sampled at most every 10 s): walks descendants from `term.pid` via `/proc/<pid>/task/*/children` (with `/proc/*/stat` `ppid` fallback on Linux; `ps` CPU-only on macOS). Any new child PID, descendant CPU or `rchar+wchar` growth, or waited child CPU (`cutime+cstime` on root) counts, and the walk records the deepest active descendant command (`argv` joined, capped at 60 chars, with start time `since_ms`) so working roles publish `RoleSummary.running`. The agent root's own CPU and I/O counters (`depth == 0`) count strictly above `8 jiffies/s` CPU or `16 KB/s` I/O — floors measured on `agy` only in R7a (`2-4 jiffies/s` and `1-7 KB/s` idle noise) — and **only when `last_signal` is absent for the current session** (no hook signals wired or no signal yet); when hook signals are active (`last_signal` is `Some`), they govern the root's own turn so TUI render redraw CPU/I/O never overrides a stale hook, while descendants and `cutime+cstime` still count.
 5. **Work area** (local machine only): `HEAD` (and resolved branch ref target), `.git/index` mtime, and a hash of `git status --porcelain` sampled at most every 60 s — never walking `target/`, `node_modules/`, or `.git/objects/`.
 6. **Role ledger event**: any new ledger event whose `by.role` is this role.
 
@@ -311,7 +311,7 @@ document list is set when it starts, while studios come and go.
 - The stage is the only writer, and it writes with the CAS version.
 - It writes only on change, at most once every 2 seconds. Core rewrites all documents in one file, so writes stay rare.
 - It stays small: target under 64 KiB, against the 1 MiB limit. Field lengths are capped and old finished studios drop
-  off. While `work == working`, live roles carry optional `progress` (`{ text, ts_ms }` from `role.progress`) and optional `doing` (`{ cmd, since_ms }`, the deepest active descendant command capped at 60 chars). Closed people stay listed while their studio is live (R19), with no `doing` field. The full history is in the
+  off. While `work == working`, live roles carry optional `progress` (`{ text, ts_ms }` from `role.progress`) and optional `running` (`{ cmd, since_ms }`, the deepest active descendant command capped at 60 chars); `doing` (`Option<String>`) stays unchanged for older clients. Closed people stay listed while their studio is live (R19), with no `doing` or `running` field. The full history is in the
   ledger.
 - No credentials, environment values or prompt text.
 
@@ -402,7 +402,7 @@ process either way.
   roles, each with its status mark and the number of people working, such as `director` and `actors 2`. Expanded shows
   the people, and each role group can collapse on its own. The strip fallback above applies to whichever width the
   panel has.
-- **Content (R19):** studios, each with its roles and the people in each role: runner and model, state, a working detail row (`working <dur> · "<progress>" <age> ago · <doing> <dur>`), and what needs attention.
+- **Content (R19):** studios, each with its roles and the people in each role: runner and model, state, a working detail row (`working <dur> · "<progress>" <age> ago · <running> <dur>`), and what needs attention.
 - **Work states (R17):** working, waiting for input, blocked, lost and closed each have their own colour and mark, from
   the palette in `chrome/status.rs`. Working is animated (spinning or a slow blink). The animation runs only while
   something is working, so an idle panel causes no redraws. The stage derives the state from the hook signals first
