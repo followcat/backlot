@@ -94,6 +94,7 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 state=waiting
 prompts=0
 ptext=
+spin_noecho=0
 saved=$(stty -g 2>/dev/null)
 # Pipe a `hook:<event>[:<arg>]` line to the hook command as a
 # Claude-shaped JSON — the arg is the Bash command for a
@@ -160,6 +161,15 @@ while :; do
                 case "$first$rest" in
                     hook:*) play_hook "$first$rest" ;;
                     sh:*) run_sh "$first$rest" ;;
+                    spin:*)
+                        state=working
+                        if [ "$spin_noecho" = 0 ]; then
+                            stty -echo 2>/dev/null || true
+                            spin_noecho=1
+                        fi
+                        spin_line="$first$rest"
+                        printf '\033[2J\033[Hfake-work: working\n%s\n' "${spin_line#spin:}"
+                        ;;
                 esac
                 ;;
         esac
@@ -168,6 +178,14 @@ while :; do
         case "$line" in
             hook:*) play_hook "$line" ;;
             sh:*) run_sh "$line" ;;
+            spin:*)
+                state=working
+                if [ "$spin_noecho" = 0 ]; then
+                    stty -echo 2>/dev/null || true
+                    spin_noecho=1
+                fi
+                printf '\033[2J\033[Hfake-work: working\n%s\n' "${line#spin:}"
+                ;;
             work:blocked:*)
                 state=blocked
                 prompts="${line##*:}"

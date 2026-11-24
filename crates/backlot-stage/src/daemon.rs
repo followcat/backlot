@@ -212,10 +212,19 @@ pub(crate) struct Stage {
     /// session (S9f) — the first work source, the signal stall's
     /// clock and the approval bind's request identity.
     pub(crate) last_signal: std::cell::RefCell<BTreeMap<(String, String), signals::Signal>>,
-    /// `(studio, role)` → `(activity revision, first-seen ms)` —
-    /// the structured stall's clock (S12d): a terminal reporting
-    /// `working` must keep its revision moving.
-    pub(crate) revision_since: std::cell::RefCell<BTreeMap<(String, String), (u64, u64)>>,
+    /// `(studio, role)` -> unified D4 liveness evidence track (hook signal,
+    /// activity revision, normalised screen, local process tree, local work
+    /// area, and role ledger activity).
+    pub(crate) liveness: std::cell::RefCell<BTreeMap<(String, String), crate::liveness::Evidence>>,
+    /// How local process trees are sampled — `liveness_probe::real_proc_tree`
+    /// live, or an injected fake in tests.
+    pub(crate) proc_read: Box<crate::liveness_probe::ProcRead>,
+    /// How local git work areas are sampled — `liveness_diff::real_work_area`
+    /// live, or an injected fake in tests.
+    pub(crate) work_area_read: Box<crate::liveness_diff::WorkAreaRead>,
+    /// Whether the stage's `hc` core runs on this local host (`false` when
+    /// connected to a remote endpoint, disabling OS process/git probes).
+    pub(crate) is_local: bool,
     /// `(studio, role)` → the rate-limit retry exchange (S12d):
     /// `continue`s already sent and when the next is due. An entry
     /// that outlives its attention marks the episode adjudicated —
@@ -354,7 +363,7 @@ impl Stage {
             .retain(|(s, _), _| keep(s));
         self.idle_since.borrow_mut().retain(|(s, _), _| keep(s));
         self.last_signal.borrow_mut().retain(|(s, _), _| keep(s));
-        self.revision_since.borrow_mut().retain(|(s, _), _| keep(s));
+        self.liveness.borrow_mut().retain(|(s, _), _| keep(s));
         self.rate_pace.borrow_mut().retain(|(s, _), _| keep(s));
         self.conn_pace.borrow_mut().retain(|(s, _), _| keep(s));
         self.session_warned.borrow_mut().retain(|(s, _)| keep(s));
@@ -393,9 +402,7 @@ impl Stage {
             .retain(|(s, _), _| s != name);
         self.idle_since.borrow_mut().retain(|(s, _), _| s != name);
         self.last_signal.borrow_mut().retain(|(s, _), _| s != name);
-        self.revision_since
-            .borrow_mut()
-            .retain(|(s, _), _| s != name);
+        self.liveness.borrow_mut().retain(|(s, _), _| s != name);
         self.rate_pace.borrow_mut().retain(|(s, _), _| s != name);
         self.conn_pace.borrow_mut().retain(|(s, _), _| s != name);
         self.session_warned.borrow_mut().retain(|(s, _)| s != name);
@@ -827,7 +834,10 @@ impl Stage {
             q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
-            revision_since: std::cell::RefCell::new(BTreeMap::new()),
+            liveness: std::cell::RefCell::new(BTreeMap::new()),
+            proc_read: Box::new(crate::liveness_probe::real_proc_tree),
+            work_area_read: Box::new(crate::liveness_diff::real_work_area),
+            is_local: true,
             rate_pace: std::cell::RefCell::new(BTreeMap::new()),
             conn_pace: std::cell::RefCell::new(BTreeMap::new()),
             session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
@@ -925,7 +935,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
-        revision_since: std::cell::RefCell::new(BTreeMap::new()),
+        liveness: std::cell::RefCell::new(BTreeMap::new()),
+        proc_read: Box::new(crate::liveness_probe::real_proc_tree),
+        work_area_read: Box::new(crate::liveness_diff::real_work_area),
+        is_local: !matches!(link.endpoint, hc_proto::endpoint::Endpoint::Remote(_)),
         rate_pace: std::cell::RefCell::new(BTreeMap::new()),
         conn_pace: std::cell::RefCell::new(BTreeMap::new()),
         session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),

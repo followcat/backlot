@@ -11,9 +11,11 @@ use backlot_model::state::{Attention, StudioState, TaskStatus, replay};
 use backlot_model::summary::Work;
 use backlot_model::testkit::*;
 
-use crate::deliver::Screen;
+use crate::liveness::{Evidence, ObserveInput};
+use crate::liveness_diff::WorkAreaSnap;
 use crate::notices;
 use crate::stall;
+use crate::workareas::GitOut;
 
 const DIR: &str = "/state/studios/acme-shop";
 
@@ -21,14 +23,33 @@ fn dir() -> &'static Path {
     Path::new(DIR)
 }
 
-/// A screen that has shown `text` unchanged since `since`, sampled
-/// at `at`.
-fn screen(text: &str, since: u64, at: u64) -> Screen {
-    Screen {
-        text: text.into(),
-        same_since_ms: since,
-        at_ms: at,
-    }
+/// An `Evidence` frozen at `since_ms` with no process/work-area activity.
+fn frozen(since_ms: u64) -> Evidence {
+    let input = ObserveInput {
+        now_ms: since_ms,
+        runner: "fake",
+        eligible: true,
+        raw_screen: "s",
+        raw_same_since_ms: since_ms,
+        signal: None,
+        terminal_working: false,
+        activity_revision: None,
+        local_machine: false,
+        pid: None,
+        work_roots: &[],
+        ledger: None,
+    };
+    let mut git = |_: &[&str], _: &str| GitOut {
+        code: 0,
+        stdout: String::new(),
+        stderr: String::new(),
+    };
+    Evidence::new(
+        &input,
+        &|_| Vec::new(),
+        &|_, _, _| WorkAreaSnap::default(),
+        &mut git,
+    )
 }
 
 /// The decision's truth table: who stalls at the limit and who
@@ -36,7 +57,8 @@ fn screen(text: &str, since: u64, at: u64) -> Screen {
 #[test]
 fn stall_truth_table() {
     let limit = 5_000;
-    // An actor on a running task stalls on a frozen screen,
+    let ev = frozen(0);
+    // An actor on a running task stalls on frozen evidence,
     // working or waiting — an actor that went idle is exactly the
     // case this catches.
     for work in [Work::Working, Work::Waiting] {
@@ -45,7 +67,8 @@ fn stall_truth_table() {
                 "actor-t1-c1",
                 Some(TaskStatus::Running),
                 work,
-                &screen("s", 0, 5_000),
+                &ev,
+                5_000,
                 limit
             ),
             "actor running {work:?}"
@@ -63,7 +86,8 @@ fn stall_truth_table() {
                 "actor-t1-c1",
                 Some(status),
                 Work::Working,
-                &screen("s", 0, 60_000),
+                &ev,
+                60_000,
                 limit
             ),
             "actor {status:?}"
@@ -77,7 +101,7 @@ fn stall_truth_table() {
         ("producer", None),
     ] {
         assert!(
-            !stall::stalled(role, task, Work::Blocked, &screen("s", 0, 60_000), limit),
+            !stall::stalled(role, task, Work::Blocked, &ev, 60_000, limit),
             "{role} blocked"
         );
     }
@@ -85,22 +109,22 @@ fn stall_truth_table() {
     // an idle one is normal.
     for role in ["producer", "director", "writer"] {
         assert!(
-            stall::stalled(role, None, Work::Working, &screen("s", 0, 5_000), limit),
+            stall::stalled(role, None, Work::Working, &ev, 5_000, limit),
             "{role} working"
         );
         assert!(
-            !stall::stalled(role, None, Work::Waiting, &screen("s", 0, 60_000), limit),
+            !stall::stalled(role, None, Work::Waiting, &ev, 60_000, limit),
             "{role} waiting"
         );
     }
-    // Under the limit nobody stalls, however the screen reads.
+    // Under the limit nobody stalls, however the evidence reads.
     for (role, task, work) in [
         ("actor-t1-c1", Some(TaskStatus::Running), Work::Working),
         ("actor-t1-c1", Some(TaskStatus::Running), Work::Waiting),
         ("director", None, Work::Working),
     ] {
         assert!(
-            !stall::stalled(role, task, work, &screen("s", 0, 4_999), limit),
+            !stall::stalled(role, task, work, &ev, 4_999, limit),
             "{role} under the limit"
         );
     }
@@ -136,7 +160,9 @@ fn raised(seq: u64, role: &str) -> Attention {
         seq,
         role: role.into(),
         reason: STALLED.into(),
-        detail: format!("screen unchanged for 5s; screen saved to attention/{seq}.txt"),
+        detail: format!(
+            "no sign of life for 5s; last: cargo test (CPU) 5s ago; screen saved to attention/{seq}.txt"
+        ),
         open: true,
         ts_ms: 0,
         needs_user: false,
@@ -205,7 +231,7 @@ fn stalled_notice_routes_per_role() {
     assert_eq!(owed[0].source_seq, 20);
     for want in [
         "producer",
-        "screen unchanged for 5s",
+        "no sign of life for 5s",
         "attention/20.txt",
         "cannot restart the producer",
         "only the user (or Hollywood) can intervene",
@@ -238,7 +264,7 @@ fn stalled_notice_body_names_the_ways_on() {
         .body;
     for want in [
         "actor-t1-c1",
-        "screen unchanged for 5s",
+        "no sign of life for 5s",
         "attention/20.txt",
         "backlot tell actor-t1-c1 --file <file>",
         "backlot task abandon --task t1",
@@ -255,7 +281,7 @@ fn stalled_notice_body_names_the_ways_on() {
         .body;
     for want in [
         "writer",
-        "screen unchanged for 5s",
+        "no sign of life for 5s",
         "attention/20.txt",
         "backlot tell writer --file <file>",
     ] {

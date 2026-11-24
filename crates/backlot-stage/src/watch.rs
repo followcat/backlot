@@ -479,9 +479,7 @@ impl Stage {
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
         self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
-        self.revision_since
-            .borrow_mut()
-            .retain(|(s, r), _| keep(s, r));
+        self.liveness.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.rate_pace.borrow_mut().retain(|(s, r), _| keep(s, r));
         Ok(())
     }

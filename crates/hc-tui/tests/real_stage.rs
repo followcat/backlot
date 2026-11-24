@@ -1169,7 +1169,7 @@ async fn real_stage_signal_stall() {
         raised["detail"]
             .as_str()
             .unwrap_or_default()
-            .contains("no hook signal for"),
+            .contains("no sign of life for"),
         "{raised}"
     );
 
