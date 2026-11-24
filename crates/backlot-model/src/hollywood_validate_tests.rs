@@ -348,3 +348,95 @@ fn hollywood_only_tells_the_producer() {
         );
     }
 }
+
+#[test]
+fn message_seen_validates_role_sender_and_status() {
+    let mut state = HollywoodState::default();
+    let user_msg = |text: &str| HollywoodKind::MessageSent {
+        to: "hollywood".into(),
+        studio: None,
+        text: Some(text.into()),
+        file: None,
+        source_seq: None,
+    };
+    apply(&mut state, &hev(1, "user", user_msg("queued")));
+    apply(
+        &mut state,
+        &hev(
+            2,
+            "stage",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: None,
+                file: Some("messages/2-prompt.md".into()),
+                source_seq: Some(9),
+            },
+        ),
+    );
+    apply(&mut state, &hev(3, "user", user_msg("delivered")));
+    apply(
+        &mut state,
+        &hev(4, "stage", HollywoodKind::MessageDelivered { target: 3 }),
+    );
+    apply(&mut state, &hev(5, "user", user_msg("dropped")));
+    apply(
+        &mut state,
+        &hev(
+            6,
+            "stage",
+            HollywoodKind::MessageDropped {
+                target: 5,
+                reason: "stale".into(),
+            },
+        ),
+    );
+    apply(&mut state, &hev(7, "user", user_msg("already seen")));
+    apply(
+        &mut state,
+        &hev(
+            8,
+            "hollywood",
+            HollywoodKind::MessageSeen {
+                target: 7,
+                by_seq: 7,
+            },
+        ),
+    );
+
+    let seen = |target: u64| HollywoodKind::MessageSeen { target, by_seq: 9 };
+    assert!(validate(&state, &nhw("hollywood", seen(1))).is_ok());
+    assert!(validate(&state, &nhw("stage", seen(1))).is_ok());
+
+    for role in ["user", "producer", "director"] {
+        assert!(
+            matches!(
+                validate(&state, &nhw(role, seen(1))),
+                Err(HRefusal::RoleBound { .. })
+            ),
+            "{role}"
+        );
+    }
+    for (target, label) in [
+        (999, "missing"),
+        (2, "stage notice"),
+        (3, "already delivered"),
+        (5, "already dropped"),
+        (7, "already seen"),
+    ] {
+        assert!(
+            matches!(
+                validate(&state, &nhw("hollywood", seen(target))),
+                Err(HRefusal::BadMessage(_))
+            ),
+            "{label}"
+        );
+    }
+    assert!(matches!(
+        validate(
+            &state,
+            &nhw("stage", HollywoodKind::MessageDelivered { target: 7 })
+        ),
+        Err(HRefusal::BadMessage(_))
+    ));
+}

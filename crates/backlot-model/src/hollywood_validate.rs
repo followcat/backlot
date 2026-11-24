@@ -264,6 +264,30 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
                 Some(m) if m.dropped => Err(HRefusal::BadMessage(format!(
                     "message '{target}' is dropped"
                 ))),
+                Some(m) if m.seen => {
+                    Err(HRefusal::BadMessage(format!("message '{target}' is seen")))
+                }
+                Some(_) => Ok(()),
+            }
+        }
+        HollywoodKind::MessageSeen { target, .. } => {
+            if role != HOLLYWOOD && role != "stage" {
+                return Err(role_bound(role, "hollywood or the stage"));
+            }
+            match state.messages.iter().find(|m| m.seq == *target) {
+                None => Err(HRefusal::BadMessage(format!("no message '{target}'"))),
+                Some(m) if m.from != "user" || m.to != HOLLYWOOD => Err(HRefusal::BadMessage(
+                    format!("message '{target}' is not a user tell to hollywood"),
+                )),
+                Some(m) if m.delivered => Err(HRefusal::BadMessage(format!(
+                    "message '{target}' is delivered"
+                ))),
+                Some(m) if m.dropped => Err(HRefusal::BadMessage(format!(
+                    "message '{target}' is dropped"
+                ))),
+                Some(m) if m.seen => {
+                    Err(HRefusal::BadMessage(format!("message '{target}' is seen")))
+                }
                 Some(_) => Ok(()),
             }
         }

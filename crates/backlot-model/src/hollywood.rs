@@ -171,6 +171,9 @@ pub enum HollywoodKind {
     /// relayed no longer stands; never pending again.
     #[serde(rename = "message.dropped")]
     MessageDropped { target: u64, reason: String },
+    /// A queued user tell acknowledged out-of-band via `--answers`.
+    #[serde(rename = "message.seen")]
+    MessageSeen { target: u64, by_seq: u64 },
     /// The user's `backlot restart --person hollywood`: stop
     /// `bl-hollywood` and launch it again — resuming its recorded
     /// session unless `fresh` asks for a new conversation. The stage
@@ -225,6 +228,7 @@ impl HollywoodKind {
             HollywoodKind::RoleApproval { .. } => "role.approval",
             HollywoodKind::MessageDelivered { .. } => "message.delivered",
             HollywoodKind::MessageDropped { .. } => "message.dropped",
+            HollywoodKind::MessageSeen { .. } => "message.seen",
             HollywoodKind::RoleRestart { .. } => "role.restart",
             HollywoodKind::RoleProgress { .. } => "role.progress",
         }

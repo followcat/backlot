@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use backlot_model::EventBy;
 use backlot_model::event::ApprovalDecision;
-use backlot_model::hollywood::{self, CardAction, HollywoodKind, NewHollywoodEvent};
+use backlot_model::hollywood::{CardAction, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::StudioState;
 
 use crate::args::{CardCmd, Cmd, Common, HollywoodCmd};
@@ -18,6 +18,7 @@ use crate::cli::{Caller, Env, Fail};
 use crate::commands;
 use crate::config;
 use crate::hrender;
+use crate::hwood_answers::{card_apply, card_cancel, check_answers, hstore_fail, mark_answers};
 use crate::link;
 use crate::store::{self, HPending, PendingFile, StoreError, sanitize};
 
@@ -31,7 +32,7 @@ pub(crate) fn role(common: &Common, env: &Env) -> String {
         .unwrap_or_else(|| "user".to_string())
 }
 
-fn by_for(common: &Common, env: &Env) -> EventBy {
+pub(crate) fn by_for(common: &Common, env: &Env) -> EventBy {
     EventBy {
         role: role(common, env),
         session: env.get("HC_TERMINAL_ID").map(String::from),
@@ -79,7 +80,13 @@ pub(crate) fn require_studio(base: &Path, name: &str) -> Result<StudioState, Fai
 
 /// `hollywood propose` — Hollywood only, checked before the
 /// filesystem is touched.
-fn propose(common: &Common, env: &Env, action: &CardAction, why: &str) -> Result<String, Fail> {
+fn propose(
+    common: &Common,
+    env: &Env,
+    action: &CardAction,
+    why: &str,
+    answers: &[u64],
+) -> Result<String, Fail> {
     let r = role(common, env);
     if r != "hollywood" {
         return Err(Fail::refused(format!(
@@ -94,10 +101,11 @@ fn propose(common: &Common, env: &Env, action: &CardAction, why: &str) -> Result
     let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
     let why = why.to_string();
-    let event = store::append_hollywood(&hdir, |_, _| {
+    let event = store::append_hollywood(&hdir, |state, _| {
+        check_answers(state, answers)?;
         Ok::<HPending, Fail>(HPending {
             event: NewHollywoodEvent::new(
-                by,
+                by.clone(),
                 HollywoodKind::CardProposed {
                     action,
                     why,
@@ -107,20 +115,22 @@ fn propose(common: &Common, env: &Env, action: &CardAction, why: &str) -> Result
             files: Vec::new(),
         })
     })
-    .map_err(store_fail)?;
+    .map_err(hstore_fail)?;
+    mark_answers(&hdir, &by, event.seq, answers)?;
     Ok(format!(
         "{} — the user applies or cancels it",
         hrender::hconfirm(&event)
     ))
 }
 
-/// `hollywood report "<headline>" [--body <file>]` — the layer's
-/// headline lands in the ledger; the TUI reads it there (H4).
+/// `hollywood report "<headline>" [--body <file>] [--answers <seqs>]` —
+/// the layer's headline lands in the ledger; the TUI reads it there (H4).
 fn hreport(
     common: &Common,
     env: &Env,
     headline: &str,
     body: Option<PathBuf>,
+    answers: &[u64],
 ) -> Result<String, Fail> {
     let r = role(common, env);
     if r != "hollywood" {
@@ -135,7 +145,8 @@ fn hreport(
     let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
     let headline = headline.to_string();
-    let event = store::append_hollywood(&hdir, |_, seq| {
+    let event = store::append_hollywood(&hdir, |state, seq| {
+        check_answers(state, answers)?;
         let (body_path, files) = match &body {
             Some(src) => {
                 let pf = copy_to("reports", seq, src, None);
@@ -145,7 +156,7 @@ fn hreport(
         };
         Ok::<HPending, Fail>(HPending {
             event: NewHollywoodEvent::new(
-                by,
+                by.clone(),
                 HollywoodKind::Reported {
                     headline,
                     body: body_path,
@@ -154,7 +165,8 @@ fn hreport(
             files,
         })
     })
-    .map_err(store_fail)?;
+    .map_err(hstore_fail)?;
+    mark_answers(&hdir, &by, event.seq, answers)?;
     Ok(format!(
         "{} — the layer shows it when the TUI lands (H4)",
         hrender::hconfirm(&event)
@@ -332,71 +344,6 @@ pub fn mirror_tell(base: &Path, by: &EventBy, studio: &str, file: &Path) -> Resu
     Ok(hrender::hconfirm(&event))
 }
 
-/// `card apply|cancel` is the user's (D17a): a shell carrying
-/// `BACKLOT_ROLE` is a role's terminal, refused before the ledger
-/// is even read.
-fn card_gate(env: &Env) -> Result<(), Fail> {
-    if env.get("BACKLOT_ROLE").is_some() {
-        return Err(Fail::refused(
-            "a card is applied or cancelled by the user — BACKLOT_ROLE is set",
-        ));
-    }
-    Ok(())
-}
-
-fn card_apply(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
-    card_gate(env)?;
-    let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
-    let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
-    let card = hstate
-        .cards
-        .get(&id)
-        .ok_or_else(|| Fail::refused(format!("no card 'c{id}'")))?;
-    // Staleness is a pure read of the card's base against the studio
-    // now — a moved base records `card.stale`, not `card.applied`.
-    let sstate = studio_state(&base, card.action.studio())?;
-    let stale = hollywood::stale(&card.action, &card.base, sstate.as_ref());
-    let by = by_for(common, env);
-    let kind = match &stale {
-        Some(r) => HollywoodKind::CardStale {
-            card: id,
-            reason: r.clone(),
-        },
-        None => HollywoodKind::CardApplied { card: id },
-    };
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, kind),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(match stale {
-        Some(r) => format!("{} — {r}", hrender::hconfirm(&event)),
-        None => format!(
-            "{} — carrying the action out is the stage's job (H3)",
-            hrender::hconfirm(&event)
-        ),
-    })
-}
-
-fn card_cancel(common: &Common, env: &Env, id: u64, reason: &str) -> Result<String, Fail> {
-    card_gate(env)?;
-    let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
-    let by = by_for(common, env);
-    let reason = reason.to_string();
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, HollywoodKind::CardCancelled { card: id, reason }),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(hrender::hconfirm(&event))
-}
-
 /// `hollywood`/`card`/`tell hollywood` — the overseer-ledger commands.
 pub fn run(common: Common, cmd: Cmd, env: &Env) -> Result<String, Fail> {
     match cmd {
@@ -404,11 +351,13 @@ pub fn run(common: Common, cmd: Cmd, env: &Env) -> Result<String, Fail> {
         Cmd::Hollywood(HollywoodCmd::Propose {
             ref action,
             ref why,
-        }) => propose(&common, env, action, why),
+            ref answers,
+        }) => propose(&common, env, action, why, answers),
         Cmd::Hollywood(HollywoodCmd::Report {
             ref headline,
             ref body,
-        }) => hreport(&common, env, headline, body.clone()),
+            ref answers,
+        }) => hreport(&common, env, headline, body.clone(), answers),
         Cmd::Hollywood(HollywoodCmd::Show { seq }) => crate::hwood_show::show(&common, env, seq),
         Cmd::Hollywood(HollywoodCmd::Setup { ref cfg }) => crate::hsetup::hsetup(&common, env, cfg),
         Cmd::Card(CardCmd::List) => crate::hwood_read::card_list(&common, env),

@@ -4,6 +4,7 @@
 
 mod act;
 pub mod args;
+mod args_card;
 mod args_hwood;
 mod args_source;
 mod args_studio;
@@ -35,9 +36,11 @@ mod guard_shell;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
+mod hdeliver_fmt;
 mod hfinished;
 mod hlife;
 mod hnotice;
+mod hnotice_stale;
 pub mod hook;
 mod hrender;
 mod hsetup;
@@ -45,6 +48,7 @@ mod hstage;
 mod hwatch;
 mod hwcli;
 mod hwood;
+mod hwood_answers;
 mod hwood_base;
 mod hwood_read;
 mod hwood_show;
@@ -161,6 +165,14 @@ mod guard_tests;
 
 #[cfg(test)]
 mod hcard_tests;
+#[cfg(test)]
+mod hdeliver_extra_tests;
+#[cfg(test)]
+mod hdeliver_passive_tests;
+#[cfg(test)]
+mod hdeliver_tests;
+#[cfg(test)]
+mod hnotice_stale_tests;
 #[cfg(test)]
 mod hnotice_tests;
 #[cfg(test)]

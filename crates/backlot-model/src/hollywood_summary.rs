@@ -174,7 +174,7 @@ pub fn hollywood_section_with_activity(
         pending: state
             .messages
             .iter()
-            .any(|m| m.to == "hollywood" && !m.delivered && !m.dropped),
+            .any(|m| m.to == "hollywood" && !m.delivered && !m.dropped && !m.seen),
         doing,
         attention: prompt
             .is_some()

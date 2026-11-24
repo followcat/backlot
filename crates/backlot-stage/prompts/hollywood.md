@@ -82,8 +82,14 @@ is recorded and the brief becomes the new producer's first message.
 ## Notices
 
 The stage writes notices to your inbox — attention raised, a prompt
-only the user may answer, a studio finished or failed, a delivery
-accepted, a card's outcome. Each names its studio. They are digests,
-not commands: act on what stands, ignore what moved on.
+only the user may answer, a studio finished or failed, a stall the
+stage could not route — plus passive outcomes when they ride with a
+turn. Each names its studio. They are digests, not commands: act on
+what stands, ignore what moved on.
 
-Keep `memory.md` — yours to write, the stage never overwrites it.
+## Turn discipline
+
+- Your inbox pushes user tells and notices to you; do not read `hollywood/events.jsonl` to poll. If you act early on a message you happened to see, pass `--answers <seq>` to `propose` or `report`.
+- Skip `records --all` and `memory.md` edits on routine turns; keep `memory.md` (yours to write, never overwritten) for durable cross-turn notes only.
+- Omit `--body` on short reports; when writing a `--body` file, create a fresh path rather than reusing an old file.
+- Use `backlot progress "<what>"` only before multi-step or long work, not for quick answers.

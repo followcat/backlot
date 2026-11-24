@@ -191,9 +191,10 @@ Changing the runner starts a new conversation; removing the section closes it.
 Its lifecycle lands in Hollywood's own ledger as `role.state` events — the studios' four role
 events folded into one.
 
-The stage owns the folder: `AGENTS.md` (the role prompt, rewritten every start), `memory.md`
-(made once, never overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`,
-`reports/` and `roles/hollywood/`. Hollywood owes no steps and is never nudged.
+The stage owns the folder: `AGENTS.md` (the role prompt with its CLI reference, rewritten every
+start and refreshed on adopt or stage boot whenever it differs), `memory.md` (made once, never
+overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`, `reports/` and
+`roles/hollywood/`. Hollywood owes no steps and is never nudged.
 
 The terminal starts at a readable grid — at least 100 columns and hc's `200×120` default
 (`hlife::hsize`), so a person who peeks or focuses `bl-hollywood` sees its answers, not a
@@ -263,7 +264,9 @@ runner that left. The ledger and the messages already queued for the role stay; 
 takes over the role's work. A recast while the old role has an open permission prompt still closes
 it. Only you may recast, and only while the studio is not finished.
 
-Every card outcome reaches Hollywood's inbox as a notice: applied, cancelled, done, failed, stale.
+Actionable card failures (`card.failed`, `card.stale`, `card.cancelled`) reach Hollywood's inbox as
+notices; `card.applied` emits no wakeup notice, and `card.done` stays passive context that rides
+with the next delivery.
 
 ## Creating a studio in plain words
 
@@ -300,12 +303,24 @@ the send.
 backlot tell hollywood "watch acme-shop for stalls"
 ```
 
-The stage also tells Hollywood, each once and naming the studio: an attention opened, a prompt
-only you may answer, a studio finished or failed, a delivery accepted, a stall it could not
-route. Notices follow the studios' own rules — the body lives under `messages/`, several
-undelivered items go as one digest, and a queued notice whose source moved on is dropped, not
-sent (`message.dropped`). Hollywood's own words — a recovered terminal, each card's outcome —
-join the same inbox.
+The stage runs a **two-lane inbox** for Hollywood:
+
+- **Person lane first (`from == "user"`).** Pending `tell hollywood` messages deliver oldest-to-newest
+  before stage notices — merged onto one line joined with ` · ` when `≤ 2 KiB`, or written to
+  `messages/user-<top>.md` with a 120-character latest preview when longer. Waiting stage notices
+  append a footer (`(+N stage notices waiting: <labels>)`) without blocking your message.
+- **Stage-notice lane (5 s defer).** Only when the Person lane is empty and the newest actionable
+  notice is at least 5 s old does the stage deliver notices, giving transient prompts time to clear.
+  A single notice `≤ 400 B` sends inline; two or more (or longer) send as `messages/digest-<top>.md`.
+  Notices rank `stalled`, `failed`, `card`, `prompt`, `attention`, `finished`, `recovered`.
+- **Notice hygiene & passive context.** Closed or `info` attentions (`session id not found`) and
+  `card.applied` emit no wakeups; queued notices coalesce to `≤ 1` per `(studio, role, label)` and
+  `≤ 1` `recovered` (dropped on a fresh start/close, on outcome, or when a studio finishes).
+  `card.done` and accepted reviews never wake an idle Hollywood on their own — they ride along once
+  as `(context: …)` on the next delivery.
+- **`--answers <seq>[,<seq>]`.** Pass `--answers` on `hollywood propose` or `hollywood report` when
+  acting on queued tells you saw early; the stage appends `message.seen` (`by_seq`) so those tells
+  are never pasted into the terminal again (already-delivered or seen seqs are skipped silently).
 
 ### What Hollywood is fed: facts with their age and class
 
@@ -338,7 +353,7 @@ document's `hollywood` object (D21). It may also talk *to* a studio's producer o
 record, and mirrors `message.sent` into Hollywood's own ledger.
 
 ```sh
-backlot hollywood report "two studios idle, one card open" --as hollywood
+backlot hollywood report "two studios idle, one card open" --answers 42 --as hollywood
 backlot tell producer --file /home/user/note.md --studio acme-shop --as hollywood
 ```
 

@@ -8,6 +8,15 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **Hollywood two-lane inbox & notice hygiene.** Hollywood inbox now delivers user messages first
+  and inline (merged in order with a deferred-notice footer), filters closed/`info`/duplicate card
+  notices, supports `--answers` (`message.seen`) to prevent re-delivering answered messages, and
+  refreshes `AGENTS.md` on adopt.
+
 ## 0.4.1 — 2026-11-25
 
 This release swaps the studio and role keys, so `Alt+Left`/`Alt+Right` step between studios and `Alt+Up`/`Alt+Down`

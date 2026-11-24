@@ -334,3 +334,46 @@ fn a_close_or_a_session_less_start_clears_the_old_session() {
     ]);
     assert_eq!(state.role.session_id.as_deref(), Some("beaded-harp"));
 }
+
+#[test]
+fn message_seen_round_trips_and_marks_target_seen() {
+    let seen = HollywoodKind::MessageSeen {
+        target: 2,
+        by_seq: 3,
+    };
+    assert_eq!(seen.name(), "message.seen");
+    let ev = hev(4, "hollywood", seen.clone());
+    let v = serde_json::to_value(&ev).unwrap();
+    assert_eq!(v["kind"], "message.seen");
+    assert_eq!(v["target"], 2);
+    assert_eq!(v["by_seq"], 3);
+    let back: HollywoodEvent = serde_json::from_value(v).unwrap();
+    assert_eq!(back, ev);
+
+    let state = replay(&[
+        hev(
+            2,
+            "user",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: Some("check t1".into()),
+                file: None,
+                source_seq: None,
+            },
+        ),
+        hev(
+            3,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: "checked t1".into(),
+                body: None,
+            },
+        ),
+        ev,
+    ]);
+    assert_eq!(state.messages.len(), 1);
+    assert!(state.messages[0].seen);
+    assert!(!state.messages[0].delivered);
+    assert!(!state.messages[0].dropped);
+}

@@ -423,4 +423,80 @@ fn hollywood_work_and_pending_project_cleanly_and_compare_in_same_as() {
     assert!(a.same_as(&b), "ticking updated_ms alone never churns");
     a.hollywood.as_mut().unwrap().work = Some(Work::Working);
     assert!(!a.same_as(&b), "work transition publishes immediately");
+
+    // A `message.seen` tell does not stay `pending` on the wire, and v0.4.0
+    // consumers still deserialize the emitted `HollywoodSummary`.
+    #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
+    struct V040HollywoodSummary {
+        state: String,
+        #[serde(default)]
+        runner: Option<String>,
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        effort: Option<String>,
+        #[serde(default)]
+        work: Option<Work>,
+        #[serde(default)]
+        pending: bool,
+        #[serde(default)]
+        doing: Option<String>,
+        #[serde(default)]
+        attention: Option<String>,
+        #[serde(default)]
+        attention_user: bool,
+        #[serde(default)]
+        attention_detail: Option<String>,
+        #[serde(default)]
+        headline: Option<String>,
+        #[serde(default)]
+        restarted_ms: Option<u64>,
+        #[serde(default)]
+        headline_seq: Option<u64>,
+        #[serde(default)]
+        cards: Vec<crate::hollywood_summary::CardSummary>,
+        #[serde(default)]
+        exchange: Vec<crate::hollywood_summary::Exchange>,
+    }
+
+    let mut seen_state = HollywoodState::default();
+    apply(
+        &mut seen_state,
+        &hev(
+            1,
+            "user",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: Some("seen already".into()),
+                file: None,
+                source_seq: None,
+            },
+        ),
+    );
+    apply(
+        &mut seen_state,
+        &hev(
+            2,
+            "hollywood",
+            HollywoodKind::MessageSeen {
+                target: 1,
+                by_seq: 2,
+            },
+        ),
+    );
+    let summary = hollywood_section_with_work(
+        &seen_state,
+        "live",
+        Some("claude"),
+        None,
+        None,
+        Some(Work::Waiting),
+    );
+    assert!(!summary.pending, "seen tell must not keep pending=true");
+    let raw = serde_json::to_string(&summary).unwrap();
+    let frozen: V040HollywoodSummary = serde_json::from_str(&raw).unwrap();
+    assert!(!frozen.pending);
+    assert_eq!(frozen.state, "live");
 }

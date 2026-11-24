@@ -85,6 +85,9 @@ pub struct HMessage {
     /// `message.dropped` landed: a queued notice skipped at send
     /// time because its source no longer stood.
     pub dropped: bool,
+    /// `message.seen` landed: a queued user tell answered out-of-band
+    /// via `--answers` before the inbox delivered it.
+    pub seen: bool,
 }
 
 /// Hollywood's own terminal record, folded from `role.state`
@@ -251,6 +254,7 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
             source_seq: *source_seq,
             delivered: false,
             dropped: false,
+            seen: false,
         }),
         HollywoodKind::RoleState {
             state: motion,
@@ -346,6 +350,11 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
         HollywoodKind::MessageDropped { target, .. } => {
             if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
                 m.dropped = true;
+            }
+        }
+        HollywoodKind::MessageSeen { target, .. } => {
+            if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
+                m.seen = true;
             }
         }
         HollywoodKind::RoleRestart { fresh, reason } => {

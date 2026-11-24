@@ -392,3 +392,97 @@ fn hollywood_starts_at_a_readable_grid() {
     // The labels and the name still mark it Hollywood's terminal.
     assert_eq!(params.name.as_deref(), Some(HOLLYWOOD_TERMINAL));
 }
+
+#[tokio::test]
+async fn agents_md_refreshes_on_adopt() {
+    use hc_proto::client::Client;
+    use hc_proto::codec::Reader;
+    use hc_proto::frame::{Frame, Kind};
+    use serde_json::{Value, json};
+    use tokio::io::AsyncWriteExt;
+
+    let tmp = crate::test_support::TestDir::new("bl-hadopt-agents");
+    let cfg_dir = tmp.join("cfg/backlot");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.toml"),
+        "[hollywood]\nrunner = \"fake\"\nmodel = \"model-h\"\neffort = \"high\"\n",
+    )
+    .unwrap();
+    let hdir = crate::store::hollywood_dir(tmp.path());
+    std::fs::create_dir_all(&hdir).unwrap();
+    std::fs::write(hdir.join("AGENTS.md"), "stale old AGENTS content\n").unwrap();
+
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(async move {
+        let (read, mut write) = tokio::io::split(core_side);
+        let mut reader = Reader::new(read);
+        let hello = reader.read_line().await.unwrap().unwrap();
+        let req: Value = serde_json::from_slice(&hello).unwrap();
+        assert_eq!(req["method"], "hello");
+        write
+            .write_all(
+                serde_json::to_string(&json!({
+                    "jsonrpc": "2.0", "id": 0,
+                    "result": {
+                        "generation": 1, "version": "fake-core 0.0",
+                        "framed": true,
+                        "core": {"id": "core-fake-1", "name": "fake-core"},
+                        "methods": ["terminal.read"],
+                        "features": [],
+                    }
+                }))
+                .unwrap()
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        write.write_all(b"\n").await.unwrap();
+        while let Ok(Some(frame)) = reader.read_frame().await {
+            if frame.channel != 0 || frame.kind != Kind::Data {
+                continue;
+            }
+            let req: Value = serde_json::from_slice(&frame.payload).unwrap();
+            if req["method"] == "terminal.read" {
+                let reply = serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": req["id"],
+                    "result": { "text": "> ", "complete": true, "how": "screen" }
+                }))
+                .unwrap();
+                write
+                    .write_all(&Frame::data(0, reply).encode())
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+
+    let mut stage = crate::daemon::Stage::for_test(client);
+    stage.base = tmp.path().to_path_buf();
+    stage.env_vars.insert(
+        "XDG_CONFIG_HOME".into(),
+        tmp.join("cfg").to_string_lossy().into_owned(),
+    );
+
+    let terminals = vec![crate::reconcile::LiveTerminal {
+        name: backlot_model::hollywood::HOLLYWOOD_TERMINAL.into(),
+        address: "t-adopted".into(),
+        ..Default::default()
+    }];
+    let mut free = false;
+    stage
+        .hollywood(&terminals, &[], &mut free, 1_000)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(hdir.join("AGENTS.md")).unwrap(),
+        crate::hwcli::agents_md(),
+        "stale AGENTS.md must be refreshed on Adopt"
+    );
+}

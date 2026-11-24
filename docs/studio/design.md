@@ -326,9 +326,18 @@ headline and its open cards. It appears only while `[hollywood]` is configured.
 One overseer floats above all studios on a core — `docs/studio/hollywood.md` owns the detail; the stage's part is this:
 with `[hollywood]` in the user config it runs one terminal `bl-hollywood` (labelled `backlot.role=hollywood`, never
 `backlot.studio`) in `<state dir>/hollywood/`, started, adopted and resumed by the same rules a producer is, with its
-lifecycle in its own ledger. The stage forwards studio notices to it — an attention opened, a prompt only the user may
-answer, a finish, a failure, an accepted delivery, an unrouted stall — through the same guarded-send path the studios
-get, deduplicated by `source_seq` and dropped when their source moves on. `tell hollywood` lands the same way.
+lifecycle in its own ledger. The stage delivers to `bl-hollywood` through a **two-lane inbox**: pending `user → hollywood` tells
+take the Person lane first and send inline (` · `-joined up to 2 KiB, else `messages/user-<top>.md`
+with a 120-character preview) together with a deferred-notice footer (`(+N stage notices waiting: …)`).
+Actionable stage notices — closed/`info` attentions and `card.applied` filtered out, `≤ 1` pending per
+`(studio, role, label)` and `≤ 1` `recovered`, ranked `stalled > failed > card > prompt > attention > finished > recovered`
+— wait in the Notice lane until the Person lane is empty and the newest notice is ≥ 5 s old
+(`NOTICE_DEFER_MS`), going inline if one notice fits within 400 B and as a digest otherwise; obsolete,
+superseded, and post-finish notices record `message.dropped`. Passive outcomes (`card.done` and
+`accepted` reviews) never wake Hollywood alone and ride once as `(context: …)` on the next send. Passing
+`--answers <seq>[,<seq>]` to `hollywood propose` or `hollywood report` appends `message.seen { target, by_seq }`
+so already-handled tells skip inbox delivery. On adopt or stage boot, `AGENTS.md` is refreshed whenever
+its bytes differ from the compiled prompt and CLI reference.
 
 Hollywood changes nothing directly: it proposes **cards**, the user applies or cancels, and the stage carries an
 applied card out exactly once — re-checking the card's base, recording the studio event `by: user` through the same
