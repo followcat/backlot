@@ -486,3 +486,137 @@ fn a_studio_role_cannot_be_hollywood() {
     let msg = refused(&env, "stage run --as hollywood");
     assert!(msg.contains("cannot do this"), "{msg}");
 }
+
+#[test]
+fn answers_flag_marks_user_tells_seen_and_rejects_bad_seqs() {
+    let (scratch, env) = scratch();
+    running(&scratch, &env);
+    argv_ok(&env, &["tell", "hollywood", "first ask"]);
+    argv_ok(&env, &["tell", "hollywood", "second ask"]);
+    argv_ok(&env, &["tell", "hollywood", "third ask"]);
+    let hdir = store::hollywood_dir(&scratch.dir);
+    let notice = store::append_hollywood(&hdir, |_, seq| {
+        Ok::<store::HPending, crate::cli::Fail>(store::HPending {
+            event: backlot_model::hollywood::NewHollywoodEvent::new(
+                backlot_model::EventBy {
+                    role: "stage".into(),
+                    session: None,
+                },
+                HollywoodKind::MessageSent {
+                    to: "hollywood".into(),
+                    studio: Some("acme-shop".into()),
+                    text: None,
+                    file: Some(format!("messages/{seq}-prompt.md")),
+                    source_seq: Some(9),
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let notice_seq = notice.seq;
+
+    // Report with --answers 1 marks #1 seen by the report's seq.
+    let out = argv_ok(
+        &env,
+        &[
+            "hollywood",
+            "report",
+            "handled first",
+            "--answers",
+            "1",
+            "--as",
+            "hollywood",
+        ],
+    );
+    assert!(out.contains("hollywood.reported"), "{out}");
+    let events = hwood_events(&scratch);
+    let report_seq = events
+        .iter()
+        .find(|e| matches!(e.kind, HollywoodKind::Reported { .. }))
+        .unwrap()
+        .seq;
+    assert!(events.iter().any(|e| {
+        matches!(
+            e.kind,
+            HollywoodKind::MessageSeen { target: 1, by_seq } if by_seq == report_seq
+        )
+    }));
+
+    // Propose with --answers 2,3,1 skips already-seen #1 and marks #2,#3.
+    let out = argv_ok(
+        &env,
+        &[
+            "hollywood",
+            "propose",
+            "pause",
+            "--studio",
+            "acme-shop",
+            "--task",
+            "t1",
+            "--why",
+            "requested",
+            "--answers",
+            "2,3,1,3",
+            "--as",
+            "hollywood",
+        ],
+    );
+    assert!(out.contains("card.proposed"), "{out}");
+    let events = hwood_events(&scratch);
+    let seen_targets: Vec<u64> = events
+        .iter()
+        .filter_map(|e| match e.kind {
+            HollywoodKind::MessageSeen { target, .. } => Some(target),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(seen_targets, vec![1, 2, 3]);
+
+    // Bad syntax, unknown seq, or non-user notice seq return usage error
+    // and never append a partial event.
+    let before = hwood_events(&scratch).len();
+    for bad_answers in ["", "abc", "1,", "999", &notice_seq.to_string()] {
+        let err = argv(
+            &env,
+            &[
+                "hollywood",
+                "report",
+                "should not land",
+                "--answers",
+                bad_answers,
+                "--as",
+                "hollywood",
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, crate::cli::Fail::Usage(_)),
+            "{bad_answers}: {err:?}"
+        );
+        let err = argv(
+            &env,
+            &[
+                "hollywood",
+                "propose",
+                "abandon",
+                "--studio",
+                "acme-shop",
+                "--task",
+                "t1",
+                "--why",
+                "should not land",
+                "--answers",
+                bad_answers,
+                "--as",
+                "hollywood",
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, crate::cli::Fail::Usage(_)),
+            "{bad_answers}: {err:?}"
+        );
+    }
+    assert_eq!(hwood_events(&scratch).len(), before);
+}

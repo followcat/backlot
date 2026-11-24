@@ -19,8 +19,8 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 - `backlot studio new --title <t> --repo <path> --cast <file.toml> [--ask <text> | --ask-file <f>] [--mode standard|experimental] [--dry-run]`
   flags: --title --repo --cast --ask --ask-file --mode --dry-run
 
-- `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>`
-  flags: --studio --task --person --level --runner --model --effort --title --repo --cast --brief --why
+- `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--answers <seqs>] --why <line>`
+  flags: --studio --task --person --level --runner --model --effort --title --repo --cast --brief --answers --why
 
-- `backlot hollywood report "<headline>" [--body <f>]`
-  flags: --body
+- `backlot hollywood report "<headline>" [--body <f>] [--answers <seqs>]`
+  flags: --body --answers

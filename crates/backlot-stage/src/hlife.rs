@@ -18,7 +18,8 @@ use crate::act::fatal;
 use crate::cli::Fail;
 use crate::config::{self, HollywoodCfg};
 use crate::daemon::Stage;
-use crate::hstage::{self, HMove, HRun};
+pub(crate) use crate::hstage::hprepare_launch;
+use crate::hstage::{self, HMove, HRun, refresh_agents_md};
 use crate::reconcile::LiveTerminal;
 use crate::runners::{self, StartDecision};
 use crate::store;
@@ -93,6 +94,13 @@ impl Stage {
         let Some(cfg) = &cfg else {
             return Ok(());
         };
+        if !self.hagents_synced.get() {
+            if let Err(e) = refresh_agents_md(&hdir) {
+                self.hlog(&format!("AGENTS.md: {}", e.message()));
+            } else {
+                self.hagents_synced.set(true);
+            }
+        }
         self.hrefresh(&hdir);
         self.hdiscover(&hdir, terminals);
         self.hsample(&hdir, terminals, &cfg.runner, now_ms).await;
@@ -201,6 +209,8 @@ impl Stage {
                 HMove::Adopt => {
                     let t = term.expect("adopt needs the live terminal");
                     let actor = hstage::identity(cfg.expect("adopt needs the config"));
+                    refresh_agents_md(hdir)?;
+                    self.hagents_synced.set(true);
                     hstage::record_role(
                         hdir,
                         RoleMotion::Started,
@@ -213,6 +223,8 @@ impl Stage {
                 }
                 HMove::Rejoin => {
                     let t = term.expect("rejoin needs the live terminal");
+                    refresh_agents_md(hdir)?;
+                    self.hagents_synced.set(true);
                     hstage::record_role(
                         hdir,
                         RoleMotion::Resumed,
@@ -470,35 +482,4 @@ pub(crate) fn hrole_env(
         configured_path.as_deref(),
     );
     env
-}
-
-/// The folder's durable files: `AGENTS.md` (rewritten every start, the
-/// generated CLI reference in place), `prompts/hollywood.first.txt` when
-/// `devin` starts fresh, and `memory.md` (created once and never
-/// overwritten).
-pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -> Result<(), Fail> {
-    for sub in [
-        "messages",
-        "reports",
-        "attention",
-        "drafts",
-        "roles",
-        "prompts",
-    ] {
-        std::fs::create_dir_all(hdir.join(sub))
-            .map_err(|e| Fail::refused(format!("hollywood dir: {e}")))?;
-    }
-    let agents = hdir.join("AGENTS.md");
-    std::fs::write(&agents, crate::hwcli::agents_md())
-        .map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
-    if resume.is_none() && runner == "devin" {
-        let line = crate::prompts::first_line(&agents);
-        crate::prompts::first_file(hdir, HOLLYWOOD, &line)
-            .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
-    }
-    let memory = hdir.join("memory.md");
-    if !memory.exists() {
-        std::fs::write(&memory, "").map_err(|e| Fail::refused(format!("memory.md: {e}")))?;
-    }
-    Ok(())
 }

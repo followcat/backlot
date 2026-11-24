@@ -17,54 +17,14 @@ use serde_json::json;
 use crate::cli::Fail;
 use crate::daemon::Stage;
 use crate::deliver::{Gate, InFlight, SEND_DEADLINE, gate_open, send_outcome};
+use crate::hdeliver_fmt::{
+    NOTICE_DEFER_MS, load_passive, notice_payload, person_payload, save_passive,
+};
 use crate::hnotice;
 use crate::hstage::hkey;
 use crate::reconcile::LiveTerminal;
 use crate::sendfail;
 use crate::store::{self, HPending, PendingFile};
-
-/// The digest file name — `messages/digest-<top seq>.md` like the
-/// studios'.
-fn digest_name(items: &[&HMessage]) -> String {
-    let top = items.iter().map(|m| m.seq).max().unwrap_or(0);
-    format!("messages/digest-{top}.md")
-}
-
-/// The digest body: sections by label, each notice's file inlined,
-/// a person's `tell` quoted as its line.
-fn digest_body(items: &[&HMessage], hdir: &Path) -> String {
-    let mut out = String::from("# backlot digest\n\n");
-    for m in items {
-        let head = m
-            .file
-            .as_deref()
-            .and_then(|_| hnotice::label(m))
-            .map(|l| format!("## {l} (seq {})\n\n", m.seq))
-            .unwrap_or_else(|| format!("## message from {} (seq {})\n\n", m.from, m.seq));
-        out.push_str(&head);
-        if let Some(f) = &m.file {
-            let text = std::fs::read_to_string(hdir.join(f)).unwrap_or_default();
-            out.push_str(text.trim_end());
-            out.push_str("\n\n");
-        } else if let Some(t) = &m.text {
-            out.push_str(&format!("{t}\n\n"));
-        }
-    }
-    out
-}
-
-/// The one line a single item sends.
-fn item_line(m: &HMessage, hdir: &Path) -> String {
-    match (&m.file, &m.text) {
-        (Some(f), _) => format!(
-            "[backlot] {} → hollywood: read {}",
-            m.from,
-            hdir.join(f).display()
-        ),
-        (None, Some(t)) => format!("[backlot] {} → hollywood: {t}", m.from),
-        (None, None) => "[backlot] stage → hollywood: your attention is wanted".into(),
-    }
-}
 
 /// The stage's errors on each studio — `broken` first, then the
 /// last failed pass.
@@ -142,15 +102,15 @@ impl Stage {
             .flat_map(|(_, f)| f.seqs.iter().copied())
             .collect();
         self.hrefresh(hdir);
-        let drops: Vec<(u64, String)> = self
-            .hstate
-            .borrow()
-            .messages
-            .iter()
-            .filter(|m| m.to == "hollywood" && !m.delivered && !m.dropped)
-            .filter(|m| !in_flight.contains(&m.seq))
-            .filter_map(|m| hnotice::stale_reason(m, &studios, &errs).map(|r| (m.seq, r)))
-            .collect();
+        let drops: Vec<(u64, String)> = {
+            let hs = self.hstate.borrow();
+            hs.messages
+                .iter()
+                .filter(|m| m.to == "hollywood" && !m.delivered && !m.dropped && !m.seen)
+                .filter(|m| !in_flight.contains(&m.seq))
+                .filter_map(|m| hnotice::stale_reason(m, &studios, &errs, &hs).map(|r| (m.seq, r)))
+                .collect()
+        };
         for (seq, reason) in drops {
             self.happend(
                 hdir,
@@ -161,10 +121,15 @@ impl Stage {
             )?;
         }
 
-        // Finished sends collect their `message.delivered` records.
+        // Finished sends collect their `message.delivered` and passive-context marks.
         let done = crate::deliver::take_finished(&mut self.sending.borrow_mut(), &pair.0);
         self.hrefresh(hdir);
         for (p, f) in done {
+            let pending_passive = self
+                .hpassive_sending
+                .borrow_mut()
+                .remove(&p)
+                .unwrap_or_default();
             self.sent_ms.borrow_mut().insert(p.clone(), now_ms);
             match f.handle.await {
                 Ok(Ok(v)) => match send_outcome(&v) {
@@ -172,6 +137,11 @@ impl Stage {
                         for seq in &f.seqs {
                             let _ = self
                                 .happend(hdir, HollywoodKind::MessageDelivered { target: *seq });
+                        }
+                        if !pending_passive.is_empty() {
+                            let mut done_set = self.hpassive_done.borrow_mut();
+                            done_set.extend(pending_passive);
+                            save_passive(hdir, &done_set);
                         }
                         crate::stagelog::stage_log!("delivered {:?} to hollywood", f.seqs);
                     }
@@ -192,18 +162,36 @@ impl Stage {
             }
         }
 
-        // The outbox: pending `to: hollywood` in (rank, seq) order.
+        // Load persisted passive-context accounted marks once per stage process.
+        if !self.hpassive_loaded.get() {
+            load_passive(hdir, &mut self.hpassive_done.borrow_mut());
+            self.hpassive_loaded.set(true);
+        }
+
+        // Two-lane outbox: Person (`from == "user"`) delivers inline first;
+        // Stage notices defer until newest is >= NOTICE_DEFER_MS old and
+        // run only when the Person lane is empty.
         self.hrefresh(hdir);
         let hs = self.hstate.borrow();
-        let mut pending: Vec<&HMessage> = hs
+        let mut user_pending: Vec<&HMessage> = hs
             .messages
             .iter()
-            .filter(|m| m.to == "hollywood" && !m.delivered && !m.dropped)
+            .filter(|m| {
+                m.to == "hollywood" && m.from == "user" && !m.delivered && !m.dropped && !m.seen
+            })
             .collect();
-        if pending.is_empty() {
+        let mut notice_pending: Vec<&HMessage> = hs
+            .messages
+            .iter()
+            .filter(|m| {
+                m.to == "hollywood" && m.from != "user" && !m.delivered && !m.dropped && !m.seen
+            })
+            .collect();
+        if user_pending.is_empty() && notice_pending.is_empty() {
             return Ok(());
         }
-        pending.sort_by_key(|m| (hnotice::rank(m), m.seq));
+        user_pending.sort_by_key(|m| m.seq);
+        notice_pending.sort_by_key(|m| (hnotice::rank(m), m.seq));
         let role = &hs.role;
         let gate = Gate {
             live: role.live
@@ -219,28 +207,28 @@ impl Stage {
         if !gate_open(&gate, now_ms) {
             return Ok(());
         }
+        let passive = hnotice::passive_items(&studios, &hs, &self.hpassive_done.borrow());
+        let (text, seqs) = if !user_pending.is_empty() {
+            let text = person_payload(&user_pending, &notice_pending, &passive, hdir)?;
+            let seqs = user_pending.iter().map(|m| m.seq).collect();
+            (text, seqs)
+        } else {
+            let newest_ts = notice_pending.iter().map(|m| m.ts_ms).max().unwrap_or(0);
+            if now_ms.saturating_sub(newest_ts) < NOTICE_DEFER_MS {
+                return Ok(());
+            }
+            let text = notice_payload(&notice_pending, &passive, hdir)?;
+            let seqs = notice_pending.iter().map(|m| m.seq).collect();
+            (text, seqs)
+        };
         let address = terminals
             .iter()
             .find(|t| t.name == backlot_model::hollywood::HOLLYWOOD_TERMINAL)
             .map(|t| t.address.clone())
             .unwrap_or_default();
-        let (text, seqs) = match pending.as_slice() {
-            [one] => (item_line(one, hdir), vec![one.seq]),
-            many => {
-                let file = digest_name(many);
-                let path = hdir.join(&file);
-                std::fs::write(&path, digest_body(many, hdir))
-                    .map_err(|e| Fail::refused(format!("digest file: {e}")))?;
-                (
-                    format!(
-                        "[backlot] stage → hollywood: read {} ({} items)",
-                        path.display(),
-                        many.len()
-                    ),
-                    many.iter().map(|m| m.seq).collect(),
-                )
-            }
-        };
+        self.hpassive_sending
+            .borrow_mut()
+            .insert(pair.clone(), passive.into_iter().map(|p| p.key).collect());
         let client = self.client.clone();
         let handle = tokio::spawn(async move {
             client

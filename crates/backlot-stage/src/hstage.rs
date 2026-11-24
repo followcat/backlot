@@ -246,3 +246,47 @@ pub(crate) enum HRun {
     Defer,
     Refused(String),
 }
+
+pub(crate) fn refresh_agents_md(hdir: &Path) -> Result<(), Fail> {
+    let agents = hdir.join("AGENTS.md");
+    let want = crate::hwcli::agents_md();
+    let unchanged = std::fs::read_to_string(&agents)
+        .map(|cur| cur == want)
+        .unwrap_or(false);
+    if !unchanged {
+        std::fs::create_dir_all(hdir).map_err(|e| Fail::refused(format!("hollywood dir: {e}")))?;
+        std::fs::write(&agents, want).map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
+    }
+    Ok(())
+}
+
+/// The folder's durable files: `AGENTS.md` (rewritten every start, the
+/// generated CLI reference in place), `prompts/hollywood.first.txt` when
+/// `devin` starts fresh, and `memory.md` (created once and never
+/// overwritten).
+pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -> Result<(), Fail> {
+    for sub in [
+        "messages",
+        "reports",
+        "attention",
+        "drafts",
+        "roles",
+        "prompts",
+    ] {
+        std::fs::create_dir_all(hdir.join(sub))
+            .map_err(|e| Fail::refused(format!("hollywood dir: {e}")))?;
+    }
+    let agents = hdir.join("AGENTS.md");
+    std::fs::write(&agents, crate::hwcli::agents_md())
+        .map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
+    if resume.is_none() && runner == "devin" {
+        let line = crate::prompts::first_line(&agents);
+        crate::prompts::first_file(hdir, HOLLYWOOD, &line)
+            .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
+    }
+    let memory = hdir.join("memory.md");
+    if !memory.exists() {
+        std::fs::write(&memory, "").map_err(|e| Fail::refused(format!("memory.md: {e}")))?;
+    }
+    Ok(())
+}

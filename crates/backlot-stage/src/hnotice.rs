@@ -17,10 +17,12 @@
 
 use std::collections::BTreeMap;
 
-use backlot_model::event::{CANNOT_RESUME, PERMISSION_PROMPT, STALLED, Verdict};
+use backlot_model::attention::AttentionClass;
+use backlot_model::event::{CANNOT_RESUME, PERMISSION_PROMPT, STALLED};
 use backlot_model::hollywood::{CardState, HMessage, HollywoodState};
 use backlot_model::state::{StudioState, actor_task};
 
+pub(crate) use crate::hnotice_stale::{PassiveItem, PassiveKey, passive_items, stale_reason};
 use crate::stall;
 
 /// One owed notice: `source_seq`/`studio` name the event it
@@ -30,6 +32,7 @@ use crate::stall;
 pub(crate) struct HNotice {
     pub label: &'static str,
     pub studio: Option<String>,
+    pub role: Option<String>,
     pub source_seq: Option<u64>,
     pub token: Option<String>,
     pub body: String,
@@ -43,17 +46,16 @@ pub(crate) fn label(m: &HMessage) -> Option<&str> {
     l.strip_suffix(".md")
 }
 
-/// The order a digest lists labels in — what needs a hand first.
+/// The order a digest lists labels in — stalled/failed/card actionables first.
 pub(crate) fn rank(m: &HMessage) -> u8 {
     match label(m) {
-        Some("prompt") => 0,
-        Some("stalled") => 1,
-        Some("attention") => 2,
-        Some("failed") => 3,
-        Some("accepted") => 4,
+        Some("stalled") => 0,
+        Some("failed") => 1,
+        Some("card") => 2,
+        Some("prompt") => 3,
+        Some("attention") => 4,
         Some("finished") => 5,
         Some("recovered") => 6,
-        Some("card") => 8,
         _ => 7,
     }
 }
@@ -120,6 +122,7 @@ fn attention_notice(
     HNotice {
         label,
         studio: Some(studio.to_string()),
+        role: Some(a.role.clone()),
         source_seq: Some(a.seq),
         token: None,
         body: format!(
@@ -129,10 +132,50 @@ fn attention_notice(
     }
 }
 
-/// Every notice the studios and Hollywood's own ledger owe the
-/// layer, oldest first. `errors` is the stage's per-studio error
-/// map (`failed`/`broken`) — the `failed` notice's source. `now_ms`
-/// ages each attention's fact.
+/// Keep only the newest candidate per `(studio, role, label)` (and at
+/// most one `recovered`) before checking `told` so superseded items never
+/// surface on a later tick. Distinct cards (`studio == None`) do not coalesce.
+fn coalesce(candidates: Vec<HNotice>) -> Vec<HNotice> {
+    let mut best_studio: BTreeMap<(String, Option<String>, &'static str), usize> = BTreeMap::new();
+    let mut best_recovered: Option<usize> = None;
+    let mut keep = vec![true; candidates.len()];
+    for (idx, n) in candidates.iter().enumerate() {
+        let seq = n.source_seq.unwrap_or(0);
+        if let Some(studio) = &n.studio {
+            let key = (studio.clone(), n.role.clone(), n.label);
+            if let Some(&prev) = best_studio.get(&key) {
+                if seq >= candidates[prev].source_seq.unwrap_or(0) {
+                    keep[prev] = false;
+                    best_studio.insert(key, idx);
+                } else {
+                    keep[idx] = false;
+                }
+            } else {
+                best_studio.insert(key, idx);
+            }
+        } else if n.label == "recovered" {
+            if let Some(prev) = best_recovered {
+                if seq >= candidates[prev].source_seq.unwrap_or(0) {
+                    keep[prev] = false;
+                    best_recovered = Some(idx);
+                } else {
+                    keep[idx] = false;
+                }
+            } else {
+                best_recovered = Some(idx);
+            }
+        }
+    }
+    candidates
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, n)| keep[i].then_some(n))
+        .collect()
+}
+
+/// Every actionable notice the studios and Hollywood's own ledger owe,
+/// oldest first. Closed/`info` attentions, `card.applied`, `card.done`,
+/// and `accepted` never emit wake-up notices.
 pub(crate) fn owed(
     studios: &BTreeMap<String, StudioState>,
     errors: &BTreeMap<String, String>,
@@ -141,97 +184,79 @@ pub(crate) fn owed(
 ) -> Vec<HNotice> {
     let mut out = Vec::new();
     for (name, s) in studios {
-        for a in &s.attention {
-            out.push(attention_notice(name, s, a, now_ms));
-        }
         if let Some(f) = &s.finished {
             out.push(HNotice {
                 label: "finished",
                 studio: Some(name.clone()),
+                role: None,
                 source_seq: Some(f.seq),
                 token: None,
                 body: format!("# {name}: studio finished\n\n{}\n", f.reason),
             });
+            continue;
         }
-        for (id, t) in &s.tasks {
-            for r in &t.reviews {
-                if matches!(r.verdict, Verdict::Accepted | Verdict::PartiallyAccepted) {
-                    out.push(HNotice {
-                        label: "accepted",
-                        studio: Some(name.clone()),
-                        source_seq: Some(r.seq),
-                        token: None,
-                        body: format!(
-                            "# {name}: delivery accepted\n\nTask `{id}` delivery {} — {} by {}: {}\n",
-                            r.delivery,
-                            verdict_str(r.verdict),
-                            r.reviewer,
-                            r.conclusion
-                        ),
-                    });
-                }
+        for a in &s.attention {
+            if !a.open || AttentionClass::of(&a.reason, a.needs_user) == AttentionClass::Info {
+                continue;
             }
+            out.push(attention_notice(name, s, a, now_ms));
         }
         if let Some(e) = errors.get(name) {
             out.push(HNotice {
                 label: "failed",
                 studio: Some(name.clone()),
+                role: None,
                 source_seq: None,
                 token: Some(e.clone()),
                 body: format!("# {name}: the stage cannot run this studio\n\n{e}\n"),
             });
         }
     }
-    // Hollywood's own words: the recovered-terminal notice and
-    // every card outcome.
+    // Unloaded/broken studios live only in `errors`.
+    for (name, e) in errors {
+        if !studios.contains_key(name) {
+            out.push(HNotice {
+                label: "failed",
+                studio: Some(name.clone()),
+                role: None,
+                source_seq: None,
+                token: Some(e.clone()),
+                body: format!("# {name}: the stage cannot run this studio\n\n{e}\n"),
+            });
+        }
+    }
+    // Hollywood's own words: `recovered` and non-done card failures.
     if let Some(seq) = h.role.recovered_seq {
         out.push(HNotice {
             label: "recovered",
             studio: None,
+            role: None,
             source_seq: Some(seq),
             token: None,
             body: "# your terminal was lost — the session was resumed\n".into(),
         });
     }
     for c in h.cards.values() {
-        if let Some(seq) = c.applied_seq {
-            out.push(HNotice {
-                label: "card",
-                studio: None,
-                source_seq: Some(seq),
-                token: None,
-                body: format!(
-                    "# card c{} applied\n\n{} — carrying it out\n",
-                    c.seq,
-                    c.action.label()
-                ),
-            });
-        }
         if let Some(seq) = c.closed_seq
-            && c.state != CardState::Applied
+            && matches!(
+                c.state,
+                CardState::Failed | CardState::Stale | CardState::Cancelled
+            )
         {
             out.push(HNotice {
                 label: "card",
                 studio: None,
+                role: None,
                 source_seq: Some(seq),
                 token: None,
                 body: card_outcome(c),
             });
         }
     }
+    let mut out = coalesce(out);
     out.retain(|n| !told(h, n));
     out.sort_by_key(|n| n.source_seq.unwrap_or(u64::MAX));
     out
-}
-
-/// The verdict's ledger word — `Verdict` carries no `as_str`.
-fn verdict_str(v: Verdict) -> &'static str {
-    match v {
-        Verdict::Accepted => "accepted",
-        Verdict::PartiallyAccepted => "partially accepted",
-        Verdict::ChangesRequested => "changes requested",
-        Verdict::Blocked => "blocked",
-    }
 }
 
 /// The card-outcome notice body — `card c3 — done`, the detail the
@@ -248,44 +273,4 @@ fn card_outcome(c: &backlot_model::hollywood::Card) -> String {
     }
     body.push('\n');
     body
-}
-
-/// Does a queued notice still stand? `Some(reason)` drops it —
-/// mirrors the studios' stale table on Hollywood's labels. A send
-/// in flight is the caller's problem, not a reason to drop.
-pub(crate) fn stale_reason(
-    m: &HMessage,
-    studios: &BTreeMap<String, StudioState>,
-    errors: &BTreeMap<String, String>,
-) -> Option<String> {
-    let l = label(m)?;
-    let studio = m.studio.as_deref().and_then(|s| studios.get(s));
-    match l {
-        "attention" | "prompt" | "stalled" => {
-            let source = m.source_seq?;
-            let open = studio
-                .and_then(|s| s.attention.iter().find(|a| a.seq == source))
-                .is_some_and(|a| a.open);
-            if open {
-                None
-            } else {
-                Some("attention cleared".into())
-            }
-        }
-        "failed" => {
-            let cur = m
-                .studio
-                .as_deref()
-                .and_then(|s| errors.get(s))
-                .map(String::as_str);
-            if cur == m.text.as_deref() {
-                None
-            } else {
-                Some("studio recovered or the error changed".into())
-            }
-        }
-        // Finished, accepted, card and recovered are facts — they
-        // never go stale.
-        _ => None,
-    }
 }

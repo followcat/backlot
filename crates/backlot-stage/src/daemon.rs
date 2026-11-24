@@ -286,6 +286,17 @@ pub(crate) struct Stage {
     /// Approval seqs already answered on Hollywood's terminal, so a
     /// slow screen never sends the same key twice.
     pub(crate) hanswered: std::cell::RefCell<BTreeSet<u64>>,
+    /// Passive context keys (`card.done`, `accepted`) currently riding
+    /// with an in-flight `terminal.send` to Hollywood.
+    pub(crate) hpassive_sending:
+        std::cell::RefCell<BTreeMap<(String, String), Vec<crate::hnotice::PassiveKey>>>,
+    /// Passive context keys already accounted for in a finished delivery
+    /// (loaded once from disk per `hdir` so stage restarts never repeat).
+    pub(crate) hpassive_done: std::cell::RefCell<BTreeSet<crate::hnotice::PassiveKey>>,
+    /// True once `hdir/passive-accounted.json` has been loaded into `hpassive_done`.
+    pub(crate) hpassive_loaded: std::cell::Cell<bool>,
+    /// True once this stage run has synced `hdir/AGENTS.md` on boot.
+    pub(crate) hagents_synced: std::cell::Cell<bool>,
     /// Cached `(studio, seq) -> snippet` lines for `StudioSummary.exchange`
     /// so immutable message/report files are read from disk at most once.
     pub(crate) exchange_cache: std::cell::RefCell<BTreeMap<(String, u64), String>>,
@@ -887,6 +898,10 @@ impl Stage {
             hprompt_is_question: std::cell::Cell::new(false),
             hprompt_base: std::cell::RefCell::new(None),
             hanswered: std::cell::RefCell::new(BTreeSet::new()),
+            hpassive_sending: std::cell::RefCell::new(BTreeMap::new()),
+            hpassive_done: std::cell::RefCell::new(BTreeSet::new()),
+            hpassive_loaded: std::cell::Cell::new(false),
+            hagents_synced: std::cell::Cell::new(false),
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
             ask_watch: std::cell::RefCell::new(BTreeMap::new()),
             ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
@@ -990,6 +1005,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hprompt_is_question: std::cell::Cell::new(false),
         hprompt_base: std::cell::RefCell::new(None),
         hanswered: std::cell::RefCell::new(BTreeSet::new()),
+        hpassive_sending: std::cell::RefCell::new(BTreeMap::new()),
+        hpassive_done: std::cell::RefCell::new(BTreeSet::new()),
+        hpassive_loaded: std::cell::Cell::new(false),
+        hagents_synced: std::cell::Cell::new(false),
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
         ask_watch: std::cell::RefCell::new(BTreeMap::new()),
         ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
