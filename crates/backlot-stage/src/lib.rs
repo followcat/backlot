@@ -28,6 +28,8 @@ mod doc;
 mod draft;
 mod exchange_read;
 mod gitcmd;
+mod guard;
+mod guard_rules;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
@@ -140,6 +142,8 @@ mod finish_guard_tests;
 mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;
+#[cfg(test)]
+mod guard_tests;
 
 #[cfg(test)]
 mod hcard_tests;
