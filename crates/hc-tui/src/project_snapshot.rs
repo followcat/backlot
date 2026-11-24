@@ -97,10 +97,8 @@ pub(super) fn structured_snapshot_from_spaces(
                 .collect::<Vec<_>>();
             let name = stored.and_then(|l| l.name.as_deref()).unwrap_or(&tab.name);
             let tab_label = if name.is_empty() {
-                space
-                    .from_app
-                    .then(|| live_tab_title(&tab_members))
-                    .flatten()
+                live_tab_title(&tab_members)
+                    .or_else(|| running_job(&tab_members))
                     .unwrap_or_else(|| tab_number.to_string())
             } else {
                 clean(name)
@@ -330,11 +328,11 @@ pub(super) fn structured_snapshot_from_spaces(
     )
 }
 
-/// The title an unnamed Herdr-app tab shows, as the app's tab bar does: the
+/// The title an unnamed tab shows, as the Herdr app's tab bar does: the
 /// live title of the tab's lead agent (its first live reporter), with
 /// the activity glyph stripped. `None` when the tab has no agent or its
 /// title says nothing beyond the program (empty, a path, `user@host`,
-/// the program's own name), so the caller keeps the tab number.
+/// the program's own name), so the caller falls back to [`running_job`].
 fn live_tab_title(members: &[&Terminal]) -> Option<String> {
     let lead = members.iter().find(|term| is_agent(term))?;
     let title = crate::chrome::title_text::stripped_terminal_title(&clean(&lead.title))?;
@@ -350,6 +348,32 @@ fn live_tab_title(members: &[&Terminal]) -> Option<String> {
         && title != lead.address
         && !program_names.into_iter().any(|name| name == lower);
     telling.then_some(title)
+}
+
+/// The job an unnamed tab shows when no agent title names it, as the Herdr
+/// app's tab bar does (`zsh`, `vim`, `claude`): the program in the
+/// foreground of the tab's first live terminal, by the name it was started
+/// under — `argv[0]`'s basename, a login shell's leading `-` dropped.
+/// The process name is only the fallback: macOS reports some programs'
+/// process name as their version (Claude Code shows as `2.1.330`). `None`
+/// when no live terminal reports a foreground, so the caller keeps the
+/// tab number.
+fn running_job(members: &[&Terminal]) -> Option<String> {
+    let foreground = members
+        .iter()
+        .find(|term| term.state == "live")?
+        .foreground
+        .as_ref()?;
+    let started_as = foreground.argv.first().map(|arg0| {
+        arg0.rsplit('/')
+            .next()
+            .unwrap_or(arg0)
+            .trim_start_matches('-')
+    });
+    started_as
+        .filter(|name| !name.is_empty())
+        .or_else(|| Some(foreground.name.as_str()).filter(|name| !name.is_empty()))
+        .map(clean)
 }
 
 /// The folder name an unnamed Herdr-app space shows, as the app's spaces list

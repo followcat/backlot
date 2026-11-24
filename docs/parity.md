@@ -887,11 +887,15 @@ Everything else on the compared surfaces still diffs normally.
   herdr-app space and tab the way the herdr app does, so one layout reads
   the same in both. The space takes the folder its first terminal works in
   now (the foreground process's cwd, else the shell's) rather than the
-  folder it was created in. The tab takes its lead agent's terminal title,
-  activity glyph stripped, unless the title is empty, a path, a
-  `user@host`, the terminal address or the program's own name; then it
-  keeps its number. A name someone gave still wins, and spaces and tabs
-  outside the herdr-app document keep the reference rules.
+  folder it was created in. An unnamed tab — an app tab or one opened
+  from hc-tui — takes its lead agent's terminal title, activity glyph
+  stripped, unless the title is empty, a path, a `user@host`, the
+  terminal address or the program's own name. Failing that it shows the
+  job in the foreground of its first live terminal by the name it was
+  started under (`zsh`, `vim`, `claude`; macOS reports some process
+  names as a version), and only with no live job does it keep its
+  number. A name someone gave still wins, and spaces outside the
+  herdr-app document keep the reference names.
 - **Terminals of a closed herdr-app tab.** Deliberate: when the app closes
   a tab, its terminals keep `herdr.space`/`herdr.tab` labels that point at
   an app space the document no longer lists them in. A finished one is not

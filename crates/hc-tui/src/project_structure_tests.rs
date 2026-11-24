@@ -187,9 +187,9 @@ fn unnamed_app_tab_shows_its_agents_live_title() {
 }
 
 #[test]
-fn app_tab_keeps_its_number_when_the_title_says_nothing() {
+fn app_tab_shows_its_job_when_the_title_says_nothing() {
     // Each title here names only the program, a path, a user@host or the
-    // terminal; the tab keeps its position number, as before.
+    // terminal; the tab shows the job running in it instead.
     for title in [
         "",
         "claude",
@@ -210,7 +210,7 @@ fn app_tab_keeps_its_number_when_the_title_says_nothing() {
         );
         assert_eq!(
             project(&v, Some("t1")).snapshot.tabs[0].label,
-            "1",
+            "claude",
             "{title:?}"
         );
     }
@@ -218,9 +218,11 @@ fn app_tab_keeps_its_number_when_the_title_says_nothing() {
 
 #[test]
 fn app_tab_live_title_needs_an_agent_and_yields_to_a_name() {
-    // A plain shell's title is not a tab name, and a name someone gave stays.
+    // A plain shell's title is not a tab name (its job is), and a name
+    // someone gave stays over both the agent's title and its job.
     let mut shell = term("t1");
     shell.title = "Some shell title".into();
+    shell.foreground = foreground("zsh", "/w");
     let mut named = crate::sidebar::fixture::agent("t2", "idle");
     named.title = "✳ Agent title".into();
     let mut v = view(vec![shell, named], vec![]);
@@ -236,18 +238,96 @@ fn app_tab_live_title_needs_an_agent_and_yields_to_a_name() {
         .iter()
         .map(|t| t.label.clone())
         .collect::<Vec<_>>();
-    assert_eq!(labels, ["1", "mine"]);
+    assert_eq!(labels, ["zsh", "mine"]);
 }
 
 #[test]
 fn spaces_outside_the_app_document_keep_their_reference_names() {
-    // Live folder and live title naming apply to app spaces only.
+    // Live folder naming applies to app spaces only; tabs, such as one
+    // opened from hc-tui itself, name themselves like the app's everywhere.
     let mut a = crate::sidebar::fixture::agent("t1", "idle");
     a.title = "✳ Agent title".into();
     a.foreground = foreground("claude", "/home/user/elsewhere");
     let projected = project(&view(vec![a], vec![]), Some("t1"));
     assert_eq!(projected.snapshot.workspaces[0].label, "proj");
-    assert_eq!(projected.snapshot.tabs[0].label, "1");
+    assert_eq!(projected.snapshot.tabs[0].label, "Agent title");
+}
+
+/// The tab labels of a one-space projection whose tabs each hold `terms`.
+fn tab_labels(terms: Vec<Terminal>) -> Vec<String> {
+    let first = terms[0].address.clone();
+    project(&view(terms, vec![]), Some(&first))
+        .snapshot
+        .tabs
+        .iter()
+        .map(|t| t.label.clone())
+        .collect()
+}
+
+#[test]
+fn an_unnamed_shell_tab_shows_the_job_it_started_as() {
+    // macOS names a login shell `-zsh` and Claude Code by its version;
+    // the tab shows the name each program was started under.
+    let started = [
+        (vec!["/bin/zsh", "-l"], "zsh", "zsh"),
+        (vec!["-zsh"], "zsh", "zsh"),
+        (vec!["claude", "--resume", "x"], "2.1.330", "claude"),
+        (vec!["/usr/bin/vim", "notes.md"], "vim", "vim"),
+    ];
+    for (argv, process_name, label) in started {
+        let mut shell = term("t1");
+        shell.foreground = foreground(process_name, "/w");
+        shell.foreground.as_mut().unwrap().argv = argv.iter().map(|a| a.to_string()).collect();
+        assert_eq!(tab_labels(vec![shell]), [label], "{argv:?}");
+    }
+}
+
+#[test]
+fn a_job_with_no_start_name_falls_back_to_its_process_name() {
+    for argv in [vec![], vec![String::new()], vec!["-".to_owned()]] {
+        let mut shell = term("t1");
+        shell.foreground = foreground("bash", "/w");
+        shell.foreground.as_mut().unwrap().argv = argv.clone();
+        assert_eq!(tab_labels(vec![shell]), ["bash"], "{argv:?}");
+    }
+}
+
+#[test]
+fn a_tab_keeps_its_number_when_no_live_terminal_reports_a_job() {
+    // A shell whose foreground is unknown, and a finished terminal that
+    // still reports the program it ran.
+    let unknown = term("t1");
+    let mut finished = tagged(term("t2"), "work", "");
+    finished.state = "finished".into();
+    finished.foreground = foreground("zsh", "/w");
+    let mut nameless = term("t3");
+    nameless.foreground = foreground("", "/w");
+    nameless.foreground.as_mut().unwrap().argv.clear();
+    assert_eq!(tab_labels(vec![unknown]), ["1"]);
+    assert_eq!(tab_labels(vec![finished]), ["1"]);
+    assert_eq!(tab_labels(vec![nameless]), ["1"]);
+}
+
+#[test]
+fn a_tab_shows_the_job_of_its_first_live_terminal() {
+    // The first pane has finished; the live one beside it names the tab.
+    let mut done = term("t1");
+    done.state = "finished".into();
+    done.foreground = foreground("make", "/w");
+    let mut live = term("t2");
+    live.foreground = foreground("htop", "/w");
+    let mut v = view(vec![done, live], vec![]);
+    doc(
+        &mut v,
+        "herdr-app",
+        None,
+        json!({"spaces":[{"id":"s1","name":"","folder":"/w","tabs":[{"id":"tab1","name":"","root":{"type":"row","children":[
+            {"type":"block","content":{"terminal":"t1"}},
+            {"type":"block","content":{"terminal":"t2"}}]}}]}]}),
+    );
+    let snapshot = project(&v, Some("t2")).snapshot;
+    assert_eq!(snapshot.tabs.len(), 1, "{:?}", snapshot.tabs);
+    assert_eq!(snapshot.tabs[0].label, "htop");
 }
 
 fn tagged(mut terminal: Terminal, space: &str, tab: &str) -> Terminal {
