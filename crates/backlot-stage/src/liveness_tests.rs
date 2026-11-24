@@ -541,3 +541,104 @@ async fn work_area_ledger_clear_reasons_and_remote_skips_os_probes() {
     assert_eq!(proc_calls.load(Ordering::Relaxed), before_p);
     assert_eq!(work_calls.load(Ordering::Relaxed), before_w);
 }
+
+fn emit_signal(dir: &std::path::Path, role: &str, ts_ms: u64, event: &str, session_id: &str) {
+    let path = crate::signals::signals_path(dir, role);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let line = json!({
+        "ts_ms": ts_ms,
+        "event": event,
+        "session_id": session_id,
+    });
+    use std::io::Write as _;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
+    writeln!(f, "{line}").unwrap();
+}
+
+/// 7 (Fix1 regression). A hooked Claude role with a stale `Working` signal,
+/// high root redraw CPU (30 jiffies/s), and no descendants must still stall
+/// naming the last hook signal.
+#[tokio::test]
+async fn hooked_claude_high_root_cpu_stalls_without_descendants() {
+    let dir = tmp();
+    setup_studio(&dir, 30);
+    emit_signal(&dir, "actor-t1-c1", 10_000, "UserPromptSubmit", "s1");
+    let stats = Arc::new(Mutex::new((100u64, 0u64)));
+    let stats_r = Arc::clone(&stats);
+    let (mut stage, fake) = make_stage().await;
+    stage.proc_read = Box::new(move |_| {
+        let (c, io) = *stats_r.lock().unwrap();
+        vec![proc_node(600, 1, 0, c, io, "claude")]
+    });
+    fake.lock().unwrap().screen = "frozen\n".into();
+    let t = term(Some(600));
+
+    for step in 0..=3u64 {
+        *stats.lock().unwrap() = (100 + step * 300, step * 500_000);
+        tick(&stage, &dir, &t, "claude", 10_000 + step * 10_000).await;
+        if step < 3 {
+            assert!(events(&dir, "attention.raised").is_empty());
+        }
+    }
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { reason, detail, .. } => {
+            assert_eq!(reason, STALLED);
+            assert!(detail.contains("UserPromptSubmit (hook)"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// 8 (Fix1 busy child). The same hooked Claude role with an active
+/// descendant process does not stall.
+#[tokio::test]
+async fn hooked_claude_with_busy_descendant_does_not_stall() {
+    let dir = tmp();
+    setup_studio(&dir, 30);
+    emit_signal(&dir, "actor-t1-c1", 10_000, "UserPromptSubmit", "s1");
+    let cpu = Arc::new(Mutex::new((100u64, 10u64)));
+    let cpu_r = Arc::clone(&cpu);
+    let (mut stage, fake) = make_stage().await;
+    stage.proc_read = Box::new(move |_| {
+        let (root_cpu, child_cpu) = *cpu_r.lock().unwrap();
+        vec![
+            proc_node(601, 1, 0, root_cpu, 0, "claude"),
+            proc_node(602, 601, 1, child_cpu, 0, "cargo test"),
+        ]
+    });
+    fake.lock().unwrap().screen = "frozen\n".into();
+    let t = term(Some(601));
+
+    for step in 0..=6u64 {
+        *cpu.lock().unwrap() = (100 + step * 300, 10 + step * 25);
+        tick(&stage, &dir, &t, "claude", 10_000 + step * 10_000).await;
+    }
+    assert!(events(&dir, "attention.raised").is_empty());
+}
+
+/// 9 (Fix1 no hooks). A role without hook signals whose root CPU exceeds the
+/// floor (e.g. agy during a pure-model turn before hooks) does not stall.
+#[tokio::test]
+async fn unhooked_role_above_root_floor_does_not_stall() {
+    let dir = tmp();
+    setup_studio(&dir, 30);
+    let cpu = Arc::new(Mutex::new(100u64));
+    let cpu_r = Arc::clone(&cpu);
+    let (mut stage, fake) = make_stage().await;
+    stage.proc_read =
+        Box::new(move |_| vec![proc_node(603, 1, 0, *cpu_r.lock().unwrap(), 0, "agy")]);
+    fake.lock().unwrap().screen = "frozen\n".into();
+    let t = term(Some(603));
+
+    for step in 0..=6u64 {
+        *cpu.lock().unwrap() = 100 + step * 300;
+        tick(&stage, &dir, &t, "agy", 10_000 + step * 10_000).await;
+    }
+    assert!(events(&dir, "attention.raised").is_empty());
+}

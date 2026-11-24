@@ -190,7 +190,10 @@ re-raise one `stall_limit_s` later.
 - **Stall detection tracks six evidence sources on one clock, with local-only OS probes.**
   Hook signals, activity revisions (for `revision_stalls` runners), per-runner normalised screens,
   local process trees (descendants of `term.pid`, `cutime+cstime`, and root CPU/I/O strictly
-  above `8 jiffies/s` and `16 KB/s`), local git work areas (`HEAD`, resolved ref, `.git/index`, and
+  above `8 jiffies/s` and `16 KB/s` — floors measured on `agy` only, and root counters count
+  only without hooks for the current session; once `last_signal` is `Some`, TUI redraw CPU/I/O on
+  the root is ignored so a spinner-animating Node/Ink runner cannot outweigh stale hooks while
+  descendants and `cutime+cstime` still count), local git work areas (`HEAD`, resolved ref, `.git/index`, and
   60s-throttled `git status --porcelain`), and role ledger events (`by.role`) all feed one per-role
   clock; spinner animations and elapsed timers alone no longer hide a hung runner (`animates
   only`). Kernel inode lock waits (`lock_inode_wait` in `wchan`) raise at `3 × stall_limit_s` as

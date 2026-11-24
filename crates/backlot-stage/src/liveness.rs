@@ -157,7 +157,7 @@ impl Evidence {
         self.check_revision(input, now_ms, &mut moved);
         self.check_screen(input, now_ms, &mut moved);
         if input.local_machine {
-            self.check_procs(input.pid, now_ms, proc_read, &mut moved);
+            self.check_procs(input, now_ms, proc_read, &mut moved);
             self.check_work_area(input.work_roots, now_ms, work_read, git, &mut moved);
         }
         if let Some(ev) = input.ledger
@@ -236,12 +236,12 @@ impl Evidence {
 
     fn check_procs(
         &mut self,
-        pid: Option<u32>,
+        input: &ObserveInput<'_>,
         now_ms: u64,
         proc_read: &ProcRead,
         moved: &mut Vec<(Source, SourceStamp)>,
     ) {
-        match pid {
+        match input.pid {
             None => {
                 self.last_root_pid = None;
                 self.procs.clear();
@@ -262,7 +262,8 @@ impl Evidence {
                 let dt_ms = now_ms.saturating_sub(self.last_proc_sample_ms.unwrap_or(now_ms));
                 self.last_proc_sample_ms = Some(now_ms);
                 let tree = proc_read(p);
-                if let Some(stamp) = diff_procs(&self.procs, &tree, p, dt_ms, now_ms) {
+                let has_hook = input.signal.is_some();
+                if let Some(stamp) = diff_procs(&self.procs, &tree, p, dt_ms, now_ms, has_hook) {
                     moved.push((Source::Process, stamp));
                 }
                 self.lock_wait = update_lock_wait(self.lock_wait.take(), &tree, now_ms);
