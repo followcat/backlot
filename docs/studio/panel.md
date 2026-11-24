@@ -34,7 +34,7 @@ tail still wins while the panel is closed or unfocused.
 | `j`/`k`, `↑`/`↓` | Move the selection one row |
 | `PageUp`/`PageDown` | Move one viewport |
 | `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
-| `t` | Open the selected studio's `›` line — the producer tell input. |
+| `i` / `/` | Compose on the selected studio's `›` tell input (`/` seeds `/`, `Tab` completes `/verb`). While composing: `↑`/`↓` step per-studio `user` message history (`StudioSummary.exchange` + session submits, saving/restoring any draft, consecutive repeats collapsed), `Enter` sends and rests, `Esc` rests keeping the draft |
 | `Space` | Open or close the three-line drawer under a person or task; on a studio header it folds the whole block |
 | `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
@@ -47,7 +47,7 @@ tail still wins while the panel is closed or unfocused.
 | `q` | Close the dock |
 | `?` | Open `Ctrl+B ?` help |
 | `m` | The selected row's context menu — the same list a right-click opens |
-| `Esc` | Beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: close |
+| `Esc` | In Compose on `›`: rest on the line keeping any draft. Otherwise beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: close |
 
 All other keys are eaten while the panel owns focus, except the prefix, which still arms the
 toggle chord — and the four studio keys, which still switch studios and roles with the panel
@@ -159,8 +159,10 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
-  their configured labels (`alt ←→ studio  ↑↓ role`). Focused: the panel's own keys
-  (`↑↓ move  m menu  ? keys  esc` — `esc back` over an overlay). Dropped under 8 rows.
+  their configured labels (`alt ←→ studio  ↑↓ role`). Focused while composing on `›`:
+  `⏎ send · ↑↓ history · esc done` (or `⏎ ↑↓ · esc` / `esc` when narrower). Focused in
+  Resting: the row's own keys (`⏎ compose  i tell  / verb  m  esc`, etc.; `esc back` over an
+  overlay). Dropped under 8 rows.
 - **Restart to update:** while a source says a newer `backlot` is installed than the
   running client, one dim line closes the lot:
   `backlot <new> installed — restart the client to update (q, then backlot)`. The sources
