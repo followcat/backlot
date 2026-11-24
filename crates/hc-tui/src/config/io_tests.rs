@@ -49,6 +49,18 @@ fn agent_panel_sort_defaults_to_priority_with_explicit_values_intact() {
 }
 
 #[test]
+fn agent_panel_space_headers_loads_without_unknown_key_diagnostics() {
+    assert!(!crate::config::UiConfig::default().agent_panel_space_headers);
+    let loaded = load_text("[ui]\nagent_panel_space_headers = true\n");
+    assert!(loaded.config.ui.agent_panel_space_headers);
+    assert!(
+        loaded.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        loaded.diagnostics
+    );
+}
+
+#[test]
 fn herdr_only_experimental_keys_are_accepted_and_ignored() {
     let loaded = load_text("[experimental]\npane_history = true\n");
     assert!(loaded.diagnostics.is_empty());

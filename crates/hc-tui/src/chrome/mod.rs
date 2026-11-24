@@ -2,6 +2,7 @@
 //! the snapshot model is neutral so `watch::View` data projects onto herdr's
 //! presentation without inventing hc-tui-specific output.
 
+pub(crate) mod agent_rows;
 pub mod agents;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
