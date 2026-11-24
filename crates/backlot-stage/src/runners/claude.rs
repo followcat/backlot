@@ -140,8 +140,9 @@ pub(crate) fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// The per-session Claude settings file (S9f): `hooks` only — no
-/// permissions, no env — pointing every event at
+/// The per-session Claude settings file (S9f, R7b): `hooks` and a
+/// `permissions.deny` entry blocking `AskUserQuestion` — no env —
+/// pointing every hook event at
 /// `backlot hook --file <role's signals.jsonl>` with a five second
 /// timeout. `--settings <file>` is one session's extra layer, so
 /// the user's own hooks keep running and no user settings file is
@@ -175,8 +176,11 @@ pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
             )
         })
         .collect();
-    let content = serde_json::to_string_pretty(&serde_json::json!({"hooks": events}))
-        .unwrap_or_default()
+    let content = serde_json::to_string_pretty(&serde_json::json!({
+        "permissions": {"deny": ["AskUserQuestion"]},
+        "hooks": events,
+    }))
+    .unwrap_or_default()
         + "\n";
     HookSetup {
         settings,
