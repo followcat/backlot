@@ -116,6 +116,7 @@ async fn c_is_inert_and_the_settings_path_reopens_the_dialog_prefilled() {
     app.area = (120, 24);
     let _recorded = install(&mut app);
     alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
     // R3-5: `c` is the dock's collapse key only — inert on the Call
     // Sheet; Hollywood settings live on the pill menu and `Ctrl+B s
     // → studio → overseer → ⏎`.

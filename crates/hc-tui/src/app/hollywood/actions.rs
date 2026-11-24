@@ -261,8 +261,11 @@ impl App {
         let line = self.hollywood.input.as_str().trim().to_string();
         if line.is_empty() {
             self.hollywood.editing = false;
+            self.hollywood.history.reset_nav();
             return;
         }
+        self.sync_hollywood_history();
+        self.hollywood.history.record_send(&line);
         self.hollywood.input.clear();
         self.run_action(studio_cmds::tell_hollywood(&line));
     }

@@ -174,3 +174,180 @@ async fn a_finished_studio_offers_reopen_producer() {
     assert!(recorded.lock().unwrap().is_empty());
     assert!(app.notice.is_some(), "the row explains `o`");
 }
+
+/// Round 8 S1: Studio Dock `›` recalls seeded `StudioSummary.exchange`
+/// user entries plus session submits (tell & `/verb` except bare `/`),
+/// stashing and restoring live drafts, and never leaves Compose on `↑`/`↓`.
+#[tokio::test]
+async fn compose_up_down_recalls_history_and_restores_draft() {
+    // 1. Empty history: Up/Down keep draft and stay in Compose.
+    let mut empty_app = app_with_panel_doc();
+    empty_app.area = (120, 24);
+    open_panel(&mut empty_app);
+    key(&mut empty_app, hc_vt::Key::Char('i'));
+    for ch in "wip".chars() {
+        key(&mut empty_app, hc_vt::Key::Char(ch));
+    }
+    key(&mut empty_app, hc_vt::Key::ArrowUp);
+    assert!(empty_app.panel_editing());
+    assert_eq!(
+        empty_app.panel.selected,
+        Some(Target::Input("acme-shop".into()))
+    );
+    assert_eq!(draft(&empty_app, "acme-shop"), "wip");
+    key(&mut empty_app, hc_vt::Key::ArrowDown);
+    assert!(empty_app.panel_editing());
+    assert_eq!(draft(&empty_app, "acme-shop"), "wip");
+
+    // 2. Seeded exchange (`who == "user"`, skipping producer replies and collapsing repeats)
+    //    plus session sends before next summary arrives.
+    let mut app = app_with_panel_doc();
+    let (recorded, run) = runner();
+    app.set_panel_runner(run);
+    app.area = (120, 24);
+    let mut doc = summary_json();
+    doc["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "seeded one" },
+        { "seq": 2, "who": "user", "text": "seeded one" },
+        { "seq": 3, "who": "producer", "text": "working on it" },
+        { "seq": 4, "who": "user", "text": "seeded two" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    open_panel(&mut app);
+
+    // Send 2 local lines before summary catches up (a plain tell and a /verb).
+    key(&mut app, hc_vt::Key::Char('i'));
+    for ch in "dock first".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(!app.panel_editing(), "Dock rests on submit");
+
+    key(&mut app, hc_vt::Key::Char('i'));
+    for ch in "/tell actor-alice check build".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(!app.panel_editing());
+    assert_eq!(recorded.lock().unwrap().len(), 2);
+
+    // Re-enter Compose, type partial draft, walk Up/Down.
+    key(&mut app, hc_vt::Key::Char('i'));
+    for ch in "draft".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert!(app.panel_editing(), "Up stays in Dock Compose");
+    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(draft(&app, "acme-shop"), "/tell actor-alice check build");
+
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "dock first");
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "seeded two");
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "seeded one");
+
+    // Editing recalled entry does not mutate history; Down restores draft.
+    key(&mut app, hc_vt::Key::Char('!'));
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(draft(&app, "acme-shop"), "seeded two");
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(draft(&app, "acme-shop"), "dock first");
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(draft(&app, "acme-shop"), "/tell actor-alice check build");
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(draft(&app, "acme-shop"), "draft");
+
+    // Recall "dock first", edit and send as a new tell.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    key(&mut app, hc_vt::Key::ArrowUp);
+    for ch in " v2".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(
+        recorded.lock().unwrap().last().unwrap().as_slice(),
+        &[
+            "tell",
+            "producer",
+            "--text",
+            "dock first v2",
+            "--studio",
+            "acme-shop",
+            "--as",
+            "user",
+        ]
+    );
+    assert!(!app.panel_editing());
+    assert_eq!(draft(&app, "acme-shop"), "");
+
+    // Summary catching up for `/tell ... check build` and `dock first` avoids duplicates.
+    let mut synced = summary_json();
+    synced["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "seeded one" },
+        { "seq": 2, "who": "user", "text": "seeded one" },
+        { "seq": 3, "who": "producer", "text": "working on it" },
+        { "seq": 4, "who": "user", "text": "seeded two" },
+        { "seq": 5, "who": "user", "text": "dock first" },
+        { "seq": 6, "who": "user", "text": "check build" },
+        { "seq": 7, "who": "user", "text": "dock first v2" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: synced,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    key(&mut app, hc_vt::Key::Char('i'));
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "dock first v2");
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "/tell actor-alice check build");
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(draft(&app, "acme-shop"), "dock first");
+
+    // Esc on empty Dock Compose rests without unfocusing; second Esc unfocuses.
+    let mut esc_app = app_with_panel_doc();
+    esc_app.area = (120, 24);
+    open_panel(&mut esc_app);
+    key(&mut esc_app, hc_vt::Key::Char('i'));
+    assert!(esc_app.panel_editing());
+    key(&mut esc_app, hc_vt::Key::Escape);
+    assert!(!esc_app.panel_editing());
+    assert!(esc_app.panel.focused);
+    assert_eq!(
+        esc_app.panel.selected,
+        Some(Target::Input("acme-shop".into()))
+    );
+    key(&mut esc_app, hc_vt::Key::Escape);
+    assert!(!esc_app.panel.focused);
+}
+
+#[tokio::test]
+async fn dock_compose_footer_hints_show_history() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Char('i'));
+    let wide = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(
+        wide.contains("⏎ send · ↑↓ history · esc done"),
+        "wide: {wide}"
+    );
+    let mid = screen_lines(&draw_to(&mut app, 28, 24)).join("\n");
+    assert!(mid.contains("⏎ ↑↓ · esc"), "mid: {mid}");
+    let tight = screen_lines(&draw_to(&mut app, 9, 24)).join("\n");
+    assert!(tight.contains("esc"), "tight: {tight}");
+}

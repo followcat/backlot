@@ -156,9 +156,10 @@ impl App {
                     // sent here asks Hollywood for a `studio-new`
                     // card; the card lands in the expanded layer.
                     self.hollywood.mode = crate::hollywood::LayerMode::Expanded;
+                    self.hollywood.selected = Some(crate::hollywood::Target::Input);
                     self.hollywood.editing = true;
-                    self.hollywood.selected = None;
                     self.hollywood.scroll = 0;
+                    self.hollywood.history.reset_nav();
                 }
             }
             Key::Char('s') if key.input.mods == hc_vt::Mods::NONE => self.opening_start_stage(),

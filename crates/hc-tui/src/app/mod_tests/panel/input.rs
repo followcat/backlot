@@ -84,6 +84,12 @@ async fn up_rests_and_steps_off_the_line() {
     open_panel(&mut app);
     key(&mut app, hc_vt::Key::Char('i'));
     key(&mut app, hc_vt::Key::Char('x'));
+    // In Compose, `↑` stays on the `›` line (history); `Esc` rests, then `↑` steps off.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert!(app.panel_editing());
+    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel_editing());
     key(&mut app, hc_vt::Key::ArrowUp);
     assert!(!app.panel_editing());
     assert!(matches!(

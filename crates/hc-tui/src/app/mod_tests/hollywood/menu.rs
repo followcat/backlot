@@ -15,7 +15,7 @@ async fn m_on_a_studio_frame_opens_a_visible_menu() {
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     draw_to(&mut app, 120, 30);
-    app.hollywood.selected = Some(Target::Studio(crate::studio::StudioKey {
+    app.hollywood_select(Target::Studio(crate::studio::StudioKey {
         machine: None,
         id: "beta-tools".into(),
     }));
@@ -59,7 +59,7 @@ async fn m_on_a_waiting_row_opens_its_menu() {
         .into_iter()
         .find(|t| matches!(t, Target::Prompt(_, role) if role == "actor-alice"))
         .expect("the prompt row is a target");
-    app.hollywood.selected = Some(target);
+    app.hollywood_select(target);
     key(&mut app, hc_vt::Key::Char('m'));
     let Some(menu) = app.menu.as_ref() else {
         panic!("a prompt row's menu opens");
@@ -82,7 +82,7 @@ async fn m_on_a_menu_less_target_opens_nothing_and_esc_still_collapses() {
     app.area = (120, 30);
     alt_y(&mut app);
     draw_to(&mut app, 120, 30);
-    app.hollywood.selected = Some(Target::Title);
+    app.hollywood_select(Target::Title);
     key(&mut app, hc_vt::Key::Char('m'));
     assert!(app.menu.is_none(), "the title row has no menu");
     key(&mut app, hc_vt::Key::Escape);
@@ -101,7 +101,7 @@ async fn a_vanished_selection_falls_back_to_the_first_frame_for_m() {
     draw_to(&mut app, 120, 30);
     // A studio that is no longer in the document — as if a publish
     // dropped it between the draw and the keypress.
-    app.hollywood.selected = Some(Target::Studio(crate::studio::StudioKey {
+    app.hollywood_select(Target::Studio(crate::studio::StudioKey {
         machine: None,
         id: "gone-shop".into(),
     }));
@@ -139,7 +139,7 @@ async fn m_on_a_talk_or_headline_row_offers_raw_hollywood_terminal_focus() {
     app.area = (120, 30);
     alt_y(&mut app);
     draw_to(&mut app, 120, 30);
-    app.hollywood.selected = Some(Target::Talk(9));
+    app.hollywood_select(Target::Talk(9));
     key(&mut app, hc_vt::Key::Char('m'));
     assert!(app.menu.is_some(), "`m` on Talk opens the entry menu");
     let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");

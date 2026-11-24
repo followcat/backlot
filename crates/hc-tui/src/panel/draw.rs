@@ -569,7 +569,11 @@ fn hint_tiers(
         out
     };
     match selected {
-        Some(Target::Input(_)) if editing => s(&["⏎ send · ↑/esc done", "⏎ ↑/esc"]),
+        Some(Target::Input(_)) if editing => [
+            "⏎ send · ↑↓ history · esc done".to_string(),
+            "⏎ ↑↓ · esc".to_string(),
+            "esc".to_string(),
+        ],
         Some(Target::Input(_)) => s(&["⏎ compose  i tell  / verb  m", "⏎ i / m", "⏎ m"]),
         Some(Target::ReopenProducer(_)) => s(&["o reopen  m", "o m"]),
         Some(Target::Talk(key, seq)) => {

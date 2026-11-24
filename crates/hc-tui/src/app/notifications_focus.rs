@@ -85,10 +85,9 @@ impl App {
                 ),
             },
             Target::Card(id) => {
-                // Expand the Call Sheet on that card.
+                // Expand the Call Sheet on that card in Resting.
                 self.hollywood.mode = crate::hollywood::LayerMode::Expanded;
-                self.hollywood.selected = Some(Target::Card(id));
-                self.hollywood.editing = false;
+                self.hollywood_select(Target::Card(id));
                 self.hollywood.scroll = 0;
                 self.studio.lot.counts.unread = 0;
             }

@@ -216,50 +216,56 @@ impl App {
 
     // ---------- the toggle ----------
 
-    /// Open the bar expanded — the toggle's open arm and the start
-    /// policy's `expanded`/`when_waiting` branches share it. The
-    /// cursor lands on the most urgent waiting item, else the
-    /// active studio's frame.
-    pub(crate) fn hollywood_open(&mut self) {
+    /// Expand the sheet into `Compose` on `Target::Input` when `[hollywood]`
+    /// is set (waiting items remain visible above), or keep wait/frame
+    /// landing when unconfigured. Preserves any parked `input` draft.
+    fn hollywood_enter_expanded(&mut self) {
         self.hollywood.mode = LayerMode::Expanded;
-        self.hollywood.selected = self.hollywood_initial_target();
         self.hollywood.chip_index = None;
         self.hollywood.last_upper = None;
         self.hollywood.last_lower = None;
         self.hollywood.frame_scroll = 0;
         self.hollywood.scroll = 0;
-        // A calm sheet opens as a dialog: nothing waits for a key, so
-        // the selection lands *on* the `tell` line editing — the
-        // highlight and the keystrokes point at the same row. A
-        // waiting item keeps its `y`/`a`/`x` letters instead.
-        if self.has_hollywood_cfg && !self.hollywood_wait_selected() {
+        self.hollywood.history.reset_nav();
+        if self.has_hollywood_cfg {
             self.hollywood.selected = Some(Target::Input);
             self.hollywood.editing = true;
         } else {
+            self.hollywood.selected = self.hollywood_initial_target();
             self.hollywood.editing = false;
         }
         self.hollywood_remember_selected();
         let machines = self.panel_summaries();
+        self.hollywood_sync_history_from(&machines);
         self.sync_hollywood_seen(&machines);
         self.studio.lot.counts.unread = 0;
     }
 
-    /// Whether the selection is on a waiting item — the rows whose
-    /// letters decide, apply, cancel or finish.
-    fn hollywood_wait_selected(&self) -> bool {
-        matches!(
-            self.hollywood.selected,
-            Some(
-                Target::Prompt(..)
-                    | Target::Role(..)
-                    | Target::Hollywood
-                    | Target::HollywoodLive
-                    | Target::Tell(_)
-                    | Target::Stage(..)
-                    | Target::Card(_)
-                    | Target::Ready(_)
-            )
-        )
+    /// Open the bar expanded — the toggle's open arm, the start
+    /// policy's `expanded`/`when_waiting` branches, menu and help share it.
+    pub(crate) fn hollywood_open(&mut self) {
+        self.hollywood_enter_expanded();
+    }
+
+    /// Sync `hollywood.history` from `HollywoodSummary.exchange`.
+    pub(crate) fn sync_hollywood_history(&mut self) {
+        let machines = self.panel_summaries();
+        self.hollywood_sync_history_from(&machines);
+    }
+
+    pub(crate) fn hollywood_sync_history_from(
+        &mut self,
+        machines: &[crate::panel::data::MachineSummary],
+    ) {
+        let exchange = hollywood::local_summary(machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .map(|h| h.exchange.as_slice())
+            .unwrap_or(&[]);
+        self.hollywood.history.sync(
+            exchange
+                .iter()
+                .map(|e| (e.seq, e.who.as_str(), e.text.as_str())),
+        );
     }
 
     /// The `Compose` latch can only live on the `›` row — every
@@ -269,10 +275,13 @@ impl App {
     /// row arms `Compose` again.
     pub(super) fn hollywood_sync_editing(&mut self) {
         self.hollywood.editing &= self.hollywood.selected == Some(Target::Input);
+        if !self.hollywood.editing {
+            self.hollywood.history.reset_nav();
+        }
     }
 
-    /// What an opening selects (A2.1): the first waiting item, else
-    /// the focused studio's frame, else the first frame.
+    /// What an opening selects when `[hollywood]` is absent: the first
+    /// waiting item, else the focused studio's frame, else the first frame.
     fn hollywood_initial_target(&self) -> Option<Target> {
         if let Some(first) = self.hollywood_waits().into_iter().next() {
             return Some(first);
@@ -290,40 +299,17 @@ impl App {
             .or_else(|| frames.first().cloned())
     }
 
-    /// The configured toggle (`alt+y` direct or its `[hollywood] key`
-    /// override): hidden shows the pill's bar collapsed, collapsed
-    /// expands, expanded collapses back. Opening lands the cursor on
-    /// the most urgent item, so `y` answers it without a move.
+    /// The configured toggle (`alt+y`, `Ctrl+B i`, clicking the pill):
+    /// `Hidden | Collapsed => Expanded` (straight into Compose when
+    /// `[hollywood]` is set; unconfigured keeps wait/frame landing), and
+    /// `Expanded => Collapsed` keeping any draft.
     pub(crate) fn hollywood_toggle(&mut self) {
-        self.hollywood.mode = match self.hollywood.mode {
-            LayerMode::Hidden => LayerMode::Collapsed,
-            LayerMode::Collapsed => LayerMode::Expanded,
-            LayerMode::Expanded => LayerMode::Collapsed,
-        };
         if self.hollywood.mode == LayerMode::Expanded {
-            self.hollywood.selected = self.hollywood_initial_target();
-            self.hollywood.chip_index = None;
-            self.hollywood.last_upper = None;
-            self.hollywood.last_lower = None;
-            self.hollywood.frame_scroll = 0;
-            self.hollywood.scroll = 0;
-            if self.has_hollywood_cfg && !self.hollywood_wait_selected() {
-                self.hollywood.selected = Some(Target::Input);
-                self.hollywood.editing = true;
-            } else {
-                self.hollywood.editing = false;
-            }
-            self.hollywood_remember_selected();
-            let machines = self.panel_summaries();
-            self.sync_hollywood_seen(&machines);
-            self.studio.lot.counts.unread = 0;
-        } else {
-            // Leaving the panel retires its ephemeral sub-state.
-            self.hollywood.view = None;
-            self.hollywood.editing = false;
-            self.hollywood.confirm = None;
+            self.hollywood_collapse();
             let machines = self.panel_summaries();
             self.sync_lot(&machines);
+        } else {
+            self.hollywood_enter_expanded();
         }
     }
 

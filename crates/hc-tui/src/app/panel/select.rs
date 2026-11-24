@@ -154,6 +154,9 @@ impl App {
         // A clamp that leaves the `›` row drops Compose; staying on
         // it keeps the edit.
         self.panel.editing &= matches!(self.panel.selected, Some(Target::Input(_)));
+        if !self.panel.editing {
+            self.panel.reset_history_nav();
+        }
     }
 
     /// Space — the S2 meaning by row: a studio header folds or

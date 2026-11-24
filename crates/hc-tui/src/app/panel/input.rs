@@ -102,6 +102,20 @@ impl App {
     /// mistyped `/verb` keeps it — and the row falls back to
     /// `Resting` either way (R3-2's dock rule), so `j`/`k`/`m`/`Esc`
     /// act on the dock at once.
+    /// Sync one studio's Compose history from `StudioSummary.exchange`.
+    pub(super) fn panel_sync_history(&mut self, key: &StudioKey) {
+        let machines = self.panel_summaries();
+        if let Some(studio) = crate::panel::data::studio(&machines, key) {
+            self.panel.history_mut(key).sync(
+                studio
+                    .studio
+                    .exchange
+                    .iter()
+                    .map(|e| (e.seq, e.who.as_str(), e.text.as_str())),
+            );
+        }
+    }
+
     pub(super) fn panel_input_submit(&mut self) {
         let Some(Target::Input(key)) = self.panel.selected.clone() else {
             return;
@@ -113,11 +127,18 @@ impl App {
             .unwrap_or_default();
         if line.is_empty() {
             self.panel.editing = false;
+            self.panel.reset_history_nav();
             return;
         }
         if mistyped_verb(&line) {
             self.reject_input("looks like a mistyped /command — remove the leading letter or edit");
             return;
+        }
+        self.panel_sync_history(&key);
+        if line != "/" {
+            self.panel.history_mut(&key).record_send(&line);
+        } else {
+            self.panel.reset_history_nav();
         }
         match line.strip_prefix('/') {
             Some(rest) => self.panel_slash(&key, rest),

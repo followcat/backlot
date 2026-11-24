@@ -89,6 +89,7 @@ impl App {
                         // `panel_activate` re-arms Compose only on
                         // the `›` row — a click elsewhere rests it.
                         self.panel.editing = false;
+                        self.panel.reset_history_nav();
                         self.panel_activate();
                     }
                 }
