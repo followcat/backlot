@@ -27,6 +27,7 @@ mod narrow;
 mod observer_policy_tests;
 mod page_keys;
 mod pane_cache;
+mod pane_exit_focus;
 mod preferences;
 mod reload;
 mod remote_children;
