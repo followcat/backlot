@@ -75,6 +75,85 @@ pub(crate) fn close(key: &StudioKey, role: &str) -> Action {
     a
 }
 
+/// `restart --person <role> [--fresh]` (L2) — the stage reloads the
+/// seat in place, resuming its session unless `fresh`.
+pub(crate) fn restart(key: &StudioKey, role: &str, fresh: bool) -> Action {
+    let word = if fresh {
+        "restarting fresh"
+    } else {
+        "restarting"
+    };
+    let mut a = action(
+        format!("{word} {role}"),
+        format!("restarted {role}"),
+        format!("restart {role}"),
+        key,
+        mark::role(key, role),
+    );
+    let mut command = vec!["restart".into(), "--person".into(), role.into()];
+    if fresh {
+        command.push("--fresh".into());
+    }
+    a.argv = studio_argv(&command, key);
+    a
+}
+
+/// `restart --person hollywood [--fresh]` — the overseer's own ledger,
+/// so no `--studio` rides the tail.
+pub(crate) fn restart_hollywood(fresh: bool) -> Action {
+    let mut argv = vec!["restart".into(), "--person".into(), "hollywood".into()];
+    if fresh {
+        argv.push("--fresh".into());
+    }
+    argv.extend(["--as".into(), "user".into()]);
+    Action {
+        label: if fresh {
+            "restarting hollywood fresh".into()
+        } else {
+            "restarting hollywood".into()
+        },
+        done: "restarted hollywood".into(),
+        name: "restart hollywood".into(),
+        mark: mark::hollywood(),
+        argv,
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `recast --person <role> --runner <r> --model <m> [--effort <e>]`
+/// (L3) — the new identity takes over on the stage's next tick.
+pub(crate) fn recast(
+    key: &StudioKey,
+    role: &str,
+    runner: &str,
+    model: &str,
+    effort: Option<&str>,
+) -> Action {
+    let mut command = vec![
+        "recast".into(),
+        "--person".into(),
+        role.into(),
+        "--runner".into(),
+        runner.into(),
+        "--model".into(),
+        model.into(),
+    ];
+    if let Some(effort) = effort {
+        command.extend(["--effort".into(), effort.into()]);
+    }
+    let mut a = action(
+        format!("recasting {role}"),
+        format!("recast {role} as {runner}"),
+        format!("recast {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(&command, key);
+    a
+}
+
 /// `reopen --person <role>` (§4).
 pub(crate) fn reopen(key: &StudioKey, role: &str) -> Action {
     let mut a = action(

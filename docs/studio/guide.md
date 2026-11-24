@@ -649,6 +649,13 @@ use restart to reload it`.
 `restart --person hollywood` reloads the overseer itself, from its own ledger and the same
 `[hollywood]` setup; a fresh restart starts a new conversation.
 
+The client's role menu offers the same command as **`Restart <name>`** for every live or stuck
+role; Hollywood's own menu carries **`Restart Hollywood`**. The confirm has two choices —
+`Resume its session` (the default when the role's runner keeps a resumable session) and
+`Fresh start` — and runs `backlot restart … --as user` on the studio's machine. A fixed seat
+(producer, director, writer) no longer offers `Close`, which `close` refuses on it; actors and
+held seats keep it.
+
 ## Changing who plays a role
 
 Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —
@@ -684,6 +691,14 @@ backlot hollywood propose recast --studio acme-shop --person director --runner c
 
 The card shows `recast director → cmd/deepseek-v4.1-flash`; applying it re-checks the role's
 identity, and the stage records one `role.recast` with the card's marker.
+
+The client offers the same command as **`Recast…`** on a fixed seat's role menu. The picker
+asks for the runner, then the model, then the effort, taking the runner and model lists from
+`backlot runners --json` on the studio's machine. The effort step follows the runner's caps: a
+runner that requires an effort lists its levels with one preselected, an optional one allows an
+empty choice, and a runner with no effort flag has no effort step at all. A summary line shows
+the old identity beside the new one before Enter runs `backlot recast … --as user`; a refusal
+comes back verbatim.
 
 ## Changing the requirement midway
 

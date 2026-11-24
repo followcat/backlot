@@ -7,6 +7,9 @@
 use crate::chrome::text_editor::TextEditor;
 use crate::studio::StudioKey;
 
+mod lifecycle;
+pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog};
+
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
 #[derive(Debug, Clone)]
@@ -123,12 +126,14 @@ pub(crate) struct ConfirmDialog {
     pub(crate) for_: ConfirmFor,
 }
 
-/// The four dialog kinds.
+/// Every dialog kind.
 pub(crate) enum StudioDialog {
     Reason(ReasonDialog),
     Confirm(ConfirmDialog),
     Tell(TellDialog),
     Revise(ReviseDialog),
+    Restart(RestartDialog),
+    Recast(RecastDialog),
 }
 
 impl StudioDialog {

@@ -108,7 +108,9 @@ fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
 }
 
 mod kinds;
+mod lifecycle;
 use kinds::{render_confirm, render_reason, render_revise, render_tell};
+use lifecycle::{render_recast, render_restart};
 
 /// One render entry — the app hands the `modal_band()` rect so a
 /// beside dock's border is never crossed (A6.2).
@@ -123,6 +125,8 @@ pub(crate) fn render(
         StudioDialog::Confirm(d) => render_confirm(b, band, d, palette),
         StudioDialog::Tell(d) => render_tell(b, band, d, palette),
         StudioDialog::Revise(d) => render_revise(b, band, d, palette),
+        StudioDialog::Restart(d) => render_restart(b, band, d, palette),
+        StudioDialog::Recast(d) => render_recast(b, band, d, palette),
     }
 }
 

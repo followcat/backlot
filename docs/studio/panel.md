@@ -78,6 +78,13 @@ A ready-but-unfinished studio reads `state: "finished"` in the document too, so 
 only when the frame's studio is `ready_to_finish`; a finished chip, an open-task studio and the
 new-studio frame leave `f` a no-op.
 
+A live person's menu (`m` on a person) carries **`Restart <name>`**, and a fixed seat — producer,
+director, writer — adds **`Recast…`** and drops `Close`, which the command refuses on it. Restart
+opens a two-choice confirm (`Resume its session` when the runner keeps a resumable session,
+else `Fresh start`); recast steps through runner → model → effort, takes the lists from
+`backlot runners --json`, and shows the old → new identity before it runs. An actor or held seat
+keeps `Close`.
+
 ## Geometry and `Esc`
 
 The expanded dock's width is fixed by the frame: 38 columns at 160+, 36 at 100+, 28 under.

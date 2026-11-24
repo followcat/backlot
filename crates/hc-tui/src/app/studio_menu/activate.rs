@@ -108,6 +108,31 @@ impl App {
                     self.run_action(studio_cmds::reopen(key, &role.role));
                 }
             }
+            StudioAct::Restart => {
+                if let Some(role) = menu.role.as_ref() {
+                    let resumable = menu.studio.is_some() && role.runner_resumes();
+                    self.studio_dialog = Some(StudioDialog::Restart(
+                        crate::studio_dialog::RestartDialog::new(
+                            menu.studio.clone(),
+                            &role.role,
+                            &role.name,
+                            resumable,
+                        ),
+                    ));
+                }
+            }
+            StudioAct::Recast => {
+                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                    self.recast_dialog_open(
+                        key,
+                        &role.role,
+                        &role.name,
+                        role.runner.clone(),
+                        role.model.clone(),
+                        role.effort.clone(),
+                    );
+                }
+            }
             StudioAct::Close => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
                     self.studio_dialog = Some(StudioDialog::confirm(

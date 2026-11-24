@@ -12,6 +12,14 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Restart and recast from the role menu.** A live or stuck role's menu offers `Restart <name>`
+  — a two-choice confirm, `Resume its session` (the default when its runner keeps a resumable
+  session) or `Fresh start`, running `backlot restart --as user` on the studio's machine.
+  Hollywood's own menu carries `Restart Hollywood`. The fixed seats — producer, director, writer
+  — add `Recast…` (runner, then model, then effort from `backlot runners --json` and each
+  runner's caps; a no-effort runner has no effort step, an optional one allows empty) and no
+  longer offer the `Close` that the command refuses on them.
+
 - **The left tree answers to the keyboard: the launcher's machine rows.** `Ctrl+B ?`'s
   `machines` group now carries, per machine, `Stage log · <machine>`,
   `Unfold finished studios (n) · <machine>` (or `Fold …`) and `Machine menu · <machine>` — the

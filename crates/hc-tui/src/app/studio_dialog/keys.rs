@@ -63,6 +63,12 @@ impl App {
             Some(StudioDialog::Revise(d)) => {
                 self.studio_dialog = self.revise_key(d, key, combo.code, combo.modifiers);
             }
+            Some(StudioDialog::Restart(d)) => {
+                self.studio_dialog = self.restart_key(d, key, combo.code);
+            }
+            Some(StudioDialog::Recast(d)) => {
+                self.studio_dialog = self.recast_key(d, key, combo.code, combo.modifiers);
+            }
             None => {}
         }
     }
@@ -294,6 +300,14 @@ impl App {
                 }
                 Some(StudioDialog::Revise(d)) => {
                     self.studio_dialog = self.revise_submit(d);
+                }
+                Some(StudioDialog::Restart(d)) => {
+                    self.studio_dialog = self.restart_submit(&d);
+                }
+                Some(StudioDialog::Recast(mut d)) => {
+                    if !self.recast_advance(&mut d) {
+                        self.studio_dialog = Some(StudioDialog::Recast(d));
+                    }
                 }
                 None => {}
             }

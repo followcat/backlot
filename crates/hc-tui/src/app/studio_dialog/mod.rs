@@ -11,6 +11,7 @@ use crate::studio_menu::StudioMenu;
 use super::App;
 
 mod keys;
+mod lifecycle;
 
 impl App {
     /// `Tell <name>…` — `Tell alice · acme-shop · host-b`.
@@ -111,6 +112,11 @@ impl App {
     /// generation drops the fetch.
     pub(crate) fn on_dialog_fetch(&mut self, (epoch, result): (u64, Result<String, String>)) {
         if epoch != self.studio_dialog_gen {
+            return;
+        }
+        // The lifecycle dialogs own their fetches (the recast runner
+        // probe and the restore dry run).
+        if self.lifecycle_dialog_fetch(result.clone()) {
             return;
         }
         match self.studio_dialog.as_mut() {
