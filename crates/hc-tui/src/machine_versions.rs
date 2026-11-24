@@ -163,11 +163,14 @@ fn parse_reply(out: Result<String, String>) -> Backlot {
 }
 
 /// `backlot --version`'s first line → the bare version, validated
-/// against the same strict semver the installer env gets — a
-/// hostile or garbled line never reaches a comparison.
+/// against the same strict semver the installer env gets — a hostile or
+/// garbled line never reaches a comparison. A build id after the
+/// version — `backlot 0.3.0 (abc123def456)` — is dropped: the probe
+/// caches versions, and the update hint compares builds separately.
 fn parse_version(text: &str) -> Option<String> {
     let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
-    let version = line.strip_prefix("backlot ").unwrap_or(line).trim();
+    let line = line.strip_prefix("backlot ").unwrap_or(line).trim();
+    let version = line.split_whitespace().next()?;
     crate::update_check::semver(version)
         .is_some()
         .then(|| version.to_owned())
@@ -292,6 +295,25 @@ mod tests {
             Backlot::Error("ssh: connect failed".into())
         );
         assert!(matches!(mv.state("d", None), Backlot::Error(_)));
+    }
+
+    /// S2 fix: `--version` now prints the build in parentheses; the probe
+    /// still reads the version before it.
+    #[test]
+    fn a_version_line_with_a_build_still_parses() {
+        let mut mv = MachineVersions::default();
+        mv.note_reply("a", Ok("backlot 0.3.0 (abc123def456)\n".into()));
+        mv.note_reply("b", Ok("backlot 0.3.0 (abc123def456-dirty)\n".into()));
+        for machine in ["a", "b"] {
+            assert_eq!(
+                mv.state(machine, None),
+                Backlot::Installed {
+                    version: "0.3.0".into(),
+                    exe: None
+                },
+                "{machine}"
+            );
+        }
     }
 
     #[test]

@@ -416,6 +416,7 @@ fn hollywood_work_and_pending_project_cleanly_and_compare_in_same_as() {
         studios: Vec::new(),
         hollywood: Some(settled.clone()),
         backlot_version: None,
+        backlot_build: None,
     };
     let mut b = a.clone();
     b.updated_ms = 9999;

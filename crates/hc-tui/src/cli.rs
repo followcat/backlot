@@ -74,9 +74,18 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
     Ok(Action::Run(options))
 }
 
+/// A `--version` line: `backlot 0.3.0`, with the build in parentheses
+/// when the build provided one — `backlot 0.3.0 (abc123def456)`.
+pub fn version_line(version: &str, build: Option<&str>) -> String {
+    match build.map(str::trim).filter(|build| !build.is_empty()) {
+        Some(build) => format!("backlot {version} ({build})"),
+        None => format!("backlot {version}"),
+    }
+}
+
 /// Version line for `--version`.
 pub fn version_text() -> String {
-    format!("backlot {}", env!("CARGO_PKG_VERSION"))
+    version_line(env!("CARGO_PKG_VERSION"), option_env!("BACKLOT_BUILD_ID"))
 }
 
 pub const INSTALL_URL: &str =

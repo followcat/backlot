@@ -22,6 +22,21 @@ fn local(socket: &str) -> Endpoint {
     })
 }
 
+/// A `--version` line carries the build id only when one exists.
+#[test]
+fn the_version_line_carries_the_build_when_present() {
+    assert_eq!(version_line("0.3.0", None), "backlot 0.3.0");
+    assert_eq!(version_line("0.3.0", Some("")), "backlot 0.3.0");
+    assert_eq!(
+        version_line("0.3.0", Some("abc123def456")),
+        "backlot 0.3.0 (abc123def456)"
+    );
+    assert_eq!(
+        version_line("0.3.0", Some("abc123def456-dirty")),
+        "backlot 0.3.0 (abc123def456-dirty)"
+    );
+}
+
 /// The id counts only when socket AND id both match the local core.
 #[test]
 fn caller_counts_only_on_a_matching_local_socket() {

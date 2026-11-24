@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use hc_proto::endpoint::Endpoint;
 
 use super::App;
+use crate::machine_versions::Backlot;
 use crate::panel::data::MachineSummary;
 use crate::panel::{self, PanelConfig, PanelMode, Target};
 
@@ -83,6 +84,32 @@ impl App {
                 .map(|m| m.state == "connected")
                 .unwrap_or(true),
         }
+    }
+
+    /// S2: the newest install that outranks this client — the local
+    /// stage's published `backlot_version` (and build id) or an
+    /// installed `backlot --version` the six-hour probe answered.
+    /// `None` while nothing is newer, so the lot says nothing.
+    pub(crate) fn update_hint(&self) -> Option<crate::panel::UpdateHint> {
+        let mut candidates = Vec::new();
+        let summaries = self.panel_summaries();
+        if let Some(local) = summaries.iter().find(|summary| summary.machine.is_none())
+            && let Some(version) = &local.summary.backlot_version
+        {
+            candidates.push((version.clone(), local.summary.backlot_build.clone()));
+        }
+        for machine in self.view.machines.as_deref().unwrap_or_default() {
+            if let Backlot::Installed { version, .. } =
+                self.machine_versions.state(&machine.name, None)
+            {
+                candidates.push((version, None));
+            }
+        }
+        crate::panel::newest(
+            env!("CARGO_PKG_VERSION"),
+            option_env!("BACKLOT_BUILD_ID"),
+            &candidates,
+        )
     }
 
     /// The toggle chord (`prefix+<panel.key>`): closed or auto-hidden

@@ -113,10 +113,7 @@ fn version_prints_name_and_package_version() {
     let scratch = ScratchEnv::new();
     let output = run_hc_tui(&scratch, &["--version"]);
     assert!(output.status.success());
-    assert_eq!(
-        stdout(&output).trim(),
-        format!("backlot {}", env!("CARGO_PKG_VERSION")),
-    );
+    assert_eq!(stdout(&output).trim(), hc_tui::cli::version_text());
 }
 
 #[test]

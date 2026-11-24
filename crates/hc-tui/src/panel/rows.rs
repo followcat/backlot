@@ -212,6 +212,11 @@ pub(crate) enum Row<'a> {
     /// H4: `no hollywood — backlot hollywood setup …` — the expanded
     /// panel's last row while `[hollywood]` is absent (R22).
     SetupHint,
+    /// S2: `backlot <v> installed — restart the client to update …`
+    /// at the foot of the lot when a newer install was found.
+    Update {
+        text: String,
+    },
 }
 
 impl Row<'_> {
@@ -242,7 +247,8 @@ impl Row<'_> {
             | Row::Owed { .. }
             | Row::Usage { .. }
             | Row::BlockBottom(_)
-            | Row::Drawer { .. } => Target::None,
+            | Row::Drawer { .. }
+            | Row::Update { .. } => Target::None,
             // R22: the hint is the dialog's button — actionable like
             // the Call Sheet's own setup line.
             Row::SetupHint => Target::Setup,
@@ -463,6 +469,7 @@ pub(crate) fn rows<'a>(
         if mode == PanelMode::Expanded && panel.hollywood_hint {
             out.push(Row::SetupHint);
         }
+        push_update(&mut out, panel);
         return out;
     }
     for machine in machines {
@@ -549,5 +556,14 @@ pub(crate) fn rows<'a>(
             }
         }
     }
+    push_update(&mut out, panel);
     out
+}
+
+/// S2: the newer-install line closes the lot — one dim row after the
+/// studios, whatever the mode.
+fn push_update<'a>(out: &mut Vec<Row<'a>>, panel: &Panel) {
+    if let Some(hint) = &panel.update {
+        out.push(Row::Update { text: hint.text() });
+    }
 }

@@ -254,11 +254,12 @@ pub(super) fn draw_person(
         mark.glyph(spin),
         mark.style(palette),
     );
-    // `name · task ↑` left — the state word keeps the right edge.
+    // `name · task ↑` left — the state word keeps the right edge,
+    // with the dim runner tag before it and the short model before
+    // that only in cells the whole name leaves spare (L4).
     let state = mark.word();
     let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
     let state_width = display_width(state) as u16 + u16::from(badge) * 2;
-    let name_width = rect.width.saturating_sub(4 + state_width + 2);
     let flag = role.priority.and_then(PriorityMark::of);
     let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
     let mut name = role.name.clone();
@@ -266,6 +267,9 @@ pub(super) fn draw_person(
         name.push_str(" · ");
         name.push_str(task);
     }
+    let name_need = display_width(&name) as u16 + flag_width;
+    let tail = super::badge::tail(role, name_need, state_width, rect.width);
+    let name_width = tail.name_width;
     let name_text = truncate_end(&name, name_width.saturating_sub(flag_width) as usize);
     let drawn_name_width = display_width(&name_text) as u16;
     put_text(
@@ -288,6 +292,37 @@ pub(super) fn draw_person(
             1,
             flag.glyph(),
             Style::default().fg(flag.color(palette)),
+        );
+    }
+    // The dim tail: the runner tag nearest the state, the short model
+    // left of it. Their cells were reserved before the name was cut,
+    // so neither ever reaches under the state word.
+    let mut end = rect
+        .x
+        .saturating_add(rect.width.saturating_sub(1 + state_width))
+        .saturating_sub(1);
+    if let Some(runner) = &tail.runner {
+        let width = tail.runner_width();
+        let x = end.saturating_sub(width);
+        put_text(
+            buf,
+            x,
+            rect.y,
+            width,
+            runner,
+            Style::default().fg(palette.overlay0),
+        );
+        end = x.saturating_sub(1);
+    }
+    if let Some(model) = &tail.model {
+        let width = tail.model_width();
+        put_text(
+            buf,
+            end.saturating_sub(width),
+            rect.y,
+            width,
+            model,
+            Style::default().fg(palette.overlay0),
         );
     }
     let (word, word_x) = if badge {

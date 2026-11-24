@@ -148,6 +148,9 @@ pub(super) fn render_overlays_and_cursor(
                     + app.studio_shells_live(&studio.key()).len()
             })
             .unwrap_or(0);
+        // S2: a newer installed backlot than this client runs puts
+        // one dim line at the foot of the lot (the row model reads it).
+        app.panel.update = app.update_hint();
         crate::panel::render(
             buf,
             rect,

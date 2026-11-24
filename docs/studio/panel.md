@@ -121,7 +121,13 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   blank row.
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
-  prompt, and the state word right-aligned. A user-owned prompt adds a cue line
+  prompt, and the state word right-aligned. Before the state word sit the dim runner tag
+  (`claude`, `cmd`, `agy`, `codex`, `devin`, `cursor`, `cline`, `opencode`, `fake`) and,
+  while the frame has room, the short model form the cast uses — the same truncation with
+  `…`. The state word keeps the right edge, and the name and task keep their cells: the
+  badge spends only spare space, dropping the model first, then the runner tag. The name
+  truncates only when it alone overflows. A user-owned
+  prompt adds a cue line
   `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
   has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a
   director-owned one reads `! prompt · director reviewing`. A
@@ -137,6 +143,14 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
   their configured labels (`alt ↑↓ studio  ←→ role`). Focused: the panel's own keys
   (`↑↓ move  m menu  ? keys  esc` — `esc back` over an overlay). Dropped under 8 rows.
+- **Restart to update:** while a source says a newer `backlot` is installed than the
+  running client, one dim line closes the lot:
+  `backlot <new> installed — restart the client to update (q, then backlot)`. The sources
+  are the local stage's published `backlot_version`/`backlot_build` and any installed
+  `backlot --version` the six-hour machine probe answered. Versions compare as strict
+  semver; equal versions fall back to the published build id when both sides have one.
+  An older version never draws the line, and an unparseable side is ignored rather than
+  guessed at.
 - The collapsed **strip** shows each studio as `● <id·machine>` with its `<done>/<total>`
   or `!<n>` — health first, then attention — and one row per active or blocked role,
   `<mark> <name> <task>`; it is never blank while work is alive.
