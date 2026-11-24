@@ -1,0 +1,22 @@
+🐱 Welcome to host-a! Type 'help' for available commands.
+
+      ▄▀▀▄        Antigravity CLI 1.5.16
+     ▀▀▀▀▀▀       alice@host-a (Google AI Ultra)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Hydrogen (Low)
+   ▄▀▀    ▀▀▄     /home/user/acme-shop
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────
+> Run the shell command: git push origin HEAD:refs/heads/denied-probe
+
+● Bash(git push origin HEAD:refs/heads/denied-probe) (ctrl+o to expand)
+
+  The command git push origin HEAD:refs/heads/denied-probe was blocked by a user-configured deny rule:
+
+    permission check failed for unsandboxed "git push origin HEAD:refs/heads/denied-probe": Permission denied for unsandboxed(git push origin HEAD:refs/heads/denied-probe). Matches user-configured
+    deny rule.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> Accept-edits mode: file edits auto-approved (shift+tab to cycle)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                                                                                                   accept-edits · Gemini 4 Hydrogen · low

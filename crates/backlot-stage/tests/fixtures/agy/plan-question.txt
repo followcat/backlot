@@ -1,0 +1,27 @@
+🐱 Welcome to host-a! Type 'help' for available commands.
+
+      ▄▀▀▄        Antigravity CLI 1.5.16
+     ▀▀▀▀▀▀       alice@host-a (Google AI Ultra)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Hydrogen (Low)
+   ▄▀▀    ▀▀▄     /home/user/acme-shop
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────
+> Plan adding a new feature to acme-shop: either a shopping cart struct or a discount calculator. Use your question tool to ask me with options which one I want before creating a plan.
+
+▸ Thought for 3s, 89 tokens
+  Considering the user's request, the task is to determine the user's preferred new feature for `acme-shop` through questioning. The prompt requires presenting the options: a shopping cart struct...
+
+? Which feature would you like me to plan for acme-shop?
+
+Question
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Question 1/1: Which feature would you like me to plan for acme-shop?
+
+> 1. Shopping cart struct
+  2. Discount calculator
+  3. Write-in...
+
+  ↑/↓ Navigate · enter Select · esc Skip
+esc to cancel                                                                                                                                                             plan · Gemini 4 Hydrogen · low
