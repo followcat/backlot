@@ -117,8 +117,9 @@ impl App {
     /// focused workspace's collapsed group, flag the workspace reveal,
     /// and scroll the agent list — unless the row was already visible
     /// on the last frame (`agent_scroll` stays untouched then).
-    /// `row_index` is the row's position in the full aggregate list,
-    /// the index the sidebar renders.
+    /// The scroll is the row's index among the panel's rendered entries,
+    /// space headers included; `row_index`, its position in the full
+    /// aggregate list, stands in when the panel does not render it.
     fn reveal_endpoint_agent(&mut self, target: &AggregateAgentTarget) {
         if let Some(workspace_id) = self.projection.snapshot.focused_workspace_id.clone() {
             self.reveal_workspace(&WorkspaceNavigationTarget {
@@ -140,7 +141,16 @@ impl App {
                 .iter()
                 .any(|(_, _, pane_id)| pane_id == &target.pane_id);
         if !visible {
-            self.shell_state.agent_scroll = target.row_index.min(self.hit_map.agent_max_scroll);
+            let row = crate::chrome::endpoint_agents::agent_entry_index(
+                &self.projection.endpoints,
+                &self.projection.active_endpoint_id,
+                self.projection.snapshot.agent_view_label.as_deref(),
+                &self.shell,
+                &target.endpoint_id,
+                &target.pane_id,
+            )
+            .unwrap_or(target.row_index);
+            self.shell_state.agent_scroll = row.min(self.hit_map.agent_max_scroll);
         }
     }
 }

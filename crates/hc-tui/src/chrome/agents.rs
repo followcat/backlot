@@ -173,7 +173,7 @@ pub(crate) fn panel_rows(
 
 /// A space header: the space's name, dim, on the panel's last line of the
 /// entry (the first line is the blank gap when there is one).
-fn render_space_header(
+pub(super) fn render_space_header(
     buffer: &mut Buffer,
     rect: Rect,
     label: &str,

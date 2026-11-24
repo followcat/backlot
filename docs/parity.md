@@ -777,7 +777,10 @@ Everything else on the compared surfaces still diffs normally.
   row with the space's name heads each run of that space's agents and a
   blank line separates the groups, as the herdr app's grouped agents list
   does. Off by default, so the space order matches the reference, which
-  draws no headers; `priority` and filtered agent views stay flat.
+  draws no headers; `priority` and filtered agent views stay flat. With
+  machines added (`hc machine add`), each machine's spaces get their own
+  headers without naming the machine, so a space of the same name on two
+  machines heads two groups.
 - **Persistent float default for a shell popup.** Deliberate: an hc-tui
   `[[keys.command]]` with `type = "popup"` whose command is a bare
   interactive shell is the tab's persistent float unless the entry says
