@@ -327,6 +327,16 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                     });
                 }
             }
+            backlot_model::event::QUESTION => {
+                if let Some(to) = crate::question::notice_to(state, a) {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to,
+                        label: "question",
+                        body: crate::question::notice_body(a, &file),
+                    });
+                }
+            }
             backlot_model::event::STALLED => {
                 if let Some(to) = crate::stall::notice_to(state, a) {
                     out.push(Notice {

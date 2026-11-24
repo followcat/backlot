@@ -52,9 +52,10 @@ impl Stage {
             role,
             state.studio.as_ref().is_some_and(|s| s.no_git),
         );
-        // The trust dialog is the trust pass's concern, not a
-        // permission episode — it resets the blocked clock.
-        let ep = permit::in_episode(work, text);
+        // Folder trust and non-permission question dialogs have their
+        // own passes, so neither starts a `permission prompt` episode.
+        let ep = permit::in_episode(work, text)
+            && !crate::question::in_episode(w.runner, work, w.term.status.as_ref(), text, request);
         let (since, due) =
             permit::episode_due(ep, self.blocked_since.borrow().get(&pair).copied(), now_ms);
         match since {

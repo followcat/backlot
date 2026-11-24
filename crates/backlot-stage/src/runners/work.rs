@@ -67,10 +67,15 @@ fn devin_blocked(screen: &str) -> bool {
     !scope.is_empty() && word_at(&flat, "Deny").is_some()
 }
 
-/// The runner's screen reads as an unanswered permission or trust
-/// prompt. Markers are matched on the joined lines: a narrow terminal
-/// wraps the question and the options, never the prompt.
+/// The runner's screen reads as an unanswered permission prompt,
+/// trust dialog, or recognised question picker.
 fn blocked(runner: &str, screen: &str) -> bool {
+    recognized_permission(runner, screen) || recognized_question(runner, screen)
+}
+
+/// The runner's screen reads as a recognised permission prompt or
+/// folder-trust dialog (kept on `permission prompt`, never `question`).
+pub(crate) fn recognized_permission(runner: &str, screen: &str) -> bool {
     match runner {
         "claude" => {
             let flat = joined(screen);
@@ -99,7 +104,16 @@ fn blocked(runner: &str, screen: &str) -> bool {
         // it does, the user switched it off and the prompt is
         // theirs. Nothing is pressed either way (`permit`).
         "cline" => cline_approval(screen),
-        "agy" => agy_blocked(screen),
+        "agy" => agy_trust_dialog(screen) || agy_command_picker(screen),
+        _ => false,
+    }
+}
+
+/// Recognised non-permission interactive picker on `runner`'s screen
+/// (`question`, R7b): e.g. agy's plan-mode `Question N/M:` picker.
+pub(crate) fn recognized_question(runner: &str, screen: &str) -> bool {
+    match runner {
+        "agy" => agy_plan_question(screen),
         _ => false,
     }
 }
@@ -282,12 +296,6 @@ fn fake_state(screen: &str) -> Option<Work> {
         "fake-work: working" => Some(Work::Working),
         _ => None,
     }
-}
-
-/// agy 1.5.16 blocked screens (R7a): folder trust, command permission
-/// picker (`request-review` and `strict`), or a plan-mode question.
-pub(crate) fn agy_blocked(screen: &str) -> bool {
-    agy_trust_dialog(screen) || agy_command_picker(screen) || agy_plan_question(screen)
 }
 
 /// agy's folder-trust dialog on first launch in an untrusted workspace.

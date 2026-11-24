@@ -693,3 +693,47 @@ async fn stage_hdiscover_records_a_cmd_session_after_a_start() {
     let state = store::load_hstate(&hdir).unwrap();
     assert_eq!(state.role.session_id.as_deref(), Some(uuid));
 }
+
+/// A `question` dialog on Hollywood (`agy` plan-mode question or generic
+/// picker) surfaces `question — needs the user` with `attention_user =
+/// true`, `can_answer_prompt = false`, and suppresses approval keys.
+#[tokio::test]
+async fn a_question_dialog_on_hollywood_is_user_owned_without_approval_keys() {
+    let picker = include_str!("../tests/fixtures/agy/plan-question.txt");
+    let (stage, _tmp, hdir, mut terminals, keys) =
+        hstage_structured_blocked("backlot-hw-question", picker).await;
+    terminals[0].status =
+        Some(serde_json::from_value(json!({"kind": "question", "state": "blocked"})).unwrap());
+    stage.hsample(&hdir, &terminals, "claude", 5_000).await;
+    let view = stage.summary_view(&BTreeMap::new());
+    let hw = view.hollywood.expect("hollywood section");
+    assert_eq!(hw.work, Some(Work::Blocked));
+    assert!(hw.attention_user);
+    assert!(!hw.can_answer_prompt);
+    assert_eq!(hw.attention.as_deref(), Some("question — needs the user"));
+    assert!(
+        hw.attention_detail
+            .as_deref()
+            .is_some_and(|d| d.contains("Question 1/1:")),
+        "{:?}",
+        hw.attention_detail
+    );
+
+    // Even if a user approval were recorded, Hollywood must never press
+    // `enter` into a `question` dialog.
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<_, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("user"),
+                HollywoodKind::RoleApproval {
+                    decision: ApprovalDecision::Allow,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    stage.hrefresh(&hdir);
+    stage.hsample(&hdir, &terminals, "claude", 7_000).await;
+    assert!(keys.lock().unwrap().is_empty());
+}

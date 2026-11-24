@@ -213,6 +213,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `owed` | needs you | `needs you · <what>` — the escalated stall |
 | `<runner> prep failed` | needs you | `needs you · <what>` |
 | `stalled` | stuck | `stuck · <plain reason>` |
+| `question` | stuck | `stuck · question` (or `needs you` when `needs_user` is set, e.g. on producer) |
 | `rate limited` | stuck | `stuck · <plain reason>` |
 | `connection error` | stuck | `stuck · <plain reason>` |
 | `session id not found` | info | the role's details only, dimmed |

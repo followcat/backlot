@@ -1009,3 +1009,234 @@ async fn turn_level_revision_runner_does_not_stall_while_screen_changes() {
         _ => unreachable!(),
     }
 }
+
+/// A generic dialog picker on an actor raises one `question` attention
+/// (NOT `permission prompt`), keeps `gate_open` closed while up, owes a
+/// notice to the task's reviewer, and clears `"dialog closed"` after two
+/// seconds out of the episode; fixed roles route `director`/`writer` to
+/// `"producer"` and flag `producer` as `needs_user: true`.
+#[tokio::test]
+async fn question_dialog_raises_routes_keeps_gate_closed_and_clears() {
+    let picker = "Which format should we use?\n> 1. JSON\n\x20 2. YAML\nEnter to select\n";
+
+    // Actor (director-reviewed): raises `question` after 2s, keeps
+    // `gate_open` closed, owes notice to `director`, clears `dialog closed`.
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let tm = term();
+    let (st, fake) = stage().await;
+    fake.lock().unwrap().screen = picker.into();
+    let t0 = now_ms();
+
+    sample(&st, &dir, &tm, "actor-t1-c1", t0).await;
+    assert!(events(&dir, "attention.raised").is_empty());
+    let gate_closed = {
+        let screens = st.screens.borrow();
+        let works = st.work.borrow();
+        crate::deliver::Gate {
+            live: true,
+            work: works
+                .get(&("acme-shop".into(), "actor-t1-c1".into()))
+                .copied(),
+            screen: screens
+                .get(&("acme-shop".into(), "actor-t1-c1".into()))
+                .cloned(),
+            role_since_ms: t0.saturating_sub(60_000),
+            in_flight: false,
+            sent_ms: None,
+        }
+    };
+    assert!(
+        !crate::deliver::gate_open(&gate_closed, t0 + 2_000),
+        "send gate must stay closed while dialog blocks"
+    );
+
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 2_000).await;
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 3_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    let seq = match &raised[0].kind {
+        EventKind::AttentionRaised {
+            role,
+            reason,
+            detail,
+            needs_user,
+        } => {
+            assert_eq!(role, "actor-t1-c1");
+            assert_eq!(reason, backlot_model::event::QUESTION);
+            assert!(!needs_user);
+            assert!(detail.contains("Which format should we use?"), "{detail}");
+            raised[0].seq
+        }
+        _ => unreachable!(),
+    };
+    let saved = fs::read_to_string(dir.join(format!("attention/{seq}.txt"))).unwrap();
+    assert!(saved.contains("> 1. JSON"), "{saved}");
+
+    let state = store::load_state(&dir).unwrap();
+    let owed = crate::notices::owed(&state, &dir);
+    assert_eq!(owed.len(), 1, "{owed:?}");
+    assert_eq!(owed[0].to, "director");
+    assert_eq!(owed[0].label, "question");
+
+    // Leaves dialog: holds through < 2s (`t0 + 5_000`), clears `"dialog closed"` at `t0 + 6_000`.
+    fake.lock().unwrap().screen = "fake-work: waiting\n".into();
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 4_000).await;
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 5_000).await;
+    assert!(events(&dir, "attention.cleared").is_empty());
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 6_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { target, reason } => {
+            assert_eq!(*target, seq);
+            assert_eq!(reason.as_deref(), Some("dialog closed"));
+        }
+        _ => unreachable!(),
+    }
+
+    // Fixed roles: director & writer route to producer; producer sets `needs_user`.
+    for (role, want_user, want_to) in [
+        ("director", false, Some("producer")),
+        ("writer", false, Some("producer")),
+        ("producer", true, None),
+    ] {
+        let dir = tmp();
+        studio(&dir);
+        let tm = term();
+        let (st, fake) = stage().await;
+        fake.lock().unwrap().screen = picker.into();
+        let t0 = now_ms();
+        sample(&st, &dir, &tm, role, t0).await;
+        sample(&st, &dir, &tm, role, t0 + 2_000).await;
+        let raised = events(&dir, "attention.raised");
+        assert_eq!(raised.len(), 1, "{role}");
+        match &raised[0].kind {
+            EventKind::AttentionRaised {
+                reason, needs_user, ..
+            } => {
+                assert_eq!(reason, backlot_model::event::QUESTION, "{role}");
+                assert_eq!(*needs_user, want_user, "{role}");
+            }
+            _ => unreachable!(),
+        }
+        let state = store::load_state(&dir).unwrap();
+        let owed = crate::notices::owed(&state, &dir);
+        assert_eq!(
+            owed.first().map(|n| n.to.as_str()),
+            want_to,
+            "{role}: {owed:?}"
+        );
+    }
+
+    // agy plan-question & structured kind="question" raise `question`,
+    // whereas agy command picker stays `permission prompt`.
+    let dir = tmp();
+    studio(&dir);
+    let (st, fake) = stage().await;
+    let mut agy_term = term();
+    agy_term.status = Some(hc_proto::terminal::Status {
+        state: "blocked".into(),
+        kind: Some("question".into()),
+        ..Default::default()
+    });
+    fake.lock().unwrap().screen = include_str!("../tests/fixtures/agy/plan-question.txt").into();
+    let t0 = now_ms();
+    sample_runner(&st, &dir, &agy_term, "actor-t1-c1", "agy", t0).await;
+    sample_runner(&st, &dir, &agy_term, "actor-t1-c1", "agy", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    assert!(matches!(
+        &raised[0].kind,
+        EventKind::AttentionRaised { reason, needs_user: false, .. } if reason == backlot_model::event::QUESTION
+    ));
+
+    let dir = tmp();
+    studio(&dir);
+    let (st, fake) = stage().await;
+    let mut agy_perm_term = term();
+    agy_perm_term.status = Some(hc_proto::terminal::Status {
+        state: "blocked".into(),
+        kind: Some("permission".into()),
+        ..Default::default()
+    });
+    fake.lock().unwrap().screen = include_str!("../tests/fixtures/agy/perm-command.txt").into();
+    sample_runner(&st, &dir, &agy_perm_term, "actor-t1-c1", "agy", t0).await;
+    sample_runner(&st, &dir, &agy_perm_term, "actor-t1-c1", "agy", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    assert!(matches!(
+        &raised[0].kind,
+        EventKind::AttentionRaised { reason, .. } if reason == PERMISSION_PROMPT
+    ));
+}
+
+/// R7c + R7b overlap: `question` and `outward action` on the same role
+/// do not suppress or clear each other, and `AttentionClass` maps both.
+#[tokio::test]
+async fn question_and_outward_action_on_same_role_do_not_clear_each_other() {
+    use backlot_model::attention::AttentionClass;
+    use backlot_model::event::{OUTWARD_ACTION, QUESTION};
+
+    assert_eq!(
+        AttentionClass::of(OUTWARD_ACTION, false),
+        AttentionClass::NeedsYou
+    );
+    assert_eq!(
+        AttentionClass::of(OUTWARD_ACTION, true),
+        AttentionClass::NeedsYou
+    );
+    assert_eq!(AttentionClass::of(QUESTION, false), AttentionClass::Stuck);
+    assert_eq!(AttentionClass::of(QUESTION, true), AttentionClass::NeedsYou);
+
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    // Record an open `outward action` attention on `actor-t1-c1` as the guard does.
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::AttentionRaised {
+                    role: "actor-t1-c1".into(),
+                    reason: OUTWARD_ACTION.into(),
+                    detail: "git push origin main".into(),
+                    needs_user: true,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+
+    let tm = term();
+    let (st, fake) = stage().await;
+    fake.lock().unwrap().screen =
+        "Which approach?\n> 1. Local fix\n\x20 2. Abort\nEnter to select\n".into();
+    let t0 = now_ms();
+    sample(&st, &dir, &tm, "actor-t1-c1", t0).await;
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 2_000).await;
+
+    let state = store::load_state(&dir).unwrap();
+    let open: Vec<&str> = state
+        .open_attention()
+        .filter(|a| a.role == "actor-t1-c1")
+        .map(|a| a.reason.as_str())
+        .collect();
+    assert!(open.contains(&OUTWARD_ACTION), "{open:?}");
+    assert!(open.contains(&QUESTION), "{open:?}");
+
+    // Closing the dialog clears only `question` (`dialog closed`),
+    // leaving `outward action` open.
+    fake.lock().unwrap().screen = "fake-work: waiting\n".into();
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 3_000).await;
+    sample(&st, &dir, &tm, "actor-t1-c1", t0 + 5_000).await;
+    let state = store::load_state(&dir).unwrap();
+    let open_after: Vec<&str> = state
+        .open_attention()
+        .filter(|a| a.role == "actor-t1-c1")
+        .map(|a| a.reason.as_str())
+        .collect();
+    assert_eq!(open_after, vec![OUTWARD_ACTION]);
+}

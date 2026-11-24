@@ -237,3 +237,23 @@ fn is_prompt_suffix(l: &str) -> bool {
     let lower = l.to_ascii_lowercase();
     l.contains("Do you want to") || lower.contains("(y/n)") || lower.contains("[y/n]")
 }
+
+/// Short one-line question summary extracted from a generic dialog
+/// screen for attention details: prefers a non-rule question/header
+/// line directly above the option cursor, capped cleanly.
+pub(crate) fn question_summary(screen: &str) -> Option<String> {
+    let tail = tail_window(screen);
+    if tail.is_empty() || has_bottom_composer(&tail) {
+        return None;
+    }
+    let cursor_idx = tail.iter().enumerate().find_map(|(i, l)| {
+        (!l.in_fence && !is_blockquote(&tail, i) && option_cursor(l.text).is_some()).then_some(i)
+    })?;
+    let header = tail[..cursor_idx]
+        .iter()
+        .rev()
+        .find(|l| !l.in_fence && !is_composer_rule(l.text))
+        .map(|l| l.text.trim().to_string())
+        .filter(|s| !s.is_empty());
+    header.map(|s| s.chars().take(120).collect())
+}

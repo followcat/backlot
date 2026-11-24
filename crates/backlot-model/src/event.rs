@@ -110,6 +110,12 @@ pub enum ApprovalDecision {
 /// sampled `blocked` for two samples raises one per blocked episode.
 pub const PERMISSION_PROMPT: &str = "permission prompt";
 
+/// The `attention` reason an interactive question or unrecognised
+/// dialog picker raises (R7b, D2): an actor's routes to its task
+/// reviewer, the director's and writer's to the producer, and the
+/// producer's surfaces `needs_user` for the user.
+pub const QUESTION: &str = "question";
+
 /// The `attention` reason a stalled role raises (S6): a live role's
 /// screen unchanged for the studio's `stall_limit_s`.
 pub const STALLED: &str = "stalled";
