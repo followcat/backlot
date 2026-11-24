@@ -15,6 +15,10 @@ ahead of stage notices, which are fewer: no notice for an applied card, and clea
 of waking Hollywood. Alt+Y opens the Call Sheet ready to type, and every `›` line keeps an input history on Up and Down.
 A cast role that has not started yet, such as a recast writer waiting for a plan, now shows as standby.
 
+### Added
+
+- **Hollywood self-setup card and Call Sheet title menu.** Added `CardAction::Setup` (`backlot hollywood propose setup --runner … --model … [--effort …] --why …`), validated at birth like `hollywood setup` against a `HollywoodIdentity` base and displaying `Hollywood: <old> → <new>`. Applied cards write `[hollywood]` while keeping `start` and all other keys, record `card.done` before requesting one fresh restart, and start the new Hollywood with a takeover first prompt (`re-cast from <old> → <new>`). Added the Call Sheet title row `m` menu (`Change Hollywood's agent…`) opening the prefilled `Recast…` runner/model/effort picker directly via `hollywood setup`. Updated `prompts/hollywood.md`, `prompts/hollywood-cli.md`, `docs/studio/hollywood.md`, and `docs/keys.md`.
+
 ### Changed
 
 - **Hollywood two-lane inbox & notice hygiene.** Hollywood inbox now delivers user messages first
@@ -26,6 +30,10 @@ A cast role that has not started yet, such as a recast writer waiting for a plan
 ### Fixed
 
 - **Show unstarted fixed roles as `standby`.** Fixed seats cast by a studio (`producer`, `director`, and `writer` before the director asks for a plan) are now listed in their usual summary slot with `state: "standby"` and their effective recast or cast identity instead of being absent before their first start. Both the cast tree and the dock render `standby` rows dim with no activity glyph or counts and a hint line (`starts when the director plans` for `writer`, `starts with the studio` for `producer` and `director`), explain why `p` and `Enter` are unavailable, keep `Recast…` active in the `m` menu and `Ctrl+B ?` launcher, and report `writer starts when the director asks for a plan` on `backlot recast` and Hollywood recast card outcomes when the role has not started yet.
+
+### Fixed
+
+- **`hollywood setup` preserves `[hollywood].start` and detects model/effort changes.** Rewriting `[hollywood]` now keeps `start` and all other keys (instead of reconstructing the table from scratch) and lists `agy` among supported runners; `hplan` now triggers a fresh restart when Hollywood's model or effort changes on the same runner.
 
 ## 0.4.1 — 2026-11-25
 
