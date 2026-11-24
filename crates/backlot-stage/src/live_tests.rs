@@ -2,7 +2,7 @@
 //! terminal's `backlot status` reads, so a role's current work state
 //! reaches Hollywood without a core connection.
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
+use backlot_model::summary::{RoleDoing, RoleSummary, StudioSummary, Summary, Work};
 
 use crate::live::{
     HEARTBEAT_MS, Live, LiveRole, STALE_MS, Write, due, from_summary, path, read, read_fresh,
@@ -10,7 +10,7 @@ use crate::live::{
 };
 use crate::test_support::TestDir;
 
-fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSummary {
+fn role_summary(role: &str, work: Option<Work>, activity: Option<&str>) -> RoleSummary {
     RoleSummary {
         role: role.into(),
         name: role.into(),
@@ -19,7 +19,12 @@ fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSumm
         model: None,
         effort: None,
         state: "live".into(),
-        doing: doing.map(String::from),
+        progress: None,
+        doing: (work == Some(Work::Working)).then(|| RoleDoing {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        }),
+        activity: activity.map(String::from),
         work,
         failed: None,
         workdir: None,
@@ -96,7 +101,14 @@ fn a_summary_round_trips_through_the_file() {
         .find(|r| r.studio == "acme-shop" && r.role == "producer")
         .expect("producer row");
     assert_eq!(producer.work, Some(Work::Working));
-    assert_eq!(producer.doing.as_deref(), Some("running checks"));
+    assert_eq!(
+        producer.doing,
+        Some(RoleDoing {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        })
+    );
+    assert_eq!(producer.activity.as_deref(), Some("running checks"));
     assert_eq!(
         work_map(&back).get(&("acme-shop".into(), "producer".into())),
         Some(&Work::Working)
@@ -131,7 +143,8 @@ fn only_classified_rows_become_facts() {
             studio: "acme".into(),
             role: "actor-t1-c1".into(),
             work: None,
-            doing: Some("writing tests".into()),
+            doing: None,
+            activity: Some("writing tests".into()),
         }]
     );
 }

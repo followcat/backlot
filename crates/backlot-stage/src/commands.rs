@@ -822,5 +822,39 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         // `report show` is read-only — `hwood_read` serves it and
         // the append path never sees it (R24).
         Cmd::ReportShow { .. } => Err(Fail::refused("report show appends nothing")),
+        Cmd::Progress { source } => {
+            let text = read_progress_source(&source)?;
+            let role = caller.role.clone();
+            let task = if backlot_model::state::actor_task(&role).is_some() || role == "actor" {
+                caller.task.clone()
+            } else {
+                None
+            };
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleProgress { role, task, text },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
     }
+}
+
+/// Read and normalize progress text from `--file`, `--text`, `--stdin`, or positional line.
+pub(crate) fn read_progress_source(source: &crate::args::TextSource) -> Result<String, Fail> {
+    let raw = match source {
+        crate::args::TextSource::File(path) => {
+            must_exist(path, "--file")?;
+            fs::read_to_string(path)
+                .map_err(|e| Fail::refused(format!("--file {}: {e}", path.display())))?
+        }
+        crate::args::TextSource::Text(t) => t.clone(),
+        crate::args::TextSource::Stdin => unreachable!("stdin is materialized before build"),
+    };
+    let text = backlot_model::event::normalize_progress_text(&raw);
+    if text.is_empty() {
+        return Err(Fail::refused("progress text must be nonempty"));
+    }
+    Ok(text)
 }

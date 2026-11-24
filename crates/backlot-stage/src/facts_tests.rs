@@ -19,6 +19,7 @@ use crate::render::{attention_fact, status};
 fn running(work: BTreeMap<(String, String), Work>) -> LiveView {
     LiveView {
         work,
+        doing: BTreeMap::new(),
         running: true,
     }
 }

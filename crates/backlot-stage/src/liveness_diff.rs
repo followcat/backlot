@@ -93,6 +93,21 @@ pub(crate) fn deepest_descendant(tree: &[ProcInfo]) -> Option<&ProcInfo> {
         .max_by_key(|p| (p.depth, p.pid))
 }
 
+pub(crate) fn update_deepest(
+    prev: Option<LockWait>,
+    tree: &[ProcInfo],
+    now_ms: u64,
+) -> Option<LockWait> {
+    let deep = deepest_descendant(tree)?;
+    let since_ms = prev
+        .filter(|p| p.argv == deep.argv)
+        .map_or(now_ms, |p| p.since_ms);
+    Some(LockWait {
+        argv: deep.argv.clone(),
+        since_ms,
+    })
+}
+
 pub(crate) fn update_lock_wait(
     prev: Option<LockWait>,
     tree: &[ProcInfo],

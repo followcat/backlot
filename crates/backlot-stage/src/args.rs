@@ -89,6 +89,10 @@ pub enum Cmd {
         role: String,
         source: TextSource,
     },
+    /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
+    Progress {
+        source: TextSource,
+    },
     /// `tell hollywood "<text>"`: the user's line to the overseer.
     TellHollywood {
         text: String,
@@ -461,6 +465,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "report" => args_studio::report(&mut common, &mut it),
         "ask" => args_studio::one_file(&mut common, &mut it, U_ASK, |file| Cmd::Ask { file }),
         "tell" => args_studio::tell(&mut common, &mut it),
+        "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
         "priority" => args_task::priority(&mut common, &mut it),
         "reopen" => args_task::person(&mut common, &mut it, U_REOPEN, |person| Cmd::Reopen {

@@ -10,6 +10,8 @@ pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n       backlot report show --studio <s> --file <relpath>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin)\n       backlot tell hollywood \"<text>\" [--text <msg>]";
+pub(crate) const U_PROGRESS: &str =
+    "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";
 pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
 pub(crate) const U_CAST: &str = "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]\n       backlot cast --task <id> --suggest [--json]";
 pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";

@@ -620,6 +620,47 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     ))
 }
 
+/// `progress (<line> | --file <f> | --text <msg> | --stdin)`: one-line progress note.
+pub(crate) fn progress(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut src = Source::default();
+    let mut line = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_PROGRESS)));
+        }
+        if common_flag(it, common, &arg, U_PROGRESS)? {
+            continue;
+        }
+        if src.flag(it, &arg, U_PROGRESS)? {
+            continue;
+        }
+        match arg.as_str() {
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_PROGRESS));
+            }
+            _ if line.is_none() => line = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_PROGRESS)),
+        }
+    }
+    let has_flag_src = src.file.is_some() || src.text.is_some() || src.stdin;
+    let source = match (line, has_flag_src) {
+        (Some(_), true) => {
+            return Err(usage(
+                "give a positional line or --file/--text/--stdin, not both",
+                U_PROGRESS,
+            ));
+        }
+        (Some(text), false) => {
+            if text.trim().is_empty() {
+                return Err(usage("progress line must not be empty", U_PROGRESS));
+            }
+            TextSource::Text(text)
+        }
+        (None, _) => src.one(U_PROGRESS)?,
+    };
+    Ok((std::mem::take(common), Cmd::Progress { source }))
+}
+
 /// `runners [--json]` — the detection table or its G4 document.
 pub(crate) fn runners(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut json = false;

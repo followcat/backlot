@@ -27,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "report",
     "ask",
     "tell",
+    "progress",
     "task",
     "cast",
     "deliver",
@@ -370,6 +371,62 @@ pub(crate) fn exec_event(
             task: None,
             session: env.get("HC_TERMINAL_ID").map(String::from),
         },
+        Cmd::Progress { source } => {
+            check_identity(&common, env)?;
+            let env_role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
+            let env_studio = env.get("BACKLOT_STUDIO").filter(|s| !s.is_empty());
+            let role = match (env_role, env_studio) {
+                (None, None) => {
+                    return Err(Fail::usage(
+                        "progress requires a role env: set BACKLOT_STUDIO and BACKLOT_ROLE",
+                    ));
+                }
+                (None, Some(_)) => {
+                    return Err(Fail::usage(
+                        "progress requires a role env: set BACKLOT_ROLE",
+                    ));
+                }
+                (Some(r), _) => r.to_string(),
+            };
+            if role == backlot_model::hollywood::HOLLYWOOD && env_studio.is_none() {
+                let text = commands::read_progress_source(source)?;
+                let by = backlot_model::EventBy {
+                    role,
+                    session: env.get("HC_TERMINAL_ID").map(String::from),
+                };
+                let hdir = store::hollywood_dir(base);
+                let event = store::append_hollywood(&hdir, |_, _| {
+                    Ok::<crate::store::HPending, Fail>(crate::store::HPending {
+                        event: backlot_model::hollywood::NewHollywoodEvent::new(
+                            by,
+                            backlot_model::hollywood::HollywoodKind::RoleProgress { text },
+                        ),
+                        files: Vec::new(),
+                    })
+                })
+                .map_err(crate::hwood::store_fail)?;
+                return Ok(crate::hrender::hconfirm(&event));
+            }
+            let studio = env_studio
+                .ok_or_else(|| Fail::usage("progress requires a role env: set BACKLOT_STUDIO"))?;
+            let studio = check_studio_name(studio)?;
+            let task = env
+                .get("BACKLOT_TASK")
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .or_else(|| backlot_model::state::actor_task(&role).map(String::from));
+            if role == "actor" && task.is_none() {
+                return Err(Fail::usage(
+                    "missing task: set BACKLOT_TASK for actor progress",
+                ));
+            }
+            Caller {
+                studio,
+                role,
+                task,
+                session: env.get("HC_TERMINAL_ID").map(String::from),
+            }
+        }
         _ => caller(&common, env, needs_task)?,
     };
     // Hollywood's one write into a studio is `tell <studio>

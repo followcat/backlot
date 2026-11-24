@@ -12,7 +12,7 @@ use backlot_model::state::RoleLastEvent;
 
 use crate::liveness_diff::{
     LockWait, ProcSnap, Source, SourceStamp, WorkAreaRead, WorkAreaSnap, deepest_descendant,
-    diff_procs, diff_work_area, to_proc_map, update_lock_wait,
+    diff_procs, diff_work_area, to_proc_map, update_deepest, update_lock_wait,
 };
 use crate::liveness_probe::ProcRead;
 use crate::runners::normalise_screen;
@@ -64,6 +64,7 @@ pub(crate) struct Evidence {
     last_proc_sample_ms: Option<u64>,
     procs: BTreeMap<u32, ProcSnap>,
     lock_wait: Option<LockWait>,
+    deepest: Option<LockWait>,
     last_status_sample_ms: Option<u64>,
     work_area: Option<WorkAreaSnap>,
     last_status_hash: Option<u64>,
@@ -96,6 +97,7 @@ impl Evidence {
             last_proc_sample_ms: None,
             procs: BTreeMap::new(),
             lock_wait: None,
+            deepest: None,
             last_status_sample_ms: None,
             work_area: None,
             last_status_hash: None,
@@ -116,6 +118,7 @@ impl Evidence {
             ev.last_proc_sample_ms = Some(now_ms);
             let tree = proc_read(pid);
             ev.lock_wait = update_lock_wait(None, &tree, now_ms);
+            ev.deepest = update_deepest(None, &tree, now_ms);
             if let Some(d) = deepest_descendant(&tree) {
                 ev.last_moved = Some((Source::Process, SourceStamp::new(now_ms, &d.argv, "CPU")));
             }
@@ -246,12 +249,14 @@ impl Evidence {
                 self.last_root_pid = None;
                 self.procs.clear();
                 self.lock_wait = None;
+                self.deepest = None;
             }
             Some(p) if self.last_root_pid != Some(p) => {
                 self.last_root_pid = Some(p);
                 self.last_proc_sample_ms = Some(now_ms);
                 let tree = proc_read(p);
                 self.lock_wait = update_lock_wait(None, &tree, now_ms);
+                self.deepest = update_deepest(None, &tree, now_ms);
                 self.procs = to_proc_map(tree);
             }
             Some(p)
@@ -267,6 +272,7 @@ impl Evidence {
                     moved.push((Source::Process, stamp));
                 }
                 self.lock_wait = update_lock_wait(self.lock_wait.take(), &tree, now_ms);
+                self.deepest = update_deepest(self.deepest.take(), &tree, now_ms);
                 self.procs = to_proc_map(tree);
             }
             Some(_) => {}
@@ -392,6 +398,10 @@ impl Evidence {
         self.lock_wait
             .as_ref()
             .map(|l| (l.argv.as_str(), l.since_ms))
+    }
+
+    pub(crate) fn deepest_cmd(&self) -> Option<(&str, u64)> {
+        self.deepest.as_ref().map(|d| (d.argv.as_str(), d.since_ms))
     }
 
     pub(crate) fn last_moved_stamp(&self) -> Option<&SourceStamp> {

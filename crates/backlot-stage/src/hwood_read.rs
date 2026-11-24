@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use backlot_model::state::StudioState;
+
 use crate::args::{Cmd, Common};
 use crate::cli::{Env, Fail};
 use crate::commands;
@@ -52,24 +54,51 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
     }
 }
 
+#[derive(serde::Serialize)]
+struct StatusJson {
+    #[serde(flatten)]
+    state: StudioState,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    doing: BTreeMap<String, backlot_model::summary::RoleDoing>,
+}
+
+fn status_json(name: &str, mut state: StudioState, live: &crate::live::LiveView) -> StatusJson {
+    let mut doing = BTreeMap::new();
+    for (role, r) in state.roles.iter_mut() {
+        if r.progress.is_none() {
+            r.progress = state.progress.get(role).cloned();
+        }
+        if let Some(d) = live
+            .work
+            .get(&(name.to_string(), role.clone()))
+            .filter(|w| **w == backlot_model::summary::Work::Working)
+            .and_then(|_| live.doing.get(&(name.to_string(), role.clone())))
+        {
+            r.doing = Some(d.clone());
+            doing.insert(role.clone(), d.clone());
+        }
+    }
+    StatusJson { state, doing }
+}
+
 /// `status [--studio <name>]` for one studio.
 fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
-    let dir = store::studio_dir(&crate::cli::resolve_base(env, common, base, &name)?, &name);
+    let resolved = crate::cli::resolve_base(env, common, base, &name)?;
+    let dir = store::studio_dir(&resolved, &name);
     let state = store::load_state(&dir).map_err(store_fail)?;
+    let now_ms = crate::live::now_ms();
+    let live = crate::live::LiveView::read(&resolved, now_ms);
     Ok(if json {
-        serde_json::to_string_pretty(&state).map_err(|e| Fail::refused(e.to_string()))?
+        let payload = status_json(&name, state, &live);
+        serde_json::to_string_pretty(&payload).map_err(|e| Fail::refused(e.to_string()))?
     } else {
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
         render::status(
             &name,
             &state,
             &crate::signals::failed_roles(&dir, &state),
             now_ms,
-            &crate::live::LiveView::read(base, now_ms),
+            &live,
         )
     })
 }
@@ -508,7 +537,7 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         let dir = store::studio_dir(base, name);
         let state = store::load_state(&dir).map_err(store_fail)?;
         if json {
-            states.insert(name.clone(), state);
+            states.insert(name.clone(), status_json(name, state, &live));
         } else {
             blocks.push(render::status(
                 name,

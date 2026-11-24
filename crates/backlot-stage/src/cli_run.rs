@@ -226,7 +226,9 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
 fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
     use crate::args::TextSource;
     let source = match cmd {
-        Cmd::Tell { source, .. } | Cmd::ReqRevise { source, .. } => source,
+        Cmd::Tell { source, .. } | Cmd::ReqRevise { source, .. } | Cmd::Progress { source } => {
+            source
+        }
         Cmd::StudioNew {
             ask: Some(source), ..
         } => source,

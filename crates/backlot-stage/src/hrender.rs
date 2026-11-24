@@ -33,6 +33,7 @@ pub fn hconfirm(event: &HollywoodEvent) -> String {
                 String::new()
             }
         }
+        HollywoodKind::RoleProgress { text } => format!(" \"{text}\""),
     };
     format!("event {}: {}{}", event.seq, event.kind.name(), subject)
 }
