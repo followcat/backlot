@@ -13,6 +13,16 @@ pub fn apply(state: &mut StudioState, event: &Event) {
     state.last_seq = event.seq;
     let seq = event.seq;
     let ts = event.ts_ms;
+    if !event.by.role.is_empty() {
+        state.last_by_role.insert(
+            event.by.role.clone(),
+            RoleLastEvent {
+                seq,
+                ts_ms: ts,
+                kind: event.kind.name().into(),
+            },
+        );
+    }
     let cap = state.rework_cap();
     match &event.kind {
         EventKind::StudioCreated {

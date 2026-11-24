@@ -456,3 +456,29 @@ fn event_json_shape_is_flat() {
     let back: Event = serde_json::from_str(&line).unwrap();
     assert_eq!(back, e);
 }
+
+/// Every event stamps `last_by_role` with its seq, ts_ms and kind
+/// so liveness evidence can track role ledger activity across restarts.
+#[test]
+fn last_by_role_tracks_each_roles_latest_event() {
+    let mut state = replay(&script());
+    let director = &state.last_by_role["director"];
+    assert_eq!(director.seq, 9);
+    assert_eq!(director.ts_ms, 9000);
+    assert_eq!(director.kind, "task.reviewed");
+
+    let actor = &state.last_by_role["actor"];
+    assert_eq!(actor.seq, 15);
+    assert_eq!(actor.kind, "task.state");
+
+    // Round-trip through serde preserves `last_by_role`.
+    let json = serde_json::to_string(&state).unwrap();
+    let back: StudioState = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.last_by_role, state.last_by_role);
+
+    // An event with an empty role does not create a "" entry.
+    let mut anon = ev(16, "", EventKind::MessageDelivered { target: 10 });
+    anon.ts_ms = 16_000;
+    apply(&mut state, &anon);
+    assert!(!state.last_by_role.contains_key(""));
+}
