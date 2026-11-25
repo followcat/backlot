@@ -50,6 +50,18 @@ count on the runner, or at their count while the writer or a candidate shares it
 for the rest. A held role accrues no task budget and owes nothing until its first `role.started`, which then becomes
 the floor for its obligations' age.
 
+The cast file only **initializes** a studio; it locks nothing afterwards. A `studio.cast` event carries the whole new
+cast — the three roles, the candidates, the rework cap, the timings, `check_env`, the declared checks,
+`task_budget_s`, `[limits]` and the push knobs — and the newest `studio.cast` (or `studio.created` when there is none)
+is what the stage reads from then on. The binding (`repo`, `members`, `no_git`, `mode`) and the push remotes recorded
+at creation are facts, not cast, and never travel in the event. A fixed role whose identity the change moves is
+recorded as a `role.recast` for that role, appended just before the `studio.cast`: that is what makes the stage close a
+live terminal and start a fresh conversation, the same path `backlot recast` takes. Everything else lands in place —
+a removed candidate only stops future picks, a new cap applies to the next start, a new check runs on the next
+delivery, and the new timings apply from the next tick. The runnable checks (a supported, installed runner, the effort
+and cline-model rules, a positive limit, caps that still seat the fixed roles) are the cast file's own, minus the ones
+that only creation needs; a studio's binding is not re-checked.
+
 It uses `hc-proto` directly, because `doc.get` and `doc.set` have no CLI verb.
 
 ## Role terminals

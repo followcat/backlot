@@ -57,6 +57,7 @@ prints `already at ledger v1`.
 | Kind | Main fields |
 |---|---|
 | `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps |
+| `studio.cast` | the same cast fields `studio.created` holds — roles, candidates, rework cap, timings, `check_env`, declared `checks`, `task_budget_s`, `[limits]`, push knobs — plus the optional `card`. The newest `studio.cast` (or `studio.created`) is the settings the stage uses; earlier events keep what they recorded. The binding (`repo`, `members`, `no_git`, `mode`) and `push.remotes` are not cast and never change. A fixed role whose identity moves is also recorded as a `role.recast`, appended first. |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.restart` | role, `fresh`, optional reason |
