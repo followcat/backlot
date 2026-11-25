@@ -269,7 +269,9 @@ impl App {
             Some(Target::Stage(machine)) => {
                 // The `s start` the row prints (U6c) — a click or
                 // Enter on `stage stopped` is the same call.
-                if !self.machine_stage_running(machine.as_deref()) {
+                if self.can_start_stage(machine.as_deref())
+                    && !self.machine_stage_running(machine.as_deref())
+                {
                     self.run_action(studio_cmds::stage_start(machine));
                 }
             }

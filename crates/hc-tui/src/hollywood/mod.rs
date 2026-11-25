@@ -145,6 +145,9 @@ pub(crate) struct Hollywood {
     /// Highest Hollywood reply `seq` viewed by the user (`None` until
     /// seeded from the first received summary document).
     pub seen_hollywood_seq: Option<u64>,
+    /// One-line start command when `backlot-cat` is present while the server
+    /// terminal is gone.
+    pub server_stopped_cmd: Option<String>,
 }
 
 /// The inline `y/n` confirm S1 arms on a ready row: which studio
@@ -174,6 +177,7 @@ impl Hollywood {
             pending: None,
             spin: 0,
             seen_hollywood_seq: None,
+            server_stopped_cmd: None,
         }
     }
 

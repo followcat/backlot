@@ -118,7 +118,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             };
             app.machine_stage_running(machine)
         });
-        view.stopped = view.studio.is_none() && !view.hint && !stage_running;
+        let server_down = app.server_stopped_command(None).is_some();
+        view.server_stopped = view.studio.is_none() && !view.hint && server_down;
+        view.stopped = view.studio.is_none() && !view.hint && !stage_running && !server_down;
     }
     // W1: the extra studio rows under each machine, and the current
     // studio the tree highlights and keeps in view — owned before the
@@ -368,12 +370,14 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // the terminals beneath stay attached, overlays still paint on top.
     if app.opening_visible() {
         let frame = app.opening_frame();
-        crate::opening::render_opening(
+        let stopped_cmd = app.server_stopped_command(Some(layout.pane_surface.width as usize));
+        crate::opening::render_opening_server(
             buf,
             layout.pane_surface,
             &app.shell.palette,
             app.opening_opts(),
             frame,
+            stopped_cmd.as_deref(),
         );
         app.arm_opening_anim(_now);
     } else if app.opening.ready() {

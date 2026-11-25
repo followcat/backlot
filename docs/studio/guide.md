@@ -923,6 +923,53 @@ backlot studio migrate --all
 A log already current is a no-op; a line carrying a `v` newer than the binary knows is refused
 with an "upgrade backlot" error rather than a cryptic one.
 
+## Using backlot from another machine
+
+When one hub runs `backlot-server` in its `backlot` `hc` session (`host-a`), another machine
+(`host-b`) can open the studio TUI and run person commands against that server with no local
+stage:
+
+1. **`--server <host>[/<session>]`** (session defaults to `backlot`).
+2. **`BACKLOT_SERVER`** environment variable (`host-a` or `host-a/backlot`).
+3. **`[client]` in `~/.config/backlot/config.toml`** (`server = "host-a"`, optional
+   `session = "backlot"`).
+
+Explicit `--remote` or `--session` stays on that session as before (combining `--server` with
+either is a usage error), `--plain` without `--server` stays local, and leaving all three unset
+keeps today's local behaviour unchanged.
+
+```sh
+# CLI commands route over ssh host-a hc connect --session backlot:
+backlot tell producer --text "check status" --server host-a --studio acme-shop --as user
+backlot tell hollywood "any studio waiting?" --server host-a
+backlot priority --task t1 --level high --server host-a --studio acme-shop --as user
+```
+
+- **TUI reads (`backlot --server host-a`):** connects the TUI over `ssh <host> hc connect
+  --session <session>`, reads `backlot` and `backlot-cat` from the server's core, follows live
+  `doc` updates, and attaches role terminals there. Your own everyday local terminals stay on your
+  local core (`backlot --plain` or an unconfigured shell).
+- **Actions via the server queue (`plugin.backlot.req` -> `plugin.backlot.res`):** both the TUI's
+  panel/Call Sheet actions and the remote CLI's person verbs (`tell`, `tell hollywood`,
+  `card apply`, `card cancel`, `card show`, `attention clear`, `recast`, `restart`, `close`, `reopen`,
+  `priority`, `pause|resume|abandon`, `hollywood setup`) append a timestamped request with CAS
+  (up to 3 retries) and wait up to 5 s for its matching ack. Queue overflow or CAS contention prints
+  `server busy`; requests past the server's 60 s window fail with `request expired`; missing replies
+  time out with `timed out waiting for ack of '<req_id>' (no reply from server)`.
+  Role terminals cannot use `hc run|exec|send|keys|connect`, interpreter code (`python -c`, `node -e`, a
+  heredoc) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, or detach tricks such as
+  `systemd-run` and `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
+  overeager agent, not isolation. Verbs not yet covered on the queue
+  (`studio new`, `finish`, `prune`, `delete`, `restore`) refuse with
+  `not available through the server yet`.
+- **On the hub itself:** when the resolved server host matches the local machine (`host-a`), CLI
+  verbs keep writing the local ledger directly (pointing at the resolved session) so they keep
+  working even while the server restarts; the TUI connects to the local server session directly.
+- **Stopped server:** when `backlot-cat` exists on the server core while no `backlot-server` or
+  `backlot-stage` terminal is live, the TUI displays one read-only line with the command to start
+  it (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`)
+  and never starts a server process itself.
+
 ## Where the files live
 
 The state root is `$XDG_STATE_HOME/backlot/<core id>/` — `~/.local/state/backlot/<core id>/` by
@@ -1026,6 +1073,10 @@ model = "claude-sonnet-5-5" # required
 effort = "high"            # the cast file's effort rule applies
 # key = "alt+y"            # optional — the layer's toggle: a direct key or prefix+<key>
 # default_cast = "/home/user/cast.toml"  # optional
+
+[client]
+# server = "host-a"        # hub host (or "host-a/backlot"); overridden by BACKLOT_SERVER / --server
+# session = "backlot"      # optional default session when `server` omits `/<session>`
 ```
 
 A missing file means defaults; a malformed one means defaults plus a notice carrying only the

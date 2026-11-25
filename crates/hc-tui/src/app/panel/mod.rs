@@ -267,6 +267,7 @@ impl App {
     /// cli injects the endpoint's action flags so spawned `backlot`
     /// commands reach the same core's ledger.
     pub(crate) fn set_panel_endpoint(&mut self, endpoint: &Endpoint) {
+        self.panel_endpoint = Some(endpoint.clone());
         self.panel_endpoint_args = match endpoint {
             Endpoint::Local(local) => vec!["--session".into(), local.session.clone()],
             Endpoint::Remote(remote) => vec![
@@ -276,6 +277,46 @@ impl App {
                 remote.session.clone(),
             ],
         };
+    }
+
+    /// cli sets the named `--server` target when connected to a central server.
+    pub(crate) fn set_server_target(
+        &mut self,
+        target: Option<backlot_stage::server_cfg::ServerTarget>,
+    ) {
+        self.server_target = target;
+    }
+
+    /// `true` when reading/acting against a central server (`--server`,
+    /// `BACKLOT_SERVER`, `[client]`, or `backlot-cat` published on the core).
+    pub(crate) fn server_mode(&self) -> bool {
+        self.server_target.is_some() || panel::data::has_catalog_doc(&self.view, None)
+    }
+
+    /// `false` in server mode or when `backlot-cat` exists on `machine`:
+    /// client TUI never starts a server terminal itself.
+    pub(crate) fn can_start_stage(&self, machine: Option<&str>) -> bool {
+        !(self.server_target.is_some() && machine.is_none())
+            && !panel::data::has_catalog_doc(&self.view, machine)
+    }
+
+    /// One-line start command when `backlot-cat` exists while the server
+    /// terminal is gone.
+    pub(crate) fn server_stopped_command(&self, max_width: Option<usize>) -> Option<String> {
+        if !panel::data::server_stopped(&self.view, None) {
+            return None;
+        }
+        let ep_session = match self.panel_endpoint.as_ref() {
+            Some(Endpoint::Remote(r)) => Some(r.session.as_str()),
+            Some(Endpoint::Local(l)) => Some(l.session.as_str()),
+            None => None,
+        };
+        let session = self
+            .server_target
+            .as_ref()
+            .map(|t| t.session.as_str())
+            .or(ep_session);
+        Some(panel::data::stopped_server_line(session, max_width))
     }
 
     /// cli installs the shared-RPC runner once the client is up.

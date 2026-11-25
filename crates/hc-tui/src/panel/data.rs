@@ -298,21 +298,84 @@ fn parse(value: &serde_json::Value, machine: Option<&str>) -> Option<Summary> {
     Some(summary)
 }
 
-/// Whether `term` is a stage terminal — its own name, or the
-/// `backlot.role=stage` label an older stage wrote.
+/// Whether `term` is a stage or server terminal — its own name, or the
+/// `backlot.role=stage|server` label.
 pub(crate) fn is_stage_terminal(term: &hc_proto::terminal::Terminal) -> bool {
-    term.name.as_deref() == Some("backlot-stage")
-        || term.labels.get("backlot.role").map(String::as_str) == Some("stage")
+    matches!(
+        term.name.as_deref(),
+        Some("backlot-stage" | "backlot-server")
+    ) || matches!(
+        term.labels.get("backlot.role").map(String::as_str),
+        Some("stage" | "server")
+    )
 }
 
-/// Whether the inventory shows a live `backlot-stage` terminal on
-/// `machine` (`None` is this core) — the producer of its document.
+/// Whether the inventory shows a live `backlot-stage` or `backlot-server`
+/// terminal on `machine` (`None` is this core) — the producer of its document.
 /// When it is gone the panel says so on one line but still shows the
 /// last document.
 pub(crate) fn stage_running(view: &View, machine: Option<&str>) -> bool {
     view.inventory.terminals().values().any(|t| {
-        t.name.as_deref() == Some("backlot-stage")
+        matches!(t.name.as_deref(), Some("backlot-stage" | "backlot-server"))
             && t.state == "live"
             && t.address.split_once('/').map(|(m, _)| m) == machine
     })
+}
+
+/// `true` when `backlot-cat` exists on `machine`'s core (not error/null).
+pub(crate) fn has_catalog_doc(view: &View, machine: Option<&str>) -> bool {
+    let key = DocKey {
+        machine: machine.map(str::to_owned),
+        name: backlot_model::req_wire::CAT_DOC_NAME.into(),
+    };
+    view.documents
+        .get(&key)
+        .is_some_and(|d| d.error.is_none() && !d.value.is_null())
+}
+
+/// Parsed `backlot-cat` catalog document on `machine`'s core.
+pub(crate) fn catalog(
+    view: &View,
+    machine: Option<&str>,
+) -> Option<backlot_model::req_catalog::CatalogDoc> {
+    let key = DocKey {
+        machine: machine.map(str::to_owned),
+        name: backlot_model::req_wire::CAT_DOC_NAME.into(),
+    };
+    let doc = view.documents.get(&key)?;
+    if doc.error.is_some() || doc.value.is_null() {
+        return None;
+    }
+    serde_json::from_value(doc.value.clone()).ok()
+}
+
+/// `true` when `backlot-cat` exists on the core while the server/stage
+/// terminal is gone (B2 stopped-server condition).
+pub(crate) fn server_stopped(view: &View, machine: Option<&str>) -> bool {
+    has_catalog_doc(view, machine) && !stage_running(view, machine)
+}
+
+/// One-line start command notice shown when the server terminal is stopped.
+pub(crate) fn stopped_server_line(session: Option<&str>, max_width: Option<usize>) -> String {
+    let sess = session.unwrap_or(backlot_stage::server_cfg::DEFAULT_SERVER_SESSION);
+    if sess == backlot_stage::server_cfg::DEFAULT_SERVER_SESSION {
+        if max_width.is_none_or(|w| w >= 104) {
+            "server stopped · systemctl --user start backlot-server.service or backlot server start --session backlot".to_owned()
+        } else if max_width.is_none_or(|w| w >= 62) {
+            "server stopped · systemctl --user start backlot-server.service".to_owned()
+        } else if max_width.is_none_or(|w| w >= 55) {
+            "server stopped · backlot server start --session backlot".to_owned()
+        } else if max_width.is_none_or(|w| w >= 45) {
+            "systemctl --user start backlot-server.service".to_owned()
+        } else {
+            "backlot server start --session backlot".to_owned()
+        }
+    } else {
+        let full = format!("server stopped · backlot server start --session {sess}");
+        if max_width.is_none_or(|w| w >= full.len()) {
+            full
+        } else {
+            format!("backlot server start --session {sess}")
+        }
+    }
 }

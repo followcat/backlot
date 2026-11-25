@@ -103,6 +103,9 @@ impl App {
     /// `s` on a stage row or a stopped-stage frame: `backlot stage
     /// start` on the machine — the same command the panel's `s` runs.
     pub(super) fn hollywood_stage_start(&mut self, machine: Option<String>) {
+        if !self.can_start_stage(machine.as_deref()) {
+            return;
+        }
         self.run_action(studio_cmds::stage_start(machine));
     }
 
