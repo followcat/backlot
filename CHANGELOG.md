@@ -4,7 +4,7 @@ All notable changes to hc-tui are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.1.20 — 2026-11-25
 
 ### Changed
 
@@ -12,13 +12,22 @@ All notable changes to hc-tui are documented here. The format follows
   `Alt+arrow` tab and agent shortcuts, `Ctrl+G` and keys typed while the
   keyboard is locked now reach the float's program instead of switching tabs,
   locking, or landing on the pane behind it. `Alt+F` still hides the float,
-  even while locked.
+  even while locked. (#68)
+- A workspace whose name nobody chose follows the folder its first terminal
+  works in now, as the herdr app does; a name you typed still wins. A new tab
+  and a new workspace open where the focused terminal works now, instead of
+  the folder the space was created in. (#65)
 
 ### Fixed
 
 - `PageUp` and `PageDown` inside a float page the float's own scrollback, under
   the same rule as a pane (normal screen, no mouse reporting); before, they
-  reached the program, which usually ignored them.
+  reached the program, which usually ignored them. (#68)
+- When a pane's program exits, focus moves to a sibling pane in the same tab
+  instead of jumping to the first space. (#67)
+- Finished terminals of a space the herdr app closed stay hidden, instead of
+  coming back as a space named by its raw id, whatever order they were
+  created in. (#66, #69)
 
 ## 0.1.19 — 2026-11-24
 
