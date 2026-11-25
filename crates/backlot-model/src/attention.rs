@@ -39,9 +39,17 @@ impl AttentionClass {
     /// `connection error` episode that exhausted its retries sets it,
     /// and the reason then stops being `stuck`. An unknown reason is
     /// `NeedsYou`, so nothing important is hidden.
+    ///
+    /// An `outward action` refusal is the role's own record of what the
+    /// guard stopped: the role was told to `backlot ask` if it still
+    /// needs the command, so nothing waits on the person and it is
+    /// `Info`. The flag still escalates a raise marked `needs_user`.
     pub fn of(reason: &str, needs_user: bool) -> AttentionClass {
         if needs_user {
             return AttentionClass::NeedsYou;
+        }
+        if reason == crate::event::OUTWARD_ACTION {
+            return AttentionClass::Info;
         }
         match reason {
             "permission prompt"
@@ -58,7 +66,6 @@ impl AttentionClass {
             | "work area failed"
             | "over budget"
             | "agent error"
-            | "outward action"
             | "owed" => AttentionClass::NeedsYou,
             "stalled" | "rate limited" | "connection error" | "question" => AttentionClass::Stuck,
             "session id not found"

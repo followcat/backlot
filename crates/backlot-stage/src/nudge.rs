@@ -295,15 +295,18 @@ pub fn plan(
             });
         }
     }
-    // An `outward action` refusal tells the person what the role was
-    // denied; the role was told to ask if it still needs it. Once the
-    // stage has delivered the role new work — deliveries only reach
-    // an idle role, so the refused turn is over — the notice is stale.
+    // An `outward action` refusal is the role's own record of what the
+    // guard stopped; the role was told to ask if it still needs the
+    // command. It clears as `role moved on` once the role writes to the
+    // ledger again after it — its turn's next `progress`, a `tell`, a
+    // publish, or the `role.refused` of a later attempt — and also once
+    // the stage hands it new work, since deliveries only reach an idle
+    // role and the refused turn is over by then.
     for a in state
         .open_attention()
         .filter(|a| a.reason == backlot_model::event::OUTWARD_ACTION)
     {
-        if delivered_since(state, &a.role, a.ts_ms) {
+        if acted_since(state, &a.role, a.seq, false) || delivered_since(state, &a.role, a.ts_ms) {
             out.push(Move::Clear {
                 seq: a.seq,
                 reason: ROLE_MOVED_ON,

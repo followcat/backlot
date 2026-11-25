@@ -131,7 +131,7 @@ fn refused(dir: &Path, role: &str) -> backlot_model::Event {
             role: role.into(),
             reason: backlot_model::event::OUTWARD_ACTION.into(),
             detail: "gh issue list -R acme/acme-shop".into(),
-            needs_user: true,
+            needs_user: false,
         },
     )
 }
@@ -144,7 +144,7 @@ fn open_outward(dir: &Path) -> usize {
 }
 
 #[tokio::test]
-async fn an_outward_refusal_clears_once_its_role_gets_new_work() {
+async fn an_outward_refusal_clears_once_its_role_writes_again() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "stage", role_started("writer", "bl-acme-shop-writer"));
@@ -152,7 +152,14 @@ async fn an_outward_refusal_clears_once_its_role_gets_new_work() {
     let stage = new_stage().await;
     let live = vec![term("acme-shop", "writer")];
 
-    // The refused turn goes on; the person still sees the refusal.
+    // The refuse is the role's own record: nothing yet clears it.
+    let state = store::load_state(&dir).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, now(&dir))
+        .unwrap();
+    assert_eq!(open_outward(&dir), 1, "still on the role's row");
+
+    // The refused turn goes on: the role's own next write moves it on.
     record(
         &dir,
         "writer",
@@ -166,11 +173,18 @@ async fn an_outward_refusal_clears_once_its_role_gets_new_work() {
     stage
         .nudge("acme-shop", &dir, &state, &live, now(&dir))
         .unwrap();
-    assert_eq!(
-        open_outward(&dir),
-        1,
-        "same turn: still the person's to see"
-    );
+    assert_eq!(open_outward(&dir), 0, "role wrote again: moved on");
+    assert!(cleared_with(&dir, crate::nudge::ROLE_MOVED_ON));
+}
+
+#[tokio::test]
+async fn an_outward_refusal_also_clears_once_its_role_gets_new_work() {
+    let dir = tmp();
+    record(&dir, "user", studio_kind());
+    record(&dir, "stage", role_started("writer", "bl-acme-shop-writer"));
+    refused(&dir, "writer");
+    let stage = new_stage().await;
+    let live = vec![term("acme-shop", "writer")];
 
     // The stage hands the idle writer a new message: the turn that
     // hit the refusal is over.

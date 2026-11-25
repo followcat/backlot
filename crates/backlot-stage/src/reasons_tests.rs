@@ -17,7 +17,8 @@ fn every_stage_reason_is_classified() {
         reasons::SESSION_NOT_FOUND
         | reasons::CURSOR_DIR_OPEN
         | reasons::HOOKS_UNAVAILABLE
-        | reasons::XDG_CONFIG_HOME_SET => Info,
+        | reasons::XDG_CONFIG_HOME_SET
+        | reasons::OUTWARD_ACTION => Info,
         _ => NeedsYou,
     };
     for reason in reasons::ALL {
