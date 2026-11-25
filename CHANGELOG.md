@@ -6,9 +6,13 @@ All notable changes to backlot are documented here. The format follows
 
 backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
-v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
+v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
 ## Unreleased
+
+### Changed
+
+- **Synced with hc-tui v0.1.20:** a shown float takes every key except its popup chords and `PageUp`/`PageDown` page its own scrollback, focus moves to a sibling pane when a pane's program exits, unnamed workspaces follow the focused terminal's live folder (and new workspaces work on an empty core), closed `herdr-app` spaces and tabs stay hidden, child terminals ended with `die_with_parent` auto-reap, `[ui] agent_panel_space_headers` adds optional space headers, and official `hc` compatibility aligns with 0.1.22 (`7cb4de47`).
 
 ## 0.4.4 — 2026-11-25
 

@@ -113,9 +113,7 @@ impl Inventory {
     /// reported labels stop matching it.
     pub fn for_subscription(params: &SubscribeParams) -> Inventory {
         Inventory {
-            filtered: params.terminal.is_some()
-                || params.children_of.is_some()
-                || !params.labels.is_empty(),
+            filtered: params.is_filtered(),
             label_filter: (!params.labels.is_empty()).then(|| params.labels.clone()),
             ..Inventory::default()
         }

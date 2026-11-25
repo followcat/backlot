@@ -2,6 +2,7 @@
 //! the snapshot model is neutral so `watch::View` data projects onto herdr's
 //! presentation without inventing hc-tui-specific output.
 
+pub(crate) mod agent_rows;
 pub mod agents;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
@@ -78,6 +79,7 @@ pub struct ClientShellConfig {
     pub spaces: SpacesSidebarConfig,
     pub agents: AgentsSidebarConfig,
     pub agent_panel_sort: AgentPanelSortConfig,
+    pub agent_panel_space_headers: bool,
     pub status_indicators: StatusIndicatorStyle,
     pub theme_name: String,
     pub theme_runtime: ThemeRuntimeConfig,
@@ -171,6 +173,7 @@ impl ClientShellConfig {
             spaces: ui.sidebar.spaces.clone(),
             agents: ui.sidebar.agents.clone(),
             agent_panel_sort: ui.agent_panel_sort,
+            agent_panel_space_headers: ui.agent_panel_space_headers,
             status_indicators: ui.status_indicators,
             theme_name,
             theme_runtime,

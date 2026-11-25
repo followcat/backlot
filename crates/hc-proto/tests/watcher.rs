@@ -394,3 +394,98 @@ async fn events_update_and_heartbeat_refreshes_machines() {
         .expect("heartbeat did not refresh machine.list");
     fake.abort();
 }
+
+/// A document-only subscription (`docs` without a terminal filter) gets
+/// empty terminal snapshots and omits terminal events, so `seq` gaps on
+/// `doc` events and higher `heartbeat` sequences must keep the watcher
+/// `Online` without triggering a resync reconnect.
+#[tokio::test]
+async fn document_only_subscription_stays_online_across_empty_snapshots_and_seq_gaps() {
+    let mut params = common::watcher::reconnect_params();
+    params.doc_patterns = vec!["hc-tui".into()];
+    let (watcher, accepted) = common::watcher::watcher_with(vec!["hc-tui".into()], params);
+    let (events_tx, events_rx) = mpsc::channel::<(String, Value)>(16);
+    let mut events_rx = Some(events_rx);
+    let version = Arc::new(std::sync::atomic::AtomicU64::new(1));
+    let fake = {
+        let version = Arc::clone(&version);
+        spawn_fake(accepted, move |core, framed| {
+            let events_rx = if framed {
+                None
+            } else {
+                Some(events_rx.take().expect("one sub conn"))
+            };
+            let version = Arc::clone(&version);
+            Box::pin(async move {
+                if framed {
+                    serve_rpc(core, METHODS, move |req| {
+                        match req["method"].as_str().unwrap() {
+                            "machine.list" => Some(Ok(json!({"machines": []}))),
+                            "doc.get" => {
+                                let v = version.load(std::sync::atomic::Ordering::SeqCst);
+                                Some(Ok(json!({"value": {"v": v}, "version": v})))
+                            }
+                            _ => Some(Ok(Value::Null)),
+                        }
+                    })
+                    .await;
+                } else {
+                    let mut core = core;
+                    let req =
+                        serve_subscribe(&mut core, METHODS, json!({"seq": 1, "terminals": []}))
+                            .await;
+                    assert_eq!(req["params"]["docs"], json!(["hc-tui"]));
+                    let mut events_rx = events_rx.unwrap();
+                    while let Some((method, params)) = events_rx.recv().await {
+                        core.notify(&method, params).await;
+                    }
+                }
+            })
+        })
+    };
+
+    let key = DocKey {
+        machine: None,
+        name: "hc-tui".into(),
+    };
+    await_view(&watcher, |v| {
+        v.link == Link::Online
+            && v.generation == 1
+            && v.documents
+                .get(&key)
+                .is_some_and(|d| d.version == 1 && !d.fetching)
+    })
+    .await;
+
+    version.store(2, std::sync::atomic::Ordering::SeqCst);
+    events_tx
+        .send((
+            "event".into(),
+            json!({"seq": 5, "type": "doc", "data": {"name": "hc-tui", "version": 2}}),
+        ))
+        .await
+        .unwrap();
+    let v2 = await_view(&watcher, |v| {
+        v.documents
+            .get(&key)
+            .is_some_and(|d| d.version == 2 && !d.fetching)
+    })
+    .await;
+    assert_eq!(v2.link, Link::Online);
+    assert_eq!(v2.generation, 1);
+    assert!(!v2.inventory.is_stale());
+
+    events_tx
+        .send(("heartbeat".into(), json!({"seq": 8})))
+        .await
+        .unwrap();
+    events_tx
+        .send(("missed".into(), json!({"seq": 9, "terminals": []})))
+        .await
+        .unwrap();
+    let v3 = await_view(&watcher, |v| v.inventory.seq() == 9).await;
+    assert_eq!(v3.link, Link::Online);
+    assert_eq!(v3.generation, 1);
+    assert!(!v3.inventory.is_stale());
+    fake.abort();
+}
