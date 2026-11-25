@@ -125,6 +125,7 @@ impl App {
                         | crate::panel::Target::Strip(key)
                         | crate::panel::Target::Fold(key)
                         | crate::panel::Target::Input(key)
+                        | crate::panel::Target::OutwardCard(key, _)
                         | crate::panel::Target::ReopenProducer(key) => {
                             self.studio.set_studio_focus(key.clone());
                         }

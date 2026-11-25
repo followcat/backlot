@@ -2,7 +2,7 @@
 //! frame pieces, one-line people with their badges and cue lines,
 //! task rows, the accepted fold, the `Space` drawer lines, the
 //! stacked single-line block and the collapsed strip's rows.
-use backlot_model::summary::RoleSummary;
+use backlot_model::summary::{OutwardCardSummary, RoleSummary};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -566,4 +566,59 @@ pub(super) fn draw_person_line(
         &truncate_end(&text, rect.width.saturating_sub(5) as usize),
         style,
     );
+}
+
+/// One open outward push/PR card inside an expanded block:
+/// `│ ◆ c1 git push origin HEAD:main      a/y x/d ⏎ │` (shortening hints first).
+pub(super) fn draw_outward_card(
+    buf: &mut Buffer,
+    rect: Rect,
+    card: &OutwardCardSummary,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    if rect.width < 6 {
+        return;
+    }
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        1,
+        "◆",
+        Style::default().fg(palette.accent),
+    );
+    let inner = rect.width.saturating_sub(5) as usize;
+    let hint = "a/y x/d ⏎";
+    let hint_w = display_width(hint);
+    let label = format!("{} {}", card.id, card.command);
+    if inner > display_width(&label) + hint_w {
+        let label_w = inner - hint_w - 1;
+        put_text(
+            buf,
+            rect.x + 4,
+            rect.y,
+            label_w as u16,
+            &truncate_end(&label, label_w),
+            Style::default().fg(palette.text),
+        );
+        put_text(
+            buf,
+            rect.x + 4 + (inner - hint_w) as u16,
+            rect.y,
+            hint_w as u16,
+            hint,
+            Style::default().fg(palette.overlay0),
+        );
+    } else {
+        put_text(
+            buf,
+            rect.x + 4,
+            rect.y,
+            inner as u16,
+            &truncate_end(&label, inner),
+            Style::default().fg(palette.text),
+        );
+    }
 }

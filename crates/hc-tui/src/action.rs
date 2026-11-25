@@ -240,6 +240,7 @@ pub(crate) mod mark {
             Target::Talk(key, seq) => Some(studio_talk(key, *seq)),
             Target::Person(key, r) => Some(role(key, r)),
             Target::Task(key, t) => Some(task(key, t)),
+            Target::OutwardCard(_, id) => Some(card(id)),
             Target::Stage(m) => Some(stage(m.as_deref())),
             Target::Setup | Target::None => None,
         }

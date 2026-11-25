@@ -205,6 +205,18 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 body: Some(format!("{} · {}", card.studio, card.why)),
                 target,
             },
+            Wait::Outward(item) => StudioEvent {
+                kind: StudioEventKind::Card,
+                key: format!(
+                    "outward\0{}\0{}\0{}",
+                    item.machine.unwrap_or(""),
+                    item.studio.id,
+                    item.card.id
+                ),
+                title: format!("card waiting: {}", item.card.command),
+                body: Some(format!("{} · {}", item.studio.id, item.card.why)),
+                target,
+            },
             Wait::Ready(item) => StudioEvent {
                 kind: StudioEventKind::Ready,
                 key: format!("ready\0{}\0{}", item.machine.unwrap_or(""), item.studio.id),

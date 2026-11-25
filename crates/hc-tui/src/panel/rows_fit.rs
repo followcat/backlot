@@ -197,7 +197,8 @@ pub(super) fn block_height(
     let mut height = 3
         + usize::from(owed)
         + usize::from(super::data::report_pending(studio.studio))
-        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
+        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()))
+        + studio.studio.outward_cards.len();
     for role in live_roles(studio.studio) {
         height += person_height(studio, role, panel);
     }

@@ -18,6 +18,7 @@ $XDG_STATE_HOME/backlot/<core id>/
     reports/          deliveries and node reports
     messages/         role-to-role and stage notice bodies, and digest-<seq>.md merges
     checks/           detached check worktrees and the <delivery-seq>-<name>.log each records
+    outward/          logs captured from executed outward cards (`c<n>.log`, capped at 1 MiB)
     attention/        screens saved when an attention was raised
     prompts/          the rendered role prompt each fresh start was given
     work/integration  the director's worktree, backlot/<studio>/integration
@@ -80,6 +81,8 @@ prints `already at ledger v1`.
 | `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
 | `ask.answered` | role, target ask seq — `stage` only |
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
+| `outward.requested` | role, optional task, `command`, `cwd`, `argv`, optional `why` — explicit `backlot ask --run` card request |
+| `outward.completed` | `card`, `source_seq`, `outcome` (`Succeeded`/`Failed`/`TimedOut`/`Denied`/`Stale`), optional `exit_code`, `output_tail`, optional `log_file` — `stage` only |
 | `correction` | target event, changed fields, reason |
 
 `role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
@@ -222,9 +225,10 @@ to its terminal and no restart, resume, recast, start or close happened since `t
 `RoleSummary.asks` (and the panel's waiting count) while leaving the question in `exchange`.
 
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
-200 chars, `cwd`) refused by `backlot guard` or the per-role `pre-push` hook. The refusal also
-raises one `outward action` attention (`needs_user: true`) once per open attention episode for that
-role and command.
+200 chars, `cwd`, and optional `decision` / `argv` when cardable or guarded) refused by `backlot guard`,
+hooks, or the per-role `pre-push` hook. The refusal also raises one `outward action` attention
+(`needs_user: true`) once per open attention episode for that role and command. When `decision` is
+`card`, the stage proposes an `Outward` card in `hollywood/events.jsonl` (`by: stage`).
 
 `role.progress` records a role's voluntary one-line note (`role`, optional `task`, normalized `text`
 with control characters stripped and length capped at 200 chars). Only roles running in a role
@@ -256,7 +260,7 @@ message to the producer (R26).
 | `role.state` | lifecycle motion (`started`/`lost`/`resumed`/`closed`), terminal, actor, session, reason — `stage` only; the studios' four role events folded into one (H3) |
 | `role.restart` | `fresh`, optional reason — `user` only; the stage closes (`restarted`) then relaunches `bl-hollywood`, resuming its session unless `fresh` |
 | `role.progress` | role, one-line `text` (<= 200 chars) — `hollywood` only |
-| `card.proposed` | the exact `action` (D18), a one-line `why`, and the `base` the card was made against — `hollywood` only |
+| `card.proposed` | the exact `action` (D18, including stage-proposed `Outward` cards), a one-line `why`, and the `base` (`GitHead` for outward) — `hollywood` or `stage` |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
 | `card.stale` | card id, reason — `user` at apply time on an open card, `stage` on an applied one (H3) |

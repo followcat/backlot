@@ -201,6 +201,8 @@ impl App {
                 self.help_state = crate::chrome::help::HelpState::default();
             }
             KeyCode::Char('s') if plain => self.panel_stage_start(),
+            KeyCode::Char('a') if plain => self.panel_card_apply(),
+            KeyCode::Char('x') if plain => self.panel_card_cancel(),
             KeyCode::Char('f') if plain => self.panel_finish_selected(),
             KeyCode::Char(c @ ('y' | 'd')) if plain => self.panel_decide(c == 'y'),
             KeyCode::Char('n') if plain => {
@@ -241,6 +243,9 @@ impl App {
             }
             Some(Target::Task(key, task)) => {
                 self.sheet_open(key, Some(task));
+            }
+            Some(Target::OutwardCard(key, id)) => {
+                self.run_action(studio_cmds::card_show_on(key.machine, &id));
             }
             Some(Target::Fold(id)) => {
                 if !self.panel.accepted_folds.remove(&id) {

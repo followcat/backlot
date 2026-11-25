@@ -308,23 +308,22 @@ pub(crate) fn revise(key: &StudioKey, summary: &str, body: String) -> Action {
     a
 }
 
-/// `card apply <id>` — a local call, always.
-pub(crate) fn card_apply(id: &str) -> Action {
+/// `card apply <id>` on `machine` (`None` is local).
+pub(crate) fn card_apply_on(machine: Option<String>, id: &str) -> Action {
     Action {
         label: format!("applying {id}"),
         done: format!("applied card {id}"),
         name: format!("apply card {id}"),
         mark: mark::card(id),
         argv: plain_argv(&["card".into(), "apply".into(), id.into()]),
-        machine: None,
+        machine,
         stdin: None,
         view: false,
     }
 }
 
-/// `card cancel <id> [--reason <r>]` — local; the menu's reason
-/// dialog fills `reason`, the `x` key keeps its preset one.
-pub(crate) fn card_cancel(id: &str, reason: Option<&str>) -> Action {
+/// `card cancel <id> [--reason <r>]` on `machine` (`None` is local).
+pub(crate) fn card_cancel_on(machine: Option<String>, id: &str, reason: Option<&str>) -> Action {
     let mut command = vec!["card".into(), "cancel".into(), id.into()];
     command.extend([
         "--reason".into(),
@@ -336,22 +335,21 @@ pub(crate) fn card_cancel(id: &str, reason: Option<&str>) -> Action {
         name: format!("cancel card {id}"),
         mark: mark::card(id),
         argv: plain_argv(&command),
-        machine: None,
+        machine,
         stdin: None,
         view: false,
     }
 }
 
-/// `card show <id>` — local; `view` opens the read instead of a
-/// toast.
-pub(crate) fn card_show(id: &str) -> Action {
+/// `card show <id>` on `machine` (`None` is local); `view` opens the read instead of a toast.
+pub(crate) fn card_show_on(machine: Option<String>, id: &str) -> Action {
     Action {
         label: format!("card show {id}"),
         done: format!("showed card {id}"),
         name: format!("card show {id}"),
         mark: mark::card(id),
         argv: plain_argv(&["card".into(), "show".into(), id.into()]),
-        machine: None,
+        machine,
         stdin: None,
         view: true,
     }

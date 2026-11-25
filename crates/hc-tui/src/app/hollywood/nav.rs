@@ -266,6 +266,7 @@ impl App {
                             | Target::Tell(_)
                             | Target::Stage(..)
                             | Target::Card(_)
+                            | Target::OutwardCard(..)
                             | Target::Ready(_)
                     )
                 })

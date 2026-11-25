@@ -234,6 +234,7 @@ fn role_refused_card_and_ask_run_create_deduped_outward_cards_without_hollywood(
         "{shown}"
     );
     assert!(shown.contains("protected branch 'main'"), "{shown}");
+    println!("CAPTURED_CARD_SHOW_BEGIN\n{shown}\nCAPTURED_CARD_SHOW_END");
 }
 
 #[test]
