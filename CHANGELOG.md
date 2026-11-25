@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.5 — 2026-11-25
+
+The lot stays short: only the studio you are in shows everything, and closed seats and done tasks fold into one line each. `Alt+L` jumps to the lot, and backlot is now based on hc-tui v0.1.20.
+
 ### Added
 
 - **Single machine-wide server mode (`backlot server run|start|stop|adopt|service`).** Runs the existing daemon loop directly under `~/.local/state/backlot/server/` with an exclusive `server.lock` (`flock`) and renewed `server-lease.json`, blocking duplicate local `server run` instances and local `stage start|run` processes across sessions while routing local studio and Hollywood commands to `server/`. `server adopt [--dry-run] [--stop-stages] [--core <id>]` promotes an existing `<core_id>` state directory into `server/` with relative symlinks for live git worktrees, archives secondary/empty cores under `server/adopted-<stamp>/`, and leaves `server-pointer.json` tombstones (`managed by backlot-server (--session backlot)`); `server service [--print | --write]` generates the `Restart=always`, `RestartSec=2` user unit; and `studio new --remote` refuses with the Phase 2 placement message (`docs/studio/server.md`).
