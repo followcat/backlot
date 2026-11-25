@@ -181,8 +181,9 @@ Light path: the producer dispatches one task directly to one actor, or does the 
 is recorded in `task.cast`'s `by` and routes the delivery notice to the producer. It is recorded the same way, so the
 two paths can be compared on real work.
 
-When everything is accepted the user decides; `backlot studio finish` records `studio.finished` and the studio stops
-scheduling — only a person explicitly reopened is desired again.
+When everything is accepted the user decides and finishes the studio themselves; the producer reports
+it ready and what is still theirs to do, and never runs the finish. `backlot studio finish` records
+`studio.finished` and the studio stops scheduling — only a person explicitly reopened is desired again.
 
 ## Stop conditions
 
