@@ -21,7 +21,7 @@ pub struct Link {
 }
 
 /// `cli::Env` (string map) as the endpoint layer's os-string map.
-fn endpoint_env(env: &Env) -> endpoint::Env {
+pub(crate) fn endpoint_env(env: &Env) -> endpoint::Env {
     env.vars
         .iter()
         .map(|(k, v)| (OsString::from(k), OsString::from(v)))

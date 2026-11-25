@@ -218,6 +218,14 @@ pub fn is_local_host_with(
     bare_pair && short_label(clean).eq_ignore_ascii_case(short_label(local))
 }
 
+/// Current OS username from `env` (`USER`) falling back to process `USER`.
+pub fn env_user(env: &BTreeMap<String, String>) -> Option<String> {
+    env.get("USER")
+        .cloned()
+        .or_else(|| std::env::var("USER").ok())
+        .filter(|s| !s.is_empty())
+}
+
 /// `true` when `target_host` refers to this machine.
 pub fn is_local_host(target_host: &str) -> bool {
     let user = std::env::var("USER").ok();

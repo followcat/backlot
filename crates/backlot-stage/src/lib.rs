@@ -297,6 +297,9 @@ mod wizard_tests;
 #[cfg(test)]
 mod workareas_tests;
 
+pub mod remote_doc_cli;
+#[cfg(test)]
+mod remote_doc_cli_tests;
 pub mod server_cfg;
 #[cfg(test)]
 mod server_cfg_tests;
