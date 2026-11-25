@@ -91,7 +91,7 @@ pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
         // so a terminal's cwd compares against the same path.
         let base = match env.get("BACKLOT_STATE_DIR") {
             Some(dir) => PathBuf::from(dir),
-            None => crate::store::base_dir(&env.vars, &link.core_id),
+            None => crate::server_lock::effective_base(&env.vars, &link.core_id),
         };
         Some((list, crate::daemon::resolved_base(base)))
     };

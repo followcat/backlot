@@ -203,7 +203,7 @@ async fn run(
     };
     let state_dir = match env.get("BACKLOT_STATE_DIR") {
         Some(dir) => PathBuf::from(dir),
-        None => store::base_dir(&env.vars, &link.core_id),
+        None => crate::server_lock::effective_base(&env.vars, &link.core_id),
     };
     let only = env.get("BACKLOT_STUDIO").map(String::from);
     let mut prev = View {

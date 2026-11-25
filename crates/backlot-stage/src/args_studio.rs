@@ -67,6 +67,11 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
         (None, Some(file)) => Some(TextSource::File(file)),
         _ => None,
     };
+    if common.remote.is_some() {
+        return Err(Fail::refused(
+            "remote studio placement is Phase 2; create studios on the server host",
+        ));
+    }
     let cmd = match interactive {
         // The wizard resolves whatever the flags left unset — the
         // only pre-checks here are the ones that always hold.
@@ -450,31 +455,84 @@ pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, C
 /// `--session`, and no `--remote` — a systemd user unit runs on the
 /// local host.
 pub(crate) fn stage_service(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    service_cmd(common, it, U_STAGE, |write| Cmd::StageService { write })
+}
+
+/// `server service`: `--print` (the default) or `--write`, the common
+/// `--session`, and no `--remote`.
+pub(crate) fn server_service(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    service_cmd(common, it, U_SERVER, |write| {
+        Cmd::Server(ServerCmd::Service { write })
+    })
+}
+
+fn service_cmd(
+    common: &mut Common,
+    it: &mut It,
+    u: &'static str,
+    make: impl FnOnce(bool) -> Cmd,
+) -> Result<(Common, Cmd), Fail> {
     let mut print = false;
     let mut write = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
-            return Ok((std::mem::take(common), Cmd::Help(U_STAGE)));
+            return Ok((std::mem::take(common), Cmd::Help(u)));
         }
-        if common_flag(it, common, &arg, U_STAGE)? {
+        if common_flag(it, common, &arg, u)? {
             continue;
         }
         match arg.as_str() {
             "--print" => print = true,
             "--write" => write = true,
-            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STAGE)),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), u)),
         }
     }
     if print && write {
-        return Err(usage("give --print or --write, not both", U_STAGE));
+        return Err(usage("give --print or --write, not both", u));
     }
     if common.remote.is_some() {
         return Err(usage(
             "--remote does not apply: a systemd --user unit runs on the local host",
-            U_STAGE,
+            u,
         ));
     }
-    Ok((std::mem::take(common), Cmd::StageService { write }))
+    Ok((std::mem::take(common), make(write)))
+}
+
+/// `server adopt [--dry-run] [--stop-stages] [--core <id>]`.
+pub(crate) fn server_adopt(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut dry_run = false;
+    let mut stop_stages = false;
+    let mut core = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_SERVER)));
+        }
+        if common_flag(it, common, &arg, U_SERVER)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--stop-stages" => stop_stages = true,
+            "--core" => core = Some(it.value("--core", U_SERVER)?),
+            _ if eq(&arg, "--core").is_some() => core = eq(&arg, "--core").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_SERVER)),
+        }
+    }
+    if common.remote.is_some() {
+        return Err(usage(
+            "--remote does not apply: server adopt runs on the local host",
+            U_SERVER,
+        ));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Server(ServerCmd::Adopt {
+            dry_run,
+            stop_stages,
+            core,
+        }),
+    ))
 }
 
 /// Commands taking just `--file`.

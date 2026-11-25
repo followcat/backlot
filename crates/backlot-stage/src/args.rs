@@ -269,6 +269,24 @@ pub enum Cmd {
     Hollywood(HollywoodCmd),
     /// `backlot card list|apply|cancel` — the card gate (D17a).
     Card(CardCmd),
+    /// `backlot server run|start|stop|adopt|service` — single-server mode (B3).
+    Server(ServerCmd),
+}
+
+/// Subcommands under `backlot server`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerCmd {
+    Run,
+    Start,
+    Stop,
+    Adopt {
+        dry_run: bool,
+        stop_stages: bool,
+        core: Option<String>,
+    },
+    Service {
+        write: bool,
+    },
 }
 
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
@@ -513,6 +531,38 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "service" => args_studio::stage_service(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STAGE))),
                 _ => Err(usage(format!("unknown stage subcommand '{sub}'"), U_STAGE)),
+            }
+        }
+        "server" => {
+            let Some(sub) = it.next() else {
+                return Err(usage("missing server subcommand", U_SERVER));
+            };
+            match sub.as_str() {
+                "run" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Run),
+                ),
+                "start" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Start),
+                ),
+                "stop" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Stop),
+                ),
+                "adopt" => args_studio::server_adopt(&mut common, &mut it),
+                "service" => args_studio::server_service(&mut common, &mut it),
+                "-h" | "--help" => Ok((common, Cmd::Help(U_SERVER))),
+                _ => Err(usage(
+                    format!("unknown server subcommand '{sub}'"),
+                    U_SERVER,
+                )),
             }
         }
         "runners" => args_studio::runners(&mut common, &mut it),
