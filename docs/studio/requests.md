@@ -22,7 +22,8 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 2. **No outward or shell actions:** `exec`, `shell`, `run`, `terminal`, `terminal-send`, and `outward` are refused.
 3. **Person verbs only:** only the explicit typed person verbs listed below are accepted; role-only actions and unpermitted subcommands are refused.
 4. **Non-prompt attentions only:** `attention-clear` refuses interactive prompt/dialog attentions (`permission prompt`, `question`, `folder-trust`, `folder trust refused`, `* prompt`, `*dialog*`).
-5. **Audit trail:** every ledger event recorded through `plugin.backlot.req` carries `by: { role: "user", via: "doc" }` (or `{ role: "stage", via: "doc" }` for stage-recorded `message.seen` under `answers`).
+5. **Confirm tokens on destructive verbs:** `studio-delete` and `studio-prune` always, and `studio-restore` when its dry run renames the copy. A dry run returns `{ report, confirm_token }`, where `confirm_token` is `sha256` of the report's canonical (compact) JSON; the commit must echo that exact token and is re-checked against a fresh dry run.
+6. **Audit trail:** every ledger event recorded through `plugin.backlot.req` carries `by: { role: "user", via: "doc" }` (or `{ role: "stage", via: "doc" }` for stage-recorded `message.seen` under `answers`).
 
 ---
 
@@ -111,7 +112,19 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 | `task-abandon` | `studio`, `task`, `reason?` | `studio`, `task`, `seq`, `state` (`abandoned`), `reason?` |
 | `hollywood-setup` | `runner`, `model`, `effort?`, `key?`, `default_cast?` | `runner`, `model`, `effort?`, `key?`, `default_cast?`, `action` (`configured` \| `updated`), `restarted` |
 
-*(Studio lifecycle verbs `new`, `finish`, `prune`, `delete`, `restore`, and `repos` are B1b. Card approvals `card-apply` and `card-cancel` travel over the same queue.)*
+### Studio lifecycle (`B1b`)
+
+| `action.kind` | Fields | Typed `result` fields |
+| --- | --- | --- |
+| `studio-new` | `id`, `title`, `repo` (a hub path), `cast` (TOML text), `mode?`, `init?`, `no_git?`, `ask?`, `dry_run?` | `studio`, `title`, `repo`, `dry_run?`, `seq?`, `ask_seq?`, `first_message?` |
+| `studio-finish` | `studio`, `reason?`, `force?` | `studio`, `seq`, `reason` |
+| `studio-prune` | `studio?`, `all_finished?`, `dry_run?`, `force?` | `PruneReport { studios: [{ studio, finished, dry_run, steps }] }`, or `{ report, confirm_token }` on a dry run |
+| `studio-delete` | `studio?`, `dry_run?`, `force?` | `DeleteReport`, or `{ report, confirm_token }` on a dry run |
+| `studio-restore` | `archived`, `name?`, `dry_run?` | `RestoreReport`, or `{ report, confirm_token }` on a dry run |
+| `repos` | `from?`, `all?` | `{ cwd, entries: [{ name, path, kind, in_use_studio, branch, members? }] }` |
+| `runners` | — | `RunnerCatalogEntry[]` (`runner`, `status`, `version`, `path`, `needs_path`, `models`, `efforts`) |
+
+The cast and the first message are content, never client paths; the hub writes them to its own temporary files, canonicalizes `repo` against its own filesystem, and runs the same code the local command runs. A dry run's `confirm_token` is required on the matching commit; `studio-restore` requires it only when the dry run reports `renamed: true` (replacing an existing studio is refused outright). Card approvals `card-apply` and `card-cancel` travel over the same queue.
 
 ---
 
@@ -125,6 +138,6 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 ## Client Routing & Error Lines (`B2`)
 
 - **Server resolution:** both `backlot` TUI and CLI resolve `--server <host>[/<session>]` (default session `backlot`), then `BACKLOT_SERVER`, then `[client] server` / `session` in `~/.config/backlot/config.toml`.
-- **Off-hub vs on-hub:** off-hub clients connect over `ssh <host> hc connect --session <session>`, read `backlot` + `backlot-cat`, and submit `B1a` verbs (card approvals included) via `plugin.backlot.req` -> `plugin.backlot.res` (5 s ack timeout). When the resolved host matches the local hub, the CLI keeps writing the local ledger directly (still works while `backlot-server` restarts) while TUI connects locally to the named session.
-- **Client errors & stopped server:** `"server busy"` (full queue or 3 CAS conflicts), `"request expired"`, `"timed out waiting for ack of '<req_id>' (no reply from server)"`, and `"not available through the server yet"` (uncovered verbs such as `studio new`/`finish`/`prune`/`delete`/`restore`). When `backlot-cat` is present with no live `backlot-server` or `backlot-stage` terminal, the TUI displays the start command (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`) without spawning anything itself.
+- **Off-hub vs on-hub:** off-hub clients connect over `ssh <host> hc connect --session <session>`, read `backlot` + `backlot-cat`, and submit the B1a person verbs, card approvals and the B1b studio lifecycle actions via `plugin.backlot.req` -> `plugin.backlot.res` (5 s ack timeout). When the resolved host matches the local hub, the CLI keeps writing the local ledger directly (still works while `backlot-server` restarts) while TUI connects locally to the named session.
+- **Client errors & stopped server:** `"server busy"` (full queue or 3 CAS conflicts), `"request expired"`, `"timed out waiting for ack of '<req_id>' (no reply from server)"`, `"confirm this from a dry run first"` / `"the studio changed since you reviewed it; run it again"` on an unreviewed or stale destructive commit, and `"not available through the server yet"` for the verbs the queue still does not carry (delivery, review, correction, approval, `req revise`, `plan publish`). When `backlot-cat` is present with no live `backlot-server` or `backlot-stage` terminal, the TUI displays the start command (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`) without spawning anything itself.
 - **What guards the queue:** remote clients approve over the server queue; role terminals cannot use `hc run|exec|send|keys|connect`, interpreter code (`python -c`, `node -e`, a heredoc) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, or detach tricks such as `systemd-run` and `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an overeager agent, not isolation.
