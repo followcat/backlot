@@ -27,6 +27,10 @@ expanded by default; `--plain` starts it closed for the parity harness's frame. 
 in herdr's defaults and the parity scripts never send it. A configured herdr binding on the same
 tail still wins while the panel is closed or unfocused.
 
+`Alt+L` (`[keys] focus_lot`) opens or expands the dock if hidden or collapsed, moves focus to it,
+and scrolls the selection to its last selectable row without starting compose; pressing it while
+focused jumps back to the last row and never closes the dock.
+
 ## Focused keys
 
 | Key | Action |
@@ -360,6 +364,7 @@ previous_studio = "alt+left"
 next_studio = "alt+right"
 previous_role = "alt+up"
 next_role = "alt+down"
+focus_lot = "alt+l"
 call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
 prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
 ```

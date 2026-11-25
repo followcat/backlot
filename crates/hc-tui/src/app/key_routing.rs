@@ -464,6 +464,17 @@ impl App {
             self.handle_hollywood_key(&press);
             return None;
         }
+        // `focus_lot` (`alt+l` by default): opens/focuses the lot on
+        // its last selectable row without starting compose; yields to
+        // floats, modals, Call Sheet overlays, and running compose.
+        if self.focus_lot_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            if key.input.action == Action::Press {
+                self.focus_lot();
+            }
+            return None;
+        }
         // A focused panel owns every key like the navigator does; the
         // prefix itself still arms so the toggle chord stays reachable.
         if self.panel_focused() {

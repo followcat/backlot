@@ -41,6 +41,8 @@ pub(crate) enum Surface {
     CallSheetTell,
     /// The studio dock — the same press the toggle chord gives.
     Dock,
+    /// Focus the lot on its last selectable row (`Alt+L`).
+    FocusLot,
     /// The focused pane's studio menu (`Ctrl+B m`).
     PaneMenu,
 }

@@ -10,9 +10,17 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **`Alt+L` (`[keys] focus_lot`) focuses the lot on its last selectable row.** Pressing `Alt+L` opens/expands the right-hand lot dock (`lot · N`) if hidden or collapsed, focuses it, and scrolls the selection to its last selectable row (e.g. `› tell producer · / actions`) without entering Compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressing `Alt+L` while the lot is already focused jumps to the last row again without toggling the dock closed. Configurable via `[keys] focus_lot` (empty string unbinds), falls through to the focused program under `--plain`, yields to floats, modals, the Call Sheet, and running compose, and appears in the lot header, `?` help, launcher, and docs (`docs/keys.md`, `docs/studio/hollywood.md`, `docs/studio/panel.md`).
+
 ### Changed
 
 - **Synced with hc-tui v0.1.20:** a shown float takes every key except its popup chords and `PageUp`/`PageDown` page its own scrollback, focus moves to a sibling pane when a pane's program exits, unnamed workspaces follow the focused terminal's live folder (and new workspaces work on an empty core), closed `herdr-app` spaces and tabs stay hidden, child terminals ended with `die_with_parent` auto-reap, `[ui] agent_panel_space_headers` adds optional space headers, and official `hc` compatibility aligns with 0.1.22 (`7cb4de47`).
+
+### Fixed
+
+- **Plain `backlot` folders and git checkouts stay visible and reachable with `Ctrl+K` / `Ctrl+J`.** `is_backlot_stage_space` now matches only the internal `herdr.space = "backlot"` space (`space:7:backlot`) instead of every workspace whose label is `"backlot"`. Previously, any plain shell in a `backlot` directory or git checkout disappeared from the left `machines` tree and from `previous_workspace` / `next_workspace` cycling in studio mode.
 
 ## 0.4.4 — 2026-11-25
 
