@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use ratatui::layout::Rect;
 
 use crate::chrome::ClientShellConfig;
-use crate::chrome::agents::{AgentRow, agent_rows};
+use crate::chrome::agents::{AgentRow, agent_row, ordered_agent_pane_ids};
 use crate::chrome::snapshot::ClientShellSnapshot;
 use crate::chrome::title_text::stripped_terminal_title;
 use crate::panel::data::{MachineSummary, StudioLabel, StudioRef, spans_machines, studio_label};
@@ -124,9 +124,10 @@ impl<'a> CastView<'a> {
                 })
                 .map(|t| t.address.as_str()),
         );
-        let others = agent_rows(snapshot, config, None)
+        let others = ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
             .into_iter()
-            .filter(|row| !seated.contains(row.pane_id.as_str()))
+            .filter(|pane_id| !seated.contains(pane_id.as_str()))
+            .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, None))
             .collect();
         let titles = studio
             .map(|studio| {

@@ -269,10 +269,10 @@ keys are Herdr's again. Under `--plain` Herdr's
 bindings, or the program, get the keys exactly as before. An empty string unbinds a key; a value
 that does not parse falls back to the default with one notice naming the file.
 
-They also work while the studio panel or a persistent float has the focus — the float parks on
-its tab and keeps running, as it does for the tab and agent keys below. While the keyboard is
-locked (`Ctrl+G`) the program gets them instead, and in copy mode they do what Herdr's
-`previous_tab` does there.
+They also work while the studio panel has the focus. While a float is shown, the float takes
+every key except its popup chord — hide the float first to switch studios or roles, as for the tab
+and agent keys below. While the keyboard is locked (`Ctrl+G`) the program gets them instead, and in
+copy mode they do what Herdr's `previous_tab` does there.
 
 ## Scrolling a pane
 
@@ -283,8 +283,8 @@ mode gets the keys instead, so `less`, `vim` and similar apps keep their own pag
 keys such as `Ctrl+PageUp` always reach the program, and any key the program does get jumps the view
 back to the bottom. The mouse wheel scrolls the pane the same way.
 
-Inside a floating terminal (`type = "popup"`), every key goes to the popup's program, so `PageUp` and
-`PageDown` do not page the pane behind it.
+Inside a floating terminal (`type = "popup"`), the same rule pages the popup's own scrollback, and
+the pane behind it never moves.
 
 ## Copy mode
 
@@ -380,11 +380,12 @@ one-shot: they close and end when you leave the tab. Set `persistent = true` on 
 popup command the same per-tab behavior, or `persistent = false` to keep even a shell one-shot. While a float is
 starting, its own chord is held back until the terminal is up.
 
-While a persistent float is focused, the keys bound to `previous_tab`/`next_tab`/`previous_agent`/`next_agent` — the
-`Alt+arrow` shortcuts above, if you set them — still switch tabs and agents: the float parks on its tab and keeps
-running, exactly as if you had clicked away. Any `[[keys.command]]` popup chord also still works, so `Alt+F` toggles
-the float instead of typing into it. The program loses exactly those chords — press, repeat and release; everything
-else, `Esc` included, reaches it, and an action with no binding loses nothing.
+While a float is shown, it takes every key except the `[[keys.command]]` popup chords: those still run their
+command, so `Alt+F` hides the float instead of typing into it. Everything else reaches the program, including the
+`Alt+arrow` tab and agent shortcuts, `Ctrl+G` and `Esc`; hide the float first to switch tabs or lock the keyboard.
+A locked keyboard sends its keys to the shown float, not to the pane behind it, and the popup chord still hides the
+float. Plain `PageUp` and `PageDown` page the float's scrollback as described under
+[Scrolling a pane](#scrolling-a-pane).
 
 The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
 the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on

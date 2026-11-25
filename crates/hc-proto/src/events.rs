@@ -95,10 +95,22 @@ pub struct SubscribeParams {
     /// Only these documents, by name; a trailing `*` is a prefix. Core
     /// 0.1.21 and later narrow documents with it, and naming anything
     /// narrows: documents without a terminal selection hear no terminal
-    /// events. Older cores ignore the member, so it needs no capability
-    /// gate.
+    /// events and (from 0.1.22) receive empty terminal snapshots. Older
+    /// cores ignore the member, so it needs no capability gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub docs: Vec<String>,
+}
+
+impl SubscribeParams {
+    /// `true` when any filter (`terminal`, `children_of`, `labels`, or `docs`)
+    /// narrows the subscription; filtered streams omit unmatched events
+    /// and may carry sequence gaps.
+    pub fn is_filtered(&self) -> bool {
+        self.terminal.is_some()
+            || self.children_of.is_some()
+            || !self.labels.is_empty()
+            || !self.docs.is_empty()
+    }
 }
 
 /// The `events.subscribe` result: a snapshot, then the event stream.
