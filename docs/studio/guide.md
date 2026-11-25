@@ -311,6 +311,8 @@ The command writes `backlot-stage.service` under `~/.config/systemd/user/` (or
 calls `systemctl` itself. `--print` (the default) shows the unit instead of writing it, and a
 working role cannot run the command. The unit runs `stage watch --restart` with the stage's
 `PATH` and `BACKLOT_STATE_DIR`; it has not been exercised under a real systemd user manager.
+For running a single machine-wide `backlot server` instance (including `adopt` from per-core state
+and `server service`), see [server.md](server.md).
 
 Run `backlot` to open the UI. The client is always in studio mode: the sidebar's agents section
 is the **cast** of the current studio — one two-line entry per person, live ones first — and

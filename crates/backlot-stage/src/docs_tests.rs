@@ -174,6 +174,13 @@ fn hollywood_commands_parse() {
     assert_commands_parse("hollywood.md", &backlot_lines(&doc));
 }
 
+/// Same for the single-server doc — its `server run|start|stop|adopt|service` lines.
+#[test]
+fn server_doc_commands_parse() {
+    let doc = repo_file("docs/studio/server.md");
+    assert_commands_parse("server.md", &backlot_lines(&doc));
+}
+
 /// Same for the README's "Run a studio" section.
 #[test]
 fn readme_run_a_studio_commands_parse() {
