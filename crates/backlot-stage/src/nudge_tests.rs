@@ -705,3 +705,6 @@ fn the_users_step_is_never_pushed() {
     let moves = nudge::plan(&state, &wanted, |_| Some(0), 10_000_000);
     assert!(moves.is_empty(), "{moves:?}");
 }
+
+#[path = "nudge_stale_tests.rs"]
+mod stale;

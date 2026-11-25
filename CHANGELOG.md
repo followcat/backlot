@@ -10,6 +10,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **Stale "needs you" rows clear by themselves.** An `owed` escalation clears (`role active again`) once its role writes to the ledger again, for example while the person talks it through, and raises again only after the role sits idle a whole `escalate_after_s` with the step still owed, counted from its last ledger write. An `outward action` refusal clears (`role moved on`) once the stage delivers the role new work. Before, both stayed "needs you" until the step was done or someone cleared them by hand.
+
 ## 0.4.3 — 2026-11-25
 
 Hollywood can change its own agent with one card. When you ask it to switch to another runner or model, it proposes a `setup` card showing the old and new identity; applying it rewrites `[hollywood]` (keeping `start`) and restarts Hollywood once, and the new Hollywood greets you with what changed instead of re-researching. The Call Sheet title row's `m` menu also offers "Change Hollywood's agent…" directly.
