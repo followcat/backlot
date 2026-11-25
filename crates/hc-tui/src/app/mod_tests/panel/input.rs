@@ -94,7 +94,13 @@ async fn up_rests_and_steps_off_the_line() {
     assert!(!app.panel_editing());
     assert!(matches!(
         app.panel.selected,
-        Some(Target::Person(..) | Target::Studio(..) | Target::Task(..) | Target::Fold(..))
+        Some(
+            Target::Person(..)
+                | Target::Studio(..)
+                | Target::Task(..)
+                | Target::Fold(..)
+                | Target::ClosedFold(..)
+        )
     ));
     assert_eq!(draft(&app, "acme-shop"), "x", "the draft parked");
     // ↓ steps back onto the line — still `Resting`: walking onto a
