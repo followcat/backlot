@@ -1031,9 +1031,9 @@ fn the_card_view_has_a_complete_border_and_footer() {
     let _ = column;
     let action_strip = row_of(&buf, area, view.area.bottom() - 2);
     assert!(
-        action_strip.contains("a apply")
-            && action_strip.contains("x cancel")
-            && action_strip.contains("esc back"),
+        action_strip.contains("[a] apply")
+            && action_strip.contains("[x] cancel")
+            && action_strip.contains("esc"),
         "action strip: {action_strip}"
     );
     let bottom = row_of(&buf, area, view.area.bottom() - 1);
@@ -1045,8 +1045,7 @@ fn the_card_view_has_a_complete_border_and_footer() {
 
 #[test]
 fn the_card_views_footer_shows_the_pending_mark() {
-    // An action kicked off inside the view reports `… <label>` in
-    // the action strip while it runs.
+    // An action kicked off inside the view locks `a`/`x` and names the pending action.
     let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
@@ -1059,7 +1058,10 @@ fn the_card_views_footer_shows_the_pending_mark() {
     let view =
         crate::hollywood::render_view(&mut buf, area, &view, Some("card apply c4"), &palettes()[0]);
     let strip = row_of(&buf, area, view.area.bottom() - 2);
-    assert!(strip.contains("… card apply c4"), "action strip: {strip}");
+    assert!(
+        strip.contains("■ card apply c4… (a/x locked)"),
+        "action strip: {strip}"
+    );
 }
 
 #[test]
@@ -1082,11 +1084,11 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
     assert!(top.contains("hollywood #7"), "top: {top}");
     let strip = row_of(&buf, area, view.area.bottom() - 2);
     assert!(
-        strip.contains("↑↓ scroll  esc back"),
+        strip.contains("[y] copy") && strip.contains("esc"),
         "read-only action strip: {strip}"
     );
-    assert!(!strip.contains("a apply"), "no card keys: {strip}");
-    assert!(!strip.contains("x cancel"), "no card keys: {strip}");
+    assert!(!strip.contains("[a] apply"), "no card keys: {strip}");
+    assert!(!strip.contains("[x] cancel"), "no card keys: {strip}");
 }
 
 #[test]
@@ -1569,6 +1571,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut buf = Buffer::empty(area);
     let ren = crate::hollywood::render_view_at(&mut buf, area, &outcome, None, palette, now_ms);
@@ -1608,6 +1611,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut lbuf = Buffer::empty(area);
     let lren = crate::hollywood::render_view_at(&mut lbuf, area, &legacy, None, palette, now_ms);
@@ -1643,6 +1647,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::HollywoodExchange(8),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut hbuf = Buffer::empty(area);
     let hren = crate::hollywood::render_view_at(&mut hbuf, area, &hw, None, palette, now_ms);
@@ -1675,6 +1680,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::Card("c3".into()),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut cbuf = Buffer::empty(area);
     let cren = crate::hollywood::render_view_at(&mut cbuf, area, &card, None, palette, now_ms);
@@ -1703,6 +1709,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::SheetDeliveries(StudioKey::local("acme-shop"), Some("t1".into())),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut kbuf = Buffer::empty(area);
     let kren = crate::hollywood::render_view_at(&mut kbuf, area, &check, None, palette, now_ms);
@@ -1728,6 +1735,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
             origin: ReaderOrigin::Records(StudioKey::local("acme-shop")),
             ..ReaderMeta::default()
         },
+        ..CardView::default()
     };
     let mut rbuf = Buffer::empty(area);
     let rren = crate::hollywood::render_view_at(&mut rbuf, area, &records, None, palette, now_ms);
@@ -1736,4 +1744,230 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     assert!(rtop.contains("■ RECORDS · acme-shop"), "{rtop}");
     assert!(rtop.contains("host-a"), "{rtop}");
     assert!(rctx.contains("2/3 tasks · 5 roles"), "{rctx}");
+}
+
+#[test]
+fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
+    use crate::hollywood::{ReaderKind, ReaderMeta, ReaderOrigin};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let make_outcome = |lines: Vec<String>| CardView {
+        card: None,
+        title: "acme-shop #188".into(),
+        lines,
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(188),
+            from: Some("producer".into()),
+            to: Some("user".into()),
+            role: Some("producer".into()),
+            role_state: Some("ready".into()),
+            role_terminal: Some("t1".into()),
+            runner: Some("agy".into()),
+            model: Some("pro".into()),
+            nav_index: Some(2),
+            nav_total: Some(4),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 188),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+
+    // Tier 0 full width (>=70 inside 100-col surface).
+    let wide_outcome = make_outcome(vec![
+        "detailed delivery summary reaching across at least seventy columns wide".into(),
+    ]);
+    let wide = Rect::new(0, 0, 100, 16);
+    let mut wbuf = Buffer::empty(wide);
+    let wren = crate::hollywood::render_view(&mut wbuf, wide, &wide_outcome, None, palette);
+    let wstrip = wide_row_of(
+        &wbuf,
+        wren.area.x,
+        wren.area.right(),
+        wren.area.bottom() - 2,
+    );
+    assert!(
+        wstrip.contains("[t] tell")
+            && wstrip.contains("[o] focus")
+            && wstrip.contains("[p] peek")
+            && wstrip.contains("[v] sheet")
+            && wstrip.contains("[y] copy"),
+        "full tier strip: {wstrip}"
+    );
+    for expected in ['t', 'o', 'p', 'v', 'y'] {
+        let (rect, _) = wren
+            .chips
+            .iter()
+            .find(|(_, ch)| *ch == expected)
+            .unwrap_or_else(|| panic!("missing chip [{expected}] in {wstrip}"));
+        let text = wide_row_of(&wbuf, rect.x, rect.right(), rect.y);
+        assert!(
+            text.starts_with(&format!("[{expected}]")),
+            "chip [{expected}] rect mismatch: got {text:?} from {wstrip:?}"
+        );
+    }
+
+    // Tier 1 medium 52-col card (`avail = 48`): `[t] tell [o] focus [y] copy  ←/→ · esc`.
+    let medium_view = make_outcome(vec!["ok".into()]);
+    let medium = Rect::new(0, 0, 56, 12);
+    let mut mbuf = Buffer::empty(medium);
+    let mren = crate::hollywood::render_view(&mut mbuf, medium, &medium_view, None, palette);
+    assert_eq!(mren.area.width, 52);
+    let mstrip = wide_row_of(
+        &mbuf,
+        mren.area.x,
+        mren.area.right(),
+        mren.area.bottom() - 2,
+    );
+    assert!(
+        mstrip.contains("[t] tell")
+            && mstrip.contains("[o] focus")
+            && mstrip.contains("[y] copy")
+            && !mstrip.contains("[p]"),
+        "medium tier strip: {mstrip}"
+    );
+
+    // Tier 2 squeezed fallback: `[t] [o] [y]  ? keys`, never mid-word cut.
+    let narrow = Rect::new(0, 0, 40, 12);
+    let mut nbuf = Buffer::empty(narrow);
+    let nren = crate::hollywood::render_view(&mut nbuf, narrow, &medium_view, None, palette);
+    assert_eq!(nren.area.width, 40);
+    let nstrip = wide_row_of(
+        &nbuf,
+        nren.area.x,
+        nren.area.right(),
+        nren.area.bottom() - 2,
+    );
+    assert!(
+        nstrip.contains("[t] [o] [y]") && nstrip.contains("? keys"),
+        "narrow fallback strip: {nstrip}"
+    );
+
+    // Narrow actionable card: `[a] [x] [y]  ? keys`, and pending card locks `a`/`x`.
+    let card_view = CardView {
+        card: Some("c3".into()),
+        title: "c3".into(),
+        lines: vec!["Action: pause t2".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Card,
+            studio: Some("acme-shop".into()),
+            card_action: Some("pause t2".into()),
+            card_status: Some("open".into()),
+            nav_index: Some(1),
+            nav_total: Some(2),
+            origin: ReaderOrigin::Card("c3".into()),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let squeezed_card = Rect::new(0, 0, 38, 12);
+    let mut cbuf = Buffer::empty(squeezed_card);
+    let cren = crate::hollywood::render_view(&mut cbuf, squeezed_card, &card_view, None, palette);
+    let cstrip = wide_row_of(
+        &cbuf,
+        cren.area.x,
+        cren.area.right(),
+        cren.area.bottom() - 2,
+    );
+    assert!(
+        cstrip.contains("[a] [x] [y]") && cstrip.contains("? keys"),
+        "narrow card strip: {cstrip}"
+    );
+
+    let mut pbuf = Buffer::empty(wide);
+    let pren = crate::hollywood::render_view(
+        &mut pbuf,
+        wide,
+        &card_view,
+        Some("applying card c3"),
+        palette,
+    );
+    let pstrip = wide_row_of(
+        &pbuf,
+        pren.area.x,
+        pren.area.right(),
+        pren.area.bottom() - 2,
+    );
+    assert!(
+        pstrip.contains("■ applying card c3… (a/x locked)"),
+        "{pstrip}"
+    );
+    assert!(!pren.chips.iter().any(|(_, c)| *c == 'a' || *c == 'x'));
+    assert!(pren.chips.iter().any(|(_, c)| *c == 'y'));
+
+    // Closed non-resumable actor omits `[o]` and `[p]`.
+    let closed_view = CardView {
+        card: None,
+        title: "acme-shop #22".into(),
+        lines: vec!["done".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(22),
+            from: Some("actor-eve".into()),
+            to: Some("user".into()),
+            role: Some("actor-eve".into()),
+            role_state: Some("closed".into()),
+            resumable: false,
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 22),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut clbuf = Buffer::empty(wide);
+    let clren = crate::hollywood::render_view(&mut clbuf, wide, &closed_view, None, palette);
+    let clstrip = wide_row_of(
+        &clbuf,
+        clren.area.x,
+        clren.area.right(),
+        clren.area.bottom() - 2,
+    );
+    assert!(!clstrip.contains("[p]"), "{clstrip}");
+    assert!(!clstrip.contains("[o]"), "{clstrip}");
+    assert!(
+        clstrip.contains("[t] tell") && clstrip.contains("[y] copy"),
+        "{clstrip}"
+    );
+
+    // Records at 40 cols keeps `[y] copy  esc`, and below Tier 1 degrades to `[y]  ? keys`.
+    let records_view = CardView {
+        card: None,
+        title: "records acme-shop".into(),
+        lines: vec!["task-1".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Records,
+            studio: Some("acme-shop".into()),
+            studio_counts: Some((1, 2, 3)),
+            studio_finished: true,
+            origin: ReaderOrigin::Records(StudioKey::local("acme-shop")),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut rbuf = Buffer::empty(narrow);
+    let rren = crate::hollywood::render_view(&mut rbuf, narrow, &records_view, None, palette);
+    let rstrip = wide_row_of(
+        &rbuf,
+        rren.area.x,
+        rren.area.right(),
+        rren.area.bottom() - 2,
+    );
+    assert!(rstrip.contains("[y] copy"), "records tier1: {rstrip}");
+
+    let tiny = Rect::new(0, 0, 16, 10);
+    let mut tbuf = Buffer::empty(tiny);
+    let tren = crate::hollywood::render_view(&mut tbuf, tiny, &records_view, None, palette);
+    let tstrip = wide_row_of(
+        &tbuf,
+        tren.area.x,
+        tren.area.right(),
+        tren.area.bottom() - 2,
+    );
+    assert!(tstrip.contains("[y]  ? keys"), "records tier2: {tstrip}");
 }

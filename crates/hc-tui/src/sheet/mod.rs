@@ -67,6 +67,7 @@ pub(crate) struct SheetView {
     /// The footer/title text — `reports/d1.md` and friends.
     pub title: String,
     pub lines: Vec<String>,
+    pub raw_body: String,
     pub scroll: usize,
     pub meta: crate::hollywood::ReaderMeta,
 }

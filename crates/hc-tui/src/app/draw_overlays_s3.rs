@@ -110,14 +110,17 @@ pub(super) fn draw_reader(
     area: Rect,
     layout: &crate::chrome::snapshot::ClientShellLayout,
 ) -> bool {
+    let card_pending =
+        app.card_pending_label(app.hollywood.view.as_ref().and_then(|v| v.card.as_deref()));
     let owned_sheet_view;
     let (view, pending) = if let Some(view) = app.hollywood.view.as_ref() {
-        (view, app.hollywood.pending.as_deref())
+        (view, card_pending.as_deref())
     } else if let Some(sv) = app.sheet.as_ref().and_then(|s| s.view.as_ref()) {
         owned_sheet_view = crate::hollywood::CardView {
             card: None,
             title: sv.title.clone(),
             lines: sv.lines.clone(),
+            raw_body: sv.raw_body.clone(),
             scroll: sv.scroll,
             meta: sv.meta.clone(),
         };

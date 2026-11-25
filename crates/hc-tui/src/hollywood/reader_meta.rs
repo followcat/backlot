@@ -81,6 +81,69 @@ pub(crate) struct ReaderMeta {
     pub origin: ReaderOrigin,
 }
 
+/// `[o]` behavior for a Reader entry when an author role is known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReaderOAction {
+    Focus,
+    Reopen,
+}
+
+/// Fixed studio seats that remain reopenable even when closed without a saved session.
+pub(crate) fn is_fixed_seat(role: &str) -> bool {
+    matches!(role, "producer" | "director" | "writer")
+        || (!role.starts_with("actor") && role != "hollywood")
+}
+
+impl ReaderMeta {
+    /// Available `[o]` action: focus live terminal, reopen closed resumable/fixed seat, or none.
+    pub(crate) fn o_action(&self) -> Option<ReaderOAction> {
+        if self.role_state.as_deref() == Some("closed") {
+            let can_reopen = matches!(self.origin, ReaderOrigin::StudioExchange(..))
+                && self
+                    .role
+                    .as_deref()
+                    .is_some_and(|r| self.resumable || is_fixed_seat(r));
+            can_reopen.then_some(ReaderOAction::Reopen)
+        } else if self.role_terminal.is_some() {
+            Some(ReaderOAction::Focus)
+        } else {
+            None
+        }
+    }
+
+    /// Whether `[p] peek` is available (requires a non-closed role with a live terminal).
+    pub(crate) fn can_peek(&self) -> bool {
+        self.role_state.as_deref() != Some("closed") && self.role_terminal.is_some()
+    }
+
+    /// Whether `[t] tell` is available on this entry.
+    pub(crate) fn can_tell(&self) -> bool {
+        matches!(
+            self.kind,
+            ReaderKind::Outcome
+                | ReaderKind::Report
+                | ReaderKind::Tell
+                | ReaderKind::Check
+                | ReaderKind::Delivery
+                | ReaderKind::Req
+        ) || (self.kind == ReaderKind::Records && !self.studio_finished)
+    }
+
+    /// Originating studio for `[v] sheet` (None for Hollywood entries or when already inside Sheet).
+    pub(crate) fn sheet_studio_key(&self) -> Option<StudioKey> {
+        match &self.origin {
+            ReaderOrigin::StudioExchange(k, _) | ReaderOrigin::Records(k) => Some(k.clone()),
+            ReaderOrigin::Card(_) => self.studio.as_ref().map(|id| StudioKey {
+                machine: self.machine.clone(),
+                id: id.clone(),
+            }),
+            ReaderOrigin::SheetDeliveries(_, _)
+            | ReaderOrigin::HollywoodExchange(_)
+            | ReaderOrigin::None => None,
+        }
+    }
+}
+
 /// Format an age token from `ts_ms` relative to `now_ms`:
 /// `<60s` -> `now`, `<60m` -> `<m>m`, `<24h` -> `<h>h`, else `<d>d`.
 pub(crate) fn age_label(ts_ms: Option<u64>, now_ms: u64) -> Option<String> {

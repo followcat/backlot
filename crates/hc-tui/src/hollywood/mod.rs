@@ -18,6 +18,7 @@ mod items;
 mod keys;
 mod new_frame;
 mod plan;
+mod reader_chips;
 mod reader_chrome;
 mod reader_md;
 mod reader_meta;
@@ -37,7 +38,8 @@ pub(crate) use plan::expanded_height;
 #[cfg(test)]
 pub(crate) use reader_meta::age_label;
 pub(crate) use reader_meta::{
-    ReaderKind, ReaderMeta, ReaderOrigin, find_studio_role, hollywood_state_word, role_state_word,
+    ReaderKind, ReaderMeta, ReaderOAction, ReaderOrigin, find_studio_role, hollywood_state_word,
+    role_state_word,
 };
 pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,

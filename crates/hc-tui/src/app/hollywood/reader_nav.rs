@@ -48,6 +48,7 @@ impl App {
                 card,
                 title,
                 lines,
+                raw_body: stdout.to_owned(),
                 scroll: 0,
                 meta,
             });
@@ -57,6 +58,7 @@ impl App {
     /// Derive structured [`ReaderMeta`] for a completed `view: true` action reply.
     pub(crate) fn reader_meta_for_action(&self, action: &Action) -> ReaderMeta {
         let machines = self.panel_summaries();
+        let hw_term = self.hollywood_live_terminal();
         if let Some(card_id) = action
             .mark
             .strip_prefix("card:")
@@ -69,7 +71,7 @@ impl App {
             .strip_prefix("hollywood #")
             .and_then(|s| s.parse::<u64>().ok())
         {
-            return hollywood_exchange_meta(hollywood_summary(&machines), seq);
+            return hollywood_exchange_meta(hollywood_summary(&machines), hw_term, seq);
         }
         if let Some(id) = action.name.strip_prefix("records ") {
             let key = StudioKey {
@@ -90,7 +92,7 @@ impl App {
                 .windows(2)
                 .find(|w| w[0] == "--file")
                 .map(|w| w[1].clone());
-            return studio_exchange_meta(&machines, key, seq, arg_file.as_deref());
+            return studio_exchange_meta(&machines, key, seq, arg_file.as_deref(), hw_term);
         }
         ReaderMeta::default()
     }
@@ -98,7 +100,7 @@ impl App {
     /// Build metadata for an inline-only `Target::Headline` fallback (no `headline_seq`).
     pub(super) fn reader_meta_for_headline(&self, machines: &[MachineSummary]) -> ReaderMeta {
         let hw = hollywood_summary(machines);
-        let mut meta = hollywood_base_meta(hw);
+        let mut meta = hollywood_base_meta(hw, self.hollywood_live_terminal());
         meta.kind = ReaderKind::Report;
         meta.studio = Some("hollywood".into());
         meta.from = Some("hollywood".into());
@@ -233,11 +235,18 @@ impl App {
             Some(m) => format!("{} #{} · {m}", key.id, entry.seq),
             None => format!("{} #{}", key.id, entry.seq),
         };
-        let meta = studio_exchange_meta(machines, key.clone(), entry.seq, None);
+        let meta = studio_exchange_meta(
+            machines,
+            key.clone(),
+            entry.seq,
+            None,
+            self.hollywood_live_terminal(),
+        );
         self.hollywood.view = Some(CardView {
             card: None,
             title,
             lines,
+            raw_body: entry.text.clone(),
             scroll: 0,
             meta,
         });

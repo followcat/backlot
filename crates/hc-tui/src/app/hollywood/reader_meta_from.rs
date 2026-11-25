@@ -15,13 +15,17 @@ pub(super) fn hollywood_summary(machines: &[MachineSummary]) -> Option<&Hollywoo
     hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref())
 }
 
-pub(super) fn hollywood_base_meta(hw: Option<&HollywoodSummary>) -> ReaderMeta {
+pub(super) fn hollywood_base_meta(
+    hw: Option<&HollywoodSummary>,
+    hw_terminal: Option<String>,
+) -> ReaderMeta {
     let Some(h) = hw else {
         return ReaderMeta::default();
     };
     ReaderMeta {
         role: Some("hollywood".into()),
         role_state: Some(hollywood_state_word(h).into()),
+        role_terminal: hw_terminal.filter(|_| h.state == "live"),
         attention_user: h.attention_user,
         runner: h.runner.clone(),
         model: h.model.clone(),
@@ -29,8 +33,12 @@ pub(super) fn hollywood_base_meta(hw: Option<&HollywoodSummary>) -> ReaderMeta {
     }
 }
 
-pub(super) fn hollywood_exchange_meta(hw: Option<&HollywoodSummary>, seq: u64) -> ReaderMeta {
-    let mut meta = hollywood_base_meta(hw);
+pub(super) fn hollywood_exchange_meta(
+    hw: Option<&HollywoodSummary>,
+    hw_terminal: Option<String>,
+    seq: u64,
+) -> ReaderMeta {
+    let mut meta = hollywood_base_meta(hw, hw_terminal);
     meta.studio = Some("hollywood".into());
     meta.seq = Some(seq);
     meta.origin = ReaderOrigin::HollywoodExchange(seq);
@@ -106,6 +114,7 @@ pub(super) fn studio_exchange_meta(
     key: StudioKey,
     seq: u64,
     fallback_file: Option<&str>,
+    hw_terminal: Option<String>,
 ) -> ReaderMeta {
     let studio_ref = data::studio(machines, &key);
     let hw = hollywood_summary(machines);
@@ -152,7 +161,9 @@ pub(super) fn studio_exchange_meta(
         if let Some(role) = find_studio_role(s, name) {
             meta.role = Some(role.role.clone());
             meta.role_state = Some(role_state_word(role).into());
-            meta.role_terminal = role.terminal.clone();
+            meta.role_terminal = (role.state == "live")
+                .then(|| role.terminal.clone())
+                .flatten();
             meta.attention_user = Person::of(role) == Person::UserPrompt;
             meta.runner = role.runner.clone();
             meta.model = role.model.clone();
@@ -162,6 +173,7 @@ pub(super) fn studio_exchange_meta(
         {
             meta.role = Some("hollywood".into());
             meta.role_state = Some(hollywood_state_word(h).into());
+            meta.role_terminal = hw_terminal.filter(|_| h.state == "live");
             meta.attention_user = h.attention_user;
             meta.runner = h.runner.clone();
             meta.model = h.model.clone();

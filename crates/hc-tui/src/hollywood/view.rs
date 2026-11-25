@@ -6,9 +6,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
+use super::reader_chips::draw_action_strip;
 use super::reader_chrome::{
-    draw_action_strip, draw_bottom_border, draw_context_row, draw_divider, draw_top_border,
-    put_styled_line,
+    draw_bottom_border, draw_context_row, draw_divider, draw_top_border, put_styled_line,
 };
 use super::reader_meta::{HeaderLayout, ReaderMeta};
 use super::reader_wrap::{body_mode_for_title, natural_body_width, render_body_lines};
@@ -25,12 +25,13 @@ pub(crate) struct CardView {
     pub card: Option<String>,
     pub title: String,
     pub lines: Vec<String>,
+    pub raw_body: String,
     pub scroll: usize,
     pub meta: ReaderMeta,
 }
 
 /// What the mouse needs: the box's rect, the scrollable body, the
-/// scrollbar track when the text overflows, and header nav hit rects.
+/// scrollbar track when the text overflows, and header nav / action chip rects.
 #[derive(Debug, Default)]
 pub(crate) struct ViewRender {
     pub area: Rect,
@@ -38,6 +39,7 @@ pub(crate) struct ViewRender {
     pub scrollbar: Rect,
     pub prev_hit: Option<Rect>,
     pub next_hit: Option<Rect>,
+    pub chips: Vec<(Rect, char)>,
     pub metrics: Option<ScrollMetrics>,
 }
 
@@ -177,7 +179,7 @@ pub(crate) fn render_view_at(
     let action_y = bottom - 1;
     let div_y = bottom - 2;
     draw_divider(buf, area, div_y, edge, palette);
-    draw_action_strip(buf, area, action_y, view.card.is_some(), pending, palette);
+    draw_action_strip(buf, area, action_y, view, pending, palette, &mut hits.chips);
 
     let body_y = area.y + if show_row2 { 3 } else { 1 };
     let body_h = div_y.saturating_sub(body_y);

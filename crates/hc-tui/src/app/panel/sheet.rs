@@ -146,9 +146,11 @@ impl App {
                 }
                 match out {
                     Ok(text) => {
+                        let lines = text.lines().map(str::to_string).collect();
                         sheet.view = Some(crate::sheet::SheetView {
                             title,
-                            lines: text.lines().map(str::to_string).collect(),
+                            lines,
+                            raw_body: text,
                             scroll: 0,
                             meta: *meta,
                         });
@@ -168,7 +170,66 @@ impl App {
     /// Keys while the sheet is open — it owns every press like the
     /// other modals; `Esc` backs out of an opened report first.
     pub(crate) fn handle_sheet_key(&mut self, key: &TerminalKey) {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyModifiers};
+        if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
+            if self.reader_handle_prefix(key) {
+                return;
+            }
+            let combo = crate::input::terminal_key_of(key);
+            let (code, modifiers) =
+                crate::config::normalize_key_combo((combo.code, combo.modifiers));
+            let (page, metrics) = self
+                .hollywood_hits
+                .view
+                .as_ref()
+                .map_or((10usize, None), |v| {
+                    (v.body.height.max(1) as usize, v.metrics)
+                });
+            if let Some(view) = self.sheet.as_mut().and_then(|s| s.view.as_mut())
+                && Self::reader_scroll_key(
+                    &mut view.scroll,
+                    code,
+                    modifiers,
+                    key.input.action,
+                    page,
+                    metrics,
+                )
+            {
+                return;
+            }
+            if key.input.action != hc_vt::Action::Press {
+                return;
+            }
+            let plain = modifiers.is_empty();
+            match code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') if plain => {
+                    if let Some(sheet) = self.sheet.as_mut() {
+                        sheet.view = None;
+                    }
+                }
+                KeyCode::Char('?') if plain || modifiers == KeyModifiers::SHIFT => {
+                    self.help = true;
+                    self.help_state = crate::chrome::help::HelpState::default();
+                }
+                KeyCode::Char('y') if plain => {
+                    self.reader_activate_sheet_chip('y');
+                }
+                KeyCode::Char('o') if plain => {
+                    self.reader_activate_sheet_chip('o');
+                }
+                KeyCode::Char('p') if plain => {
+                    self.reader_activate_sheet_chip('p');
+                }
+                KeyCode::Left | KeyCode::Char('[') if plain => {
+                    self.sheet_step_file(-1);
+                }
+                KeyCode::Right | KeyCode::Char(']') if plain => {
+                    self.sheet_step_file(1);
+                }
+                _ => {}
+            }
+            return;
+        }
         if key.input.action != hc_vt::Action::Press {
             return;
         }
@@ -176,43 +237,6 @@ impl App {
         let Some(sheet) = self.sheet.as_mut() else {
             return;
         };
-        // An opened report eats movement as its own scroll; `←`/`→`/`[`/`]`
-        // step sibling files; `Esc`, `⏎` or `q` retires it back to the tab body.
-        if sheet.view.is_some() {
-            match combo.code {
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
-                    sheet.view = None;
-                }
-                KeyCode::Left | KeyCode::Char('[') => {
-                    self.sheet_step_file(-1);
-                }
-                KeyCode::Right | KeyCode::Char(']') => {
-                    self.sheet_step_file(1);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll += 1;
-                    }
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll = view.scroll.saturating_sub(1);
-                    }
-                }
-                KeyCode::PageDown => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll += 10;
-                    }
-                }
-                KeyCode::PageUp => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll = view.scroll.saturating_sub(10);
-                    }
-                }
-                _ => {}
-            }
-            return;
-        }
         match combo.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.sheet = None;
@@ -253,16 +277,17 @@ impl App {
         // An opened report renders in the unified top-level Reader (`R3-M2`):
         // wheel scrolls it, clicks outside Reader close only the Reader.
         if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-            let (reader_area, prev_hit, next_hit, max_scroll) = self
+            let (reader_area, prev_hit, next_hit, max_scroll, chips) = self
                 .hollywood_hits
                 .view
                 .as_ref()
-                .map_or((None, None, None, None), |v| {
+                .map_or((None, None, None, None, Vec::new()), |v| {
                     (
                         Some(v.area),
                         v.prev_hit,
                         v.next_hit,
                         v.metrics.map(|m| m.max_offset_from_bottom),
+                        v.chips.clone(),
                     )
                 });
             match mouse.kind {
@@ -282,6 +307,11 @@ impl App {
                 }
                 MouseEventKind::Down(MouseButton::Left) if next_hit.is_some_and(hit) => {
                     self.sheet_step_file(1);
+                }
+                MouseEventKind::Down(MouseButton::Left) if chips.iter().any(|(r, _)| hit(*r)) => {
+                    if let Some((_, ch)) = chips.iter().find(|(r, _)| hit(*r)) {
+                        self.reader_activate_sheet_chip(*ch);
+                    }
                 }
                 MouseEventKind::Down(MouseButton::Left) if reader_area.is_none_or(|r| !hit(r)) => {
                     if let Some(sheet) = self.sheet.as_mut() {

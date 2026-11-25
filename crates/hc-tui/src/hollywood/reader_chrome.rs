@@ -10,7 +10,7 @@ use ratatui::text::Line;
 use super::reader_meta::HeaderLayout;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
-use crate::chrome::text::{display_width, fit_hints, truncate_end};
+use crate::chrome::text::{display_width, truncate_end};
 
 /// Draw the top border with left title/kind badge and optional right
 /// nav controls (`◀ i/N ▶ · <age>`), returning `(prev_hit, next_hit)`.
@@ -203,36 +203,6 @@ pub(super) fn draw_divider(buf: &mut Buffer, area: Rect, y: u16, edge: Style, pa
     if area.width >= 2 {
         put_text(buf, area.right() - 1, y, 1, "┤", edge);
     }
-}
-
-pub(super) fn draw_action_strip(
-    buf: &mut Buffer,
-    area: Rect,
-    y: u16,
-    is_card: bool,
-    pending: Option<&str>,
-    palette: &Palette,
-) {
-    if area.width <= 2 {
-        return;
-    }
-    let strip = Rect::new(area.x + 1, y, area.width - 2, 1);
-    let bg = Style::default().bg(palette.surface0);
-    buf.set_style(strip, bg);
-    let avail = usize::from(area.width.saturating_sub(4));
-    let label = match (is_card, pending) {
-        (true, Some(lbl)) => truncate_end(&format!("… {lbl}"), avail),
-        (true, None) => fit_hints(&["a apply  x cancel  esc back", "a x  esc"], avail).to_string(),
-        (false, _) => fit_hints(&["↑↓ scroll  esc back", "↑↓  esc"], avail).to_string(),
-    };
-    put_text(
-        buf,
-        area.x + 2,
-        y,
-        avail as u16,
-        &label,
-        bg.fg(palette.subtext0),
-    );
 }
 
 pub(super) fn draw_bottom_border(

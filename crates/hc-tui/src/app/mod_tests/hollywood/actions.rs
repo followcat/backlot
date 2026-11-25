@@ -84,6 +84,14 @@ async fn the_view_applies_and_cancels_the_card_it_shows() {
     app.on_action_reply(result);
     assert!(app.hollywood.view.is_some());
     key(&mut app, hc_vt::Key::Char('a'));
+    // While `card apply` is pending, `x` is locked (`a/x locked`).
+    key(&mut app, hc_vt::Key::Char('x'));
+    assert!(
+        app.studio_dialog.is_none(),
+        "cancel stays locked while card apply is pending"
+    );
+    let apply_res = app.action_rx.recv().await.expect("the apply reply");
+    app.on_action_reply((apply_res.0, Err("needs cancel".into())));
     key(&mut app, hc_vt::Key::Char('x'));
     assert!(app.studio_dialog.is_some(), "the cancel reason dialog");
     key(&mut app, hc_vt::Key::Enter);
@@ -154,8 +162,10 @@ async fn a_failed_card_answer_keeps_the_view_and_notices() {
     app.on_hollywood_action(("card apply c3".into(), Err("no card 'c3'".into()), false));
     assert!(app.hollywood.view.is_some(), "the read stays on a failure");
     assert!(app.action_toast.is_some());
-    // And Enter closes it.
+    // `Enter` is a no-op on actionable cards; `Esc` closes it cleanly.
     key(&mut app, hc_vt::Key::Enter);
+    assert!(app.hollywood.view.is_some());
+    key(&mut app, hc_vt::Key::Escape);
     assert!(app.hollywood.view.is_none());
 }
 
@@ -527,8 +537,8 @@ async fn records_action_opens_read_only_card_view_without_stuffing_card_id() {
     assert_eq!(view.title, "records acme-shop");
     let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
     assert!(text.contains("■ RECORDS · acme-shop"), "{text}");
-    assert!(text.contains("↑↓ scroll  esc back"), "{text}");
-    assert!(!text.contains("a apply"), "{text}");
+    assert!(text.contains("[y] copy") && text.contains("esc"), "{text}");
+    assert!(!text.contains("[a] apply"), "{text}");
 
     // `a`/`x` do nothing; `Esc` closes the read-only CardView cleanly.
     key(&mut app, hc_vt::Key::Char('a'));
@@ -689,4 +699,47 @@ async fn stepping_walks_hollywood_exchange_and_open_cards_syncing_selection() {
 
     key(&mut app, hc_vt::Key::ArrowLeft);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+}
+
+#[tokio::test]
+async fn enter_closes_read_only_reader_and_noops_on_actionable_card() {
+    let mut app = app_with_hollywood();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    app.area = (120, 30);
+    alt_y(&mut app);
+
+    // Actionable card: `Enter` is a strict no-op (prevents accidental apply/dismissal).
+    app.hollywood.view = Some(crate::hollywood::CardView {
+        card: Some("c3".into()),
+        title: "c3".into(),
+        lines: vec!["Action: pause t1".into()],
+        scroll: 0,
+        meta: crate::hollywood::ReaderMeta {
+            kind: crate::hollywood::ReaderKind::Card,
+            studio: Some("acme-shop".into()),
+            origin: crate::hollywood::ReaderOrigin::Card("c3".into()),
+            ..crate::hollywood::ReaderMeta::default()
+        },
+        ..crate::hollywood::CardView::default()
+    });
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(
+        app.hollywood.view.is_some(),
+        "Enter must be a no-op on actionable card views"
+    );
+    assert!(recorded.lock().unwrap().is_empty());
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
+
+    // Read-only view: `Enter` closes the Reader cleanly.
+    app.hollywood.view = Some(crate::hollywood::CardView {
+        card: None,
+        title: "hollywood #8".into(),
+        lines: vec!["digest".into()],
+        scroll: 0,
+        ..crate::hollywood::CardView::default()
+    });
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.hollywood.view.is_none());
 }

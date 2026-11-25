@@ -135,6 +135,7 @@ impl App {
                     card: None,
                     title: "hollywood".into(),
                     lines,
+                    raw_body: headline.to_owned(),
                     scroll: 0,
                     meta,
                 });
