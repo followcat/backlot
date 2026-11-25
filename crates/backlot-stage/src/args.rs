@@ -164,6 +164,10 @@ pub enum Cmd {
     AttentionClear {
         target: u64,
     },
+    /// `studio cast`: the studio's cast after creation. `show [--json]`
+    /// prints the effective cast as a cast file; `set --file <toml>
+    /// [--dry-run] [--json]` records it.
+    StudioCast(CastCmd),
     StudioFinish {
         reason: String,
         /// `--force`: finish a studio with no requirement and no
@@ -281,6 +285,21 @@ pub enum Cmd {
     Card(CardCmd),
     /// `backlot server run|start|stop|adopt|service` — single-server mode (B3).
     Server(ServerCmd),
+}
+
+/// Subcommands under `backlot studio cast`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CastCmd {
+    /// `show [--json]`: the effective cast as a cast file, or the same
+    /// settings structured.
+    Show { json: bool },
+    /// `set --file <toml> [--dry-run] [--json]`: validate (and, unless
+    /// `--dry-run`, record) the file as the studio's cast.
+    Set {
+        file: PathBuf,
+        dry_run: bool,
+        json: bool,
+    },
 }
 
 /// Subcommands under `backlot server`.
@@ -431,6 +450,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             };
             match sub.as_str() {
                 "new" => args_studio::studio_new(&mut common, &mut it),
+                "cast" => args_studio::studio_cast(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),
                 "delete" => args_studio::studio_delete(&mut common, &mut it),

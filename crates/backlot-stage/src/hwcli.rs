@@ -152,6 +152,9 @@ pub fn generate() -> String {
             out.push_str(
                 "  example (`propose setup`): `backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why \"switch agent\"`\n",
             );
+            out.push_str(
+                "  examples: `propose restart --studio <s> --person <key> [--fresh] --why \"stuck\"`,\n  `propose cast --studio <s> --file drafts/<studio>/cast.toml --why \"cheaper actors\"`\n",
+            );
         }
     }
     out

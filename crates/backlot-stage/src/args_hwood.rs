@@ -41,8 +41,9 @@ pub enum HollywoodCmd {
 pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] \
 [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] \
-[--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--answers <seqs>] --why <line>
-       actions: studio-new | close | reopen | priority | pause | resume | abandon | recast | setup
+[--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>]
+[--answers <seqs>] --why <line>
+       actions: studio-new | close | reopen | priority | pause | resume | abandon | recast | restart | cast | setup
   backlot hollywood report \"<headline>\" [--body <f>] [--answers <seqs>]
   backlot hollywood show <seq>
   backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]";
@@ -87,6 +88,8 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     let mut why = None;
     let mut answers = Vec::new();
     let mut no_git = false;
+    let mut fresh = false;
+    let mut cast_file = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
@@ -124,6 +127,9 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             "--effort" => effort = Some(it.value("--effort", U_HOLLYWOOD)?),
             _ if eq(&arg, "--effort").is_some() => effort = eq(&arg, "--effort").map(String::from),
             "--no-git" => no_git = true,
+            "--fresh" => fresh = true,
+            "--file" => cast_file = Some(it.value("--file", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--file").is_some() => cast_file = eq(&arg, "--file").map(String::from),
             "--why" => why = Some(it.value("--why", U_HOLLYWOOD)?),
             _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
             "--answers" => parse_answers(
@@ -181,6 +187,17 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                 _ => CardAction::Abandon { studio, task },
             }
         }
+        "restart" => CardAction::Restart {
+            studio: studio("--studio")?,
+            person: person.ok_or_else(|| usage("missing --person", U_HOLLYWOOD))?,
+            fresh,
+        },
+        "cast" => CardAction::Cast {
+            studio: studio("--studio")?,
+            cast: cast_file
+                .or_else(|| cast.map(|p| p.to_string_lossy().into_owned()))
+                .ok_or_else(|| usage("missing --file", U_HOLLYWOOD))?,
+        },
         "recast" => {
             let studio = studio("--studio")?;
             let person = person.ok_or_else(|| usage("missing --person", U_HOLLYWOOD))?;

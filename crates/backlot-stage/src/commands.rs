@@ -344,6 +344,9 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioMigrate { .. }
         | Cmd::StudioList { .. }
         | Cmd::StudioRestore { .. }
+        // `studio cast set` is answered by `verbs::cast_set`, which
+        // appends its own events with the diff in hand.
+        | Cmd::StudioCast(_)
         | Cmd::PermsRevoke { .. }
         | Cmd::Server(..)
         | Cmd::TellHollywood { .. } => {
@@ -668,10 +671,13 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             let named = std::collections::BTreeSet::from([runner.clone()]);
             crate::draft::check_runners(base, &named, env)?;
             Ok(Box::new(move |state, _| {
-                let current = state
-                    .fixed_identity(&person)
-                    .cloned()
-                    .ok_or_else(|| Fail::refused(format!("no fixed role '{person}' recorded")))?;
+                let current = backlot_model::recast::current_identity(state, &person)
+                    .map_err(|e| Fail::refused(e.to_string()))?
+                    .ok_or_else(|| {
+                        Fail::refused(format!(
+                            "'{person}' is not a fixed role or an actor of this studio"
+                        ))
+                    })?;
                 let actor = ActorIdentity {
                     runner,
                     runner_version: None,

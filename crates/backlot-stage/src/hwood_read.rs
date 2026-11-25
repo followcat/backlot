@@ -25,6 +25,11 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             Some(records(common, env, base, *json, *all, kind.as_deref()))
         }
         Cmd::CastSuggest { json } => Some(cast_suggest(common, env, base, *json)),
+        // `studio cast show` only reads the ledger — the effective cast
+        // as a cast file, or the same settings structured.
+        Cmd::StudioCast(crate::args::CastCmd::Show { json }) => {
+            Some(cast_show(common, env, base, *json))
+        }
         Cmd::ReportShow { file } => {
             let mut out = std::io::stdout().lock();
             Some(report_show(common, env, base, file, &mut out).map(|()| String::new()))
@@ -176,6 +181,25 @@ fn studio_logs(base: &Path, names: &[String]) -> Result<Vec<backlot_model::Studi
         });
     }
     Ok(logs)
+}
+
+/// `studio cast show [--json]`: the effective cast — the fixed roles
+/// as their newest recast has them, the rest as the newest
+/// `studio.cast` or `studio.created` recorded. The plain form is a cast
+/// file that `studio new --cast` reads back; `--json` is the same
+/// settings structured.
+fn cast_show(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
+    let name = crate::cli::studio_name(common, env)?;
+    let base = crate::cli::resolve_base(env, common, base, &name)?;
+    let dir = store::studio_dir(&base, &name);
+    let state = store::load_state(&dir).map_err(store_fail)?;
+    let cast = backlot_model::cast::CastSettings::of(&state)
+        .ok_or_else(|| Fail::refused(format!("no studio '{name}'")))?;
+    Ok(if json {
+        serde_json::to_string_pretty(&cast).map_err(|e| Fail::refused(e.to_string()))?
+    } else {
+        backlot_model::cast::to_toml(&cast)
+    })
 }
 
 /// `cast --task <id> --suggest` (L3, D8): each declared candidate's

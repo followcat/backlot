@@ -82,6 +82,21 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
                 .iter()
                 .any(|r| r.card.as_deref() == Some(marker.as_str()))
         }
+        // A restart's marker is the card's `card c<n>:` reason on the
+        // recorded `role.restart`.
+        CardAction::Restart { person, .. } => {
+            let marker = format!("card c{}:", card.seq);
+            s.restarts.iter().filter(|r| r.role == *person).any(|r| {
+                r.reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.starts_with(&marker))
+            })
+        }
+        // A cast change's marker is its `studio.cast` card id.
+        CardAction::Cast { .. } => {
+            let marker = format!("c{}", card.seq);
+            s.cast_card.as_deref() == Some(marker.as_str())
+        }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
         CardAction::Setup { .. } => false,
         CardAction::Outward { .. } => s.has_outward_completion(card.seq),
@@ -139,6 +154,7 @@ impl Stage {
         let step = match &card.action {
             CardAction::StudioNew { .. } => self.studio_new_step(hdir, &sdir, card, sstate),
             CardAction::Setup { .. } => return self.setup_step(hdir, card),
+            CardAction::Cast { .. } => self.cast_step(hdir, &sdir, card, sstate),
             CardAction::Outward { .. } => match &sstate {
                 None => Step::Fail(format!("no studio '{}'", card.action.studio())),
                 Some(s) => self.start_outward_card(&sdir, card, s, now_ms),
@@ -339,6 +355,13 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
             reason: Some(card.why.clone()),
             card: Some(format!("c{}", card.seq)),
         }),
+        CardAction::Restart { person, fresh, .. } => Ok(EventKind::RoleRestart {
+            role: person.clone(),
+            fresh: *fresh,
+            reason: Some(marker(card.seq, &card.why)),
+        }),
+        // The cast change reads its file in `cast_step`, not here.
+        CardAction::Cast { .. } => Err("cast is handled apart".into()),
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
         CardAction::Setup { .. } => Err("setup is handled apart".into()),
         CardAction::Outward { .. } => Err("outward is handled apart".into()),
