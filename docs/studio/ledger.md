@@ -137,7 +137,11 @@ stage therefore looks again at a role already past the stop, finds the ID, and r
 
 Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
 (to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
-`plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose.
+`plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose. A plain
+`tell` to the writer or director also keeps that role wanted — while it is undelivered, and after
+delivery until the role writes to the ledger again — so a tell to a role closed as `no longer
+desired` starts it again and delivers the message, the way a `plan` request does. A `tell` to an
+actor whose task is finished or abandoned is refused; the note names the task and its state.
 
 `message.queued` may carry `source_seq`, the seq of the ledger event it was generated from. The
 stage's automatic notices — a delivery to whoever cast the task, a `changes_requested` review to
@@ -227,8 +231,13 @@ to its terminal and no restart, resume, recast, start or close happened since `t
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
 200 chars, `cwd`, and optional `decision` / `argv` when cardable or guarded) refused by `backlot guard`,
 hooks, or the per-role `pre-push` hook. The refusal also raises one `outward action` attention
-(`needs_user: true`) once per open attention episode for that role and command. When `decision` is
-`card`, the stage proposes an `Outward` card in `hollywood/events.jsonl` (`by: stage`).
+(`needs_user: false`) once per open attention episode for that role and command. The refusal is
+informational: it stays on the studio's attention list and the role's record, but it is `info`, so it
+never counts toward the person's needs-you list, the lot pill or notifications. The role sees the
+refusal line telling it to `backlot ask` when it really needs the command, and the attention clears
+`role moved on` as soon as the role writes anything else to the ledger after it, or the stage delivers
+it new work. When `decision` is `card`, the stage proposes an `Outward` card in
+`hollywood/events.jsonl` (`by: stage`) and raises no attention at all.
 
 `role.progress` records a role's voluntary one-line note (`role`, optional `task`, normalized `text`
 with control characters stripped and length capped at 200 chars). Only roles running in a role
