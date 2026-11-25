@@ -4,6 +4,22 @@ All notable changes to hc-tui are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- A shown float (`Alt+F` popup) takes every key except its popup chords: the
+  `Alt+arrow` tab and agent shortcuts, `Ctrl+G` and keys typed while the
+  keyboard is locked now reach the float's program instead of switching tabs,
+  locking, or landing on the pane behind it. `Alt+F` still hides the float,
+  even while locked.
+
+### Fixed
+
+- `PageUp` and `PageDown` inside a float page the float's own scrollback, under
+  the same rule as a pane (normal screen, no mouse reporting); before, they
+  reached the program, which usually ignored them.
+
 ## 0.1.19 — 2026-11-24
 
 ### Added

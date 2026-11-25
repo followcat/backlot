@@ -1,6 +1,7 @@
-//! Key takeover while a persistent float is focused: navigation chords
-//! still navigate (the float parks or stays with its tab), popup binding
-//! chords run their command, and everything else types into the program.
+//! Key takeover while a persistent float is focused: only popup binding
+//! chords run their command (its own toggle hides the float); every other
+//! key — navigation chords, Ctrl+G and Esc included — types into the
+//! program, and plain page keys page the float's own scrollback.
 use super::*;
 use crate::app::float::FloatKey;
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
@@ -109,8 +110,8 @@ fn press_key(app: &mut App, key: input::TerminalKey) {
     app.on_input(input::UiEvent::Key(key), 120);
 }
 
-#[tokio::test]
-async fn a_nav_chord_switches_tabs_and_parks_the_float() {
+/// A shown float over `two_tabs`, published like a spawned one.
+fn shown_float() -> (App, FloatKey) {
     let mut app = two_tabs();
     app.live = float_live();
     app.focused = Some("t1".into());
@@ -121,32 +122,145 @@ async fn a_nav_chord_switches_tabs_and_parks_the_float() {
     publish(&mut app, terms);
     // The setup spawn hit the dead wire; only the takeover is under test.
     app.notice = None;
+    (app, key)
+}
 
+fn float_backlog(app: &App) -> usize {
+    app.popup
+        .as_ref()
+        .expect("the float keeps focus")
+        .pane
+        .input_backlog()
+        .0
+}
+
+#[tokio::test]
+async fn a_nav_chord_types_into_the_float() {
+    let (mut app, _) = shown_float();
     press_key(
         &mut app,
         term_key(Key::ArrowRight, Mods::ALT, KeyAction::Press),
     );
-    assert!(app.popup.is_none(), "the float parks on a tab switch");
-    assert!(
-        app.size_leases.contains_key("t9"),
-        "its program lives on the size lease"
-    );
-    assert!(
-        app.floats.get(&key).is_some_and(|entry| entry.restore),
-        "leaving visible means returning re-shows it"
-    );
-    assert_eq!(app.pending_actions, 0);
-    assert!(app.notice.is_none(), "parking issues no terminal.kill");
-
-    press_key(
-        &mut app,
-        term_key(Key::ArrowLeft, Mods::ALT, KeyAction::Press),
-    );
     assert_eq!(
         app.popup.as_ref().map(|popup| popup.terminal.as_str()),
         Some("t9"),
-        "switching back restores the float"
+        "the float keeps focus: no tab switch"
     );
+    assert_eq!(float_backlog(&app), 1, "the chord reached the program");
+    assert_eq!(
+        app.pane.input_backlog().0,
+        0,
+        "nothing reached the pane behind"
+    );
+}
+
+#[tokio::test]
+async fn ctrl_g_types_into_the_float_instead_of_locking() {
+    let (mut app, _) = shown_float();
+    press_key(
+        &mut app,
+        term_key(Key::Char('g'), Mods::CTRL, KeyAction::Press),
+    );
+    assert!(!app.keyboard_locked, "the float takes Ctrl+G");
+    assert_eq!(float_backlog(&app), 1);
+}
+
+#[tokio::test]
+async fn a_locked_keyboard_still_types_into_the_float() {
+    let (mut app, _) = shown_float();
+    app.keyboard_locked = true;
+    press_key(
+        &mut app,
+        term_key(Key::Char('x'), Mods::NONE, KeyAction::Press),
+    );
+    assert_eq!(float_backlog(&app), 1, "the shown float owns the keys");
+    assert_eq!(app.pane.input_backlog().0, 0, "not the pane behind it");
+    // Its own chord still hides it, so Ctrl+G can unlock again.
+    press_key(
+        &mut app,
+        term_key(Key::Char('f'), Mods::ALT, KeyAction::Press),
+    );
+    assert!(
+        app.popup.is_none(),
+        "Alt+F hides the float even when locked"
+    );
+}
+
+/// Five content rows plus two pages of history, on the normal screen.
+fn scrollback_vt() -> hc_vt::Vt {
+    let mut vt = hc_vt::Vt::new(40, 5, 8192);
+    let mut lines = Vec::new();
+    for i in 1..=20 {
+        lines.extend_from_slice(format!("line-{i:02}\r\n").as_bytes());
+    }
+    vt.feed(&lines);
+    vt
+}
+
+fn float_scrolled_back(app: &App) -> u64 {
+    let bar = app
+        .popup
+        .as_ref()
+        .and_then(|popup| popup.pane.vt_ref())
+        .and_then(|vt| vt.scrollbar())
+        .expect("scrollbar state");
+    bar.total - bar.offset - bar.len
+}
+
+#[tokio::test]
+async fn page_keys_page_the_floats_own_scrollback() {
+    let (mut app, _) = shown_float();
+    app.host_reports_key_releases = true;
+    app.popup.as_mut().unwrap().pane.install_vt(scrollback_vt());
+    press_key(
+        &mut app,
+        term_key(Key::PageUp, Mods::NONE, KeyAction::Press),
+    );
+    assert_eq!(float_scrolled_back(&app), 5, "one float height");
+    assert_eq!(
+        float_backlog(&app),
+        0,
+        "a paged key never reaches the program"
+    );
+    press_key(
+        &mut app,
+        term_key(Key::PageUp, Mods::NONE, KeyAction::Release),
+    );
+    assert_eq!(float_backlog(&app), 0, "nor does its release");
+    press_key(
+        &mut app,
+        term_key(Key::PageUp, Mods::NONE, KeyAction::Press),
+    );
+    press_key(
+        &mut app,
+        term_key(Key::PageDown, Mods::NONE, KeyAction::Press),
+    );
+    assert_eq!(float_scrolled_back(&app), 5, "PageDown pages back");
+    assert_eq!(app.pane.input_backlog().0, 0, "the pane behind never moves");
+
+    press_key(
+        &mut app,
+        term_key(Key::Char('x'), Mods::NONE, KeyAction::Press),
+    );
+    assert_eq!(float_backlog(&app), 1, "other keys still type");
+    assert_eq!(
+        float_scrolled_back(&app),
+        0,
+        "and jump the view back to the bottom"
+    );
+}
+
+#[tokio::test]
+async fn page_keys_reach_a_float_program_that_pages_itself() {
+    let (mut app, _) = shown_float();
+    let mut vt = scrollback_vt();
+    vt.feed(b"\x1b[?1049h");
+    app.popup.as_mut().unwrap().pane.install_vt(vt);
+    press_key(
+        &mut app,
+        term_key(Key::PageUp, Mods::NONE, KeyAction::Press),
+    );
+    assert_eq!(float_backlog(&app), 1, "the alternate screen gets its keys");
 }
 
 #[tokio::test]

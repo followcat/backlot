@@ -788,6 +788,13 @@ Everything else on the compared surfaces still diffs normally.
   harness pins the audited Alt+F entry to `persistent = false` in the
   **candidate's private config copy only**: herdr treats the unknown key
   as a config diagnostic and draws a toast over row 0.
+- **A shown float takes the navigation and lock chords.** Deliberate:
+  while a popup is shown, every key except a `[[keys.command]]` popup
+  chord goes to its program, including the `previous_tab`/`next_tab`/
+  `previous_agent`/`next_agent` bindings and Ctrl+G, and a locked
+  keyboard sends its keys to the popup. Plain page keys page the popup's
+  own scrollback under the pane rule. The reference routes Ctrl+G and the
+  lock before the popup and never pages a popup's scrollback.
 - **Parity harness known differences.** The harness excuses exactly three
   things, each by position and content and recorded per checkpoint under
   `known_differences` with the reason: the running version badge (one
