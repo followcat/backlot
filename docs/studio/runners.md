@@ -457,7 +457,9 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   `toolPermission: "always-proceed"` together with policy-aware `permissions.deny` containing the outward-action
   prefixes (`command(git push)` when policy is `none`, `command(gh pr)` unless `recorded` with `allow_gh_pr`,
   `command(gh release)`, `command(gh repo)`, `command(gh issue)`, `command(gh api)`, `command(hc update)`,
-  `command(hc machine)`, `command(hc server stop)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
+  `command(hc machine)`, `command(hc server stop)`, `command(hc run)`, `command(hc exec)`,
+  `command(hc send)`, `command(hc keys)`, `command(hc connect)`, `command(systemd-run)`,
+  `command(tmux new -d)`, `command(tmux new-session -d)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
   `command(npm publish)`, `command(cargo publish)`) — **without** trailing ` *` — while preserving
   any other top-level settings and any existing `permissions.allow`. Feature-branch pushes under `recorded`/`any`
   pass `permissions.deny` and are checked at execution time by the per-role `pre-push` hook and `PreToolUse`

@@ -949,16 +949,15 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
   local core (`backlot --plain` or an unconfigured shell).
 - **Actions via the server queue (`plugin.backlot.req` -> `plugin.backlot.res`):** both the TUI's
   panel/Call Sheet actions and the remote CLI's person verbs (`tell`, `tell hollywood`,
-  `card show`, `attention clear`, `recast`, `restart`, `close`, `reopen`,
+  `card apply`, `card cancel`, `card show`, `attention clear`, `recast`, `restart`, `close`, `reopen`,
   `priority`, `pause|resume|abandon`, `hollywood setup`) append a timestamped request with CAS
   (up to 3 retries) and wait up to 5 s for its matching ack. Queue overflow or CAS contention prints
   `server busy`; requests past the server's 60 s window fail with `request expired`; missing replies
   time out with `timed out waiting for ack of '<req_id>' (no reply from server)`.
-  Card approvals (`card apply` / `card cancel`, TUI `a`/`x` in server mode) are held on the
-  server host for now and refuse immediately without writing the queue
-  (`card approvals are not taken over the server queue; apply it on the server host`), because
-  `herdr-core` does not yet attest which process wrote a document and any role terminal reaching
-  the socket could otherwise approve its own card. Verbs not yet covered on the queue
+  Role terminals cannot use `hc run|exec|send|keys|connect`, raw socket scripts naming
+  `plugin.backlot.`, `doc.set` or the core socket, or detach tricks such as `systemd-run` and
+  `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
+  overeager agent, not isolation. Verbs not yet covered on the queue
   (`studio new`, `finish`, `prune`, `delete`, `restore`) refuse with
   `not available through the server yet`.
 - **On the hub itself:** when the resolved server host matches the local machine (`host-a`), CLI
