@@ -166,6 +166,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
             checks: Vec::<CheckDecl>::new(),
             task_budget_s: None,
             limits: BTreeMap::new(),
+            push: Default::default(),
         },
     );
     append(

@@ -1353,6 +1353,7 @@ fn summary_exposes_current_requirement_file_when_present() {
         checks: Vec::new(),
         task_budget_s: None,
         limits: BTreeMap::new(),
+        push: Default::default(),
     });
     let s0 = summary(
         &[("acme-shop".into(), no_req)],

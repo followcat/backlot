@@ -63,6 +63,17 @@ pub(crate) fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -
     }
 }
 
+/// `backlot studio new --cast [push]`: branch/tag/default-branch protection.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct CastPush {
+    #[serde(default)]
+    pub(crate) protected_branches: Option<Vec<String>>,
+    #[serde(default)]
+    pub(crate) protect_tags: Option<bool>,
+    #[serde(default)]
+    pub(crate) protect_default_branch: Option<bool>,
+}
+
 /// `backlot studio new --cast` file: role identities and candidates.
 #[derive(Debug, Deserialize)]
 pub(crate) struct CastFile {
@@ -92,6 +103,8 @@ pub(crate) struct CastFile {
     pub(crate) check_env: Vec<String>,
     #[serde(default)]
     pub(crate) checks: Vec<crate::checks::CastCheck>,
+    #[serde(default)]
+    pub(crate) push: CastPush,
 }
 
 /// Read and validate a `--cast` file — the same checks `studio new`
@@ -179,7 +192,35 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
             )));
         }
     }
+    if let Some(branches) = &cast.push.protected_branches
+        && branches.iter().any(|b| b.trim().is_empty())
+    {
+        return Err(Fail::usage(
+            "push.protected_branches cannot contain an empty pattern",
+        ));
+    }
     Ok(cast)
+}
+
+/// Build `PushPolicy` from `[push]` in `cast.toml` plus remotes probed from `repo`/`members`.
+pub(crate) fn build_push_policy(
+    cast_push: &CastPush,
+    repo: &str,
+    members: &[String],
+    no_git: bool,
+) -> PushPolicy {
+    let mut policy = PushPolicy::default();
+    if let Some(branches) = &cast_push.protected_branches {
+        policy.protected_branches = branches.clone();
+    }
+    if let Some(tags) = cast_push.protect_tags {
+        policy.protect_tags = tags;
+    }
+    if let Some(def) = cast_push.protect_default_branch {
+        policy.protect_default_branch = def;
+    }
+    policy.remotes = crate::guard_git::probe_remotes(repo, members, no_git);
+    policy
 }
 
 /// Every runner the cast names — the three fixed roles and each
@@ -361,6 +402,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             }
             crate::paths::initialize(&repo, &binding.members, binding.no_git, init)?;
             let members = binding.members.clone();
+            let push = build_push_policy(&cast.push, &repo, &members, binding.no_git);
             Ok(Box::new(move |_, _| {
                 Ok(pending(
                     EventKind::StudioCreated {
@@ -387,6 +429,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         checks,
                         task_budget_s: cast.task_budget_s,
                         limits: cast.limits,
+                        push,
                     },
                     by,
                     Vec::new(),

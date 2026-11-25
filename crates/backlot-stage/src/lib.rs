@@ -31,8 +31,15 @@ mod draft;
 mod exchange_read;
 mod gitcmd;
 mod guard;
+mod guard_git;
+mod guard_git_env;
+mod guard_git_parse;
+mod guard_git_probe;
+mod guard_git_push;
+mod guard_prep;
 mod guard_rules;
 mod guard_shell;
+mod guard_shell_lex;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
@@ -158,6 +165,8 @@ mod finish_guard_tests;
 mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;
+#[cfg(test)]
+mod guard_git_tests;
 #[cfg(test)]
 mod guard_line_tests;
 #[cfg(test)]

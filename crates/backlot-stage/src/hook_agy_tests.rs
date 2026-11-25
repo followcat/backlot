@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use backlot_model::event::{EventKind, OUTWARD_ACTION};
+use backlot_model::event::{EventKind, OUTWARD_ACTION, RefusalDisposition};
 use backlot_model::summary::Work;
 
 use crate::cli::Env;
@@ -154,23 +154,33 @@ fn agy_pre_tool_use_refuses_outward_command_records_once_and_allows_safe_calls()
     assert_eq!(parsed1["decision"], "deny");
     assert_eq!(
         parsed1["reason"],
-        "refused by backlot: git push origin is the person's to run; ask with backlot ask"
+        "refused by backlot (unrecorded remote URL 'origin'): sent to the person as a card; wait for the result"
     );
 
-    // Second refusal in the same episode records role.refused again, attention stays once.
-    let denied2 = run_agy(&args, &env, &s.files, push_payload);
+    let force_payload = r#"{"conversationId":"conv-1","hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"git push --force origin HEAD"}}}"#;
+    let denied2 = run_agy(&args, &env, &s.files, force_payload);
     let parsed2: serde_json::Value = serde_json::from_str(denied2.trim()).unwrap();
     assert_eq!(parsed2["decision"], "deny");
+    let denied3 = run_agy(&args, &env, &s.files, force_payload);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(denied3.trim()).unwrap()["decision"],
+        "deny"
+    );
 
     let (events, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
+    let card_count = events
+        .iter()
+        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, disposition: RefusalDisposition::Card, .. } if role == "director"))
+        .count();
     let refused_count = events
         .iter()
-        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, command, .. } if role == "director" && command == "git push origin"))
+        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, disposition: RefusalDisposition::Refused, .. } if role == "director"))
         .count();
     let attn_count = events
         .iter()
         .filter(|e| matches!(&e.kind, EventKind::AttentionRaised { role, reason, .. } if role == "director" && reason == OUTWARD_ACTION))
         .count();
+    assert_eq!(card_count, 1);
     assert_eq!(refused_count, 2);
     assert_eq!(attn_count, 1);
 }
@@ -214,7 +224,7 @@ fn agy_pre_tool_use_allows_outside_role_env_and_refuses_in_role_env() {
     assert_eq!(parsed["decision"], "deny");
     assert_eq!(
         parsed["reason"],
-        "refused by backlot: git push origin is the person's to run; ask with backlot ask"
+        "refused by backlot (unrecorded remote URL 'origin'): sent to the person as a card; wait for the result"
     );
     let (events_after, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
     assert_eq!(

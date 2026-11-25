@@ -51,6 +51,9 @@ pub struct StudioConfig {
     /// Runner name → maximum live roles in this studio (S9e).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub limits: BTreeMap<String, u32>,
+    /// Studio outward push policy and recorded remote URLs.
+    #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
+    pub push: PushPolicy,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the

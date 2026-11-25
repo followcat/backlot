@@ -13,9 +13,8 @@ use backlot_model::summary::summary;
 
 use crate::cli::Env;
 use crate::cli_testkit::{CAST_TOML, fixture, git, ok, scratch};
-use crate::guard::{
-    SHIM_MARKER, apply_env, find_real_binary, prepare_role, refused_command, run_in,
-};
+use crate::guard::{SHIM_MARKER, apply_env, find_real_binary, prepare_role, run_in};
+use crate::guard_rules::refused_command;
 use crate::runners::executable;
 use crate::store;
 use crate::test_support::TestDir;
@@ -42,10 +41,8 @@ fn shim_allow_and_refuse_cases() {
     let refuse = [
         ("git-push", "origin main"),
         ("git-push", ""),
-        ("gh", "pr create --title x"),
         ("gh", "pr merge 12"),
-        ("gh", "pr list"),
-        ("gh", "-R owner/repo pr create"),
+        ("gh", "-R owner/repo pr close 5"),
         ("gh", "--repo=owner/repo release create v1.0"),
         ("gh", "repo create foo"),
         ("gh", "issue create --title bug"),
@@ -86,6 +83,8 @@ fn shim_allow_and_refuse_cases() {
     }
 
     let allow = [
+        ("gh", "pr list"),
+        ("gh", "pr view 42"),
         ("gh", "status"),
         ("gh", "auth status"),
         ("gh", "search prs --state open"),
@@ -188,7 +187,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     env.vars.insert("PATH".into(), "/usr/bin:/bin".into());
 
     let work = Path::new("/home/user/acme-shop");
-    let argv: Vec<String> = ["gh", "--", "pr", "create", "--title", "hi"]
+    let argv: Vec<String> = ["gh", "--", "pr", "merge", "42"]
         .into_iter()
         .map(String::from)
         .collect();
@@ -198,7 +197,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     assert_eq!(
         msg.as_deref(),
         Some(
-            "refused by backlot: gh pr create --title hi is the person's to run; ask with backlot ask"
+            "refused by backlot: gh pr merge 42 is the person's to run; ask with backlot ask (gh write)"
         )
     );
 
@@ -219,8 +218,11 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         EventKind::RoleRefused {
             role: "actor-t1-c1".into(),
             task: Some("t1".into()),
-            command: "gh pr create --title hi".into(),
+            command: "gh pr merge 42".into(),
             cwd: "/home/user/acme-shop".into(),
+            argv: vec!["gh".into(), "pr".into(), "merge".into(), "42".into()],
+            rule: Some("gh write".into()),
+            disposition: backlot_model::event::RefusalDisposition::Refused,
         }
     );
 
@@ -239,7 +241,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         EventKind::AttentionRaised {
             role: "actor-t1-c1".into(),
             reason: OUTWARD_ACTION.into(),
-            detail: "gh pr create --title hi".into(),
+            detail: "gh pr merge 42".into(),
             needs_user: true,
         }
     );
@@ -265,7 +267,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     assert!(!actor_row.attention_user);
     assert_eq!(
         actor_row.attention_detail.as_deref(),
-        Some("gh pr create --title hi")
+        Some("gh pr merge 42")
     );
 
     // Clear attention via user env, then refuse again: starts a new episode.
@@ -344,14 +346,15 @@ fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
     let repo = dir.join("repo");
     let work = dir.join("work-t1");
 
-    // Mock `backlot` exe verifying `guard git-push -- ...` invocation from pre-push hook.
+    // Mock `backlot` exe verifying `guard git-push -- ...` invocation from pre-push hook
+    // while passing `guard git -- ...` through to real git so pre-commit and pre-push run.
     write_exec(
         &exe_dir.join("backlot"),
-        "#!/bin/sh\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git-push\" ]; then\n  echo \"refused by backlot: git push is the person's to run; ask with backlot ask\" >&2\n  exit 126\nfi\nexit 0\n",
+        "#!/bin/sh\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git-push\" ]; then\n  echo \"refused by backlot: git push is the person's to run; ask with backlot ask\" >&2\n  exit 126\nfi\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git\" ]; then\n  shift 3\n  PATH=\"${PATH#*:}\" exec git \"$@\"\nfi\nexit 0\n",
     );
     prepare_role(&role_dir, exe_dir.to_str().unwrap()).unwrap();
 
-    for cmd in ["gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"] {
+    for cmd in ["git", "gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"] {
         assert!(
             executable(&role_dir.join("bin").join(cmd)),
             "missing shim for {cmd}"
