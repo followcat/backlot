@@ -459,3 +459,120 @@ async fn the_sheet_draws_inside_the_modal_band_at_every_width() {
     assert!(app.sheet_hits.frame.x >= band.x);
     assert!(app.sheet_hits.frame.x + app.sheet_hits.frame.width <= band.x + band.width);
 }
+
+#[tokio::test]
+async fn stepping_walks_sheet_deliverable_and_check_files_syncing_sel() {
+    let mut app = app_with_panel_doc();
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = crate::app::pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.area = (120, 36);
+    let status = serde_json::json!({
+        "schema": "studio/1",
+        "id": "acme-shop",
+        "requirement_version": 1,
+        "last_seq": 3,
+        "tasks": {
+            "task-1": {
+                "id": "task-1",
+                "title": "t",
+                "status": "delivered",
+                "task_kind": "task",
+                "requirement_version": 1,
+                "priority": "normal",
+                "acceptance": "it works",
+                "rework_rounds": 0,
+                "dependencies": [],
+                "created_seq": 1,
+                "created_ts_ms": 1,
+                "last_ts_ms": 1,
+                "deliveries": [{
+                    "n": 1,
+                    "actor": {"runner": "agent-a", "model": "m", "permission_profile": "standard"},
+                    "commits": "a1..b2",
+                    "requirement_version": 1,
+                    "report": "reports/d1.md",
+                    "checks": [],
+                    "seq": 2,
+                    "ts_ms": 2
+                }],
+                "checked": [{
+                    "delivery": 1,
+                    "name": "units",
+                    "passed": false,
+                    "exit_code": 1,
+                    "duration_ms": 12,
+                    "output": "checks/d1-units.txt",
+                    "seq": 3,
+                    "ts_ms": 3
+                }],
+                "reviews": []
+            }
+        }
+    });
+    let calls: Recorded = Default::default();
+    app.set_ns_run(recorded_run(
+        calls.clone(),
+        vec![
+            (
+                "status --studio acme-shop --json".to_string(),
+                Ok(status.to_string()),
+            ),
+            (
+                "report show --studio acme-shop --file reports/d1.md".to_string(),
+                Ok("delivery report body".to_string()),
+            ),
+            (
+                "report show --studio acme-shop --file checks/d1-units.txt".to_string(),
+                Ok("error: test failed\nexit status: 1".to_string()),
+            ),
+        ],
+    ));
+    open_panel(&mut app);
+    app.sheet_open(StudioKey::local("acme-shop"), Some("task-1".into()));
+    drain_sheet(&mut app).await;
+    key(&mut app, hc_vt::Key::Char('2'));
+
+    let (del_idx, check_idx) = {
+        let sheet = app.sheet.as_mut().unwrap();
+        let lines = lines_for(sheet, None);
+        let d = lines
+            .iter()
+            .position(|l| l.file.as_deref() == Some("reports/d1.md"))
+            .unwrap();
+        let c = lines
+            .iter()
+            .position(|l| l.file.as_deref() == Some("checks/d1-units.txt"))
+            .unwrap();
+        sheet.sel = d;
+        (d, c)
+    };
+    key(&mut app, hc_vt::Key::Enter);
+    drain_sheet(&mut app).await;
+    let dtext = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(dtext.contains("■ DELIVERY · acme-shop"), "{dtext}");
+    assert!(dtext.contains("◀ 1/2 ▶"), "{dtext}");
+    assert!(dtext.contains("delivery report body"), "{dtext}");
+
+    // Step forward with `→` onto the check log (`checks/d1-units.txt`).
+    key(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.sheet.as_ref().unwrap().sel, check_idx);
+    drain_sheet(&mut app).await;
+    let ctext = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(ctext.contains("■ CHECK · acme-shop"), "{ctext}");
+    assert!(ctext.contains("◀ 2/2 ▶"), "{ctext}");
+    assert!(ctext.contains("checks/d1-units.txt"), "{ctext}");
+    assert!(ctext.contains("error: test failed"), "{ctext}");
+
+    // `[` steps back to the delivery line.
+    key(&mut app, hc_vt::Key::Char('['));
+    assert_eq!(app.sheet.as_ref().unwrap().sel, del_idx);
+    drain_sheet(&mut app).await;
+
+    // `]` moves back onto check line, and `Esc` closes only Reader keeping Sheet open at check_idx.
+    key(&mut app, hc_vt::Key::Char(']'));
+    drain_sheet(&mut app).await;
+    key(&mut app, hc_vt::Key::Escape);
+    let sheet = app.sheet.as_ref().expect("Sheet remains open");
+    assert!(sheet.view.is_none());
+    assert_eq!(sheet.sel, check_idx);
+}

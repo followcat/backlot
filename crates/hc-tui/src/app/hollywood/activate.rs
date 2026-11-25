@@ -133,11 +133,15 @@ impl App {
         {
             let lines: Vec<String> = headline.lines().map(str::to_string).collect();
             if !lines.is_empty() {
+                let meta = self.reader_meta_for_headline(&machines);
                 self.hollywood.view = Some(hollywood::CardView {
                     card: None,
                     title: "hollywood".into(),
                     lines,
+                    raw_body: headline.to_owned(),
                     scroll: 0,
+                    meta,
+                    ..hollywood::CardView::default()
                 });
             }
         }

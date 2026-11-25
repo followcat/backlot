@@ -965,6 +965,7 @@ fn the_card_view_draws_over_the_layer() {
         title: "c4".into(),
         lines: (0..30).map(|i| format!("draft line {i}")).collect(),
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -986,6 +987,7 @@ fn the_card_view_has_a_complete_border_and_footer() {
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1002,44 +1004,64 @@ fn the_card_view_has_a_complete_border_and_footer() {
             .map(|y| buf[(x, y)].symbol())
             .collect::<String>()
     };
-    for side in [
-        column(view.area.x),
-        column(view.area.x + view.area.width - 1),
-    ] {
-        let middle: String = side
-            .chars()
-            .skip(1)
-            .take(side.chars().count() - 2)
-            .collect();
-        assert!(middle.chars().all(|c| c == '│'), "side edge: {middle:?}");
-    }
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    let left_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
+        .map(|y| buf[(view.area.x, y)].symbol())
+        .collect();
+    let right_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
+        .map(|y| buf[(view.area.right() - 1, y)].symbol())
+        .collect();
+    assert_eq!(left_side[left_side.len() - 2], "├");
+    assert_eq!(right_side[right_side.len() - 2], "┤");
+    assert!(
+        left_side
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != left_side.len() - 2)
+            .all(|(_, s)| *s == "│"),
+        "left edge: {left_side:?}"
+    );
+    assert!(
+        right_side
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != right_side.len() - 2)
+            .all(|(_, s)| *s == "│"),
+        "right edge: {right_side:?}"
+    );
+    let _ = column;
+    let action_strip = row_of(&buf, area, view.area.bottom() - 2);
+    assert!(
+        action_strip.contains("[a] apply")
+            && action_strip.contains("[x] cancel")
+            && action_strip.contains("esc"),
+        "action strip: {action_strip}"
+    );
+    let bottom = row_of(&buf, area, view.area.bottom() - 1);
     assert!(
         bottom.contains('╰') && bottom.contains('╯'),
         "bottom: {bottom}"
-    );
-    assert!(
-        bottom.contains("a apply") && bottom.contains("x cancel") && bottom.contains("esc back"),
-        "footer: {bottom}"
     );
 }
 
 #[test]
 fn the_card_views_footer_shows_the_pending_mark() {
-    // An action kicked off inside the view reports `… <label>` in
-    // the footer while it runs.
+    // An action kicked off inside the view locks `a`/`x` and names the pending action.
     let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
     let view =
         crate::hollywood::render_view(&mut buf, area, &view, Some("card apply c4"), &palettes()[0]);
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
-    assert!(bottom.contains("… card apply c4"), "footer: {bottom}");
+    let strip = row_of(&buf, area, view.area.bottom() - 2);
+    assert!(
+        strip.contains("■ card apply c4… (a/x locked)"),
+        "action strip: {strip}"
+    );
 }
 
 #[test]
@@ -1053,19 +1075,20 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
             "detail line".into(),
         ],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
     let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
     let top = row_of(&buf, area, view.area.y);
     assert!(top.contains("hollywood #7"), "top: {top}");
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    let strip = row_of(&buf, area, view.area.bottom() - 2);
     assert!(
-        bottom.contains("↑↓ scroll  esc back"),
-        "read-only footer: {bottom}"
+        strip.contains("[y] copy") && strip.contains("esc"),
+        "read-only action strip: {strip}"
     );
-    assert!(!bottom.contains("a apply"), "no card keys: {bottom}");
-    assert!(!bottom.contains("x cancel"), "no card keys: {bottom}");
+    assert!(!strip.contains("[a] apply"), "no card keys: {strip}");
+    assert!(!strip.contains("[x] cancel"), "no card keys: {strip}");
 }
 
 #[test]
@@ -1263,4 +1286,759 @@ fn a_studio_frame_shows_its_next_step() {
         .map(|x| buf[(x, frame.y + 4)].symbol())
         .collect();
     assert!(!calm_row.contains("next:"), "{calm_row}");
+}
+
+fn wide_row_of(buf: &Buffer, x0: u16, x1: u16, y: u16) -> String {
+    use unicode_width::UnicodeWidthStr;
+    let mut out = String::new();
+    let mut x = x0;
+    while x < x1 {
+        let sym = buf[(x, y)].symbol();
+        out.push_str(sym);
+        x += UnicodeWidthStr::width(sym).max(1) as u16;
+    }
+    out.trim_end().to_string()
+}
+
+#[test]
+fn card_view_cjk_title_places_right_corners_at_exact_right_edge() {
+    let view = CardView {
+        card: None,
+        title: "OUTCOME #188 · acme-shop · 已记录最终需求 v6".into(),
+        lines: vec!["ok".into()],
+        scroll: 0,
+        ..CardView::default()
+    };
+    let area = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
+    let right_x = rendered.area.right() - 1;
+    let bottom_y = rendered.area.bottom() - 1;
+    assert_eq!(buf[(right_x, rendered.area.y)].symbol(), "╮");
+    assert_eq!(buf[(right_x, bottom_y)].symbol(), "╯");
+    let top = wide_row_of(
+        &buf,
+        rendered.area.x,
+        rendered.area.right(),
+        rendered.area.y,
+    );
+    assert!(
+        top.contains("已记录最终需求 v6"),
+        "CJK title must not be overwritten by ─ dashes: {top}"
+    );
+}
+
+#[test]
+fn card_view_wraps_cjk_and_paths_without_ellipsis_and_keeps_kinsoku() {
+    let cjk_90 = "已记录最终需求版本六，并已正式向导演派发方案甲。我们要求每条路径都完整展示，不能在行尾截断成省略号，标点符号也要紧贴前一个字符。";
+    let path_90 = "crates/hc-tui/src/hollywood/deeply/nested/module/for/testing/long_path/reader_wrap_boundary.rs";
+    let view = CardView {
+        card: None,
+        title: "wrap check".into(),
+        lines: vec![cjk_90.into(), path_90.into()],
+        scroll: 0,
+        ..CardView::default()
+    };
+    let area = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
+    let body_rows: Vec<String> = (rendered.body.y..rendered.body.bottom())
+        .map(|y| {
+            wide_row_of(&buf, rendered.body.x, rendered.body.right(), y)
+                .trim()
+                .to_string()
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    let joined: String = body_rows.concat();
+    assert!(!joined.contains('…'), "no ellipsis loss: {body_rows:?}");
+    assert!(
+        joined.contains("标点符号也要紧贴前一个字符。"),
+        "full CJK paragraph preserved across wrapped rows: {body_rows:?}"
+    );
+    assert!(
+        joined.contains("reader_wrap_boundary.rs"),
+        "full 90-char path preserved across wrapped rows: {body_rows:?}"
+    );
+    const CLOSING: &[char] = &[
+        '，', '。', '：', '；', '！', '？', '、', '）', '》', '」', '』', '】', '.', ',', ':', ';',
+        '!', '?', ')', ']', '}',
+    ];
+    for row in &body_rows {
+        let first = row.chars().next().unwrap();
+        assert!(
+            !CLOSING.contains(&first),
+            "wrapped row started with closing punctuation '{first}': {row:?}"
+        );
+    }
+    assert!(
+        body_rows.iter().any(|r| r.ends_with('/')),
+        "90-char path should prefer breaking after '/': {body_rows:?}"
+    );
+}
+
+#[test]
+fn card_view_sizes_adaptively_for_short_and_long_notes() {
+    let area = Rect::new(0, 0, 200, 44);
+
+    let short = CardView {
+        card: None,
+        title: "OUTCOME #188".into(),
+        lines: vec!["line one".into(), "line two".into()],
+        scroll: 0,
+        ..CardView::default()
+    };
+    let mut buf = Buffer::empty(area);
+    let short_rendered =
+        crate::hollywood::render_view(&mut buf, area, &short, None, &palettes()[0]);
+    assert!(
+        short_rendered.area.height <= 10,
+        "2-line note should render compactly (<=10), got {}",
+        short_rendered.area.height
+    );
+
+    let long = CardView {
+        card: None,
+        title: "REPORT #188".into(),
+        lines: (1..=60).map(|i| format!("report line {i}")).collect(),
+        scroll: 0,
+        ..CardView::default()
+    };
+    let mut buf = Buffer::empty(area);
+    let long_rendered = crate::hollywood::render_view(&mut buf, area, &long, None, &palettes()[0]);
+    assert_eq!(
+        long_rendered.area.height, 32,
+        "60-line note at 200x44 should cap at min(32, 44 - 2) = 32"
+    );
+    assert!(
+        !long_rendered.scrollbar.is_empty(),
+        "60-line note should show scrollbar"
+    );
+    let bottom = wide_row_of(
+        &buf,
+        long_rendered.area.x,
+        long_rendered.area.right(),
+        long_rendered.area.bottom() - 1,
+    );
+    assert!(
+        bottom.contains("lines 1–") && bottom.contains(" of 60"),
+        "bottom border should show scroll range: {bottom}"
+    );
+}
+
+#[test]
+fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
+    let palette = palettes()[0].clone();
+    let md = CardView {
+        card: None,
+        title: "reports/188.md".into(),
+        lines: vec![
+            "## MixedCase Heading".into(),
+            "- **Bold** `code` [docs](https://example.invalid) dbbe825be crates/hc-tui/src/view.rs:82".into(),
+            "".into(),
+            "".into(),
+            "".into(),
+            "```rs".into(),
+            "// 中文注释".into(),
+            "```".into(),
+        ],
+        scroll: 0,
+        ..CardView::default()
+    };
+    let area = Rect::new(0, 0, 100, 30);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &md, None, &palette);
+    let text: Vec<String> = (rendered.body.y..rendered.body.bottom())
+        .map(|y| wide_row_of(&buf, rendered.body.x, rendered.body.right(), y))
+        .collect();
+    let joined = text.join("\n");
+    assert!(
+        joined.contains("MixedCase Heading"),
+        "case preserved: {joined}"
+    );
+    assert!(joined.contains("▪ Bold code docs dbbe825be"), "{joined}");
+    assert!(
+        !joined.contains("https://example.invalid"),
+        "link URL hidden: {joined}"
+    );
+    assert!(
+        joined.contains("▏ // 中文注释"),
+        "code block gutter + text: {joined}"
+    );
+
+    // Verify heading accent, code surface0, SHA/path teal, and code surface1 display-width pad.
+    let heading_y = rendered.body.y;
+    assert_eq!(buf[(rendered.area.x + 2, heading_y)].fg, palette.accent);
+    // Find `▏` row and ensure all content cells up to right pad have `surface1`.
+    let code_y = (rendered.body.y..rendered.body.bottom())
+        .find(|&y| buf[(rendered.area.x + 2, y)].symbol() == "▏")
+        .expect("fenced code row");
+    assert_eq!(buf[(rendered.area.x + 2, code_y)].bg, palette.surface1);
+    assert_eq!(
+        buf[(rendered.area.right() - 3, code_y)].bg,
+        palette.surface1
+    );
+
+    // PlainLog skips markdown parsing, highlights error/pass, and uses `↪ ` continuation.
+    let log = CardView {
+        card: None,
+        title: "checks/tests.log".into(),
+        lines: vec![
+            "## not a heading".into(),
+            "error[E0001]: very long failure message that wraps across narrow card width cleanly without ellipsis".into(),
+            "test result: ok. 18 passed".into(),
+        ],
+        scroll: 0,
+        ..CardView::default()
+    };
+    let narrow = Rect::new(0, 0, 60, 24);
+    let mut log_buf = Buffer::empty(narrow);
+    let log_ren = crate::hollywood::render_view(&mut log_buf, narrow, &log, None, &palette);
+    let log_rows: Vec<String> = (log_ren.body.y..log_ren.body.bottom())
+        .map(|y| wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y))
+        .collect();
+    let log_joined = log_rows.join("\n");
+    assert!(
+        log_joined.contains("## not a heading"),
+        "no markdown parse in PlainLog: {log_joined}"
+    );
+    assert!(
+        log_joined.contains("↪ "),
+        "PlainLog continuation glyph: {log_joined}"
+    );
+    let err_y = (log_ren.body.y..log_ren.body.bottom())
+        .find(|&y| log_buf[(log_ren.area.x + 2, y)].symbol() == "e")
+        .expect("error line");
+    assert_eq!(log_buf[(log_ren.area.x + 2, err_y)].fg, palette.red);
+    let ok_y = (log_ren.body.y..log_ren.body.bottom())
+        .find(|&y| {
+            wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y)
+                .trim_start()
+                .starts_with("test result: ok")
+        })
+        .expect("ok line");
+    assert_eq!(log_buf[(log_ren.area.x + 2, ok_y)].fg, palette.green);
+}
+
+#[test]
+fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
+    use crate::hollywood::{ReaderKind, ReaderMeta, ReaderOrigin, age_label};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let now_ms = 10 * 86_400_000;
+    assert_eq!(
+        age_label(Some(now_ms - 5_000), now_ms).as_deref(),
+        Some("now")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 4 * 60_000), now_ms).as_deref(),
+        Some("4m")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 3 * 3_600_000), now_ms).as_deref(),
+        Some("3h")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 2 * 86_400_000), now_ms).as_deref(),
+        Some("2d")
+    );
+    assert_eq!(age_label(None, now_ms), None);
+
+    let area = Rect::new(0, 0, 100, 16);
+
+    // 1a. Studio Outcome with full metadata & working square mark (yellow).
+    let outcome = CardView {
+        card: None,
+        title: "acme-shop #12".into(),
+        lines: vec!["Build summary".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(12),
+            from: Some("producer".into()),
+            to: Some("user".into()),
+            task: Some("t1".into()),
+            file: Some("reports/12.md".into()),
+            ts_ms: Some(now_ms - 4 * 60_000),
+            role: Some("producer".into()),
+            role_state: Some("working".into()),
+            runner: Some("agy".into()),
+            model: Some("pro".into()),
+            nav_index: Some(3),
+            nav_total: Some(6),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut buf = Buffer::empty(area);
+    let ren = crate::hollywood::render_view_at(&mut buf, area, &outcome, None, palette, now_ms);
+    assert!(ren.prev_hit.is_some(), "◀ hit rect recorded");
+    assert!(ren.next_hit.is_some(), "▶ hit rect recorded");
+    let top_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y);
+    let ctx_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y + 1);
+    assert!(top_row.contains("■ OUTCOME #12 · acme-shop"), "{top_row}");
+    assert!(top_row.contains("◀ 3/6 ▶ · 4m"), "{top_row}");
+    assert!(
+        ctx_row.contains("producer → you · agy · pro · ■ working"),
+        "{ctx_row}"
+    );
+    assert!(ctx_row.contains("t1 · reports/12.md"), "{ctx_row}");
+    assert_eq!(
+        buf[(ren.area.x, ren.area.y + 2)].symbol(),
+        "├",
+        "Row 2 header divider present"
+    );
+    let sq_x = (ren.area.x..ren.area.right())
+        .find(|&x| buf[(x, ren.area.y + 1)].symbol() == "■")
+        .expect("working square mark");
+    assert_eq!(buf[(sq_x, ren.area.y + 1)].fg, palette.yellow);
+
+    // 1b. Legacy studio entry with absent optional fields: no `· ·` or stray `→`.
+    let legacy = CardView {
+        card: None,
+        title: "acme-shop #12".into(),
+        lines: vec!["Legacy body".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(12),
+            from: Some("producer".into()),
+            file: Some("reports/12.md".into()),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut lbuf = Buffer::empty(area);
+    let lren = crate::hollywood::render_view_at(&mut lbuf, area, &legacy, None, palette, now_ms);
+    let ltop = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y);
+    let lctx = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y + 1);
+    assert!(ltop.contains("■ OUTCOME #12 · acme-shop"), "{ltop}");
+    assert!(!ltop.contains("◀"), "{ltop}");
+    assert!(lctx.contains("producer"), "{lctx}");
+    assert!(lctx.contains("reports/12.md"), "{lctx}");
+    assert!(!lctx.contains("→"), "no stray arrow: {lctx}");
+    assert!(!lctx.contains("· ·"), "no stray separator: {lctx}");
+    assert!(!lctx.contains("●") && !lctx.contains("○"), "{lctx}");
+
+    // 2. Hollywood report / tell + closed role square mark.
+    let hw = CardView {
+        card: None,
+        title: "hollywood #8".into(),
+        lines: vec!["Digest".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Report,
+            studio: Some("hollywood".into()),
+            seq: Some(8),
+            from: Some("hollywood".into()),
+            to: Some("user".into()),
+            ts_ms: Some(now_ms - 120_000),
+            role_state: Some("closed".into()),
+            runner: Some("claude".into()),
+            model: Some("sonnet".into()),
+            resumable: true,
+            nav_index: Some(2),
+            nav_total: Some(4),
+            origin: ReaderOrigin::HollywoodExchange(8),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut hbuf = Buffer::empty(area);
+    let hren = crate::hollywood::render_view_at(&mut hbuf, area, &hw, None, palette, now_ms);
+    let htop = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y);
+    let hctx = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y + 1);
+    assert!(htop.contains("■ REPORT #8 · hollywood"), "{htop}");
+    assert!(htop.contains("◀ 2/4 ▶ · 2m"), "{htop}");
+    assert!(hctx.contains("□ closed"), "{hctx}");
+    let closed_x = (hren.area.x..hren.area.right())
+        .find(|&x| hbuf[(x, hren.area.y + 1)].symbol() == "□")
+        .expect("closed hollow square mark");
+    assert_eq!(hbuf[(closed_x, hren.area.y + 1)].fg, palette.overlay0);
+
+    // 3. Actionable card (`■ CARD c3 · acme-shop · open`).
+    let card = CardView {
+        card: Some("c3".into()),
+        title: "c3".into(),
+        lines: vec!["Action: pause t2".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Card,
+            studio: Some("acme-shop".into()),
+            machine: Some("host-a".into()),
+            from: Some("hollywood".into()),
+            ts_ms: Some(now_ms - 60_000),
+            card_action: Some("pause t2".into()),
+            card_status: Some("open".into()),
+            nav_index: Some(1),
+            nav_total: Some(2),
+            origin: ReaderOrigin::Card("c3".into()),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut cbuf = Buffer::empty(area);
+    let cren = crate::hollywood::render_view_at(&mut cbuf, area, &card, None, palette, now_ms);
+    let ctop = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y);
+    let cctx = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y + 1);
+    assert!(ctop.contains("■ CARD c3 · acme-shop · open"), "{ctop}");
+    assert!(ctop.contains("◀ 1/2 ▶ · 1m"), "{ctop}");
+    assert!(cctx.contains("hollywood proposes: pause t2"), "{cctx}");
+    assert!(cctx.contains("host-a"), "{cctx}");
+
+    // 4. Task Sheet Check artifact (`■ CHECK · acme-shop`) + loading tag.
+    let check = CardView {
+        card: None,
+        title: "checks/d1-units.txt".into(),
+        lines: vec!["cargo test failed".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Check,
+            studio: Some("acme-shop".into()),
+            task: Some("t1".into()),
+            file: Some("checks/d1-units.txt".into()),
+            check_status: Some("FAIL (exit 1)".into()),
+            nav_index: Some(2),
+            nav_total: Some(3),
+            loading_label: Some("#13".into()),
+            origin: ReaderOrigin::SheetDeliveries(StudioKey::local("acme-shop"), Some("t1".into())),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut kbuf = Buffer::empty(area);
+    let kren = crate::hollywood::render_view_at(&mut kbuf, area, &check, None, palette, now_ms);
+    let ktop = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y);
+    let kctx = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y + 1);
+    assert!(ktop.contains("■ loading #13…"), "{ktop}");
+    assert!(
+        kctx.contains("task t1 · FAIL (exit 1)") && kctx.contains("checks/d1-units.txt"),
+        "{kctx}"
+    );
+
+    // 5. Actor Records (`■ RECORDS · acme-shop`).
+    let records = CardView {
+        card: None,
+        title: "records acme-shop".into(),
+        lines: vec!["task-1 accepted".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Records,
+            studio: Some("acme-shop".into()),
+            machine: Some("host-a".into()),
+            studio_counts: Some((2, 3, 5)),
+            origin: ReaderOrigin::Records(StudioKey::local("acme-shop")),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut rbuf = Buffer::empty(area);
+    let rren = crate::hollywood::render_view_at(&mut rbuf, area, &records, None, palette, now_ms);
+    let rtop = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y);
+    let rctx = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y + 1);
+    assert!(rtop.contains("■ RECORDS · acme-shop"), "{rtop}");
+    assert!(rtop.contains("host-a"), "{rtop}");
+    assert!(rctx.contains("2/3 tasks · 5 roles"), "{rctx}");
+}
+
+#[test]
+fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
+    use crate::hollywood::{ReaderKind, ReaderMeta, ReaderOrigin};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let make_outcome = |lines: Vec<String>| CardView {
+        card: None,
+        title: "acme-shop #188".into(),
+        lines,
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(188),
+            from: Some("producer".into()),
+            to: Some("user".into()),
+            role: Some("producer".into()),
+            role_state: Some("ready".into()),
+            role_terminal: Some("t1".into()),
+            runner: Some("agy".into()),
+            model: Some("pro".into()),
+            nav_index: Some(2),
+            nav_total: Some(4),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 188),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+
+    // Tier 0 full width (>=70 inside 100-col surface).
+    let wide_outcome = make_outcome(vec![
+        "detailed delivery summary reaching across at least seventy columns wide".into(),
+    ]);
+    let wide = Rect::new(0, 0, 100, 16);
+    let mut wbuf = Buffer::empty(wide);
+    let wren = crate::hollywood::render_view(&mut wbuf, wide, &wide_outcome, None, palette);
+    let wstrip = wide_row_of(
+        &wbuf,
+        wren.area.x,
+        wren.area.right(),
+        wren.area.bottom() - 2,
+    );
+    assert!(
+        wstrip.contains("[t] tell")
+            && wstrip.contains("[o] focus")
+            && wstrip.contains("[p] peek")
+            && wstrip.contains("[v] sheet")
+            && wstrip.contains("[y] copy"),
+        "full tier strip: {wstrip}"
+    );
+    for expected in ['t', 'o', 'p', 'v', 'y'] {
+        let (rect, _) = wren
+            .chips
+            .iter()
+            .find(|(_, ch)| *ch == expected)
+            .unwrap_or_else(|| panic!("missing chip [{expected}] in {wstrip}"));
+        let text = wide_row_of(&wbuf, rect.x, rect.right(), rect.y);
+        assert!(
+            text.starts_with(&format!("[{expected}]")),
+            "chip [{expected}] rect mismatch: got {text:?} from {wstrip:?}"
+        );
+    }
+
+    // Tier 1 medium 52-col card (`avail = 48`): `[t] tell [o] focus [y] copy  ←/→ · esc`.
+    let medium_view = make_outcome(vec!["ok".into()]);
+    let medium = Rect::new(0, 0, 56, 12);
+    let mut mbuf = Buffer::empty(medium);
+    let mren = crate::hollywood::render_view(&mut mbuf, medium, &medium_view, None, palette);
+    assert_eq!(mren.area.width, 52);
+    let mstrip = wide_row_of(
+        &mbuf,
+        mren.area.x,
+        mren.area.right(),
+        mren.area.bottom() - 2,
+    );
+    assert!(
+        mstrip.contains("[t] tell")
+            && mstrip.contains("[o] focus")
+            && mstrip.contains("[y] copy")
+            && !mstrip.contains("[p]"),
+        "medium tier strip: {mstrip}"
+    );
+
+    // Tier 2 squeezed fallback: `[t] [o] [y]  ? keys`, never mid-word cut.
+    let narrow = Rect::new(0, 0, 40, 12);
+    let mut nbuf = Buffer::empty(narrow);
+    let nren = crate::hollywood::render_view(&mut nbuf, narrow, &medium_view, None, palette);
+    assert_eq!(nren.area.width, 40);
+    let nstrip = wide_row_of(
+        &nbuf,
+        nren.area.x,
+        nren.area.right(),
+        nren.area.bottom() - 2,
+    );
+    assert!(
+        nstrip.contains("[t] [o] [y]") && nstrip.contains("? keys"),
+        "narrow fallback strip: {nstrip}"
+    );
+
+    // Narrow actionable card: `[a] [x] [y]  ? keys`, and pending card locks `a`/`x`.
+    let card_view = CardView {
+        card: Some("c3".into()),
+        title: "c3".into(),
+        lines: vec!["Action: pause t2".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Card,
+            studio: Some("acme-shop".into()),
+            card_action: Some("pause t2".into()),
+            card_status: Some("open".into()),
+            nav_index: Some(1),
+            nav_total: Some(2),
+            origin: ReaderOrigin::Card("c3".into()),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let squeezed_card = Rect::new(0, 0, 38, 12);
+    let mut cbuf = Buffer::empty(squeezed_card);
+    let cren = crate::hollywood::render_view(&mut cbuf, squeezed_card, &card_view, None, palette);
+    let cstrip = wide_row_of(
+        &cbuf,
+        cren.area.x,
+        cren.area.right(),
+        cren.area.bottom() - 2,
+    );
+    assert!(
+        cstrip.contains("[a] [x] [y]") && cstrip.contains("? keys"),
+        "narrow card strip: {cstrip}"
+    );
+
+    let mut pbuf = Buffer::empty(wide);
+    let pren = crate::hollywood::render_view(
+        &mut pbuf,
+        wide,
+        &card_view,
+        Some("applying card c3"),
+        palette,
+    );
+    let pstrip = wide_row_of(
+        &pbuf,
+        pren.area.x,
+        pren.area.right(),
+        pren.area.bottom() - 2,
+    );
+    assert!(
+        pstrip.contains("■ applying card c3… (a/x locked)"),
+        "{pstrip}"
+    );
+    assert!(!pren.chips.iter().any(|(_, c)| *c == 'a' || *c == 'x'));
+    assert!(pren.chips.iter().any(|(_, c)| *c == 'y'));
+
+    // Closed non-resumable actor omits `[o]` and `[p]`.
+    let closed_view = CardView {
+        card: None,
+        title: "acme-shop #22".into(),
+        lines: vec!["done".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(22),
+            from: Some("actor-eve".into()),
+            to: Some("user".into()),
+            role: Some("actor-eve".into()),
+            role_state: Some("closed".into()),
+            resumable: false,
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 22),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut clbuf = Buffer::empty(wide);
+    let clren = crate::hollywood::render_view(&mut clbuf, wide, &closed_view, None, palette);
+    let clstrip = wide_row_of(
+        &clbuf,
+        clren.area.x,
+        clren.area.right(),
+        clren.area.bottom() - 2,
+    );
+    assert!(!clstrip.contains("[p]"), "{clstrip}");
+    assert!(!clstrip.contains("[o]"), "{clstrip}");
+    assert!(
+        clstrip.contains("[t] tell") && clstrip.contains("[y] copy"),
+        "{clstrip}"
+    );
+
+    // Records at 40 cols keeps `[y] copy  esc`, and below Tier 1 degrades to `[y]  ? keys`.
+    let records_view = CardView {
+        card: None,
+        title: "records acme-shop".into(),
+        lines: vec!["task-1".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Records,
+            studio: Some("acme-shop".into()),
+            studio_counts: Some((1, 2, 3)),
+            studio_finished: true,
+            origin: ReaderOrigin::Records(StudioKey::local("acme-shop")),
+            ..ReaderMeta::default()
+        },
+        ..CardView::default()
+    };
+    let mut rbuf = Buffer::empty(narrow);
+    let rren = crate::hollywood::render_view(&mut rbuf, narrow, &records_view, None, palette);
+    let rstrip = wide_row_of(
+        &rbuf,
+        rren.area.x,
+        rren.area.right(),
+        rren.area.bottom() - 2,
+    );
+    assert!(rstrip.contains("[y] copy"), "records tier1: {rstrip}");
+
+    let tiny = Rect::new(0, 0, 16, 10);
+    let mut tbuf = Buffer::empty(tiny);
+    let tren = crate::hollywood::render_view(&mut tbuf, tiny, &records_view, None, palette);
+    let tstrip = wide_row_of(
+        &tbuf,
+        tren.area.x,
+        tren.area.right(),
+        tren.area.bottom() - 2,
+    );
+    assert!(tstrip.contains("[y]  ? keys"), "records tier2: {tstrip}");
+}
+
+#[test]
+fn card_view_inline_compose_states_render_band_and_never_overflow_80x24() {
+    use crate::hollywood::{InlineTellState, ReaderKind, ReaderMeta, ReaderOrigin};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let mut view = CardView {
+        card: None,
+        title: "acme-shop #188".into(),
+        lines: (1..=25).map(|i| format!("▪ report line {i}")).collect(),
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Report,
+            studio: Some("acme-shop".into()),
+            seq: Some(188),
+            from: Some("director".into()),
+            to: Some("user".into()),
+            role: Some("director".into()),
+            role_state: Some("working".into()),
+            role_terminal: Some("t2".into()),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 188),
+            ..ReaderMeta::default()
+        },
+        tell: InlineTellState::Composing,
+        ..CardView::default()
+    };
+
+    let narrow = Rect::new(0, 1, 80, 22);
+    let mut nbuf = Buffer::empty(narrow);
+    let editor = crate::chrome::text_editor::TextEditor::new("hi", false);
+    let opts = crate::hollywood::ReaderComposeOpts {
+        editor: Some(&editor),
+        target: "director",
+        studio: true,
+    };
+    let nren = crate::hollywood::render_view_with_compose(
+        &mut nbuf,
+        narrow,
+        &view,
+        None,
+        Some(opts),
+        palette,
+        0,
+    );
+    assert!(nren.area.bottom() <= narrow.bottom());
+    assert!(nren.compose_rect.is_some());
+    assert!(nren.cursor.is_some());
+
+    view.tell = InlineTellState::Sending {
+        action_id: 7,
+        target: "director".into(),
+        text: "hi".into(),
+    };
+    let sren = crate::hollywood::render_view_with_compose(
+        &mut nbuf,
+        narrow,
+        &view,
+        None,
+        Some(opts),
+        palette,
+        0,
+    );
+    let sline = wide_row_of(
+        &nbuf,
+        sren.area.x,
+        sren.area.right(),
+        sren.area.bottom() - 4,
+    );
+    assert!(sline.contains("■ sending to director…"), "{sline}");
 }

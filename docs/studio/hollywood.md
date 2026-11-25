@@ -108,8 +108,7 @@ the wheel scrolls the frames sideways and the waiting rows vertically, and a cli
 collapses the bar to the pill and hands the keys to what is under it — a typed letter lands in
 the pane. Right-click on the title or a row opens the same context menu `m` opens.
 
-`s` on any card opens `backlot card show <id>` in the read-only view. The view owns its keys
-until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.
+`s` (or `Enter`) on a card, headline, or talk row opens it in the **Lot Reader** card: arrows / `j` / `k`, `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U`, `g`/`Home`, and `G`/`End` scroll (while plain `d` stays unbound), `←`/`→` (or `[`/`]` or clicking `◀`/`▶`) step sibling entries, `y` copies raw unwrapped text via OSC 52 without answering prompts, `v` jumps to the studio's Task & Delivery Sheet, `o`/`p` focus or peek a live seat (when present), `t`/`i` open inline compose sharing `hollywood.input` and `↑`/`↓` history on talk/report entries (`Esc` keeps draft), `?` opens key help, and `Esc`/`q` close (on read-only entries `Enter` closes too; on open cards `a`/`x` apply/cancel when unlocked and `Enter` is a no-op).
 
 The input line (`Alt+Y` open, `i`, `Enter` on `›`, or a click) sends one line with
 `backlot tell hollywood "<line>"` as the user — never written into Hollywood's terminal. While

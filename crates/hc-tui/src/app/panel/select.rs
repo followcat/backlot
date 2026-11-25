@@ -222,6 +222,17 @@ impl App {
         self.scroll_to_panel_row(&rows, index);
     }
 
+    /// Move the Lot Dock selection directly to `target` (used when stepping or
+    /// clicking entries from the Reader) and reveal it inside the dock body.
+    /// Selecting a row of another studio unfolds that studio first, so the row
+    /// index comes from the folded rows `panel_reveal_selected` builds.
+    pub(crate) fn panel_focus_target(&mut self, target: &Target) {
+        self.panel.selected = Some(target.clone());
+        self.panel.finish_confirm = None;
+        self.panel.editing = false;
+        self.panel_reveal_selected();
+    }
+
     /// Direct scroll (wheel/drag): write `scroll`, then clamp the
     /// selection into the shown body so rendering does not snap back.
     pub(super) fn panel_scroll_to(&mut self, start: usize, viewport_rows: usize) {
