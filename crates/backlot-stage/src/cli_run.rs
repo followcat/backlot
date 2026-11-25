@@ -113,6 +113,11 @@ pub(crate) fn run_stdin_with_host(
             return crate::service::run(&common, env, write);
         }
         Cmd::Server(scmd) => {
+            crate::proc_guard::check_cli_gate(
+                crate::proc_guard::CliVerb::ServerControl,
+                &common,
+                env,
+            )?;
             check_stage_caller(&common, env)?;
             return match scmd {
                 crate::args::ServerCmd::Run => crate::server_mode::run(&common, env),

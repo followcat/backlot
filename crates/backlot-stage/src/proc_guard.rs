@@ -44,6 +44,7 @@ impl RoleAncestor {
 pub(crate) enum CliVerb<'a> {
     CardMutate,
     PermsRevoke,
+    ServerControl,
     Approve { person: &'a str },
 }
 
@@ -90,7 +91,7 @@ fn current_ppid() -> u32 {
 }
 
 #[cfg(target_os = "linux")]
-fn real_proc_entry(pid: u32) -> Option<(u32, Vec<(String, String)>)> {
+pub(crate) fn real_proc_entry(pid: u32) -> Option<(u32, Vec<(String, String)>)> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let ppid = parse_linux_ppid(&stat)?;
     let mut vars = Vec::new();
@@ -108,7 +109,7 @@ fn real_proc_entry(pid: u32) -> Option<(u32, Vec<(String, String)>)> {
 }
 
 #[cfg(target_os = "macos")]
-fn real_proc_entry(pid: u32) -> Option<(u32, Vec<(String, String)>)> {
+pub(crate) fn real_proc_entry(pid: u32) -> Option<(u32, Vec<(String, String)>)> {
     let pid_s = pid.to_string();
     let ppid_out = std::process::Command::new("ps")
         .args(["-o", "ppid=", "-p", &pid_s])
@@ -144,7 +145,7 @@ fn real_proc_entry(_pid: u32) -> Option<(u32, Vec<(String, String)>)> {
     None
 }
 
-fn find_role_ancestor(start_ppid: u32, read: AncestorRead<'_>) -> Option<RoleAncestor> {
+pub(crate) fn find_role_ancestor(start_ppid: u32, read: AncestorRead<'_>) -> Option<RoleAncestor> {
     let mut pid = start_ppid;
     let mut visited = BTreeSet::new();
     for _ in 0..MAX_ANCESTOR_HOPS {
@@ -219,6 +220,21 @@ pub(crate) fn check_cli_gate_with(
                 return Err(Fail::refused(
                     "permission revocation is the user's — cannot run from a role terminal (BACKLOT_ROLE)",
                 ));
+            }
+            Ok(())
+        }
+        CliVerb::ServerControl => {
+            if env_role.is_some() {
+                return Err(Fail::refused(
+                    "the server is started, stopped or adopted by the person — BACKLOT_ROLE is set",
+                ));
+            }
+            if let Some(a) = anc {
+                return Err(Fail::refused(format!(
+                    "the server is started, stopped or adopted by the person — role terminal ancestor (pid {}, BACKLOT_ROLE={})",
+                    a.pid,
+                    a.effective_role().unwrap_or("unknown")
+                )));
             }
             Ok(())
         }
@@ -376,6 +392,9 @@ fn check_backlot_args(args: &[String], role: Option<&str>) -> Option<String> {
             Some("self-approval blocked (backlot card apply|cancel)".into())
         }
         ["perms", "revoke", ..] => Some("self-approval blocked (backlot perms revoke)".into()),
+        ["server", "run" | "start" | "stop" | "adopt" | "service", ..] => {
+            Some("server control is the person's (backlot server)".into())
+        }
         ["approve", ..] => {
             if !matches!(role, Some("producer" | "director")) {
                 return Some("self-approval blocked (backlot approve)".into());
