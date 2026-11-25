@@ -14,11 +14,10 @@ use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
-/// The frame's colour: accent only while the panel owns the keys AND
-/// the block owns the selected row — every block is `surface1`
-/// otherwise, focused or not (A2.3, A7.2).
-pub(super) fn frame_style(selected: bool, focused: bool, palette: &Palette) -> Style {
-    Style::default().fg(if focused && selected {
+/// The frame's colour: `accent` for the selected studio (whether or
+/// not the lot owns the keys), `surface1` for every other block.
+pub(super) fn frame_style(selected: bool, palette: &Palette) -> Style {
+    Style::default().fg(if selected {
         palette.accent
     } else {
         palette.surface1
@@ -47,6 +46,7 @@ pub(super) fn draw_top(
     studio: StudioRef<'_>,
     label: &StudioLabel,
     health: Health,
+    selected: bool,
     focused_terminal: bool,
     frame: Style,
     palette: &Palette,
@@ -68,7 +68,8 @@ pub(super) fn draw_top(
         format!("{} {progress}", health.glyph())
     };
     let marker_w = u16::from(focused_terminal) * 2;
-    let interior = rect.width.saturating_sub(3); // `╭─ ` … `╮`
+    let chip_pad = u16::from(selected);
+    let interior = rect.width.saturating_sub(4 + chip_pad);
     let full_fits = display_width(&label.full) as u16 + display_width(&full_tail) as u16
         <= interior.saturating_sub(marker_w);
     let tail = if full_fits || waiting == 0 {
@@ -102,41 +103,77 @@ pub(super) fn draw_top(
             Style::default().fg(if user { palette.red } else { palette.peach }),
         );
     }
-    // `▸ ` before the label while its terminal is the focused pane.
-    let id_end = tail_x.saturating_sub(1);
-    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w);
-    if focused_terminal && id_end > rect.x + 2 {
-        put_text(
-            buf,
-            rect.x + 2,
-            rect.y,
-            1,
-            glyphs::FOCUSED_STUDIO,
-            Style::default()
-                .fg(palette.text)
-                .add_modifier(Modifier::BOLD),
-        );
-    }
     // R14: an experimental studio's `exp` badge rides after the
     // label — the label gets the full budget and a dock too narrow
-    // for both drops the badge first.
-    let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
+    // for both drops the badge first. Selected blocks wrap `[▸ ]label`
+    // in a bold padded `accent` chip (` ▸ label `).
+    let id_end = tail_x.saturating_sub(1);
+    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w + chip_pad);
     let id_text = label.fit(id_width as usize);
     let drawn = display_width(&id_text) as u16;
-    if id_width > 0 {
+    if selected && id_width > 0 {
+        let chip_style = Style::default()
+            .fg(glyphs::contrast_fg(palette))
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD);
+        put_text(buf, rect.x + 1, rect.y, 1, " ", chip_style);
+        if focused_terminal {
+            put_text(
+                buf,
+                rect.x + 2,
+                rect.y,
+                2,
+                &format!("{} ", glyphs::FOCUSED_STUDIO),
+                chip_style,
+            );
+        }
         put_text(
             buf,
             rect.x + 2 + marker_w,
             rect.y,
             id_width,
             &id_text,
-            Style::default().fg(if focused_terminal {
-                palette.text
-            } else {
-                palette.subtext0
-            }),
+            chip_style,
         );
+        if drawn > 0 {
+            put_text(
+                buf,
+                rect.x + 2 + marker_w + drawn,
+                rect.y,
+                1,
+                " ",
+                chip_style,
+            );
+        }
+    } else {
+        if focused_terminal && id_end > rect.x + 2 {
+            put_text(
+                buf,
+                rect.x + 2,
+                rect.y,
+                1,
+                glyphs::FOCUSED_STUDIO,
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+        if id_width > 0 {
+            put_text(
+                buf,
+                rect.x + 2 + marker_w,
+                rect.y,
+                id_width,
+                &id_text,
+                Style::default().fg(if focused_terminal {
+                    palette.text
+                } else {
+                    palette.subtext0
+                }),
+            );
+        }
     }
+    let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
     if badge && fill_start + 3 < id_end {
         put_text(

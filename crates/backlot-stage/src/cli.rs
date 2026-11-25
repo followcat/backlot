@@ -323,9 +323,10 @@ pub(crate) fn resolve_base(
                 .flatten()
                 .map(|e| e.file_name().to_string_lossy().into_owned())
                 .filter(|core| {
-                    store::studio_dir(&root.join(core), name)
-                        .join("events.jsonl")
-                        .is_file()
+                    !crate::server_lock::is_pointer_dir(&root.join(core))
+                        && store::studio_dir(&root.join(core), name)
+                            .join("events.jsonl")
+                            .is_file()
                 })
                 .collect()
         })

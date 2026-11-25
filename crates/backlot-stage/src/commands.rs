@@ -341,6 +341,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioList { .. }
         | Cmd::StudioRestore { .. }
         | Cmd::PermsRevoke { .. }
+        | Cmd::Server(..)
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }

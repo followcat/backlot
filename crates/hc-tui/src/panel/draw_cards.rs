@@ -5,7 +5,7 @@
 use backlot_model::summary::RoleSummary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
 use super::draw::PanelRender;
@@ -42,6 +42,7 @@ pub(super) fn draw_stacked(
     rect: Rect,
     studio: StudioRef<'_>,
     label: &StudioLabel,
+    selected: bool,
     spin: usize,
     palette: &Palette,
     hits: &mut PanelRender,
@@ -68,13 +69,20 @@ pub(super) fn draw_stacked(
     let id_end = tail.saturating_sub(gap);
     if id_end > rect.x + 2 {
         let id_width = id_end - (rect.x + 2);
+        let style = if selected {
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(palette.subtext0)
+        };
         put_text(
             buf,
             rect.x + 2,
             rect.y,
             id_width,
             &label.fit(id_width as usize),
-            Style::default().fg(palette.subtext0),
+            style,
         );
     }
 }
@@ -88,6 +96,7 @@ pub(super) fn draw_strip(
     rect: Rect,
     studio: StudioRef<'_>,
     health: Health,
+    selected: bool,
     local: Option<&str>,
     palette: &Palette,
 ) {
@@ -125,13 +134,20 @@ pub(super) fn draw_strip(
     let id = truncate_end(&studio.studio.id, id_room.max(1));
     let label = format!("{id}·{short_m}");
     if label_w > 0 {
+        let style = if selected {
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(palette.text)
+        };
         put_text(
             buf,
             rect.x + 2,
             rect.y,
             label_w,
             &truncate_end(&label, label_w as usize),
-            Style::default().fg(palette.text),
+            style,
         );
     }
 }

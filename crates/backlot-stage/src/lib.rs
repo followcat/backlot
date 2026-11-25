@@ -103,6 +103,11 @@ mod restore;
 mod runners;
 mod sample;
 mod sendfail;
+mod server_adopt;
+mod server_adopt_fs;
+mod server_lock;
+mod server_mode;
+mod server_service;
 mod service;
 pub mod signals;
 mod stage;
@@ -287,6 +292,18 @@ mod restore_tests;
 mod role_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
+
+#[cfg(test)]
+mod server_adopt_tests;
+
+#[cfg(test)]
+mod server_fake_core;
+
+#[cfg(test)]
+mod server_mode_tests;
+
+#[cfg(test)]
+mod server_service_tests;
 
 #[cfg(test)]
 mod signals_tests;

@@ -114,8 +114,9 @@ pub fn worktree_listed(list: &str, dir: &Path, branch: &str) -> bool {
     let want_branch = format!("branch refs/heads/{branch}");
     let mut at = false;
     for line in list.lines() {
-        if line.starts_with("worktree ") {
-            at = line == want;
+        if let Some(listed) = line.strip_prefix("worktree ") {
+            at = line == want
+                || Path::new(listed).canonicalize().ok().as_deref() == Some(dir.as_path());
         } else if at && line == want_branch {
             return true;
         }
