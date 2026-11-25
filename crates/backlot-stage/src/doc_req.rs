@@ -9,6 +9,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+pub(crate) use backlot_model::req_wire::{CARD_QUEUE_REFUSAL, person_only};
 use backlot_model::req_wire::{
     MAX_DOC_BYTES, MAX_REQ_QUEUE, MAX_RES_ACKS, REQ_DOC_NAME, REQ_SCHEMA, RES_DOC_NAME, RES_SCHEMA,
     ReqDoc, ReqEnvelope, ResAck, ResDoc, validate_timestamp,
@@ -126,6 +127,9 @@ impl Consumer {
                 ResAck::err(&envelope.req_id, now_ms, msg)
             } else {
                 match envelope.parse_action() {
+                    Ok(action) if person_only(&action) => {
+                        ResAck::err(&envelope.req_id, now_ms, CARD_QUEUE_REFUSAL)
+                    }
                     Ok(action) => match dispatch_action(&stage.base, &env, action) {
                         Ok(result) => ResAck::ok_value(&envelope.req_id, now_ms, result),
                         Err(e) => ResAck::err(&envelope.req_id, now_ms, e.message()),
