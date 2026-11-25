@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use backlot_model::event::EventKind;
-use backlot_model::state::StudioState;
+use backlot_model::state::{StudioState, actor_task};
 use backlot_model::steps::{Step, next_steps};
 use backlot_model::summary::Work;
 
@@ -32,6 +32,9 @@ use crate::reconcile::{self, LiveTerminal};
 pub(crate) enum Move {
     /// Write `messages/<key>-nudge.md`, then queue the nudge.
     Nudge { step: Step },
+    /// Write the firmer `messages/<key>-again.md`, then queue it —
+    /// the actor's delivery step's second nudge, for the same key.
+    NudgeAgain { step: Step },
     /// Raise one `owed` attention on the still-idle owner.
     Raise { role: String, detail: String },
     /// Clear an open attention that no longer stands, with the
@@ -50,11 +53,14 @@ pub(crate) fn queued_for(state: &StudioState, role: &str) -> bool {
         || state.reports.iter().any(|r| r.to == role && !r.delivered)
 }
 
-/// The nudge's own message — any queued, whatever became of it.
+/// The step's latest nudge message — any queued, whatever became of
+/// it. The latest, not the first, so an actor's second nudge restarts
+/// the escalation clock from its own delivery.
 fn nudge_for(state: &StudioState, key: u64) -> Option<&backlot_model::state::Message> {
     state
         .messages
         .iter()
+        .rev()
         .find(|m| m.source_seq == Some(key) && m.purpose.as_deref() == Some("nudge"))
 }
 
@@ -64,19 +70,6 @@ pub(crate) const ROLE_ACTIVE: &str = "role active again";
 /// `attention.cleared` reason: the refused role has since been handed
 /// new work.
 pub(crate) const ROLE_MOVED_ON: &str = "role moved on";
-
-/// Did `role` write any ledger event after `seq`?
-fn acted_since(state: &StudioState, role: &str, seq: u64) -> bool {
-    state
-        .last_by_role
-        .get(role)
-        .is_some_and(|last| last.seq > seq)
-}
-
-/// When `role` last wrote to the ledger; zero when it never did.
-fn last_act_ms(state: &StudioState, role: &str) -> u64 {
-    state.last_by_role.get(role).map_or(0, |last| last.ts_ms)
-}
 
 /// Was a message or report delivered to `role` after `ts_ms`?
 fn delivered_since(state: &StudioState, role: &str, ts_ms: u64) -> bool {
@@ -91,9 +84,35 @@ fn delivered_since(state: &StudioState, role: &str, ts_ms: u64) -> bool {
             .any(|r| r.to == role && r.delivered && after(r.delivered_ms))
 }
 
+/// The delivery step of a running task — the one obligation an actor
+/// can sit at its prompt and never discharge. `None` for every other
+/// step, which keeps today's body and one-nudge rule.
+fn delivery_task(step: &Step) -> Option<&str> {
+    let task = actor_task(&step.owner)?;
+    step.command
+        .starts_with(&format!("backlot deliver --task {task} "))
+        .then_some(task)
+}
+
 /// The body the nudge file carries: what is owed, the command that
-/// discharges it, and where a question or a wait goes.
-pub(crate) fn nudge_body(step: &Step) -> String {
+/// discharges it, and where a question or a wait goes. An actor's
+/// delivery step gets the directive form — name the task, keep working
+/// until `backlot deliver`, do not end the turn on a progress line,
+/// and a block goes to the task's reviewer.
+pub(crate) fn nudge_body(state: &StudioState, step: &Step) -> String {
+    if let Some(task) = delivery_task(step) {
+        let reviewer = state
+            .tasks
+            .get(task)
+            .map(|t| t.reviewer())
+            .unwrap_or("producer");
+        return format!(
+            "# {label} is owed\n\nTask `{task}` is running and its delivery is yours:\n\n    {command}\n\nKeep working until that command lands; do not end the turn with a `backlot progress` line. If something blocks you, say why with `backlot tell {reviewer} --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
+            label = step.label,
+            task = task,
+            command = step.command,
+        );
+    }
     format!(
         "# {label} is owed\n\nThe ledger still owes {label} — the step is yours:\n\n    {command}\n\nA question or a wait on something the ledger cannot see goes through `backlot tell <role> --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
         label = step.label,
@@ -101,15 +120,62 @@ pub(crate) fn nudge_body(step: &Step) -> String {
     )
 }
 
+/// The second nudge body: the same step, said as a directive — keep
+/// working until the delivery lands, do not end the turn on a
+/// progress line.
+pub(crate) fn nudge_body_second(step: &Step) -> String {
+    format!(
+        "# {label} is still owed\n\nYou answered the last nudge and went back to your prompt, but the ledger still owes {label} — the step is yours:\n\n    {command}\n\nKeep working until that command lands; do not end the turn with a `backlot progress` line. If something blocks you, say why with `backlot tell <role> --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
+        label = step.label,
+        command = step.command,
+    )
+}
+
+/// Whether the actor's delivery step already earned its second nudge:
+/// two `nudge` messages share the step's `source_seq`.
+fn second_sent(state: &StudioState, key: u64) -> bool {
+    state
+        .messages
+        .iter()
+        .filter(|m| m.source_seq == Some(key) && m.purpose.as_deref() == Some("nudge"))
+        .count()
+        > 1
+}
+
+/// The ledger activity that counts for `role`: a bare `role.progress`
+/// never does when `ignore_progress` — an actor's delivery step — so
+/// a progress-only reply cannot postpone the escalation.
+fn act_ts(state: &StudioState, role: &str, ignore_progress: bool) -> u64 {
+    let map = if ignore_progress {
+        &state.last_act_by_role
+    } else {
+        &state.last_by_role
+    };
+    map.get(role).map_or(0, |last| last.ts_ms)
+}
+
+/// Did `role` record any ledger event after `seq` that counts — the
+/// same `ignore_progress` rule as [`act_ts`]?
+fn acted_since(state: &StudioState, role: &str, seq: u64, ignore_progress: bool) -> bool {
+    let map = if ignore_progress {
+        &state.last_act_by_role
+    } else {
+        &state.last_by_role
+    };
+    map.get(role).is_some_and(|last| last.seq > seq)
+}
+
 /// The moves the state calls for. `idle` answers the role's current
-/// idle-stretch start — `None` while it is not idle — so the caller
-/// owns the stretch bookkeeping and this stays pure. At most one
-/// nudge per owner per plan: a second owed step waits for the
-/// first's delivery, which makes the owner not idle anyway.
+/// idle-stretch start — `None` while it is not idle — and `moved` the
+/// last time its work-area probe saw a change, so the caller owns the
+/// stretch and probe bookkeeping and this stays pure. At most one
+/// nudge per owner per plan: a second owed step waits for the first's
+/// delivery, which makes the owner not idle anyway.
 pub fn plan(
     state: &StudioState,
     wanted: &BTreeSet<String>,
     idle: impl Fn(&str) -> Option<u64>,
+    moved: impl Fn(&str) -> Option<u64>,
     now_ms: u64,
 ) -> Vec<Move> {
     let steps = next_steps(state);
@@ -121,14 +187,45 @@ pub fn plan(
         if s.owner == "user" {
             continue;
         }
+        // An actor's delivery step ignores a bare `role.progress` and
+        // reads the work-area probe instead: a progress-only reply or
+        // a `git status` with nothing touched is not activity there, so
+        // neither postpones the second nudge or the escalation.
+        let ignore_progress = delivery_task(s).is_some();
+        // For the delivery step, the last thing that counted as work:
+        // any non-progress ledger write, else the work area's last move.
+        let worked_ms = |role: &str| {
+            if ignore_progress {
+                act_ts(state, role, true).max(moved(role).unwrap_or(0))
+            } else {
+                act_ts(state, role, false)
+            }
+        };
         match nudge_for(state, s.key) {
-            // The nudge landed `escalate_after_s` ago, and the owner
-            // has written nothing to the ledger for as long — still
-            // owed, still idle: the user's step now. Both clocks come
-            // from the ledger, so a stage restart never postpones it.
             Some(m) if m.delivered => {
                 let delivered = m.delivered_ms.unwrap_or(m.ts_ms);
-                let quiet_since = delivered.max(last_act_ms(state, &s.owner));
+                // An actor's delivery step earns one firmer nudge: the
+                // first was delivered, nothing but progress landed since
+                // — no deliver, no commit, the work area unchanged — and
+                // it sat idle past `nudge_after_s` again. Real work
+                // since the nudge cancels the second one outright.
+                let worked_since = ignore_progress && worked_ms(&s.owner) >= delivered;
+                if ignore_progress
+                    && !worked_since
+                    && !second_sent(state, s.key)
+                    && idle(&s.owner).is_some_and(|stretch| {
+                        now_ms.saturating_sub(delivered.max(stretch)) >= nudge_ms
+                    })
+                {
+                    out.push(Move::NudgeAgain { step: s.clone() });
+                    continue;
+                }
+                // The nudge landed `escalate_after_s` ago, and the
+                // owner has done nothing that counts for as long —
+                // still owed, still idle: the user's step now. For a
+                // delivery step the clock reads the ledger and the
+                // work-area probe, never a bare progress write.
+                let quiet_since = delivered.max(worked_ms(&s.owner));
                 if now_ms.saturating_sub(quiet_since) >= escalate_ms
                     && idle(&s.owner).is_some()
                     && !state
@@ -164,17 +261,27 @@ pub fn plan(
     // again: the attention clears unless the owner has since sat idle
     // a whole escalation window, when it stands as the re-escalation.
     for a in state.open_attention().filter(|a| a.reason == reasons::OWED) {
+        // The escalated step decides whether progress counts here: for
+        // an actor's delivery step it does not.
+        let ignore_progress = steps.iter().any(|s| {
+            s.owner == a.role
+                && nudge_for(state, s.key).is_some_and(|m| m.delivered)
+                && delivery_task(s).is_some()
+        });
         let nudged = steps
             .iter()
             .any(|s| s.owner == a.role && nudge_for(state, s.key).is_some_and(|m| m.delivered));
+        // A work-area move after the raise is work too, wherever the
+        // ledger is silent.
+        let moved_after = ignore_progress && moved(&a.role).is_some_and(|t| t > a.ts_ms);
         if !wanted.contains(&a.role) || !nudged {
             out.push(Move::Clear {
                 seq: a.seq,
                 reason: "done",
             });
-        } else if acted_since(state, &a.role, a.seq)
+        } else if (acted_since(state, &a.role, a.seq, ignore_progress) || moved_after)
             && (idle(&a.role).is_none()
-                || now_ms.saturating_sub(last_act_ms(state, &a.role)) < escalate_ms)
+                || now_ms.saturating_sub(act_ts(state, &a.role, ignore_progress)) < escalate_ms)
         {
             out.push(Move::Clear {
                 seq: a.seq,
@@ -232,7 +339,13 @@ impl Stage {
             }
         }
         let wanted = reconcile::wanted(studio, state);
-        for mv in plan(state, &wanted, |r| idle.get(r).copied(), now_ms) {
+        let moved = |role: &str| {
+            self.liveness
+                .borrow()
+                .get(&(studio.to_string(), role.to_string()))
+                .and_then(|ev| ev.work_area_moved_ms())
+        };
+        for mv in plan(state, &wanted, |r| idle.get(r).copied(), moved, now_ms) {
             match mv {
                 Move::Nudge { step } => {
                     let dest = format!("messages/{}-nudge.md", step.key);
@@ -241,7 +354,7 @@ impl Stage {
                         std::fs::create_dir_all(parent)
                             .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
                     }
-                    std::fs::write(&path, nudge_body(&step))
+                    std::fs::write(&path, nudge_body(state, &step))
                         .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
                     record(
                         dir,
@@ -254,6 +367,29 @@ impl Stage {
                     )?;
                     eprintln!(
                         "stage: nudge {} ({}) queued for {}",
+                        step.key, step.label, step.owner
+                    );
+                }
+                Move::NudgeAgain { step } => {
+                    let dest = format!("messages/{}-again.md", step.key);
+                    let path = dir.join(&dest);
+                    if let Some(parent) = path.parent() {
+                        std::fs::create_dir_all(parent)
+                            .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
+                    }
+                    std::fs::write(&path, nudge_body_second(&step))
+                        .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
+                    record(
+                        dir,
+                        EventKind::MessageQueued {
+                            to: step.owner.clone(),
+                            file: Some(dest),
+                            purpose: Some("nudge".into()),
+                            source_seq: Some(step.key),
+                        },
+                    )?;
+                    eprintln!(
+                        "stage: second nudge {} ({}) queued for {}",
                         step.key, step.label, step.owner
                     );
                 }

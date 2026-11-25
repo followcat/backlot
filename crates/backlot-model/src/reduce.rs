@@ -22,14 +22,17 @@ pub fn apply(state: &mut StudioState, event: &Event) {
     let seq = event.seq;
     let ts = event.ts_ms;
     if !event.by.role.is_empty() {
-        state.last_by_role.insert(
-            event.by.role.clone(),
-            RoleLastEvent {
-                seq,
-                ts_ms: ts,
-                kind: event.kind.name().into(),
-            },
-        );
+        let last = RoleLastEvent {
+            seq,
+            ts_ms: ts,
+            kind: event.kind.name().into(),
+        };
+        if !matches!(event.kind, EventKind::RoleProgress { .. }) {
+            state
+                .last_act_by_role
+                .insert(event.by.role.clone(), last.clone());
+        }
+        state.last_by_role.insert(event.by.role.clone(), last);
     }
     let cap = state.rework_cap();
     match &event.kind {

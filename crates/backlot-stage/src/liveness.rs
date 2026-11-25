@@ -394,6 +394,14 @@ impl Evidence {
             && self.raw_same_since_ms > start
     }
 
+    /// When the work-area probe last saw a change — `git HEAD`, the
+    /// index or `git status` — or `None` when it never did. The nudge
+    /// pass reads it so a work-area change keeps counting as activity
+    /// where a bare progress line does not.
+    pub(crate) fn work_area_moved_ms(&self) -> Option<u64> {
+        self.moved_sources.get(&Source::WorkArea).map(|s| s.at_ms)
+    }
+
     pub(crate) fn lock_wait(&self) -> Option<(&str, u64)> {
         self.lock_wait
             .as_ref()

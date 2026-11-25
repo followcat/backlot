@@ -606,6 +606,12 @@ pub struct StudioState {
     /// `by.role` → the newest event written by that role.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub last_by_role: BTreeMap<String, RoleLastEvent>,
+    /// `by.role` → the newest event by that role that is not a bare
+    /// `role.progress` note. The nudge pass reads it for an actor's
+    /// delivery step, where progress is not activity. Skipped on
+    /// serialization: replay rebuilds it.
+    #[serde(default, skip_serializing)]
+    pub last_act_by_role: BTreeMap<String, RoleLastEvent>,
     /// Role key → latest `role.progress` note (even before `role.started`);
     /// skipped on serialization because `status --json` publishes `progress` once per role.
     #[serde(default, skip_serializing)]
