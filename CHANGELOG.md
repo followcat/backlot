@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The Hollywood band's talk shows a reply you can see, read in full, and the conversation that matters.** A card Hollywood proposes now draws as its own line under the person's line (`✦ proposed card c3 · acme-shop · pause t1`) and ends the live row like a report, so a recast that came back as cards reads as an answer where the person spoke; a card the stage proposed never joins the talk. An idle Hollywood whose newest `user ›` line still has nothing after it says `○ hollywood is idle and has not answered · open ↵` instead of going silent. The newest Hollywood line wraps to at most four rows at the band's width (two on a narrow/mobile band) with the Reader's CJK-aware wrap, so a long report's end — `choose 1`, `only you can publish: …` — is never cut; every other line stays one row. When the band is short the wrap gives its extra rows back before any waiting row is dropped. The talk keeps only the newest turn and the one before it, folding older lines into `… <n> earlier · ↵ read`, and the saved rows go to the waiting list (`docs/studio/hollywood.md`, `docs/studio/guide.md`, `docs/studio/design.md`).
+
 ## 0.4.6 — 2026-11-26
 
 Use backlot from another machine: one server runs the studios and every other machine is a client. From a client you can start, finish, prune, delete and restore studios, browse the server's folders in the New Studio dialog, and approve cards, with every destructive step confirmed against the dry run you reviewed. Refused outward commands no longer count as waiting on you, a tell wakes a closed writer or director, an actor idling at its prompt keeps being pushed until it delivers, only you finish a studio, and Devin's SWE-2.1 models are in the cast picker.

@@ -701,6 +701,140 @@ async fn stepping_walks_hollywood_exchange_and_open_cards_syncing_selection() {
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
 }
 
+/// Enter on the fold row opens the newest folded entry in the Reader,
+/// and its stepping still reaches the earlier lines the band folded.
+#[tokio::test]
+async fn enter_on_the_fold_reads_the_newest_folded_entry() {
+    let mut app = app_with_hollywood();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 1,
+                "studios": [{
+                    "id": "acme-shop", "title": "Acme", "state": "live",
+                    "requirement_version": 1, "mode": "standard",
+                    "open_reviews": 0, "waiting": 0, "roles": []
+                }],
+                "hollywood": {
+                    "state": "live", "work": "waiting", "runner": "agy", "model": "pro",
+                    "cards": [],
+                    "exchange": [
+                        { "seq": 1, "who": "user", "text": "first ask" },
+                        { "seq": 2, "who": "hollywood", "text": "first answer" },
+                        { "seq": 3, "who": "user", "text": "second ask" },
+                        { "seq": 4, "who": "hollywood", "text": "second answer" },
+                        { "seq": 5, "who": "user", "text": "third ask" },
+                        { "seq": 6, "who": "hollywood", "text": "third answer" }
+                    ]
+                }
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_hollywood_runner(std::sync::Arc::new(move |argv| {
+        let body = argv.join(" ");
+        sink.lock().unwrap().push(argv.clone());
+        Box::pin(async move { Ok(format!("body of {body}")) })
+    }));
+    app.area = (120, 30);
+    alt_y(&mut app);
+
+    // The band folded #1 and #2 into one row that targets #2.
+    let band = app.hollywood_band();
+    let fold_target = band
+        .iter()
+        .find(|t| matches!(t, Target::Talk(2)))
+        .cloned()
+        .expect("the fold row targets the newest folded entry");
+    app.hollywood_select(fold_target);
+    key(&mut app, hc_vt::Key::Enter);
+    let reply = tokio::time::timeout(std::time::Duration::from_millis(100), app.action_rx.recv())
+        .await
+        .expect("fold read dispatched")
+        .unwrap();
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["hollywood", "show", "2", "--as", "user"]],
+        "Enter on the fold reads the newest folded entry"
+    );
+    app.on_action_reply(reply);
+    // Stepping back reaches the earlier folded line (#1).
+    key(&mut app, hc_vt::Key::Char('['));
+    let back = tokio::time::timeout(std::time::Duration::from_millis(100), app.action_rx.recv())
+        .await
+        .expect("step dispatched")
+        .unwrap();
+    app.on_action_reply(back);
+    assert_eq!(
+        recorded.lock().unwrap().last().unwrap().as_slice(),
+        &["hollywood", "show", "1", "--as", "user"],
+        "stepping reaches the earlier folded entry"
+    );
+}
+
+/// Enter on a card talk line reads that card (`card show c<seq>`), not
+/// `hollywood show` — the card is a card, not a report.
+#[tokio::test]
+async fn enter_on_a_card_line_runs_card_show() {
+    let mut app = app_with_hollywood();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 1,
+                "studios": [{
+                    "id": "acme-shop", "title": "Acme", "state": "live",
+                    "requirement_version": 1, "mode": "standard",
+                    "open_reviews": 0, "waiting": 0, "roles": []
+                }],
+                "hollywood": {
+                    "state": "live", "work": "waiting", "runner": "agy", "model": "pro",
+                    "cards": [
+                        { "id": "c3", "studio": "acme-shop", "action": "pause t1", "why": "looping" }
+                    ],
+                    "exchange": [
+                        { "seq": 8, "who": "user", "text": "recast it" },
+                        { "seq": 9, "who": "hollywood", "kind": "card",
+                          "text": "proposed card c3 · acme-shop · pause t1" }
+                    ]
+                }
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_hollywood_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv.clone());
+        Box::pin(async { Ok("card body".to_owned()) })
+    }));
+    app.area = (120, 30);
+    alt_y(&mut app);
+    app.hollywood_select(Target::Talk(9));
+    key(&mut app, hc_vt::Key::Enter);
+    let reply = tokio::time::timeout(std::time::Duration::from_millis(100), app.action_rx.recv())
+        .await
+        .expect("card read dispatched")
+        .unwrap();
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["card", "show", "c9", "--as", "user"]],
+        "the card line opens the card, not a hollywood report"
+    );
+    app.on_action_reply(reply);
+    let view = app.hollywood.view.as_ref().expect("the card view");
+    assert_eq!(view.card.as_deref(), Some("c9"));
+}
+
 #[tokio::test]
 async fn enter_closes_read_only_reader_and_noops_on_actionable_card() {
     let mut app = app_with_hollywood();

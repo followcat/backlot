@@ -191,13 +191,19 @@ pub(crate) fn default_chip_index(wait: &Wait<'_>, chips: &[Chip]) -> usize {
 }
 
 /// The live row's glyph and text: `… sending to hollywood`,
-/// `⠶ hollywood: <doing>` and `⚠ hollywood asks: <prompt>`.
+/// `⠶ hollywood: <doing>`, `⚠ hollywood asks: <prompt>`, and
+/// `○ hollywood is idle and has not answered · open ↵` when the
+/// screen is idle and the line still has no reply.
 pub(crate) fn live_head(live: &Live<'_>) -> (String, &'static str) {
     match live {
         Live::Pending => ("sending to hollywood".into(), "…"),
         Live::Working(Some(doing)) => (format!("hollywood: {doing}"), "⠶"),
         Live::Working(None) => ("hollywood is working".into(), "⠶"),
         Live::Prompt(prompt) => (format!("hollywood asks: {prompt}"), "⚠"),
+        Live::Idle => (
+            "hollywood is idle and has not answered · open ↵".into(),
+            "○",
+        ),
     }
 }
 

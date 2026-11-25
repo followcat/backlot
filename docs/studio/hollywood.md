@@ -122,8 +122,13 @@ collapses. While composing, the footer names `⏎ send   ↑↓ history   tab wa
 Under the newest `user ›` line the band shows what Hollywood is doing with it, for as long as
 that line has no `hollywood` reply after it: `… sending to hollywood` while the line is still in
 the outbox, `⠶ hollywood: <doing>` while its terminal works (or `⠶ hollywood is working` when it
-reports no detail), and `⚠ hollywood asks: <prompt>` when a permission prompt stands on its
-screen. The prompt row takes the studio prompt row's keys: `y` answers `allow` and `d` `deny`
+reports no detail), `○ hollywood is idle and has not answered · open ↵` once its screen reads idle
+and the line still has nothing after it — a reply that never came, not silence — and
+`⚠ hollywood asks: <prompt>` when a permission prompt stands on its
+screen. A card Hollywood proposes (`card.proposed` by `hollywood`) ends the live row just like a
+report: it draws as Hollywood's own line (`✦ proposed card c3 · acme-shop · pause t1`, the same
+words the CARD row uses), under the line it answers, so a recast that came back as cards reads
+as a reply where the person spoke. The prompt row takes the studio prompt row's keys: `y` answers `allow` and `d` `deny`
 (`backlot approve --person hollywood --decision …` on Hollywood's own ledger), `p` peeks at its
 screen read-only, and `Enter` focuses `bl-hollywood`. When Hollywood's runner has no approval key
 (`can_answer_prompt` false — `opencode`, `cline`, `agy`) the row keeps its needs-you entry but the
@@ -137,6 +142,18 @@ picker on the screen — so a terminal resized narrow cannot hide the row. Its d
 from the screen's wrapping: the whole command for cmd, the question for the other runners, and
 `permission prompt` when the screen cannot name it. The same width-independent picker detection
 and detail reading raise a role's `permission prompt` attention.
+
+The talk above the input keeps only the **recent conversation**: the newest turn (a `user ›` line
+and everything after it up to the next one) and the turn before it — or, with no `user` line, the
+newest two lines. Older lines fold into one dim row, `… <n> earlier · ↵ read`; Enter on it opens
+the newest folded entry in the Lot Reader, and the Reader's `←`/`→` stepping still reaches every
+earlier line. The newest Hollywood line (a report, or a card when no report followed) wraps to at
+most four rows at the band's width, using the same CJK-aware wrap the Reader body uses, so its
+end — the "choose 1", the "only you can publish: …" — is never cut off; every other line stays
+one row, and at a narrow or mobile width the wrap caps at two. When the band is short the wrap
+gives its extra rows back, down to one, before any waiting row is dropped: waiting rows keep
+their priority over talk. Selection, mouse hits and scrolling treat a wrapped line as one row.
+
 
 Everything the bar draws comes from the published `backlot` summary documents plus the
 watcher's machine and stage state — never scraped terminal output — so the frames show even

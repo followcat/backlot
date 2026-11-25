@@ -224,6 +224,42 @@ fn is_path_sep(c: char) -> bool {
     matches!(c, '/' | '-' | '_' | '.' | ':')
 }
 
+/// Wrap plain `text` at `width` display cells into at most `max_rows`
+/// rows, reusing the same CJK-aware break rules the Reader body uses.
+/// Text past `max_rows` is ellipsized on the last row. Empty text
+/// yields one empty row.
+pub(crate) fn wrap_plain(text: &str, width: usize, max_rows: usize) -> Vec<String> {
+    let width = width.max(1);
+    let style = Style::default();
+    let cells: Vec<Cell> = text.chars().map(|c| cell_of(c, style)).collect();
+    let mut rows: Vec<String> = wrap_cells(&cells, width, 0, &[])
+        .into_iter()
+        .map(|row| row.iter().map(|c| c.ch).collect())
+        .collect();
+    if max_rows > 0 && rows.len() > max_rows {
+        rows.truncate(max_rows);
+        if let Some(last) = rows.last_mut() {
+            *last = format!("{}…", take_prefix_width_str(last, width.saturating_sub(1)));
+        }
+    }
+    rows
+}
+
+/// The widest prefix of `text` that fits `max_width` display cells.
+fn take_prefix_width_str(text: &str, max_width: usize) -> String {
+    let mut out = String::new();
+    let mut width = 0usize;
+    for ch in text.chars() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + w > max_width {
+            break;
+        }
+        out.push(ch);
+        width += w;
+    }
+    out
+}
+
 fn wrap_cells(
     cells: &[Cell],
     content_w: usize,

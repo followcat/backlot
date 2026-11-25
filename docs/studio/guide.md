@@ -500,8 +500,11 @@ The expanded strip, top to bottom:
   `<n> cast · r<version>` on the right;
 - the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
 - below them, with an agent: the newest headline, one row per open card with `apply`,
-  `cancel` and `show`, and the `tell hollywood` line. Without one: the `⏎ hollywood setup`
-  line — the setup dialog's button.
+  `cancel` and `show`, the recent conversation (the newest turn and the one before it, older
+  lines folded into `… <n> earlier · ↵ read`) and the `tell hollywood` line. A card Hollywood
+  proposes draws under the person's line as its own reply; the newest Hollywood line wraps to a
+  few rows so its end is never cut off. Without one: the `⏎ hollywood setup` line — the setup
+  dialog's button.
 
 Keys in the expanded bar: `←`/`→` (or `h`/`l`) move between the frames, the new-studio frame
 included; `↓`/`↑` (or `j`/`k`) leave the frames for the cards and the input line and come back;

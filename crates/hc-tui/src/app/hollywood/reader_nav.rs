@@ -21,7 +21,8 @@ impl App {
             .mark
             .strip_prefix("card:")
             .or_else(|| action.label.strip_prefix("card show "))
-            .map(str::to_owned);
+            .map(str::to_owned)
+            .or_else(|| card_show_id(action));
         let title = match &card {
             Some(id) => id.clone(),
             None => match &action.machine {
@@ -167,7 +168,8 @@ impl App {
                 }
                 let next_origin = ReaderOrigin::HollywoodExchange(next.seq);
                 self.set_reader_loading(format!("#{}", next.seq), next_origin);
-                self.run_action(studio_cmds::hollywood_show(next.seq));
+                let card = self.hollywood_exchange_is_card(next.seq);
+                self.run_action(studio_cmds::hollywood_exchange(next.seq, card));
             }
             ReaderOrigin::Card(id) => {
                 let Some(hw) = hollywood_summary(&machines) else {
@@ -253,6 +255,15 @@ impl App {
             ..CardView::default()
         });
     }
+}
+
+/// The card id a `card show <id>` action reads, from its argv — the
+/// `hollywood show`-shaped action carries the id nowhere else.
+fn card_show_id(action: &Action) -> Option<String> {
+    let argv = &action.argv;
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let pos = argv.windows(2).position(|w| w == ["card", "show"])?;
+    argv.get(pos + 2).map(|s| s.to_string())
 }
 
 fn step_slice<T>(items: &[T], pos: usize, delta: isize) -> Option<&T> {
