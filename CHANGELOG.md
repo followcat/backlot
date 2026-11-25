@@ -10,6 +10,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.4 — 2026-11-25
+
+"Needs you" now means it: a studio row stops asking for you once the role it was about has moved on.
+
 ### Fixed
 
 - **Stale "needs you" rows clear by themselves.** An `owed` escalation clears (`role active again`) once its role writes to the ledger again, for example while the person talks it through, and raises again only after the role sits idle a whole `escalate_after_s` with the step still owed, counted from its last ledger write. An `outward action` refusal clears (`role moved on`) once the stage delivers the role new work. Before, both stayed "needs you" until the step was done or someone cleared them by hand.
