@@ -224,36 +224,13 @@ impl App {
 
     /// Move the Lot Dock selection directly to `target` (used when stepping or
     /// clicking entries from the Reader) and reveal it inside the dock body.
+    /// Selecting a row of another studio unfolds that studio first, so the row
+    /// index comes from the folded rows `panel_reveal_selected` builds.
     pub(crate) fn panel_focus_target(&mut self, target: &Target) {
-        let machines = self.panel_summaries();
-        let rows = panel::rows(
-            &machines,
-            |m| self.machine_stage_running(m),
-            |m| self.machine_reachable(m),
-            &self.panel,
-            self.panel_mode_at(self.area.0),
-            self.studio.current.as_ref(),
-            self.panel_hits.body.height,
-        );
-        let Some(index) = rows.iter().position(|r| &r.target() == target) else {
-            self.panel.selected = Some(target.clone());
-            self.panel.finish_confirm = None;
-            self.panel.editing = false;
-            return;
-        };
         self.panel.selected = Some(target.clone());
-        self.panel.selected_row = Some(index);
         self.panel.finish_confirm = None;
         self.panel.editing = false;
-        let body_height = self.panel_hits.body.height.max(1);
-        let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
-        self.panel.scroll = scroll::list_scroll_start_to_reveal(
-            &heights,
-            &[],
-            body_height,
-            self.panel.scroll,
-            index.saturating_sub(1),
-        );
+        self.panel_reveal_selected();
     }
 
     /// Direct scroll (wheel/drag): write `scroll`, then clamp the
