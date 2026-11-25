@@ -19,6 +19,9 @@ pub struct EventBy {
     pub role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// Additive transport origin (`"doc"` when submitted through `plugin.backlot.req`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
 }
 
 impl EventBy {
@@ -26,6 +29,15 @@ impl EventBy {
         EventBy {
             role: role.into(),
             session: None,
+            via: None,
+        }
+    }
+
+    pub fn doc(role: impl Into<String>) -> Self {
+        EventBy {
+            role: role.into(),
+            session: None,
+            via: Some("doc".into()),
         }
     }
 }

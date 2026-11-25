@@ -185,8 +185,9 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
             .iter()
             .filter(|t| matches!(t, Target::Person(..)))
             .count(),
-        8
+        7
     );
+    assert!(exact_targets.contains(&Target::ClosedFold("acme-shop".into())));
     assert!(exact_targets.contains(&Target::Input("acme-shop".into())));
 }
 

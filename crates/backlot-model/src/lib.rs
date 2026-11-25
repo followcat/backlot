@@ -30,6 +30,9 @@ pub mod recast;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
+pub mod req_catalog;
+pub mod req_results;
+pub mod req_wire;
 pub mod roles;
 pub mod state;
 pub mod steps;
@@ -90,6 +93,8 @@ mod records_extra_tests;
 mod records_tests;
 #[cfg(test)]
 mod reopen_tests;
+#[cfg(test)]
+mod req_wire_tests;
 #[cfg(test)]
 mod restart_tests;
 #[cfg(test)]

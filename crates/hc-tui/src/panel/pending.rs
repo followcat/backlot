@@ -36,6 +36,7 @@ pub(super) fn mark(
             | Row::Task { .. }
             | Row::OutwardCard { .. }
             | Row::AcceptedFold { .. }
+            | Row::ClosedFold { .. }
             | Row::Talk { .. }
     ) {
         rect.width.saturating_sub(2)

@@ -11,6 +11,7 @@ mod args_studio;
 mod args_task;
 mod args_usage;
 mod ask_answer;
+pub(crate) mod catalog_doc;
 mod checkrun;
 mod checks;
 mod checkwork;
@@ -27,6 +28,10 @@ mod deliver;
 mod digest;
 mod discover;
 mod doc;
+pub mod doc_client;
+pub(crate) mod doc_dedupe;
+mod doc_dispatch;
+pub(crate) mod doc_req;
 mod draft;
 mod exchange_read;
 mod gitcmd;
@@ -107,6 +112,10 @@ mod stall;
 pub mod store;
 mod studio_list;
 mod supervise;
+mod verbs;
+mod verbs_card_show;
+mod verbs_fmt;
+mod verbs_hwood;
 mod watch;
 mod watchdog;
 mod wizard;
@@ -159,6 +168,16 @@ mod dep_cmd_tests;
 mod digest_tests;
 #[cfg(test)]
 mod discover_tests;
+#[cfg(test)]
+mod doc_req_cap_tests;
+#[cfg(test)]
+mod doc_req_fake_core;
+#[cfg(test)]
+mod doc_req_tests;
+#[cfg(test)]
+mod doc_req_verbs_seed;
+#[cfg(test)]
+mod doc_req_verbs_tests;
 #[cfg(test)]
 mod docs_tests;
 #[cfg(test)]

@@ -99,10 +99,10 @@ pub(super) fn draw_strip(
         health.glyph(),
         Style::default().fg(health.color(palette)),
     );
-    let waiting = studio.studio.waiting;
+    let waiting = crate::studio::waiting_count(studio.studio);
     let mut parts = Vec::new();
     if waiting > 0 {
-        let user = studio.studio.roles.iter().any(|r| r.attention_user);
+        let user = crate::studio::waiting_is_user(studio.studio);
         parts.push((
             format!("!{waiting}"),
             if user { palette.red } else { palette.peach },

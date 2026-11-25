@@ -26,12 +26,19 @@ pub struct Throttle {
     written: Option<Summary>,
     /// When the last write landed.
     last_ms: u64,
+    /// Bypass the two-second write cooldown on the next publish (used after a doc request drains).
+    flush_next: bool,
 }
 
 impl Throttle {
     /// A tick's rebuilt view.
     pub fn note(&mut self, summary: Summary) {
         self.latest = Some(summary);
+    }
+
+    /// Force the next changed view to publish immediately without waiting for `MIN_GAP_MS`.
+    pub fn force_next(&mut self) {
+        self.flush_next = true;
     }
 
     /// The summary to write, when the view changed and the gap allows.
@@ -42,7 +49,9 @@ impl Throttle {
         }
         match self.written {
             None => Some(latest.clone()),
-            Some(_) if now_ms >= self.last_ms + MIN_GAP_MS => Some(latest.clone()),
+            Some(_) if self.flush_next || now_ms >= self.last_ms + MIN_GAP_MS => {
+                Some(latest.clone())
+            }
             _ => None,
         }
     }
@@ -51,6 +60,7 @@ impl Throttle {
     pub fn wrote(&mut self, now_ms: u64) {
         self.written = self.latest.clone();
         self.last_ms = now_ms;
+        self.flush_next = false;
     }
 }
 

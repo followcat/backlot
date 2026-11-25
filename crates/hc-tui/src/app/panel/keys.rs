@@ -233,10 +233,17 @@ impl App {
     /// a closed person reopens through `run_action` (S5 §2), a task row opens
     /// its sheet and the `✓ <n> accepted` fold toggles.
     pub(super) fn panel_activate(&mut self) {
-        let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        match targets.get(index).cloned() {
+        self.panel_activate_target(targets.get(index).cloned());
+    }
+
+    /// Activate an explicit `Target` — used both by keyboard Enter and
+    /// left-clicks (where `Target::Block` was clicked before folding
+    /// recomputed the block into `Target::Studio`).
+    pub(super) fn panel_activate_target(&mut self, target: Option<Target>) {
+        let machines = self.panel_summaries();
+        match target {
             Some(Target::Studio(id) | Target::Strip(id)) => {
                 self.focus_studio(&id);
                 self.panel_leave();
@@ -251,6 +258,13 @@ impl App {
                 if !self.panel.accepted_folds.remove(&id) {
                     self.panel.accepted_folds.insert(id);
                 }
+                self.panel_reveal_selected();
+            }
+            Some(Target::ClosedFold(id)) => {
+                if !self.panel.closed_folds.remove(&id) {
+                    self.panel.closed_folds.insert(id);
+                }
+                self.panel_reveal_selected();
             }
             Some(Target::Stage(machine)) => {
                 // The `s start` the row prints (U6c) — a click or
@@ -293,11 +307,8 @@ impl App {
                 // block's new identity.
                 self.panel.collapsed_blocks.remove(&id);
                 self.panel.expanded_blocks.insert(id.clone());
-                self.panel.selected = Some(Target::Studio(id.clone()));
-                self.panel.selected_row = self
-                    .panel_targets()
-                    .iter()
-                    .position(|t| *t == Target::Studio(id.clone()));
+                self.panel.selected = Some(Target::Studio(id));
+                self.panel_reveal_selected();
             }
             Some(Target::Person(key, role_name)) => {
                 let role = crate::panel::data::studio(&machines, &key)

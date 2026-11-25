@@ -255,6 +255,7 @@ To run the tests: `git submodule update --init --depth 1`, then `cargo test`.
 - [Run a studio](docs/studio/guide.md)
 - [Hollywood, the overseer](docs/studio/hollywood.md)
 - [The studio panel](docs/studio/panel.md)
+- [Request, result, and catalog documents](docs/studio/requests.md)
 - [Studio: what has and has not been tried](docs/studio/limits.md)
 - [Install, upgrade, uninstall](docs/install.md)
 - [Keys](docs/keys.md)

@@ -57,7 +57,7 @@ pub(super) fn draw_top(
     // The right-hand tail: `● r1·1/4 !1` when the whole label fits
     // beside it, else `●!1` — the progress part drops before the
     // waiting count does.
-    let waiting = studio.studio.waiting;
+    let waiting = crate::studio::waiting_count(studio.studio);
     let progress = format!(
         "r{}·{}/{}",
         studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
@@ -88,11 +88,11 @@ pub(super) fn draw_top(
             Style::default().fg(health.color(palette)),
         );
     }
-    // `!<n>` is its own colour — red while a person waits on the
-    // user, peach for director-owned waits (S2 §2).
+    // `!<n>` is its own colour — red while a person or outward card waits on
+    // the user, peach for director-owned waits (S2 §2).
     if waiting > 0 {
         let mark_w = display_width(&format!("!{waiting}")) as u16;
-        let user = studio.studio.roles.iter().any(|r| r.attention_user);
+        let user = crate::studio::waiting_is_user(studio.studio);
         put_text(
             buf,
             right.saturating_sub(1 + mark_w),

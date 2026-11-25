@@ -168,6 +168,7 @@ pub(crate) fn record_verdict(
     let by = EventBy {
         role: role_s.clone(),
         session,
+        via: None,
     };
     let refused_kind = EventKind::RoleRefused {
         role: role_s.clone(),

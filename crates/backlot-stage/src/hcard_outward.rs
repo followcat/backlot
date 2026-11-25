@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use backlot_model::EventBy;
 use backlot_model::event::OutwardOutcome;
-use backlot_model::hollywood::{Card, CardAction, CardBase, HollywoodKind, NewHollywoodEvent};
+use backlot_model::hollywood::{CardAction, CardBase, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::{OutwardRequestRecord, StudioState};
 
 use crate::cli::{Caller, Env, Fail};
@@ -298,8 +298,8 @@ pub(crate) fn outward_stale(
     None
 }
 
-/// Append detailed preview lines for an `Outward` card in `backlot card show`.
-pub(crate) fn append_outward_preview(out: &mut String, card: &Card) {
+/// Append detailed preview lines for an `Outward` card action in `backlot card show`.
+pub(crate) fn append_outward_preview(out: &mut String, action: &CardAction) {
     let CardAction::Outward {
         studio,
         role,
@@ -310,7 +310,7 @@ pub(crate) fn append_outward_preview(out: &mut String, card: &Card) {
         commits,
         commits_total,
         ..
-    } = &card.action
+    } = action
     else {
         return;
     };

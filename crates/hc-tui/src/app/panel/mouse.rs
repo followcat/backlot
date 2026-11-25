@@ -84,13 +84,14 @@ impl App {
                         .map(|m| m.max_offset_from_bottom - m.offset_from_bottom)
                         .unwrap_or(0);
                     if target != crate::panel::Target::None {
-                        self.panel.selected = Some(target);
+                        self.panel.selected = Some(target.clone());
                         self.panel.selected_row = Some(1 + start + pos);
-                        // `panel_activate` re-arms Compose only on
-                        // the `›` row — a click elsewhere rests it.
                         self.panel.editing = false;
                         self.panel.reset_history_nav();
-                        self.panel_activate();
+                        if !matches!(target, crate::panel::Target::Block(..)) {
+                            self.panel_reveal_selected();
+                        }
+                        self.panel_activate_target(Some(target));
                     }
                 }
             }
@@ -119,11 +120,13 @@ impl App {
                         .unwrap_or(0);
                     self.panel.selected = Some(target.clone());
                     self.panel.selected_row = Some(1 + start + pos);
+                    self.panel_reveal_selected();
                     match &target {
                         crate::panel::Target::Studio(key)
                         | crate::panel::Target::Block(key)
                         | crate::panel::Target::Strip(key)
                         | crate::panel::Target::Fold(key)
+                        | crate::panel::Target::ClosedFold(key)
                         | crate::panel::Target::Input(key)
                         | crate::panel::Target::OutwardCard(key, _)
                         | crate::panel::Target::ReopenProducer(key) => {

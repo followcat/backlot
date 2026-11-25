@@ -44,8 +44,11 @@ pub(crate) fn draft_model(runner: &str) -> Option<&'static str> {
 /// `devin`, `cmd` and `opencode` take no effort (the cast rule).
 /// An experimental studio's draft shows `mode = "experimental"` up
 /// top; a standard draft writes no mode line at all.
-fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String, Fail> {
-    let Some((runner, model)) = PREFERENCE.iter().find(|(r, _)| (io.installed)(r)) else {
+pub(crate) fn draft_text_for(
+    installed: impl Fn(&str) -> bool,
+    mode: backlot_model::event::StudioMode,
+) -> Result<String, Fail> {
+    let Some((runner, model)) = PREFERENCE.iter().find(|(r, _)| installed(r)) else {
         return Err(Fail::refused(
             "no supported runner is installed — the wizard cannot draft a cast",
         ));
@@ -80,6 +83,10 @@ fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String,
         role(runner, model),
         role(runner, model),
     ))
+}
+
+fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String, Fail> {
+    draft_text_for(|r| (io.installed)(r), mode)
 }
 
 /// The draft's file: `backlot-cast-<pid>-<n>.toml` at the first

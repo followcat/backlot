@@ -10,6 +10,7 @@ use ratatui::style::Style;
 
 use super::data::StudioRef;
 use super::draw_blocks::draw_inner;
+use super::rows_fold::{accepted_fold_ids, closed_fold_summary};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
@@ -102,7 +103,38 @@ fn task_word(task: &TaskSummary) -> &'static str {
     }
 }
 
-/// The `✓ <n> accepted` fold line — `▾` open, `▸` shut.
+/// Fit `<prefix> · <tokens...>` inside `max_width`, cutting at a
+/// token boundary with `…` when not all tokens fit.
+fn fit_fold_line(prefix: &str, tokens: &[String], max_width: usize) -> String {
+    if tokens.is_empty() {
+        return truncate_end(prefix, max_width);
+    }
+    let full = format!("{prefix} · {}", tokens.join(" "));
+    if display_width(&full) <= max_width {
+        return full;
+    }
+    let mut end = 0usize;
+    for i in 0..tokens.len() {
+        let cand = format!("{prefix} · {} …", tokens[..=i].join(" "));
+        if display_width(&cand) <= max_width {
+            end = i + 1;
+        } else {
+            break;
+        }
+    }
+    if end > 0 {
+        format!("{prefix} · {} …", tokens[..end].join(" "))
+    } else {
+        let stub = format!("{prefix} · …");
+        if display_width(&stub) <= max_width {
+            stub
+        } else {
+            truncate_end(prefix, max_width)
+        }
+    }
+}
+
+/// The `✓ <n> done · <ids>` fold line.
 pub(super) fn draw_fold(
     buf: &mut Buffer,
     rect: Rect,
@@ -112,25 +144,52 @@ pub(super) fn draw_fold(
     palette: &Palette,
 ) {
     draw_inner(buf, rect, frame);
-    let n = studio
-        .studio
-        .tasks
-        .iter()
-        .filter(|t| {
-            matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        })
-        .count();
-    let text = format!("{} ✓ {n} accepted", if open { "▾" } else { "▸" });
+    let ids: Vec<String> = accepted_fold_ids(studio.studio)
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let prefix = format!("✓ {} done", ids.len());
+    let width = rect.width.saturating_sub(3);
+    let text = if open {
+        truncate_end(&prefix, width as usize)
+    } else {
+        fit_fold_line(&prefix, &ids, width as usize)
+    };
     put_text(
         buf,
         rect.x + 2,
         rect.y,
-        rect.width.saturating_sub(3),
+        width,
         &text,
         Style::default().fg(palette.teal),
+    );
+}
+
+/// The `□ <n> closed · <names>` dim fold line.
+pub(super) fn draw_closed_fold(
+    buf: &mut Buffer,
+    rect: Rect,
+    studio: StudioRef<'_>,
+    open: bool,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    let (count, tokens) = closed_fold_summary(studio.studio);
+    let prefix = format!("□ {count} closed");
+    let width = rect.width.saturating_sub(3);
+    let text = if open {
+        truncate_end(&prefix, width as usize)
+    } else {
+        fit_fold_line(&prefix, &tokens, width as usize)
+    };
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        width,
+        &text,
+        Style::default().fg(palette.overlay0),
     );
 }
 

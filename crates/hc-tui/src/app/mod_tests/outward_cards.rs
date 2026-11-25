@@ -96,7 +96,7 @@ fn local_summary_json(with_hollywood: bool) -> serde_json::Value {
             "requirement_version": 1,
             "mode": "standard",
             "open_reviews": 0,
-            "waiting": 1,
+            "waiting": 0,
             "roles": [
                 {
                     "role": "producer",
@@ -191,7 +191,7 @@ fn setup_two_machine_app() -> App {
                     "requirement_version": 1,
                     "mode": "standard",
                     "open_reviews": 0,
-                    "waiting": 1,
+                    "waiting": 0,
                     "roles": [
                         {
                             "role": "producer",
@@ -370,11 +370,16 @@ async fn call_sheet_and_dock_outward_card_keys_route_local_and_remote() {
     }
     calls.lock().unwrap().clear();
 
-    // 2. Studio Dock on remote outward card `c2`: `a`/`y`/`x`/`d`/`s`/Enter.
+    // 2. Studio Dock on remote outward card `c2`: moving cursor to `beta-tools` unfolds it, then `a`/`y`/`x`/`d`/`s`/Enter.
     app.hollywood.view = None;
     app.hollywood.mode = LayerMode::Hidden;
     press_mods(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
     press(&mut app, hc_vt::Key::Char('y'));
+    draw_to(&mut app, 140, 40);
+    app.panel.selected = Some(crate::panel::Target::Studio(crate::studio::StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    }));
     draw_to(&mut app, 140, 40);
     let remote_dock_target = app
         .panel_targets()
@@ -520,4 +525,111 @@ async fn remote_outward_card_runs_through_remote_runner() {
         ])
     );
     fake.abort();
+}
+
+#[tokio::test]
+async fn folded_studio_outward_card_counts_in_folded_line_lot_pill_and_call_sheet() {
+    let mut app = setup_local_app(false);
+    let fold_doc = serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 2,
+        "studios": [
+            {
+                "id": "acme-shop",
+                "title": "Acme shop",
+                "state": "live",
+                "requirement_version": 1,
+                "mode": "standard",
+                "open_reviews": 0,
+                "waiting": 0,
+                "roles": [
+                    {
+                        "role": "producer",
+                        "name": "producer",
+                        "terminal": "t1",
+                        "state": "live",
+                        "work": "working"
+                    }
+                ]
+            },
+            {
+                "id": "blog",
+                "title": "Blog",
+                "state": "live",
+                "requirement_version": 1,
+                "mode": "standard",
+                "open_reviews": 0,
+                "waiting": 0,
+                "roles": [
+                    {
+                        "role": "producer",
+                        "name": "producer",
+                        "terminal": "t2",
+                        "state": "live",
+                        "work": "waiting"
+                    },
+                    {
+                        "role": "director",
+                        "name": "director",
+                        "terminal": "t3",
+                        "state": "live",
+                        "work": "waiting"
+                    }
+                ],
+                "outward_cards": [
+                    outward_card_json("c1", "git push origin HEAD:main", "protected branch 'main'", "release_main")
+                ]
+            }
+        ]
+    });
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: None,
+            name: "backlot".into(),
+        },
+        Document {
+            value: fold_doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+
+    // 1. Outward card in folded `blog` counts on the lot pill and renders in Call Sheet.
+    assert_eq!(app.studio.lot.counts.urgent, 1, "lot pill urgent count");
+    if app.hollywood.mode != LayerMode::Expanded {
+        press_mods(&mut app, hc_vt::Key::Char('y'), hc_vt::Mods::ALT);
+    }
+    let sheet_text = screen_lines(&draw_to(&mut app, 140, 32)).join("\n");
+    assert!(
+        sheet_text.contains("c1") && sheet_text.contains("blog · git push origin HEAD:main"),
+        "Call Sheet missing folded studio outward card:\n{sheet_text}"
+    );
+
+    // 2. Open Studio Dock while `acme-shop` stays selected -> `blog` is folded yet its `!1` counts.
+    app.hollywood.mode = LayerMode::Hidden;
+    press_mods(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
+    press(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    let dock_lines = screen_lines(&draw_to(&mut app, 140, 32));
+    let dock_text = dock_lines.join("\n");
+    let blog_top = dock_lines
+        .iter()
+        .find(|l| l.contains("blog") && l.contains("!1"))
+        .unwrap_or_else(|| panic!("expected folded blog header with `!1`:\n{dock_text}"));
+    assert!(
+        !dock_text.contains("c1 git push origin HEAD:main"),
+        "folded studio must not expand outward card rows:\n{dock_text}"
+    );
+    let _ = blog_top;
+
+    // 3. Cramped height (`body_height = 7 < 8`) stacks `blog` into one line with `!1`.
+    let stacked_lines = screen_lines(&draw_to(&mut app, 140, 9));
+    let stacked_text = stacked_lines.join("\n");
+    assert!(
+        stacked_lines
+            .iter()
+            .any(|l| l.contains("╶") && l.contains("blog") && l.contains("!1")),
+        "expected stacked blog line with `!1`:\n{stacked_text}"
+    );
 }
