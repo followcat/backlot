@@ -13,7 +13,7 @@ use crate::cli::{Env, check_studio_name};
 use crate::guard_git::{GitContext, is_fast_path};
 pub(crate) use crate::guard_prep::{
     apply_env, find_real_binary, hollywood_role_dir, is_guard_shim_file, prepare_role,
-    studio_role_dir,
+    prepare_role_with, studio_role_dir,
 };
 use crate::guard_rules::{GuardVerdict, cap_command, classify_with_context};
 use crate::store::{self, Pending, StoreError};

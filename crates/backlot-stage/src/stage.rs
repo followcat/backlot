@@ -243,7 +243,14 @@ pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fai
         })
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
-    crate::server_mode::reap_finished_matching(&link.client, &list.terminals, is_local_stage).await;
+    let driver = crate::driver::LocalDriver::new();
+    crate::server_mode::reap_finished_matching(
+        &driver,
+        &link.client,
+        &list.terminals,
+        is_local_stage,
+    )
+    .await;
     if let Some(t) = list
         .terminals
         .iter()
@@ -302,10 +309,17 @@ async fn stop_async(common: &Common, env: &Env) -> Result<String, Fail> {
         })
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
-    crate::server_mode::reap_finished_matching(&link.client, &list.terminals, is_local_stage).await;
+    let driver = crate::driver::LocalDriver::new();
+    crate::server_mode::reap_finished_matching(
+        &driver,
+        &link.client,
+        &list.terminals,
+        is_local_stage,
+    )
+    .await;
     let (address, report) = stop_verdict(&list.terminals);
     if let Some(terminal) = address {
-        crate::server_mode::stop_terminal(&link.client, &terminal).await?;
+        crate::server_mode::stop_terminal(&driver, &link.client, &terminal).await?;
     }
     Ok(report.into())
 }

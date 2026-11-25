@@ -33,6 +33,7 @@ pub(crate) mod doc_dedupe;
 mod doc_dispatch;
 pub(crate) mod doc_req;
 mod draft;
+mod driver;
 mod exchange_read;
 mod gitcmd;
 mod guard;
@@ -192,6 +193,8 @@ mod doc_req_verbs_tests;
 mod docs_tests;
 #[cfg(test)]
 mod draft_tests;
+#[cfg(test)]
+mod driver_record_tests;
 #[cfg(test)]
 mod exchange_read_tests;
 #[cfg(test)]

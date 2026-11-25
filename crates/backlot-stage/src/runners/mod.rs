@@ -128,10 +128,19 @@ pub(crate) fn prep_signals_file(prep: &Prep) -> Option<&std::path::Path> {
 
 /// Truncate a hook runner's `signals.jsonl` before launching or resuming.
 pub(crate) fn truncate_signals(path: &std::path::Path) -> std::io::Result<()> {
+    truncate_signals_with(&crate::driver::LocalDriver::new(), path)
+}
+
+/// [`truncate_signals`] through a [`MachineDriver`], so the empty file
+/// lands on the machine the role runs on.
+pub(crate) fn truncate_signals_with(
+    driver: &dyn crate::driver::MachineDriver,
+    path: &std::path::Path,
+) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        driver.create_dir_all(parent)?;
     }
-    std::fs::write(path, "")
+    driver.write_file(path, b"")
 }
 
 /// The attention reason a failed `prepare` raises — each runner

@@ -11,7 +11,7 @@ use backlot_model::EventBy;
 use backlot_model::event::{ActorIdentity, Event, EventKind, NewEvent, RECOVERED, RESTARTED};
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
-use hc_proto::terminal::{RunParams, TerminalParams};
+use hc_proto::terminal::RunParams;
 
 use crate::cli::Fail;
 use crate::config;
@@ -28,11 +28,20 @@ use crate::workareas::{self, AreaFail};
 /// file and truncate the signals file — a fresh session starts an
 /// empty stream so a dead turn's last signal cannot read as its own.
 pub(crate) fn prepare_hooks(hooks: &runners::HookSetup) -> std::io::Result<()> {
+    prepare_hooks_with(&crate::driver::LocalDriver::new(), hooks)
+}
+
+/// [`prepare_hooks`] through a [`MachineDriver`], so both files land on
+/// the machine the role runs on.
+pub(crate) fn prepare_hooks_with(
+    driver: &dyn crate::driver::MachineDriver,
+    hooks: &runners::HookSetup,
+) -> std::io::Result<()> {
     if let Some(parent) = hooks.settings.parent() {
-        std::fs::create_dir_all(parent)?;
+        driver.create_dir_all(parent)?;
     }
-    std::fs::write(&hooks.settings, &hooks.content)?;
-    std::fs::write(&hooks.signals, "")?;
+    driver.write_file(&hooks.settings, hooks.content.as_bytes())?;
+    driver.write_file(&hooks.signals, b"")?;
     Ok(())
 }
 
@@ -234,22 +243,9 @@ impl Stage {
     /// `terminal.kill` then `terminal.rm`, tolerating a terminal that
     /// is already gone. `address` is the hc address (`t7`).
     pub(crate) async fn remove(&self, address: &str) -> Result<(), Fail> {
-        let kill = self
-            .client
-            .terminal_kill(TerminalParams {
-                terminal: address.to_string(),
-                caller: None,
-            })
-            .await;
+        let kill = self.driver.kill(&self.client, address).await;
         tolerate(kill.map(|t| serde_json::to_value(t).unwrap_or_default()))?;
-        tolerate(
-            self.client
-                .call(
-                    "terminal.rm",
-                    Some(serde_json::json!({ "terminal": address })),
-                )
-                .await,
-        )
+        tolerate(self.driver.rm(&self.client, address).await)
     }
 
     /// `terminal.run` a role, then record `role.started` with its
@@ -323,35 +319,39 @@ impl Stage {
         // signals truncated — at every start and resume, so a moved
         // binary or studio directory heals on the next launch.
         if let Some(hooks) = &launch.hooks {
-            prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
+            prepare_hooks_with(&*self.driver, hooks)
+                .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         } else if let Some(sig) = launch.prep.as_ref().and_then(runners::prep_signals_file) {
-            runners::truncate_signals(sig)
+            runners::truncate_signals_with(&*self.driver, sig)
                 .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         }
         let role_dir = dir.join("roles").join(&start.role);
-        crate::guard::prepare_role(&role_dir, &self.exe_dir)
+        crate::guard::prepare_role_with(&*self.driver, &role_dir, &self.exe_dir)
             .map_err(|e| Fail::refused(format!("guard files: {e}")))?;
         let cwd = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
         let run = self
-            .client
-            .terminal_run(RunParams {
-                argv: launch.argv.clone(),
-                name: Some(start.terminal.clone()),
-                cwd: Some(cwd.to_string_lossy().into_owned()),
-                env: role_env(
-                    studio,
-                    start,
-                    &self.state_dir,
-                    &self.exe_dir,
-                    &self.path_env,
-                    launch.env.clone(),
-                    runner_env,
-                ),
-                labels: labels(studio, state, start),
-                no_parent: true,
-                no_notify: true,
-                ..RunParams::default()
-            })
+            .driver
+            .run(
+                &self.client,
+                RunParams {
+                    argv: launch.argv.clone(),
+                    name: Some(start.terminal.clone()),
+                    cwd: Some(cwd.to_string_lossy().into_owned()),
+                    env: role_env(
+                        studio,
+                        start,
+                        &self.state_dir,
+                        &self.exe_dir,
+                        &self.path_env,
+                        launch.env.clone(),
+                        runner_env,
+                    ),
+                    labels: labels(studio, state, start),
+                    no_parent: true,
+                    no_notify: true,
+                    ..RunParams::default()
+                },
+            )
             .await;
         let address = match run {
             Ok(r) => r.terminal.address,
@@ -494,18 +494,10 @@ impl Stage {
             // fatal. A core without `terminal.rm` keeps the record.
             Action::RemoveFinished { terminal, address } => {
                 if self
-                    .client
-                    .explain_unavailable(hc_proto::method::TERMINAL_RM)
-                    .is_none()
+                    .driver
+                    .supports(&self.client, hc_proto::method::TERMINAL_RM)
                 {
-                    match self
-                        .client
-                        .call(
-                            "terminal.rm",
-                            Some(serde_json::json!({ "terminal": address })),
-                        )
-                        .await
-                    {
+                    match self.driver.rm(&self.client, address).await {
                         Ok(_) => crate::stagelog::stage_log!(
                             "cleared finished terminal {terminal} ({address})"
                         ),
@@ -558,7 +550,7 @@ impl Stage {
                 // retries on a later tick.
                 let area = workareas::area_of(start);
                 let cwd = match workareas::ensure(
-                    &mut *self.git.borrow_mut(),
+                    &mut *self.driver.git(),
                     studio,
                     &start.repo,
                     &start.members,

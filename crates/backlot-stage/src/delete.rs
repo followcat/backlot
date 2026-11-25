@@ -19,10 +19,10 @@ use crate::delete_ops::{
     utc_stamp_now,
 };
 use crate::delete_render::format_report;
+use crate::driver::{LocalDriver, MachineDriver};
 use crate::link;
 use crate::prune::{self, Plan, Step};
 use crate::store;
-use crate::workareas::real_git;
 
 /// Summary of what `backlot studio delete` did or (with `--dry-run`) would do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +170,7 @@ async fn run_local(
         }
     }
 
+    let driver = LocalDriver::new();
     // Step 2: Close studio terminals and prevent stage resume.
     let matched = match &connected {
         Some(link) => list_studio_terminals(&link.client, id).await?,
@@ -182,14 +183,15 @@ async fn run_local(
     if !dry_run {
         close_roles_in_ledger(&dir, &state, &by)?;
         if let Some(link) = &connected {
-            close_terminals(&link.client, &matched).await?;
+            close_terminals(&driver, &link.client, &matched).await?;
         }
     }
 
     // Step 3: Prune worktrees and branches safely.
     let cfg = state.studio.as_ref().expect("checked studio exists");
-    let mut git = real_git;
-    let (plan, mut steps) = prune::plan(&mut git, cfg);
+    let mut git = driver.git();
+    let git = &mut **git;
+    let (plan, mut steps) = prune::plan(git, cfg);
     let repos = match plan {
         Plan::NotWorkTree => {
             return Err(Fail::refused(format!(
@@ -201,7 +203,7 @@ async fn run_local(
     };
     for repo in repos {
         let label = (!cfg.members.is_empty()).then(|| prune::member_leaf(&repo));
-        match prune::prune_studio(&mut git, id, &dir, &repo, label.as_deref(), dry_run, force) {
+        match prune::prune_studio(git, id, &dir, &repo, label.as_deref(), dry_run, force) {
             Ok(more) => steps.extend(more),
             Err(e) if cfg.members.is_empty() => return Err(e),
             Err(e) => steps.push(Step::KeptRepo(

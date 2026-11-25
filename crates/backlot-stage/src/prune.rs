@@ -21,9 +21,10 @@ use std::path::{Path, PathBuf};
 use backlot_model::state::StudioConfig;
 
 use crate::cli::Fail;
+use crate::driver::{LocalDriver, MachineDriver};
 use crate::prune_paths::{shown, under};
 use crate::store;
-use crate::workareas::{GitRun, err_line, real_git};
+use crate::workareas::{GitRun, err_line};
 
 /// One thing prune did — or, in a dry run, would do.
 #[derive(Debug, Clone, PartialEq)]
@@ -294,6 +295,25 @@ pub(crate) fn run(
     dry_run: bool,
     force: bool,
 ) -> Result<String, Fail> {
+    run_with(
+        &LocalDriver::new(),
+        base,
+        studio,
+        all_finished,
+        dry_run,
+        force,
+    )
+}
+
+/// [`run`] through a driver's git runner.
+pub(crate) fn run_with(
+    driver: &dyn MachineDriver,
+    base: &Path,
+    studio: Option<String>,
+    all_finished: bool,
+    dry_run: bool,
+    force: bool,
+) -> Result<String, Fail> {
     let names = match (&studio, all_finished) {
         (Some(name), false) => vec![crate::cli::check_studio_name(name)?],
         (None, true) => store::studios(base).map_err(|e| Fail::refused(e.to_string()))?,
@@ -302,7 +322,8 @@ pub(crate) fn run(
     if names.is_empty() {
         return Ok("no finished studios to prune\n".into());
     }
-    let mut git = real_git;
+    let mut git = driver.git();
+    let git = &mut **git;
     let mut blocks = Vec::new();
     for name in names {
         let dir = store::studio_dir(base, &name);
@@ -329,7 +350,7 @@ pub(crate) fn run(
         // binding has none and a broken member is reported kept, so
         // either way the pass still reaches the state records; only
         // a single-repository binding with no work tree refuses.
-        let (plan, mut steps) = plan(&mut git, cfg);
+        let (plan, mut steps) = plan(git, cfg);
         let repos = match plan {
             Plan::NotWorkTree => {
                 return Err(Fail::refused(format!(
@@ -343,15 +364,7 @@ pub(crate) fn run(
             // A workspace names the member in its branch lines; a
             // single repository needs no such qualifier.
             let label = (!cfg.members.is_empty()).then(|| member_leaf(&repo));
-            match prune_studio(
-                &mut git,
-                &name,
-                &dir,
-                &repo,
-                label.as_deref(),
-                dry_run,
-                force,
-            ) {
+            match prune_studio(git, &name, &dir, &repo, label.as_deref(), dry_run, force) {
                 Ok(more) => steps.extend(more),
                 // A member that passes its probe but then refuses a
                 // git step is kept as a whole and the others still

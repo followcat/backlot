@@ -10,7 +10,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::cli::Fail;
-use crate::workareas::{self, GitOut};
+use crate::driver::{LocalDriver, MachineDriver};
+use crate::workareas::{self, GitOut, GitRun};
 
 /// What the bound path is (D4).
 #[derive(Debug, Clone, PartialEq)]
@@ -36,13 +37,24 @@ pub enum PathShape {
 /// never meet a check that disagrees. A broken mark counts as no
 /// repository — the path classifies plain and `git init` repairs it.
 pub fn is_git(path: &Path) -> bool {
-    path.join(".git").exists() && prove_git(&path.to_string_lossy()).is_ok()
+    is_git_with(&LocalDriver::new(), path)
+}
+
+/// [`is_git`] through a driver's git runner.
+pub fn is_git_with(driver: &dyn MachineDriver, path: &Path) -> bool {
+    path.join(".git").exists() && prove_git(driver, &path.to_string_lossy()).is_ok()
 }
 
 /// Does the repository at `path` hold at least one commit — one
 /// `rev-parse --verify HEAD`, like `repos`' `git log -1` probe.
-pub fn has_commits(path: &Path) -> bool {
-    let out = workareas::real_git(
+pub fn has_commits_with(driver: &dyn MachineDriver, path: &Path) -> bool {
+    let mut git = driver.git();
+    commits_held(&mut **git, path)
+}
+
+/// The one `rev-parse --verify HEAD` probe, through a runner.
+fn commits_held(git: &mut GitRun<'_>, path: &Path) -> bool {
+    let out = git(
         &[
             "-C",
             &path.to_string_lossy(),
@@ -67,8 +79,8 @@ pub fn has_commits(path: &Path) -> bool {
 /// parent (`/var` → `/private/var` on macOS) cannot split them. A
 /// path git cannot answer keeps itself as its identity — it is
 /// reported by the checks that probe it.
-fn common_dir(path: &Path) -> PathBuf {
-    let out = workareas::real_git(
+fn common_dir(git: &mut GitRun<'_>, path: &Path) -> PathBuf {
+    let out = git(
         &[
             "-C",
             &path.to_string_lossy(),
@@ -93,10 +105,10 @@ fn common_dir(path: &Path) -> PathBuf {
 /// One path per repository — `common_dir` is the identity, so linked
 /// worktrees collapse to a single member; the main checkout (`.git` a
 /// directory, not a worktree's gitfile) wins the slot (D4, D10).
-fn distinct(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+fn distinct(git: &mut GitRun<'_>, paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
     let mut members: Vec<(PathBuf, PathBuf)> = Vec::new();
     for p in paths {
-        let id = common_dir(&p);
+        let id = common_dir(git, &p);
         match members.iter_mut().find(|(mid, _)| *mid == id) {
             None => members.push((id, p)),
             Some((_, stored)) if p.join(".git").is_dir() && !stored.join(".git").is_dir() => {
@@ -113,17 +125,23 @@ fn distinct(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
 /// distinct repositories: linked worktrees of one repository count
 /// once (D4).
 pub fn member_repos(path: &Path) -> Vec<String> {
+    member_repos_with(&LocalDriver::new(), path)
+}
+
+/// [`member_repos`] through a driver's git runner.
+pub fn member_repos_with(driver: &dyn MachineDriver, path: &Path) -> Vec<String> {
     let mut candidates = Vec::new();
     if let Ok(rd) = std::fs::read_dir(path) {
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() && is_git(&p) {
+            if p.is_dir() && is_git_with(driver, &p) {
                 candidates.push(p);
             }
         }
     }
     candidates.sort();
-    let mut members = distinct(candidates);
+    let mut git = driver.git();
+    let mut members = distinct(&mut **git, candidates);
     members.sort();
     members
         .iter()
@@ -134,12 +152,17 @@ pub fn member_repos(path: &Path) -> Vec<String> {
 /// Classify `path`: a repository, a workspace over member
 /// repositories, or a plain directory.
 pub fn classify(path: &Path) -> PathShape {
-    if is_git(path) {
+    classify_with(&LocalDriver::new(), path)
+}
+
+/// [`classify`] through a driver's git runner.
+pub fn classify_with(driver: &dyn MachineDriver, path: &Path) -> PathShape {
+    if is_git_with(driver, path) {
         return PathShape::Repo {
-            has_commits: has_commits(path),
+            has_commits: has_commits_with(driver, path),
         };
     }
-    let members = member_repos(path);
+    let members = member_repos_with(driver, path);
     if !members.is_empty() {
         return PathShape::Workspace { members };
     }
@@ -191,8 +214,9 @@ pub struct Binding {
 
 /// `git rev-parse --git-dir` proves a repository the user owns —
 /// linked worktrees count alike.
-fn prove_git(repo: &str) -> Result<(), Fail> {
-    let out = workareas::real_git(&["rev-parse", "--git-dir", "--end-of-options"], repo);
+fn prove_git(driver: &dyn MachineDriver, repo: &str) -> Result<(), Fail> {
+    let mut git = driver.git();
+    let out = (**git)(&["rev-parse", "--git-dir", "--end-of-options"], repo);
     if out.code != 0 {
         return Err(Fail::refused(format!(
             "'{repo}' is not a git repository ({})",
@@ -208,11 +232,21 @@ fn prove_git(repo: &str) -> Result<(), Fail> {
 /// options named, and a flag that fights the shape refuses too. Pure
 /// checks only — nothing is created.
 pub fn check(repo: &str, init: bool, no_git: bool) -> Result<Binding, Fail> {
+    check_with(&LocalDriver::new(), repo, init, no_git)
+}
+
+/// [`check`] through a driver's git runner.
+pub fn check_with(
+    driver: &dyn MachineDriver,
+    repo: &str,
+    init: bool,
+    no_git: bool,
+) -> Result<Binding, Fail> {
     if init && no_git {
         return Err(Fail::usage("give --init or --no-git, not both"));
     }
     let path = Path::new(repo);
-    match classify(path) {
+    match classify_with(driver, path) {
         PathShape::Repo { has_commits } => {
             if no_git {
                 return Err(Fail::refused(format!(
@@ -224,7 +258,7 @@ pub fn check(repo: &str, init: bool, no_git: bool) -> Result<Binding, Fail> {
                     "--init has no effect: '{repo}' is already a git repository"
                 )));
             }
-            prove_git(repo)?;
+            prove_git(driver, repo)?;
             Ok(Binding::default())
         }
         PathShape::Workspace { members } => {
@@ -240,7 +274,7 @@ pub fn check(repo: &str, init: bool, no_git: bool) -> Result<Binding, Fail> {
                 )));
             }
             for member in &members {
-                prove_git(member)?;
+                prove_git(driver, member)?;
             }
             Ok(Binding {
                 members,
@@ -265,18 +299,18 @@ pub fn check(repo: &str, init: bool, no_git: bool) -> Result<Binding, Fail> {
     }
 }
 
-fn run_git(args: &[String], cwd: &str) -> GitOut {
+fn run_git(git: &mut GitRun<'_>, args: &[String], cwd: &str) -> GitOut {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    workareas::real_git(&refs, cwd)
+    git(&refs, cwd)
 }
 
 /// One empty initial commit in `repo` — idempotent: a repository
 /// that already holds commits is left alone.
-fn ensure_initial_commit(repo: &Path) -> Result<(), Fail> {
-    if has_commits(repo) {
+fn ensure_initial_commit(git: &mut GitRun<'_>, repo: &Path) -> Result<(), Fail> {
+    if commits_held(git, repo) {
         return Ok(());
     }
-    let out = run_git(&initial_commit_args(repo), &repo.to_string_lossy());
+    let out = run_git(git, &initial_commit_args(repo), &repo.to_string_lossy());
     if out.code != 0 {
         return Err(Fail::refused(format!(
             "cannot create the initial commit in {} ({})",
@@ -293,13 +327,25 @@ fn ensure_initial_commit(repo: &Path) -> Result<(), Fail> {
 /// member — gets the same empty initial commit; a no-git binding
 /// touches nothing.
 pub fn initialize(repo: &str, members: &[String], no_git: bool, init: bool) -> Result<(), Fail> {
+    initialize_with(&LocalDriver::new(), repo, members, no_git, init)
+}
+
+/// [`initialize`] through a driver's git runner.
+pub fn initialize_with(
+    driver: &dyn MachineDriver,
+    repo: &str,
+    members: &[String],
+    no_git: bool,
+    init: bool,
+) -> Result<(), Fail> {
     if no_git {
         return Ok(());
     }
     let root = PathBuf::from(repo);
     if init {
+        let mut git = driver.git();
         for args in init_args(&root) {
-            let out = run_git(&args, &root.to_string_lossy());
+            let out = run_git(&mut **git, &args, &root.to_string_lossy());
             if out.code != 0 {
                 return Err(Fail::refused(format!(
                     "git init failed in {repo} ({})",
@@ -315,13 +361,15 @@ pub fn initialize(repo: &str, members: &[String], no_git: bool, init: bool) -> R
         // nothing to initialize; the stage's `not a git repository`
         // attention names it at the first role start. A workspace
         // root is never a repository itself — its members are.
-        if is_git(&root) {
-            ensure_initial_commit(&root)?;
+        if is_git_with(driver, &root) {
+            let mut git = driver.git();
+            ensure_initial_commit(&mut **git, &root)?;
         }
         return Ok(());
     }
-    for member in distinct(members.iter().map(PathBuf::from)) {
-        ensure_initial_commit(&member)?;
+    let mut git = driver.git();
+    for member in distinct(&mut **git, members.iter().map(PathBuf::from)) {
+        ensure_initial_commit(&mut **git, &member)?;
     }
     Ok(())
 }
