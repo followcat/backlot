@@ -25,7 +25,7 @@ use backlot_model::state::actor_task;
 
 use super::cline_hook::{self, Spec};
 use super::splice::write600;
-use super::{Launch, LaunchCtx, PlanError, Prep, Session};
+use super::{Launch, LaunchCtx, PlanError, Prep, Session, predates_start};
 
 /// The attention reason a failed `prepare` raises.
 pub const CLINE_PREP_FAILED: &str = "cline prep failed";
@@ -126,7 +126,8 @@ fn file_time_ms(path: &Path) -> Option<u64> {
 /// The session a fresh launch created (S14a section 3): a manifest
 /// `<id>/<id>.json` under `sessions_root` whose `cwd` (or
 /// `workspace_root`) is the role's, whose file is at or after the
-/// launch, whose `source` is `cli` when it names one, and whose `pid`
+/// launch (up to [`super::BIRTH_SLACK_MS`] before it), whose
+/// `source` is `cli` when it names one, and whose `pid`
 /// belongs to the role's own `.cline` process — its parent is the
 /// terminal's pid. Dirs with no manifest, corrupt JSON and ids
 /// another role claims are skipped; the newest qualified one wins.
@@ -184,7 +185,7 @@ pub fn session_at(
         let Some(ms) = file_time_ms(&manifest) else {
             continue;
         };
-        if ms < started_ms {
+        if predates_start(ms, started_ms) {
             continue;
         }
         if best.as_ref().is_none_or(|(b, _)| ms > *b) {

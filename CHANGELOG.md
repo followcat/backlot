@@ -21,6 +21,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - **Only you finish a studio.** `backlot studio finish` is the person's alone: a role that runs it — the producer included — is refused with `finishing the studio is the person's call; say in your report that it is ready, and they finish it from the lot`, and nothing joins the ledger. The producer reports that the studio is ready and what is still yours to do; the studio menu in the lot finishes it (`prompts/producer.md`, `docs/studio/guide.md`, `docs/studio/ledger.md`, `docs/studio/design.md`).
 - **The selected studio stands out with an accent border, title chip, and bold strip/stacked label.** Whether or not the lot owns the keys, the selected studio (cursor studio, else `▸` current studio, else first studio) draws all frame edges (`╭ ─ ╮ │ ╰ ╯`) in `accent` with a bold high-contrast `accent` title chip (` ▸ <studio> `) in its top border, while unselected blocks stay muted in `surface1`; collapsed strip and stacked rows also highlight the selected studio's label in bold `accent`.
 
+### Fixed
+
+- **A cmd session created in the same clock tick as its role start is still found.** Session discovery now accepts a session file born up to 2 s before `started_ms` — the kernel's coarse file clock can stamp a file written just after the launch earlier than the start record — for `cmd`, and the same slack covers `agy`, `cline` and `codex` discovery; the `taken` set and the cwd check still decide which session is the role's.
+
 ## 0.4.5 — 2026-11-25
 
 The lot stays short: only the studio you are in shows everything, and closed seats and done tasks fold into one line each. `Alt+L` jumps to the lot, and backlot is now based on hc-tui v0.1.20.

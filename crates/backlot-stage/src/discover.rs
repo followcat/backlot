@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::runners;
+use crate::runners::predates_start;
 
 /// One external command the stage wants run.
 pub struct ExecCall {
@@ -273,8 +274,9 @@ fn walk_days(dir: &Path, level: usize, bounds: &[&str], on_floor: bool, out: &mu
 /// session opened later in the same folder never wins. Only day
 /// directories from the day before the role started onward are
 /// read at all. A file counts when its cwd is the role's, it was
-/// created after the role started and no other role already claims
-/// the id.
+/// created after the role started — or up to
+/// [`runners::BIRTH_SLACK_MS`] before it — and no other role already
+/// claims the id.
 fn codex_session(
     home: &Path,
     cwd: &str,
@@ -298,7 +300,7 @@ fn codex_session(
             .collect();
         rollouts.sort();
         for f in rollouts {
-            if file_time_ms(&f).is_none_or(|ms| ms < started_ms) {
+            if file_time_ms(&f).is_none_or(|ms| predates_start(ms, started_ms)) {
                 continue;
             }
             let Ok(file) = fs::File::open(&f) else {
