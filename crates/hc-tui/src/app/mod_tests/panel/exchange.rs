@@ -170,7 +170,10 @@ async fn enter_on_talk_opens_read_only_cardview_and_esc_returns_to_dock_row() {
     // CardView renders even while `hollywood.mode == Hidden`, scrolls on `j`, ignores `a`/`x`.
     let screen = screen_lines(&draw_to(&mut app, 120, 20)).join("\n");
     assert!(screen.contains("acme-shop #12"), "{screen}");
-    assert!(screen.contains("# Checkout Report"), "{screen}");
+    assert!(
+        screen.contains("Checkout Report") && !screen.contains("# Checkout Report"),
+        "{screen}"
+    );
     assert!(!screen.contains("a apply"), "{screen}");
 
     key(&mut app, hc_vt::Key::Char('j'));

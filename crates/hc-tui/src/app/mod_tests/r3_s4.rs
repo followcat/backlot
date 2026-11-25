@@ -237,6 +237,118 @@ async fn unified_reader_geometry_matches_across_callsheet_dock_and_sheet() {
     let narrow_dock = app.hollywood_hits.view.as_ref().unwrap().area;
 
     assert_eq!(narrow_cs, narrow_dock);
-    assert_eq!(narrow_cs.width, 80 * 7 / 8);
-    assert_eq!(narrow_cs.height, 24 * 7 / 8);
+    assert_eq!(narrow_cs.width, 52);
+    assert_eq!(narrow_cs.height, 22);
+}
+
+#[tokio::test]
+async fn reader_dims_panes_and_sidebar_while_keeping_beside_dock_undimmed() {
+    use ratatui::style::Modifier;
+
+    let mut app = s4_app();
+    app.area = (160, 40);
+    app.panel.mode = PanelMode::Expanded;
+    app.panel.focused = true;
+    app.hollywood.mode = LayerMode::Collapsed;
+    app.hollywood.view = Some(CardView {
+        card: None,
+        title: "acme-shop #1".into(),
+        lines: vec!["已记录最终需求 v6".into()],
+        scroll: 0,
+    });
+
+    let backend = draw_to(&mut app, 160, 40);
+    let buf = backend.buffer();
+    let dock = app.panel_hits.area;
+    assert!(!dock.is_empty());
+    // Pane/sidebar cell outside the Reader card and dock must be DIM.
+    assert!(
+        buf[(0, 0)].modifier.contains(Modifier::DIM),
+        "sidebar should be dimmed behind Reader"
+    );
+    assert!(
+        buf[(26, 2)].modifier.contains(Modifier::DIM),
+        "pane surface outside Reader card should be dimmed"
+    );
+    // Beside Lot Dock cells must stay undimmed.
+    assert!(
+        !buf[(dock.x + 1, dock.y + 1)]
+            .modifier
+            .contains(Modifier::DIM),
+        "beside Lot Dock must stay undimmed while Reader is open"
+    );
+}
+
+#[tokio::test]
+async fn slice2_visual_shots() {
+    use unicode_width::UnicodeWidthStr;
+    let Ok(dir) = std::env::var("LOT_READER_SHOTS") else {
+        return;
+    };
+    let dump = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> String {
+        (0..h)
+            .map(|y| {
+                let mut row = String::new();
+                let mut x = 0u16;
+                while x < w {
+                    let sym = buf[(x, y)].symbol();
+                    row.push_str(sym);
+                    x += UnicodeWidthStr::width(sym).max(1) as u16;
+                }
+                row
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let sample_cjk = vec![
+        "已记录最终需求 v6，并已正式向导演派发（dispatch）方案 A+：".into(),
+        "- T1 同步基线 `dbbe825be`（crates/hc-tui/src/panel/rows.rs）".into(),
+        "- T2 回填角色门控回归测试，验收通过后汇总提交。".into(),
+    ];
+
+    for (name, w, h, lines) in [
+        ("s2-80x24.txt", 80u16, 24u16, sample_cjk.clone()),
+        ("s2-120x36.txt", 120, 36, sample_cjk.clone()),
+        (
+            "s2-200x44.txt",
+            200,
+            44,
+            (1..=28)
+                .map(|i| {
+                    if i == 1 {
+                        "### T1 Baseline Sync & Gate Verification".into()
+                    } else if i == 2 {
+                        "已完成 `crates/backlot-stage/src/` 下全部门控检查：".into()
+                    } else if i == 3 {
+                        "- crates/backlot-stage/src/hwood_read.rs:230 — 限制读取在 studio 根目录内"
+                            .into()
+                    } else if i == 5 {
+                        "```sh".into()
+                    } else if i == 6 {
+                        "cargo test -p hc-tui panel::exchange".into()
+                    } else if i == 7 {
+                        "test result: ok. 18 passed; 0 failed (1.2s)".into()
+                    } else if i == 8 {
+                        "```".into()
+                    } else {
+                        format!("detail line {i}")
+                    }
+                })
+                .collect(),
+        ),
+    ] {
+        let mut app = s4_app();
+        app.area = (w, h);
+        app.panel.mode = PanelMode::Expanded;
+        app.hollywood.mode = LayerMode::Collapsed;
+        app.hollywood.view = Some(CardView {
+            card: None,
+            title: "OUTCOME #188 · acme-shop".into(),
+            lines,
+            scroll: 0,
+        });
+        let backend = draw_to(&mut app, w, h);
+        std::fs::write(format!("{dir}/{name}"), dump(backend.buffer(), w, h)).unwrap();
+    }
 }

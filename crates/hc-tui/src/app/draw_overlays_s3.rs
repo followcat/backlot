@@ -3,12 +3,25 @@
 
 use super::*;
 
+/// The dim every modal paints under itself, optionally leaving `exclude`
+/// (e.g. a beside Lot Dock behind the Reader) undimmed.
+pub(in crate::app) fn dim_cells_except(buf: &mut Buffer, exclude: Option<Rect>) {
+    let area = buf.area;
+    for y in area.y..area.bottom() {
+        for x in area.x..area.right() {
+            if exclude.is_some_and(|r| r.contains(ratatui::layout::Position::new(x, y))) {
+                continue;
+            }
+            let cell = &mut buf[(x, y)];
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+    }
+}
+
 /// The dim every modal paints under itself.
 pub(in crate::app) fn dim_cells(buf: &mut Buffer) {
-    for cell in &mut buf.content {
-        cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-        cell.set_style(cell.style().add_modifier(Modifier::DIM));
-    }
+    dim_cells_except(buf, None);
 }
 
 /// S3's action toast (§3): the pending reply's card under the notice
@@ -68,6 +81,25 @@ pub(super) fn draw_action_toast(
     true
 }
 
+/// Whether the beside Lot Dock should stay highlighted while `hollywood.view`
+/// is the only open modal (so `←`/`→` moves `▌` live on `Target::Talk`).
+pub(super) fn dock_live_with_reader(app: &App, area: Rect) -> bool {
+    app.hollywood.view.is_some()
+        && app.panel_beside(area.width)
+        && !app.hollywood.expanded()
+        && app.sheet.is_none()
+        && app.new_studio.is_none()
+        && app.hw_setup.is_none()
+        && app.studio_dialog.is_none()
+        && app.peek.is_none()
+        && !app.help
+        && app.settings.is_none()
+        && app.navigator.is_none()
+        && app.dialog.is_none()
+        && app.update_modal.is_none()
+        && matches!(app.panel.selected, Some(crate::panel::Target::Talk(..)))
+}
+
 /// The unified top-level Backlot Reader (`R3-M2`): renders `hollywood.view`
 /// (`card show`, `report show`, `hollywood show`, `records`) or an open
 /// Task Sheet report (`sheet.view`) centered inside `backlot_modal_surface`
@@ -93,7 +125,12 @@ pub(super) fn draw_reader(
         app.hollywood_hits.view = None;
         return false;
     };
-    dim_cells(buf);
+    let exclude = (app.panel_beside(area.width)
+        && app.sheet.is_none()
+        && !app.hollywood.expanded()
+        && !app.panel_hits.area.is_empty())
+    .then_some(app.panel_hits.area);
+    dim_cells_except(buf, exclude);
     let surface = app.backlot_modal_surface(area, layout, 64);
     app.hollywood_hits.view = Some(crate::hollywood::render_view(
         buf,

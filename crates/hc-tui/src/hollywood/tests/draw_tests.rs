@@ -1002,32 +1002,49 @@ fn the_card_view_has_a_complete_border_and_footer() {
             .map(|y| buf[(x, y)].symbol())
             .collect::<String>()
     };
-    for side in [
-        column(view.area.x),
-        column(view.area.x + view.area.width - 1),
-    ] {
-        let middle: String = side
-            .chars()
-            .skip(1)
-            .take(side.chars().count() - 2)
-            .collect();
-        assert!(middle.chars().all(|c| c == '│'), "side edge: {middle:?}");
-    }
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    let left_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
+        .map(|y| buf[(view.area.x, y)].symbol())
+        .collect();
+    let right_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
+        .map(|y| buf[(view.area.right() - 1, y)].symbol())
+        .collect();
+    assert_eq!(left_side[left_side.len() - 2], "├");
+    assert_eq!(right_side[right_side.len() - 2], "┤");
+    assert!(
+        left_side
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != left_side.len() - 2)
+            .all(|(_, s)| *s == "│"),
+        "left edge: {left_side:?}"
+    );
+    assert!(
+        right_side
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != right_side.len() - 2)
+            .all(|(_, s)| *s == "│"),
+        "right edge: {right_side:?}"
+    );
+    let _ = column;
+    let action_strip = row_of(&buf, area, view.area.bottom() - 2);
+    assert!(
+        action_strip.contains("a apply")
+            && action_strip.contains("x cancel")
+            && action_strip.contains("esc back"),
+        "action strip: {action_strip}"
+    );
+    let bottom = row_of(&buf, area, view.area.bottom() - 1);
     assert!(
         bottom.contains('╰') && bottom.contains('╯'),
         "bottom: {bottom}"
-    );
-    assert!(
-        bottom.contains("a apply") && bottom.contains("x cancel") && bottom.contains("esc back"),
-        "footer: {bottom}"
     );
 }
 
 #[test]
 fn the_card_views_footer_shows_the_pending_mark() {
     // An action kicked off inside the view reports `… <label>` in
-    // the footer while it runs.
+    // the action strip while it runs.
     let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
@@ -1038,8 +1055,8 @@ fn the_card_views_footer_shows_the_pending_mark() {
     let mut buf = Buffer::empty(area);
     let view =
         crate::hollywood::render_view(&mut buf, area, &view, Some("card apply c4"), &palettes()[0]);
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
-    assert!(bottom.contains("… card apply c4"), "footer: {bottom}");
+    let strip = row_of(&buf, area, view.area.bottom() - 2);
+    assert!(strip.contains("… card apply c4"), "action strip: {strip}");
 }
 
 #[test]
@@ -1059,13 +1076,13 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
     let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
     let top = row_of(&buf, area, view.area.y);
     assert!(top.contains("hollywood #7"), "top: {top}");
-    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    let strip = row_of(&buf, area, view.area.bottom() - 2);
     assert!(
-        bottom.contains("↑↓ scroll  esc back"),
-        "read-only footer: {bottom}"
+        strip.contains("↑↓ scroll  esc back"),
+        "read-only action strip: {strip}"
     );
-    assert!(!bottom.contains("a apply"), "no card keys: {bottom}");
-    assert!(!bottom.contains("x cancel"), "no card keys: {bottom}");
+    assert!(!strip.contains("a apply"), "no card keys: {strip}");
+    assert!(!strip.contains("x cancel"), "no card keys: {strip}");
 }
 
 #[test]
@@ -1263,4 +1280,230 @@ fn a_studio_frame_shows_its_next_step() {
         .map(|x| buf[(x, frame.y + 4)].symbol())
         .collect();
     assert!(!calm_row.contains("next:"), "{calm_row}");
+}
+
+fn wide_row_of(buf: &Buffer, x0: u16, x1: u16, y: u16) -> String {
+    use unicode_width::UnicodeWidthStr;
+    let mut out = String::new();
+    let mut x = x0;
+    while x < x1 {
+        let sym = buf[(x, y)].symbol();
+        out.push_str(sym);
+        x += UnicodeWidthStr::width(sym).max(1) as u16;
+    }
+    out.trim_end().to_string()
+}
+
+#[test]
+fn card_view_cjk_title_places_right_corners_at_exact_right_edge() {
+    let view = CardView {
+        card: None,
+        title: "OUTCOME #188 · acme-shop · 已记录最终需求 v6".into(),
+        lines: vec!["ok".into()],
+        scroll: 0,
+    };
+    let area = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
+    let right_x = rendered.area.right() - 1;
+    let bottom_y = rendered.area.bottom() - 1;
+    assert_eq!(buf[(right_x, rendered.area.y)].symbol(), "╮");
+    assert_eq!(buf[(right_x, bottom_y)].symbol(), "╯");
+    let top = wide_row_of(
+        &buf,
+        rendered.area.x,
+        rendered.area.right(),
+        rendered.area.y,
+    );
+    assert!(
+        top.contains("已记录最终需求 v6"),
+        "CJK title must not be overwritten by ─ dashes: {top}"
+    );
+}
+
+#[test]
+fn card_view_wraps_cjk_and_paths_without_ellipsis_and_keeps_kinsoku() {
+    let cjk_90 = "已记录最终需求版本六，并已正式向导演派发方案甲。我们要求每条路径都完整展示，不能在行尾截断成省略号，标点符号也要紧贴前一个字符。";
+    let path_90 = "crates/hc-tui/src/hollywood/deeply/nested/module/for/testing/long_path/reader_wrap_boundary.rs";
+    let view = CardView {
+        card: None,
+        title: "wrap check".into(),
+        lines: vec![cjk_90.into(), path_90.into()],
+        scroll: 0,
+    };
+    let area = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
+    let body_rows: Vec<String> = (rendered.body.y..rendered.body.bottom())
+        .map(|y| {
+            wide_row_of(&buf, rendered.body.x, rendered.body.right(), y)
+                .trim()
+                .to_string()
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    let joined: String = body_rows.concat();
+    assert!(!joined.contains('…'), "no ellipsis loss: {body_rows:?}");
+    assert!(
+        joined.contains("标点符号也要紧贴前一个字符。"),
+        "full CJK paragraph preserved across wrapped rows: {body_rows:?}"
+    );
+    assert!(
+        joined.contains("reader_wrap_boundary.rs"),
+        "full 90-char path preserved across wrapped rows: {body_rows:?}"
+    );
+    const CLOSING: &[char] = &[
+        '，', '。', '：', '；', '！', '？', '、', '）', '》', '」', '』', '】', '.', ',', ':', ';',
+        '!', '?', ')', ']', '}',
+    ];
+    for row in &body_rows {
+        let first = row.chars().next().unwrap();
+        assert!(
+            !CLOSING.contains(&first),
+            "wrapped row started with closing punctuation '{first}': {row:?}"
+        );
+    }
+    assert!(
+        body_rows.iter().any(|r| r.ends_with('/')),
+        "90-char path should prefer breaking after '/': {body_rows:?}"
+    );
+}
+
+#[test]
+fn card_view_sizes_adaptively_for_short_and_long_notes() {
+    let area = Rect::new(0, 0, 200, 44);
+
+    let short = CardView {
+        card: None,
+        title: "OUTCOME #188".into(),
+        lines: vec!["line one".into(), "line two".into()],
+        scroll: 0,
+    };
+    let mut buf = Buffer::empty(area);
+    let short_rendered =
+        crate::hollywood::render_view(&mut buf, area, &short, None, &palettes()[0]);
+    assert!(
+        short_rendered.area.height <= 10,
+        "2-line note should render compactly (<=10), got {}",
+        short_rendered.area.height
+    );
+
+    let long = CardView {
+        card: None,
+        title: "REPORT #188".into(),
+        lines: (1..=60).map(|i| format!("report line {i}")).collect(),
+        scroll: 0,
+    };
+    let mut buf = Buffer::empty(area);
+    let long_rendered = crate::hollywood::render_view(&mut buf, area, &long, None, &palettes()[0]);
+    assert_eq!(
+        long_rendered.area.height, 32,
+        "60-line note at 200x44 should cap at min(32, 44 - 2) = 32"
+    );
+    assert!(
+        !long_rendered.scrollbar.is_empty(),
+        "60-line note should show scrollbar"
+    );
+    let bottom = wide_row_of(
+        &buf,
+        long_rendered.area.x,
+        long_rendered.area.right(),
+        long_rendered.area.bottom() - 1,
+    );
+    assert!(
+        bottom.contains("lines 1–") && bottom.contains(" of 60"),
+        "bottom border should show scroll range: {bottom}"
+    );
+}
+
+#[test]
+fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
+    let palette = palettes()[0].clone();
+    let md = CardView {
+        card: None,
+        title: "reports/188.md".into(),
+        lines: vec![
+            "## MixedCase Heading".into(),
+            "- **Bold** `code` [docs](https://example.invalid) dbbe825be crates/hc-tui/src/view.rs:82".into(),
+            "".into(),
+            "".into(),
+            "".into(),
+            "```rs".into(),
+            "// 中文注释".into(),
+            "```".into(),
+        ],
+        scroll: 0,
+    };
+    let area = Rect::new(0, 0, 100, 30);
+    let mut buf = Buffer::empty(area);
+    let rendered = crate::hollywood::render_view(&mut buf, area, &md, None, &palette);
+    let text: Vec<String> = (rendered.body.y..rendered.body.bottom())
+        .map(|y| wide_row_of(&buf, rendered.body.x, rendered.body.right(), y))
+        .collect();
+    let joined = text.join("\n");
+    assert!(
+        joined.contains("MixedCase Heading"),
+        "case preserved: {joined}"
+    );
+    assert!(joined.contains("▪ Bold code docs dbbe825be"), "{joined}");
+    assert!(
+        !joined.contains("https://example.invalid"),
+        "link URL hidden: {joined}"
+    );
+    assert!(
+        joined.contains("▏ // 中文注释"),
+        "code block gutter + text: {joined}"
+    );
+
+    // Verify heading accent, code surface0, SHA/path teal, and code surface1 display-width pad.
+    let heading_y = rendered.body.y;
+    assert_eq!(buf[(rendered.area.x + 2, heading_y)].fg, palette.accent);
+    // Find `▏` row and ensure all content cells up to right pad have `surface1`.
+    let code_y = (rendered.body.y..rendered.body.bottom())
+        .find(|&y| buf[(rendered.area.x + 2, y)].symbol() == "▏")
+        .expect("fenced code row");
+    assert_eq!(buf[(rendered.area.x + 2, code_y)].bg, palette.surface1);
+    assert_eq!(
+        buf[(rendered.area.right() - 3, code_y)].bg,
+        palette.surface1
+    );
+
+    // PlainLog skips markdown parsing, highlights error/pass, and uses `↪ ` continuation.
+    let log = CardView {
+        card: None,
+        title: "checks/tests.log".into(),
+        lines: vec![
+            "## not a heading".into(),
+            "error[E0001]: very long failure message that wraps across narrow card width cleanly without ellipsis".into(),
+            "test result: ok. 18 passed".into(),
+        ],
+        scroll: 0,
+    };
+    let narrow = Rect::new(0, 0, 60, 24);
+    let mut log_buf = Buffer::empty(narrow);
+    let log_ren = crate::hollywood::render_view(&mut log_buf, narrow, &log, None, &palette);
+    let log_rows: Vec<String> = (log_ren.body.y..log_ren.body.bottom())
+        .map(|y| wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y))
+        .collect();
+    let log_joined = log_rows.join("\n");
+    assert!(
+        log_joined.contains("## not a heading"),
+        "no markdown parse in PlainLog: {log_joined}"
+    );
+    assert!(
+        log_joined.contains("↪ "),
+        "PlainLog continuation glyph: {log_joined}"
+    );
+    let err_y = (log_ren.body.y..log_ren.body.bottom())
+        .find(|&y| log_buf[(log_ren.area.x + 2, y)].symbol() == "e")
+        .expect("error line");
+    assert_eq!(log_buf[(log_ren.area.x + 2, err_y)].fg, palette.red);
+    let ok_y = (log_ren.body.y..log_ren.body.bottom())
+        .find(|&y| {
+            wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y)
+                .trim_start()
+                .starts_with("test result: ok")
+        })
+        .expect("ok line");
+    assert_eq!(log_buf[(log_ren.area.x + 2, ok_y)].fg, palette.green);
 }
