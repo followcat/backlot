@@ -93,6 +93,18 @@ pub struct Exchange {
     pub seq: u64,
     /// The sender: `user`, `hollywood`, or a stage-written notice's `by`.
     pub who: String,
+    /// The recipient (`hollywood`, `user`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Turn kind (`"tell"` for `message.sent`, `"report"` for `hollywood.reported`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Reserved for schema parity with studio exchange entries; omitted on wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// Ledger timestamp in milliseconds, omitted when `0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ts_ms: Option<u64>,
     /// The line's text (≤ [`HEADLINE_CHARS`]).
     pub text: String,
     /// Whether this entry carries a file body on disk (`--body` on a
@@ -112,6 +124,9 @@ pub struct CardSummary {
     pub action: String,
     /// Hollywood's one-line why.
     pub why: String,
+    /// Proposal timestamp in milliseconds, omitted when `0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ts_ms: Option<u64>,
 }
 
 /// The optional `hollywood` object: `state` is the stage's read of
@@ -211,6 +226,7 @@ pub fn hollywood_section_with_activity(
                     studio: cap(c.action.studio()),
                     action: cap(&action),
                     why: cap(&c.why),
+                    ts_ms: (c.ts_ms > 0).then_some(c.ts_ms),
                 }
             })
             .collect(),
@@ -234,6 +250,10 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
             m.text.as_ref().map(|text| Exchange {
                 seq: m.seq,
                 who: cap(&m.from),
+                to: Some(cap(&m.to)),
+                kind: Some("tell".into()),
+                task: None,
+                ts_ms: (m.ts_ms > 0).then_some(m.ts_ms),
                 text: cap_headline(text),
                 has_body: m.file.is_some(),
             })
@@ -241,6 +261,10 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
         .chain(state.reports.iter().map(|r| Exchange {
             seq: r.seq,
             who: "hollywood".into(),
+            to: Some("user".into()),
+            kind: Some("report".into()),
+            task: None,
+            ts_ms: (r.ts_ms > 0).then_some(r.ts_ms),
             text: cap_headline(&r.headline),
             has_body: r.body.is_some(),
         }))

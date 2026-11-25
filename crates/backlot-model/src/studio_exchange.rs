@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::hollywood_summary::HEADLINE_CHARS;
-use crate::state::{Message, StudioState};
+use crate::state::{Message, StudioState, actor_task};
 use crate::summary::cap;
 
 /// Maximum user-facing exchange turns carried per studio in the summary.
@@ -21,6 +21,18 @@ pub struct StudioExchange {
     pub seq: u64,
     /// Sender role (`user`, `producer`, `hollywood`, …).
     pub who: String,
+    /// Recipient role (`user`, `producer`, `hollywood`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Turn kind (`"tell"` for `message.queued`, `"report"` for `report.sent`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Task id (`t1`, …) for task-bound reports and actor messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// Ledger timestamp in milliseconds, omitted when `0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ts_ms: Option<u64>,
     /// One-line snippet (≤ [`HEADLINE_CHARS`] = 200 chars).
     pub text: String,
     /// Studio-relative path (`messages/…` or `reports/…`) opened on Enter.
@@ -111,9 +123,14 @@ pub fn studio_exchange(
                     .map(|s| cap_snippet(s.trim()))
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| cap(&format!("{} → {}", m.from, m.to)));
+                let task = actor_task(&m.from).or_else(|| actor_task(&m.to)).map(cap);
                 StudioExchange {
                     seq: m.seq,
                     who: cap(&m.from),
+                    to: Some(cap(&m.to)),
+                    kind: Some("tell".into()),
+                    task,
+                    ts_ms: (m.ts_ms > 0).then_some(m.ts_ms),
                     text,
                     file: m.file.as_deref().and_then(clean_relpath),
                 }
@@ -124,9 +141,18 @@ pub fn studio_exchange(
                     .map(|s| cap_snippet(s.trim()))
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| cap(&format!("report: {}", r.node)));
+                let task = if state.tasks.contains_key(&r.node) {
+                    Some(cap(&r.node))
+                } else {
+                    actor_task(&r.from).map(cap)
+                };
                 StudioExchange {
                     seq: r.seq,
                     who: cap(&r.from),
+                    to: Some(cap(&r.to)),
+                    kind: Some("report".into()),
+                    task,
+                    ts_ms: (r.ts_ms > 0).then_some(r.ts_ms),
                     text,
                     file: clean_relpath(&r.file),
                 }

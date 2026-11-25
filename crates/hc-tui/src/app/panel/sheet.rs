@@ -27,6 +27,7 @@ pub(crate) enum SheetReply {
         epoch: u64,
         view_epoch: u64,
         title: String,
+        meta: Box<crate::hollywood::ReaderMeta>,
         out: Result<String, String>,
     },
 }
@@ -110,56 +111,6 @@ impl App {
         }
     }
 
-    /// `⏎` inside the sheet: the selected line's file streams
-    /// through `backlot report show` — a local studio's run reads
-    /// its own file; a remote studio's runs the same G3 command on
-    /// its machine (S2 §3). On the Deliveries tab only.
-    pub(crate) fn sheet_open_file(&mut self) {
-        let Some(sheet) = self.sheet.as_ref() else {
-            return;
-        };
-        if sheet.view.is_some() || sheet.tab != SheetTab::Deliveries {
-            return;
-        }
-        let summary = self
-            .panel_summaries()
-            .iter()
-            .find_map(|m| m.summary.studios.iter().find(|s| s.id == sheet.studio.id))
-            .cloned();
-        let file = lines_for(sheet, summary.as_ref())
-            .get(sheet.sel)
-            .and_then(|l| l.file.clone());
-        let Some(file) = file else {
-            return;
-        };
-        let run = self.ns_runner();
-        let machine = sheet.studio.machine.clone();
-        let argv = vec![
-            "report".into(),
-            "show".into(),
-            "--studio".into(),
-            sheet.studio.id.clone(),
-            "--file".into(),
-            file.clone(),
-        ];
-        let epoch = sheet.epoch;
-        let sheet_mut = self.sheet.as_mut().expect("checked above");
-        sheet_mut.view_epoch += 1;
-        let view_epoch = sheet_mut.view_epoch;
-        let tx = self.sheet_tx.clone();
-        tokio::spawn(async move {
-            let out = run(machine, argv, None).await;
-            let _ = tx
-                .send(SheetReply::Report {
-                    epoch,
-                    view_epoch,
-                    title: file,
-                    out,
-                })
-                .await;
-        });
-    }
-
     /// A reply off `sheet_rx` — landed only while the sheet it was
     /// fetched for is still open (a second open bumped `epoch`).
     pub(crate) fn on_sheet_reply(&mut self, reply: SheetReply) {
@@ -187,6 +138,7 @@ impl App {
                 epoch,
                 view_epoch,
                 title,
+                meta,
                 out,
             } => {
                 if epoch != sheet.epoch || view_epoch != sheet.view_epoch {
@@ -194,13 +146,20 @@ impl App {
                 }
                 match out {
                     Ok(text) => {
+                        let lines = text.lines().map(str::to_string).collect();
                         sheet.view = Some(crate::sheet::SheetView {
                             title,
-                            lines: text.lines().map(str::to_string).collect(),
+                            lines,
+                            raw_body: text,
                             scroll: 0,
+                            meta: *meta,
+                            ..crate::sheet::SheetView::default()
                         });
                     }
                     Err(err) => {
+                        if let Some(sv) = sheet.view.as_mut() {
+                            sv.meta.loading_label = None;
+                        }
                         self.show_notice("Report", &err);
                     }
                 }
@@ -212,7 +171,69 @@ impl App {
     /// Keys while the sheet is open — it owns every press like the
     /// other modals; `Esc` backs out of an opened report first.
     pub(crate) fn handle_sheet_key(&mut self, key: &TerminalKey) {
-        use crossterm::event::KeyCode;
+        use crossterm::event::{KeyCode, KeyModifiers};
+        if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
+            if self.reader_handle_prefix(key) || self.reader_handle_tell_key(key, true) {
+                return;
+            }
+            let combo = crate::input::terminal_key_of(key);
+            let (code, modifiers) =
+                crate::config::normalize_key_combo((combo.code, combo.modifiers));
+            let (page, metrics) = self
+                .hollywood_hits
+                .view
+                .as_ref()
+                .map_or((10usize, None), |v| {
+                    (v.body.height.max(1) as usize, v.metrics)
+                });
+            if let Some(view) = self.sheet.as_mut().and_then(|s| s.view.as_mut())
+                && Self::reader_scroll_key(
+                    &mut view.scroll,
+                    code,
+                    modifiers,
+                    key.input.action,
+                    page,
+                    metrics,
+                )
+            {
+                return;
+            }
+            if key.input.action != hc_vt::Action::Press {
+                return;
+            }
+            let plain = modifiers.is_empty();
+            match code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') if plain => {
+                    if let Some(sheet) = self.sheet.as_mut() {
+                        sheet.view = None;
+                    }
+                }
+                KeyCode::Char('?') if plain || modifiers == KeyModifiers::SHIFT => {
+                    self.help = true;
+                    self.help_state = crate::chrome::help::HelpState::default();
+                }
+                KeyCode::Char('t' | 'i') if plain => {
+                    self.reader_activate_sheet_chip('t');
+                }
+                KeyCode::Char('y') if plain => {
+                    self.reader_activate_sheet_chip('y');
+                }
+                KeyCode::Char('o') if plain => {
+                    self.reader_activate_sheet_chip('o');
+                }
+                KeyCode::Char('p') if plain => {
+                    self.reader_activate_sheet_chip('p');
+                }
+                KeyCode::Left | KeyCode::Char('[') if plain => {
+                    self.sheet_step_file(-1);
+                }
+                KeyCode::Right | KeyCode::Char(']') if plain => {
+                    self.sheet_step_file(1);
+                }
+                _ => {}
+            }
+            return;
+        }
         if key.input.action != hc_vt::Action::Press {
             return;
         }
@@ -220,37 +241,6 @@ impl App {
         let Some(sheet) = self.sheet.as_mut() else {
             return;
         };
-        // An opened report eats movement as its own scroll; `Esc`,
-        // `⏎` or `q` retires it back to the tab body.
-        if sheet.view.is_some() {
-            match combo.code {
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
-                    sheet.view = None;
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll += 1;
-                    }
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll = view.scroll.saturating_sub(1);
-                    }
-                }
-                KeyCode::PageDown => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll += 10;
-                    }
-                }
-                KeyCode::PageUp => {
-                    if let Some(view) = sheet.view.as_mut() {
-                        view.scroll = view.scroll.saturating_sub(10);
-                    }
-                }
-                _ => {}
-            }
-            return;
-        }
         match combo.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.sheet = None;
@@ -291,15 +281,23 @@ impl App {
         // An opened report renders in the unified top-level Reader (`R3-M2`):
         // wheel scrolls it, clicks outside Reader close only the Reader.
         if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-            let reader_area = self.hollywood_hits.view.as_ref().map(|v| v.area);
-            let max_scroll = self
+            let (reader_area, prev_hit, next_hit, compose_hit, max_scroll, chips) = self
                 .hollywood_hits
                 .view
                 .as_ref()
-                .and_then(|v| v.metrics)
-                .map(|m| m.max_offset_from_bottom);
+                .map_or((None, None, None, None, None, Vec::new()), |v| {
+                    (
+                        Some(v.area),
+                        v.prev_hit,
+                        v.next_hit,
+                        v.compose_rect,
+                        v.metrics.map(|m| m.max_offset_from_bottom),
+                        v.chips.clone(),
+                    )
+                });
             match mouse.kind {
                 MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                    self.reader_dismiss_sent(true);
                     let delta: isize = if mouse.kind == MouseEventKind::ScrollDown {
                         3
                     } else {
@@ -308,6 +306,20 @@ impl App {
                     if let Some(view) = self.sheet.as_mut().and_then(|s| s.view.as_mut()) {
                         let next = view.scroll.saturating_add_signed(delta);
                         view.scroll = max_scroll.map_or(next, |max| next.min(max));
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) if compose_hit.is_some_and(hit) => {
+                    self.reader_activate_sheet_chip('t');
+                }
+                MouseEventKind::Down(MouseButton::Left) if prev_hit.is_some_and(hit) => {
+                    self.sheet_step_file(-1);
+                }
+                MouseEventKind::Down(MouseButton::Left) if next_hit.is_some_and(hit) => {
+                    self.sheet_step_file(1);
+                }
+                MouseEventKind::Down(MouseButton::Left) if chips.iter().any(|(r, _)| hit(*r)) => {
+                    if let Some((_, ch)) = chips.iter().find(|(r, _)| hit(*r)) {
+                        self.reader_activate_sheet_chip(*ch);
                     }
                 }
                 MouseEventKind::Down(MouseButton::Left) if reader_area.is_none_or(|r| !hit(r)) => {
@@ -379,15 +391,5 @@ impl App {
     fn sheet_page(&mut self, delta: isize) {
         let page = self.sheet_hits.body.height.max(1) as isize;
         self.sheet_move(delta.saturating_mul(page));
-    }
-
-    /// The sheet's studio summary — the instant detail the tabs show
-    /// while the ledger reads are out.
-    fn sheet_summary(&self) -> Option<backlot_model::summary::StudioSummary> {
-        let sheet = self.sheet.as_ref()?;
-        self.panel_summaries()
-            .into_iter()
-            .flat_map(|m| m.summary.studios.into_iter())
-            .find(|s| s.id == sheet.studio.id)
     }
 }

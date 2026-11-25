@@ -18,24 +18,39 @@ mod items;
 mod keys;
 mod new_frame;
 mod plan;
+mod reader_chips;
+mod reader_chrome;
+mod reader_compose;
+mod reader_md;
+mod reader_meta;
+mod reader_wrap;
 mod rows;
 mod sheet;
 mod title;
 mod view;
 
 pub(crate) use draw::{HollywoodRender, render};
-// The footer's own tests compare the mask against the dispatch.
+// The footer's and Reader's own tests inspect these directly.
 #[cfg(test)]
 pub(crate) use hints::for_row;
 pub(crate) use items::{chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
+pub(crate) use reader_compose::{InlineTellState, ReaderComposeOpts, reader_tell_target};
+#[cfg(test)]
+pub(crate) use reader_meta::age_label;
+pub(crate) use reader_meta::{
+    ReaderKind, ReaderMeta, ReaderOAction, ReaderOrigin, find_studio_role, hollywood_state_word,
+    role_state_word,
+};
 pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
     hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
-pub(crate) use view::{CardView, render_view};
+pub(crate) use view::{CardView, render_view_with_compose};
+#[cfg(test)]
+pub(crate) use view::{render_view, render_view_at};
 
 use crate::chrome::text_editor::TextEditor;
 

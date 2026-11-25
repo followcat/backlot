@@ -174,6 +174,7 @@ async fn a_studio_switch_closes_an_open_cardview() {
         title: "hollywood".into(),
         lines: vec!["a report".into()],
         scroll: 0,
+        ..crate::hollywood::CardView::default()
     });
     alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("night-owl".into()));

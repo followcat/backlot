@@ -124,6 +124,7 @@ impl App {
             .chain(self.waiting_due)
             .chain(self.image_read.as_ref().map(|read| read.deadline))
             .chain(self.action_toast.as_ref().map(|toast| toast.deadline))
+            .chain(self.reader_sent_deadline())
             .chain(self.install_tick_deadline())
             .min()
     }
@@ -187,6 +188,7 @@ impl App {
         if deadline_due || kind.clocks() {
             dirty |= self.expire_notice(now);
             dirty |= self.expire_action_toast(now);
+            dirty |= self.expire_reader_sent(now);
             dirty |= self.tick_notifications(now);
             self.tick_panel(now);
             self.settle_opening(now);
