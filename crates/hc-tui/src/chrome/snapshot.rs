@@ -76,9 +76,11 @@ pub struct ClientShellWorkspace {
 }
 
 /// Whether `workspace` is the internal `backlot` stage/hollywood space
-/// that studio mode hides from the sidebar machine tree and cycling.
+/// (`herdr.space = "backlot"`) that studio mode hides from the sidebar
+/// machine tree and cycling, without hiding user folders or checkouts
+/// named `backlot`.
 pub(crate) fn is_backlot_stage_space(workspace: &ClientShellWorkspace) -> bool {
-    workspace.label == "backlot"
+    workspace.workspace_id == "space:7:backlot"
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
