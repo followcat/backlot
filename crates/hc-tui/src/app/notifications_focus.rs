@@ -128,7 +128,7 @@ impl App {
     }
 
     /// This core's live `bl-hollywood` address.
-    fn hollywood_live_terminal(&self) -> Option<String> {
+    pub(super) fn hollywood_live_terminal(&self) -> Option<String> {
         self.view
             .inventory
             .terminals()
@@ -143,7 +143,7 @@ impl App {
 
     /// Collapse the expanded Call Sheet before a jump focuses a pane —
     /// the same leave the sheet's own Enter takes.
-    fn hollywood_leave_if_open(&mut self) {
+    pub(super) fn hollywood_leave_if_open(&mut self) {
         if self.hollywood.expanded() {
             self.hollywood.mode = crate::hollywood::LayerMode::Collapsed;
             self.hollywood.editing = false;

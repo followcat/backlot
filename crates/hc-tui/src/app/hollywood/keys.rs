@@ -19,6 +19,9 @@ impl App {
     pub(crate) fn handle_hollywood_key(&mut self, key: &TerminalKey) {
         // The "Show me" view owns its keys until it closes.
         if self.hollywood.view.is_some() {
+            if self.reader_handle_prefix(key) {
+                return;
+            }
             self.hollywood_view_key(key);
             return;
         }

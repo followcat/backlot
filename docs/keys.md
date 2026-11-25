@@ -106,11 +106,31 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | `?` | Open this help |
 | `Esc` | While composing on `›`: rest keeping any draft. Otherwise beside the panes: unfocus the dock. As an overlay: close |
 
-Right-click on a dock row selects it and opens the same menu `m` opens on the selection.
+Right-click on a dock row selects it and opens the same menu `m` opens on the selection. `Enter` on a studio `✦` / `›` exchange line opens the entry in the Lot Reader.
 While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second
 press of the same command waits for the first to finish.
 
 [docs/studio/guide.md](studio/guide.md) explains what the panel's marks and blocks mean.
+
+## The Lot Reader
+
+Opening a studio `✦`/`›` report or message (`Enter` on the dock), a Call Sheet headline, talk row or card (`Enter`/`s`), an actor `records` report, or a Task & Delivery Sheet artifact (`Enter`/`o`) opens the **Lot Reader** — an adaptive centered card (leaving the beside Lot Dock undimmed when open from the dock). While reading (`Ctrl+B` prefix chords and `Ctrl+G`/`Alt+Y`/Alt-arrows stay active):
+
+| Keys | Action |
+|---|---|
+| `j`/`k`, `↓`/`↑` | Scroll 1 line |
+| `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U` | Page down / page up (`d` stays unbound to avoid prompt muscle memory) |
+| `g`/`Home`, `G`/`End` | Jump to top / bottom |
+| `←`/`→`, `[`/`]` | Step to previous / next sibling entry (header `◀`/`▶` clicks step too; beside dock `▌` follows live) |
+| `t`, `i` | Open inline composer (`[t] tell`), sharing the studio's dock `›` draft and `↑`/`↓` history (`hollywood` uses the Call Sheet draft/history; `Tab` completes `/verb` on studios; `Enter` sends or retries failed sends; `Esc` returns to reading keeping the draft) |
+| `o` | Focus the author's live terminal (closing the Reader), or reopen a closed resumable / fixed seat (`□ closed`) |
+| `p` | Peek at the author's live screen read-only (never carrying a prompt; omitted when closed) |
+| `v` | Open the Task & Delivery Sheet for the entry's studio/task (closing the Reader) |
+| `y` | Copy the unwrapped raw UTF-8 source text via OSC 52 (never answers permission prompts) |
+| `a` / `x` | Apply / cancel an open actionable card (locked while pending; inert on read-only views) |
+| `?` | Open key help (`Ctrl+B ?` also works in reading mode) |
+| `Enter` | Close read-only views (no-op on actionable cards) |
+| `Esc`, `q` | Close inline compose keeping draft (first `Esc`), then close the Reader keeping any draft visible on the dock |
 
 ## The opening page
 

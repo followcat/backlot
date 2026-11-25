@@ -500,3 +500,70 @@ fn hollywood_work_and_pending_project_cleanly_and_compare_in_same_as() {
     assert!(!frozen.pending);
     assert_eq!(frozen.state, "live");
 }
+
+#[test]
+fn hollywood_section_populates_exchange_and_card_metadata() {
+    let mut state = HollywoodState::default();
+    apply(&mut state, &hev(1, "hollywood", hpropose("t1")));
+    apply(
+        &mut state,
+        &hev(
+            2,
+            "user",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: Some("status check".into()),
+                file: None,
+                source_seq: None,
+            },
+        ),
+    );
+    apply(
+        &mut state,
+        &hev(
+            3,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: "all green".into(),
+                body: Some("reports/3.md".into()),
+            },
+        ),
+    );
+    // Zero timestamp omits ts_ms.
+    let zero_msg = crate::hollywood::NewHollywoodEvent {
+        by: by("user"),
+        kind: HollywoodKind::MessageSent {
+            to: "hollywood".into(),
+            studio: None,
+            text: Some("zero ts".into()),
+            file: None,
+            source_seq: None,
+        },
+    }
+    .stamp(4, 0);
+    apply(&mut state, &zero_msg);
+
+    let s = hollywood_section(&state, "live", Some("agy"), Some("pro"), None);
+    assert_eq!(s.cards.len(), 1);
+    assert_eq!(s.cards[0].ts_ms, Some(1000));
+
+    assert_eq!(s.exchange.len(), 3);
+    assert_eq!(s.exchange[0].to.as_deref(), Some("hollywood"));
+    assert_eq!(s.exchange[0].kind.as_deref(), Some("tell"));
+    assert_eq!(s.exchange[0].task, None);
+    assert_eq!(s.exchange[0].ts_ms, Some(2000));
+
+    assert_eq!(s.exchange[1].to.as_deref(), Some("user"));
+    assert_eq!(s.exchange[1].kind.as_deref(), Some("report"));
+    assert_eq!(s.exchange[1].task, None);
+    assert_eq!(s.exchange[1].ts_ms, Some(3000));
+
+    assert_eq!(s.exchange[2].ts_ms, None);
+
+    let v = serde_json::to_value(&s).unwrap();
+    assert!(v["exchange"][0].get("task").is_none());
+    assert!(v["exchange"][1].get("task").is_none());
+    assert!(v["exchange"][2].get("ts_ms").is_none());
+    assert_eq!(v["cards"][0]["ts_ms"], 1000);
+}

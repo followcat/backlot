@@ -106,8 +106,8 @@ expanded, so widening the window brings the column back. The collapsed strip is 
 columns: beside the panes from 60 columns up, and a 16-column **overlay** at the pane
 surface's right edge under that — the dock never takes the whole surface.
 
-- Beside: `Esc` unfocuses — the borders turn `surface1`; `Ctrl+B y` refocuses, `q`,
-  `Ctrl+B Y` or the `×` on the title row closes it.
+- Beside: `Esc` unfocuses — the `▌` row cursor hides (the selected block keeps its `accent`
+  border and title chip); `Ctrl+B y` refocuses, `q`, `Ctrl+B Y` or the `×` on the title row closes it.
 - Overlay: `Esc` closes; the footer reads `esc back`. An overlay dock's rect is
   reset cell by cell before painting, so nothing underneath shows through.
 - `Enter` on a live person or studio focuses that terminal; over an overlay it also
@@ -120,9 +120,11 @@ dock's border.
 ## The blocks
 
 Expanded, the dock's top line is `lot · <n>` — one **block per studio**, in document order,
-drawn as a rounded frame (`╭╮╰╯`). The selection is `selection_bg` with an accent `▌` in the
-first column; it lands only on actionable rows — decorative lines and block bottoms are
-skipped — and borders are honest about focus: unfocused, every block edge is `surface1`.
+drawn as a rounded frame (`╭╮╰╯`). The row cursor (`selection_bg` with an accent `▌` in the
+first column) lands only on actionable rows, skips decorative lines and block bottoms, and stays
+honest about focus (hidden when unfocused). Every border cell of the **selected studio** (`╭ ─ ╮ │ ╰ ╯`
+from `rows_fold::selected_studio`) draws in `palette.accent` whether or not the lot owns the keys;
+every other studio keeps `surface1`.
 
 - **Selected-studio folding:** in a lot with two or more studios, only the selected studio draws
   in full (the studio holding the `▌` cursor, else the `▸` current studio, else the first studio);
@@ -135,10 +137,13 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   studios fall back to one-line `╶` stacked rows when even folded blocks exceed the body height.
   Talk budgets go to the selected full block only.
 
-- The studio id sits in the top border. The first row inside is the **header**: a health
-  glyph — `●` live, `◌` stage stopped, `×` offline or a ledger error, `✓` finished — then
-  `r<version> · <done>/<total>` and `!<waiting>` in the blocked colour when above zero.
-  The current studio's frame is the accent colour, the others a muted surface colour.
+- The studio id sits in the top border (` ▸ <id> ` for the selected studio: a bold padded
+  `accent` background chip with contrast `panel_bg` foreground, truncating cleanly before the
+  health/progress tail when narrow; `subtext0` or focused `text` on unselected blocks). The first
+  row inside is the **header**: a health glyph — `●` live, `◌` stage stopped, `×` offline or a
+  ledger error, `✓` finished — then `r<version> · <done>/<total>` and `!<waiting>` in the
+  blocked colour when above zero. On stacked rows (`╶`) and the collapsed strip, the selected
+  studio's label uses bold `accent`.
 - The **owed-step** line under it says where the next step is owed in role names —
   `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and
   machine-offline forms say so instead.
@@ -214,8 +219,9 @@ The summary projection paints at once; `status --json` and `records --json` fill
 it, fetched off the event loop on the studio's own machine — locally through
 `std::env::current_exe()`, remotely through `RemoteRunner`. A reply for a sheet already
 closed or reopened is dropped. `o` on a delivery or check line streams its file through
-`backlot report show` — a local file for a local studio, the same command remotely — and
-`Esc` backs out of the report first. A click outside the frame closes the sheet.
+`backlot report show` — a local file for a local studio, the same command remotely — into the **Lot Reader** (`j`/`k`/`Space`/`b`/`Ctrl+D`/`Ctrl+U`/`g`/`G` scroll, `←`/`→`/`[`/`]` step files, `t`/`i` compose inline sharing the dock's `›` draft and `↑`/`↓` history plus `Tab /verb`, `o` focuses/reopens, `p` peeks read-only, `y` copies raw text, `?` opens help, `Enter`/`Esc`/`q` close back to the sheet). A click outside the frame closes the sheet.
+
+**Lot Reader from the dock:** `Enter` or a click on any `✦` / `›` exchange line (and `m → Records`) opens the same adaptive Reader card beside the undimmed Lot Dock (`▌` tracks `←`/`→` or `[`/`]` stepping in place, and clicks on beside `✦`/`›` lines switch in place). Action strips adapt cleanly down to compact 80-column chips (`[t] tell`, `[o] focus/reopen`, `[p] peek`, `[v] sheet`, `[y] copy`, `? keys`), while `y` copies raw UTF-8 without answering prompts and `d` stays unbound. Pressing `t`/`i` or clicking `[t]` opens the inline composer backed by the studio's `›` draft and `↑`/`↓` history (`Esc` leaves compose keeping any draft; a second `Esc` closes the Reader with the draft still mirrored in the dock).
 
 ## Person states and attentions
 

@@ -10,7 +10,7 @@ use crate::summary::{
     HEADLINE_CHARS, MAX_STUDIO_EXCHANGE, SUMMARY_SCHEMA, Summary, studio_exchange,
     studio_exchange_files, summary_with_exchange,
 };
-use crate::testkit::{base_events, base_state, ev, role_started, state_with};
+use crate::testkit::{base_events, base_state, cast, ev, role_started, state_with};
 
 fn msg(
     seq: u64,
@@ -720,4 +720,105 @@ fn role_stage_touch_seq_tracks_terminal_writes_and_lifecycle_since_ask() {
         state.role_stage_touch_seq.get("producer").copied(),
         Some(12)
     );
+}
+
+#[test]
+fn studio_exchange_populates_to_kind_task_and_ts_ms() {
+    let mut state = state_with(
+        &base_events(),
+        vec![("director", cast("t1", "actor-a", "a"))],
+    );
+    // Non-task message with non-zero ts_ms.
+    state.messages.push(msg(
+        10,
+        "user",
+        "producer",
+        Some("messages/10-tell.txt"),
+        None,
+        None,
+    ));
+    // Actor message with ts_ms == 0 (should omit ts_ms, populate task from recipient).
+    let mut zero_ts = msg(
+        11,
+        "user",
+        "actor-t1-c1",
+        Some("messages/11-actor.txt"),
+        None,
+        None,
+    );
+    zero_ts.ts_ms = 0;
+    state.messages.push(zero_ts);
+    // Task-bound report (node is in state.tasks).
+    state.reports.push(ReportRecord {
+        seq: 12,
+        from: "director".into(),
+        to: "user".into(),
+        node: "t1".into(),
+        file: "reports/12-t1.md".into(),
+        delivered: false,
+        ts_ms: 1200,
+        delivered_ms: None,
+    });
+    // Non-task report from non-actor role (milestone node not in state.tasks).
+    state.reports.push(ReportRecord {
+        seq: 13,
+        from: "producer".into(),
+        to: "user".into(),
+        node: "milestone-1".into(),
+        file: "reports/13-m1.md".into(),
+        delivered: false,
+        ts_ms: 1300,
+        delivered_ms: None,
+    });
+    // Report from actor role whose node is not a task id falls back to actor's task.
+    state.reports.push(ReportRecord {
+        seq: 14,
+        from: "actor-t1-c1".into(),
+        to: "user".into(),
+        node: "notes".into(),
+        file: "reports/14-notes.md".into(),
+        delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
+    });
+
+    let ex = studio_exchange(&state, &BTreeMap::new());
+    assert_eq!(ex.len(), 5);
+
+    assert_eq!(ex[0].seq, 10);
+    assert_eq!(ex[0].to.as_deref(), Some("producer"));
+    assert_eq!(ex[0].kind.as_deref(), Some("tell"));
+    assert_eq!(ex[0].task, None);
+    assert_eq!(ex[0].ts_ms, Some(1000));
+
+    assert_eq!(ex[1].seq, 11);
+    assert_eq!(ex[1].to.as_deref(), Some("actor-t1-c1"));
+    assert_eq!(ex[1].kind.as_deref(), Some("tell"));
+    assert_eq!(ex[1].task.as_deref(), Some("t1"));
+    assert_eq!(ex[1].ts_ms, None);
+
+    assert_eq!(ex[2].seq, 12);
+    assert_eq!(ex[2].to.as_deref(), Some("user"));
+    assert_eq!(ex[2].kind.as_deref(), Some("report"));
+    assert_eq!(ex[2].task.as_deref(), Some("t1"));
+    assert_eq!(ex[2].ts_ms, Some(1200));
+
+    assert_eq!(ex[3].seq, 13);
+    assert_eq!(ex[3].to.as_deref(), Some("user"));
+    assert_eq!(ex[3].kind.as_deref(), Some("report"));
+    assert_eq!(ex[3].task, None);
+    assert_eq!(ex[3].ts_ms, Some(1300));
+
+    assert_eq!(ex[4].seq, 14);
+    assert_eq!(ex[4].to.as_deref(), Some("user"));
+    assert_eq!(ex[4].kind.as_deref(), Some("report"));
+    assert_eq!(ex[4].task.as_deref(), Some("t1"));
+    assert_eq!(ex[4].ts_ms, None);
+
+    // Wire serialization omits None fields.
+    let v = serde_json::to_value(&ex[1]).unwrap();
+    assert!(v.get("ts_ms").is_none());
+    assert_eq!(v["to"], "actor-t1-c1");
+    assert_eq!(v["kind"], "tell");
+    assert_eq!(v["task"], "t1");
 }
