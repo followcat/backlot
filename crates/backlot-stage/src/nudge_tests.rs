@@ -801,8 +801,9 @@ fn a_progress_only_reply_earns_the_second_nudge_and_no_delay() {
         panic!("{moves:?}")
     };
     assert_eq!(step.key, key);
-    let body = nudge::nudge_body_second(step);
+    let body = nudge::nudge_body_second(&state, step);
     assert!(body.contains("do not end the turn"), "{body}");
+    assert!(!body.contains("<role>"), "names who to tell: {body}");
 
     // Deliver the second nudge. Never a third: the idle stretch is
     // long past, and nothing but progress landed.

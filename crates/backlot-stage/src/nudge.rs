@@ -101,11 +101,7 @@ fn delivery_task(step: &Step) -> Option<&str> {
 /// and a block goes to the task's reviewer.
 pub(crate) fn nudge_body(state: &StudioState, step: &Step) -> String {
     if let Some(task) = delivery_task(step) {
-        let reviewer = state
-            .tasks
-            .get(task)
-            .map(|t| t.reviewer())
-            .unwrap_or("producer");
+        let reviewer = reviewer_of(state, task);
         return format!(
             "# {label} is owed\n\nTask `{task}` is running and its delivery is yours:\n\n    {command}\n\nKeep working until that command lands; do not end the turn with a `backlot progress` line. If something blocks you, say why with `backlot tell {reviewer} --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
             label = step.label,
@@ -120,12 +116,22 @@ pub(crate) fn nudge_body(state: &StudioState, step: &Step) -> String {
     )
 }
 
+/// Who a blocked actor tells: the task's reviewer, else the producer.
+fn reviewer_of<'a>(state: &'a StudioState, task: &str) -> &'a str {
+    state
+        .tasks
+        .get(task)
+        .map(|t| t.reviewer())
+        .unwrap_or("producer")
+}
+
 /// The second nudge body: the same step, said as a directive — keep
 /// working until the delivery lands, do not end the turn on a
-/// progress line.
-pub(crate) fn nudge_body_second(step: &Step) -> String {
+/// progress line, and a block goes to the task's reviewer by name.
+pub(crate) fn nudge_body_second(state: &StudioState, step: &Step) -> String {
+    let reviewer = delivery_task(step).map_or("producer", |task| reviewer_of(state, task));
     format!(
-        "# {label} is still owed\n\nYou answered the last nudge and went back to your prompt, but the ledger still owes {label} — the step is yours:\n\n    {command}\n\nKeep working until that command lands; do not end the turn with a `backlot progress` line. If something blocks you, say why with `backlot tell <role> --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
+        "# {label} is still owed\n\nYou answered the last nudge and went back to your prompt, but the ledger still owes {label} — the step is yours:\n\n    {command}\n\nKeep working until that command lands; do not end the turn with a `backlot progress` line. If something blocks you, say why with `backlot tell {reviewer} --file <file>` — the stage reads the ledger, so a message there reaches whoever can unblock you.\n",
         label = step.label,
         command = step.command,
     )
@@ -377,7 +383,7 @@ impl Stage {
                         std::fs::create_dir_all(parent)
                             .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
                     }
-                    std::fs::write(&path, nudge_body_second(&step))
+                    std::fs::write(&path, nudge_body_second(state, &step))
                         .map_err(|e| Fail::refused(format!("nudge file: {e}")))?;
                     record(
                         dir,
