@@ -235,6 +235,7 @@ pub(crate) mod mark {
             | Target::Block(key)
             | Target::Strip(key)
             | Target::Fold(key)
+            | Target::ClosedFold(key)
             | Target::ReopenProducer(key)
             | Target::Input(key) => Some(studio(key)),
             Target::Talk(key, seq) => Some(studio_talk(key, *seq)),

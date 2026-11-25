@@ -34,6 +34,22 @@ impl App {
         if self.studio.current != self.last_current_studio {
             self.last_current_studio = self.studio.current.clone();
             self.shell_state.reveal_studio_row = true;
+            if !self.panel.focused
+                && self
+                    .panel
+                    .selected
+                    .as_ref()
+                    .and_then(crate::panel::Target::studio)
+                    != self.studio.current.as_ref()
+            {
+                self.panel.selected = None;
+                self.panel.selected_row = None;
+            }
+            if !self.panel.focused
+                && let Some(key) = self.studio.current.clone()
+            {
+                self.panel_reveal_studio(&key);
+            }
         }
         self.hollywood_sync_history_from(&machines);
         self.panel.sync_histories(&machines);
@@ -171,7 +187,19 @@ impl App {
                     None => self.studio.current_index(&machines).unwrap_or(0),
                 };
                 let next = studios[anchor].key();
-                self.studio.set_studio_focus(next);
+                self.studio.set_studio_focus(next.clone());
+                self.last_current_studio = self.studio.current.clone();
+                if self
+                    .panel
+                    .selected
+                    .as_ref()
+                    .and_then(crate::panel::Target::studio)
+                    != Some(&next)
+                {
+                    self.panel.selected = None;
+                    self.panel.selected_row = None;
+                }
+                self.panel_reveal_studio(&next);
                 self.sync_lot(&machines);
             }
             StudioNav::PreviousRole | StudioNav::NextRole => {

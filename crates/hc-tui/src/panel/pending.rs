@@ -32,7 +32,11 @@ pub(super) fn mark(
     };
     let inner_width = if matches!(
         row,
-        Row::Person { .. } | Row::Task { .. } | Row::AcceptedFold { .. } | Row::Talk { .. }
+        Row::Person { .. }
+            | Row::Task { .. }
+            | Row::AcceptedFold { .. }
+            | Row::ClosedFold { .. }
+            | Row::Talk { .. }
     ) {
         rect.width.saturating_sub(2)
     } else {
