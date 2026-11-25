@@ -59,6 +59,8 @@ mod reload;
 mod remote_children;
 mod reveal_focus;
 mod review_regressions;
+mod server_client;
+mod server_doc_fake;
 mod settings_studio;
 mod shared_rpc;
 mod sidebar_edge;

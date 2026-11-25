@@ -62,7 +62,10 @@ pub(super) fn should_reap_exited(term: &Terminal, now_ms: u64) -> bool {
     if term.labels.contains_key("backlot.studio") && !term.labels.contains_key("backlot.shell") {
         return false;
     }
-    if matches!(term.name.as_deref(), Some("backlot-stage" | "bl-hollywood")) {
+    if matches!(
+        term.name.as_deref(),
+        Some("backlot-stage" | "backlot-server" | "bl-hollywood")
+    ) {
         return false;
     }
     !term.labels.contains_key("wherdr-request")

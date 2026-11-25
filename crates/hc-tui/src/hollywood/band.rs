@@ -148,7 +148,16 @@ fn draw_wait(
         palette.surface_dim
     };
     buf.set_style(rect, Style::default().bg(bg));
-    let (head, glyph) = wait_head(wait, local, multi);
+    let stopped_server = matches!(wait, Wait::Stage(item) if !item.offline && item.machine.is_none())
+        && hollywood.server_stopped_cmd.is_some();
+    let (head, glyph) = if stopped_server {
+        (
+            hollywood.server_stopped_cmd.clone().unwrap_or_default(),
+            "◌",
+        )
+    } else {
+        wait_head(wait, local, multi)
+    };
     let glyph_colour = match wait {
         Wait::Prompt(_) => palette.red,
         Wait::Role(item) if item.asks => palette.peach,
@@ -192,7 +201,11 @@ fn draw_wait(
             .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
-    let chips = chips_of(wait);
+    let chips = if stopped_server {
+        Vec::new()
+    } else {
+        chips_of(wait)
+    };
     let gaps = chips.len().saturating_sub(1) as u16 * CHIP_GAP;
     // Compact chips at the narrow cut, and whenever the full labels
     // cannot leave the head its twenty cells.

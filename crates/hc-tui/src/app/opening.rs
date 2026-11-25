@@ -185,7 +185,7 @@ impl App {
     /// `s`: `backlot stage start` on this core — U6a starts stages
     /// only locally; a stage on a chosen machine is U6b's.
     fn opening_start_stage(&mut self) {
-        if crate::panel::stage_running(&self.view, None) {
+        if !self.can_start_stage(None) || crate::panel::stage_running(&self.view, None) {
             return;
         }
         self.run_action(crate::studio_cmds::stage_start(None));

@@ -181,6 +181,29 @@ impl App {
         if let Some(run) = &self.ns_run {
             return run.clone();
         }
+        if self.server_mode() {
+            let rpc = self.rpc_opener.clone();
+            let ep = self.panel_endpoint.clone();
+            let studio = self.studio.current.as_ref().map(|k| k.id.clone());
+            let timeout = self.server_ack_timeout;
+            let remote = self.remote_runner.clone();
+            return Arc::new(move |machine, argv, stdin| match machine {
+                Some(machine) => match remote.clone() {
+                    Some(runner) => runner.run_output(machine, argv, stdin),
+                    None => Box::pin(async move {
+                        Err(format!("cannot reach {machine}: no remote connection"))
+                    }),
+                },
+                None => crate::server_action::run(
+                    rpc.clone(),
+                    ep.clone(),
+                    argv,
+                    stdin,
+                    studio.clone(),
+                    timeout,
+                ),
+            });
+        }
         let remote = self.remote_runner.clone();
         let endpoint_args = self.panel_endpoint_args.clone();
         Arc::new(move |machine, argv, stdin| {

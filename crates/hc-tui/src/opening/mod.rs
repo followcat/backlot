@@ -82,7 +82,7 @@ pub(super) struct Action {
 }
 
 /// The rows for `opts`, in page order.
-pub(super) fn actions(opts: &OpeningOpts) -> Vec<Action> {
+pub(super) fn actions_for(opts: &OpeningOpts, server_stopped: bool) -> Vec<Action> {
     let mut rows = vec![Action {
         key: "n",
         label: "New studio",
@@ -93,7 +93,7 @@ pub(super) fn actions(opts: &OpeningOpts) -> Vec<Action> {
             label: "Tell Hollywood",
         });
     }
-    if !opts.stage_running {
+    if !opts.stage_running && !server_stopped {
         rows.push(Action {
             key: "s",
             label: "Start the stage",
@@ -114,6 +114,7 @@ pub(super) const PLAIN_HINT: &str = "plain: backlot --plain";
 
 /// Paint the page over `area` (the pane surface). `frame` is the
 /// one-time animation's frame, or `None` for the static page.
+#[cfg(test)]
 pub(crate) fn render_opening(
     buffer: &mut Buffer,
     area: Rect,
@@ -121,21 +122,40 @@ pub(crate) fn render_opening(
     opts: OpeningOpts,
     frame: Option<u8>,
 ) {
+    render_opening_server(buffer, area, palette, opts, frame, None);
+}
+
+/// Like [`render_opening`], plus an optional read-only command banner
+/// when connected to a stopped server (`backlot-cat` present, no server terminal).
+pub(crate) fn render_opening_server(
+    buffer: &mut Buffer,
+    area: Rect,
+    palette: &Palette,
+    opts: OpeningOpts,
+    frame: Option<u8>,
+    server_cmd: Option<&str>,
+) {
     if area.is_empty() {
         return;
     }
     buffer.set_style(area, Style::default().bg(palette.panel_bg));
-    if card::render(buffer, area, palette, &opts, frame) {
+    if card::render_server(buffer, area, palette, &opts, frame, server_cmd) {
         return;
     }
-    render_plain(buffer, area, palette, &opts);
+    render_plain(buffer, area, palette, &opts, server_cmd);
 }
 
 /// Today's plain layout — the ladder's last fallback, and what a
 /// one-cell area gets: tagline, actions, dim hint. Narrow frames clip
 /// lines on the right, never panic.
-fn render_plain(buffer: &mut Buffer, area: Rect, palette: &Palette, opts: &OpeningOpts) {
-    let rows = actions(opts);
+fn render_plain(
+    buffer: &mut Buffer,
+    area: Rect,
+    palette: &Palette,
+    opts: &OpeningOpts,
+    server_cmd: Option<&str>,
+) {
+    let rows = actions_for(opts, server_cmd.is_some());
     let key_col = rows.iter().map(|a| a.key.len()).max().unwrap_or(1) as u16;
     let label_max = rows
         .iter()
@@ -185,13 +205,29 @@ fn render_plain(buffer: &mut Buffer, area: Rect, palette: &Palette, opts: &Openi
     }
     let hint_row = y + height - 1;
     if hint_row < area.bottom() {
+        let hint = server_cmd.unwrap_or(PLAIN_HINT);
+        let hint_w = if server_cmd.is_some() {
+            (display_width(hint) as u16).min(area.width)
+        } else {
+            block
+        };
+        let hint_x = if server_cmd.is_some() {
+            area.x + area.width.saturating_sub(hint_w) / 2
+        } else {
+            x
+        };
+        let style = if server_cmd.is_some() {
+            Style::default().fg(palette.peach)
+        } else {
+            Style::default().fg(palette.overlay0)
+        };
         put_text(
             buffer,
-            x,
+            hint_x,
             hint_row,
-            block,
-            &truncate_end(PLAIN_HINT, block as usize),
-            Style::default().fg(palette.overlay0),
+            hint_w,
+            &truncate_end(hint, hint_w as usize),
+            style,
         );
     }
 }

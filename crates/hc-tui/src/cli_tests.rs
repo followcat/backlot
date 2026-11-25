@@ -402,3 +402,115 @@ fn a_direct_upgrade_installs_into_the_running_directory() {
         assert!(ran.get());
     }
 }
+
+#[test]
+fn parse_accepts_server_and_rejects_conflicting_remote_or_session() {
+    let Action::Run(opts) = parse(["--server", "host-a/work"].map(str::to_owned)).unwrap() else {
+        panic!("expected Run");
+    };
+    assert_eq!(opts.server.as_deref(), Some("host-a/work"));
+
+    let Action::Run(opts_eq) = parse(["--server=host-b"].map(str::to_owned)).unwrap() else {
+        panic!("expected Run");
+    };
+    assert_eq!(opts_eq.server.as_deref(), Some("host-b"));
+
+    assert!(
+        parse(["--server", "host-a", "--remote", "host-b"].map(str::to_owned)).is_err(),
+        "--server and --remote must not combine"
+    );
+    assert!(
+        parse(["--server", "host-a", "--session", "s"].map(str::to_owned)).is_err(),
+        "--server and --session must not combine"
+    );
+}
+
+#[test]
+fn watch_params_for_server_adds_catalog_and_resolve_keeps_local_explicit_sessions() {
+    assert!(!watch_params().documents.iter().any(|d| d == "backlot-cat"));
+    let srv_docs = watch_params_for(true).documents;
+    assert!(srv_docs.iter().any(|d| d == "backlot"));
+    assert!(srv_docs.iter().any(|d| d == "backlot-cat"));
+
+    let dir = TestDir::new("hctui-srv-res");
+    let cfg = dir.join("backlot").join("config.toml");
+    std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
+    std::fs::write(&cfg, "[client]\nserver = \"host-a\"\n").unwrap();
+
+    let mut env = Env::default();
+    env.insert("XDG_CONFIG_HOME".into(), dir.as_os_str().to_os_string());
+    env.insert("XDG_RUNTIME_DIR".into(), dir.as_os_str().to_os_string());
+    env.insert("HOME".into(), dir.as_os_str().to_os_string());
+
+    let platform = hc_proto::endpoint::Sys;
+    let base_opts = Options {
+        session: None,
+        remote: None,
+        server: None,
+        plain: false,
+    };
+
+    // `[client] server = "host-a"` off-hub -> Endpoint::Remote("host-a", "backlot")
+    let (ep_remote, target) = resolve_endpoint_and_server_with(
+        &base_opts,
+        &env,
+        &platform,
+        Some("host-b"),
+        Some("alice"),
+    )
+    .unwrap();
+    assert_eq!(target.as_ref().map(|t| t.host.as_str()), Some("host-a"));
+    assert!(matches!(
+        ep_remote,
+        Endpoint::Remote(ref r) if r.target == "host-a" && r.session == "backlot"
+    ));
+
+    // On hub host-a -> Endpoint::Local("backlot")
+    let (ep_hub, _) = resolve_endpoint_and_server_with(
+        &base_opts,
+        &env,
+        &platform,
+        Some("host-a"),
+        Some("alice"),
+    )
+    .unwrap();
+    assert!(matches!(ep_hub, Endpoint::Local(ref l) if l.session == "backlot"));
+
+    // Explicit `--session default` or `--plain` keeps personal local terminals on local core.
+    let local_opts = Options {
+        session: Some("default".into()),
+        ..Options {
+            session: None,
+            remote: None,
+            server: None,
+            plain: false,
+        }
+    };
+    let (ep_local, target_none) = resolve_endpoint_and_server_with(
+        &local_opts,
+        &env,
+        &platform,
+        Some("host-b"),
+        Some("alice"),
+    )
+    .unwrap();
+    assert!(target_none.is_none());
+    assert!(matches!(ep_local, Endpoint::Local(ref l) if l.session == "default"));
+
+    let plain_opts = Options {
+        plain: true,
+        session: None,
+        remote: None,
+        server: None,
+    };
+    let (ep_plain, target_plain) = resolve_endpoint_and_server_with(
+        &plain_opts,
+        &env,
+        &platform,
+        Some("host-b"),
+        Some("alice"),
+    )
+    .unwrap();
+    assert!(target_plain.is_none());
+    assert!(matches!(ep_plain, Endpoint::Local(_)));
+}

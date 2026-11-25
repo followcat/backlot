@@ -338,6 +338,11 @@ pub struct App {
     sheet_rx: mpsc::Receiver<panel::sheet::SheetReply>,
     /// Endpoint flags (`--session`/`--remote`) for spawned actions.
     panel_endpoint_args: Vec<String>,
+    /// Endpoint and RPC opener used by server-mode `plugin.backlot.req` actions.
+    panel_endpoint: Option<hc_proto::endpoint::Endpoint>,
+    rpc_opener: Option<hc_proto::watch::OpenRpc>,
+    server_target: Option<backlot_stage::server_cfg::ServerTarget>,
+    pub(crate) server_ack_timeout: std::time::Duration,
     /// `--plain` (U2): the plain multiplexer — studio mode never
     /// latches, so the cast, the opening page and every studio key
     /// stay off and the frame is Herdr's, cell-identical to `main`.

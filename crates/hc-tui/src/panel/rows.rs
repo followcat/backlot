@@ -90,6 +90,8 @@ pub(crate) enum Owed {
     Confirm,
     /// `◌ stage stopped · s start`.
     StageDown,
+    /// `◌ <start command>` when server is stopped (read-only).
+    ServerStopped,
     /// `× <machine> unreachable`.
     Offline,
     /// `! <error>` — the ledger/stage error.
@@ -141,6 +143,11 @@ pub(crate) enum Row<'a> {
     /// several machines answered.
     StageDown {
         machine: Option<&'a str>,
+    },
+    /// Server terminal is gone while `backlot-cat` is present — read-only
+    /// command hint, never starts anything itself.
+    ServerStopped {
+        cmd: String,
     },
     /// A listed machine that is not connected; its studios cannot
     /// answer.
@@ -275,6 +282,7 @@ impl Row<'_> {
                 ..
             } => Target::Stage(machine.clone()),
             Row::Title
+            | Row::ServerStopped { .. }
             | Row::StoppedLedger { .. }
             | Row::Offline { .. }
             | Row::Empty
@@ -328,7 +336,13 @@ fn block_rows<'a>(
             format!("{} unreachable", studio.machine.unwrap_or("local")),
         ))
     } else if !stage {
-        Some((Owed::StageDown, "stage stopped · s start".to_string()))
+        if studio.machine.is_none()
+            && let Some(cmd) = panel.server_stopped_cmd.as_deref()
+        {
+            Some((Owed::ServerStopped, cmd.to_owned()))
+        } else {
+            Some((Owed::StageDown, "stage stopped · s start".to_string()))
+        }
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
     } else if studio.studio.ready_to_finish {
@@ -501,7 +515,13 @@ pub(crate) fn rows<'a>(
     let mut out = vec![Row::Title];
     if machines.is_empty() {
         if !stage_running(None) {
-            out.push(Row::StageDown { machine: None });
+            if let Some(cmd) = panel.server_stopped_cmd.as_deref() {
+                out.push(Row::ServerStopped {
+                    cmd: cmd.to_owned(),
+                });
+            } else {
+                out.push(Row::StageDown { machine: None });
+            }
         }
         match &panel.stopped {
             Some(stopped) => out.push(Row::StoppedLedger {
@@ -532,9 +552,17 @@ pub(crate) fn rows<'a>(
             continue;
         }
         if !stage_running(machine.machine.as_deref()) {
-            out.push(Row::StageDown {
-                machine: machine.machine.as_deref(),
-            });
+            if machine.machine.is_none()
+                && let Some(cmd) = panel.server_stopped_cmd.as_deref()
+            {
+                out.push(Row::ServerStopped {
+                    cmd: cmd.to_owned(),
+                });
+            } else {
+                out.push(Row::StageDown {
+                    machine: machine.machine.as_deref(),
+                });
+            }
         }
     }
     let studios = super::data::studios(machines);

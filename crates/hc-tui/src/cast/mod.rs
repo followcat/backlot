@@ -65,6 +65,9 @@ pub(crate) struct CastView<'a> {
     /// exists at all — the body's one dim line `stage stopped — s to
     /// start` instead of a blank cast.
     pub(crate) stopped: bool,
+    /// `backlot-cat` is on the core while the server terminal is down
+    /// (read-only: never shows `s to start`).
+    pub(crate) server_stopped: bool,
 }
 
 impl<'a> CastView<'a> {
@@ -187,6 +190,7 @@ impl<'a> CastView<'a> {
             studio_focused: false,
             hint,
             stopped: false,
+            server_stopped: false,
         }
     }
 }

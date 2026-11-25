@@ -32,6 +32,7 @@ pub mod raw_input;
 #[cfg(unix)]
 pub mod reader;
 pub mod selection;
+pub(crate) mod server_action;
 pub mod sidebar;
 pub mod term;
 pub mod terminal_modes;

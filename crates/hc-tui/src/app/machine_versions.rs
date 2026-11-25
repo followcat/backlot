@@ -403,6 +403,9 @@ impl App {
     /// restart marker lands on the stop action, and its `Ok` reply
     /// chains the start through the same ActionTracker (U6c §5).
     pub(super) fn machine_stage_restart(&mut self, machine: Option<String>) {
+        if !self.can_start_stage(machine.as_deref()) {
+            return;
+        }
         self.stage_restart_pending.insert(machine.clone());
         self.run_action(crate::studio_cmds::stage_stop(machine));
     }
@@ -414,7 +417,10 @@ impl App {
         if action.name != "stop stage" {
             return;
         }
-        if self.stage_restart_pending.remove(&action.machine) && ok {
+        if self.stage_restart_pending.remove(&action.machine)
+            && ok
+            && self.can_start_stage(action.machine.as_deref())
+        {
             self.run_action(crate::studio_cmds::stage_start(action.machine.clone()));
         }
     }

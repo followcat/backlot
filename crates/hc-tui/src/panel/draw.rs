@@ -312,6 +312,16 @@ pub(crate) fn render(
                     Style::default().fg(palette.peach),
                 );
             }
+            Row::ServerStopped { cmd } => {
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end(&format!("◌ {cmd}"), rect.width as usize),
+                    Style::default().fg(palette.peach),
+                );
+            }
             Row::Empty => {
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
             }

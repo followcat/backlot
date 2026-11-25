@@ -160,7 +160,8 @@ impl App {
                 // A mutation that landed while its machine's stage is
                 // down is on disk but unseen — the toast stays up for
                 // the actionable hold with `[s] start stage` (R3 §1b).
-                let stopped = mutates_ledger(&pending.action)
+                let stopped = self.can_start_stage(pending.action.machine.as_deref())
+                    && mutates_ledger(&pending.action)
                     && !self.machine_stage_running(pending.action.machine.as_deref());
                 let (body, hold) = if stopped {
                     (
@@ -270,6 +271,10 @@ impl App {
         else {
             return false;
         };
+        if !self.can_start_stage(machine.as_deref()) {
+            self.action_toast = None;
+            return false;
+        }
         self.run_action(crate::studio_cmds::stage_start(machine));
         self.action_toast = None;
         true

@@ -180,11 +180,15 @@ pub(crate) fn render_cast(
             }
             CastRow::Stopped => {
                 let avail = rect.width.saturating_sub(1);
-                let full = "stage stopped — s to start";
-                let label = if avail >= display_width(full) as u16 {
-                    full
+                let label = if view.server_stopped {
+                    "server stopped"
                 } else {
-                    "stage stopped · s start"
+                    let full = "stage stopped — s to start";
+                    if avail >= display_width(full) as u16 {
+                        full
+                    } else {
+                        "stage stopped · s start"
+                    }
                 };
                 put_text(
                     buffer,

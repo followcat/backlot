@@ -30,6 +30,8 @@ pub struct Options {
     pub session: Option<OsString>,
     /// SSH target (`--remote`); a local endpoint when `None`.
     pub remote: Option<String>,
+    /// Central server target (`--server <host>[/<session>]`).
+    pub server: Option<String>,
     /// `--plain`: the plain multiplexer from `main` — no studio mode,
     /// no opening page. For the parity harness and troubleshooting;
     /// general users wanting this shape should run `hc-tui`.
@@ -41,6 +43,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
     let mut options = Options {
         session: None,
         remote: None,
+        server: None,
         plain: false,
     };
     let mut args = args.into_iter();
@@ -62,14 +65,26 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
                 };
                 options.remote = Some(value);
             }
+            "--server" => {
+                let Some(value) = args.next() else {
+                    return Err("--server needs a value".into());
+                };
+                options.server = Some(value);
+            }
             other if other.starts_with("--session=") => {
                 options.session = Some(other["--session=".len()..].into());
             }
             other if other.starts_with("--remote=") => {
                 options.remote = Some(other["--remote=".len()..].into());
             }
+            other if other.starts_with("--server=") => {
+                options.server = Some(other["--server=".len()..].into());
+            }
             other => return Err(format!("unexpected argument '{other}'")),
         }
+    }
+    if options.server.is_some() && (options.remote.is_some() || options.session.is_some()) {
+        return Err("--server cannot be combined with --remote or --session".into());
     }
     Ok(Action::Run(options))
 }
@@ -170,6 +185,9 @@ Options:
       --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`; one
                          shared login and one attach connection per
                          target (login kept 10 minutes)
+      --server <H[/S]>   Connect to a backlot server host H and session S
+                         (default: backlot; overrides BACKLOT_SERVER /
+                         [client] in config.toml)
       --plain            Plain multiplexer — no studio mode, no opening
                          page (hc-tui is the general client)
   -h, --help             Print this help
@@ -203,7 +221,14 @@ docs/studio/guide.md walks a studio end to end.",
 /// every terminal event. `doc_patterns` therefore stays empty while
 /// backlot wants every terminal (docs/fork-features.md, "Named document
 /// subscriptions").
+#[cfg(test)]
 pub(crate) fn watch_params() -> WatchParams {
+    watch_params_for(false)
+}
+
+/// The watcher's parameters; when connected to a named server, also watches
+/// `backlot-cat` alongside `backlot`.
+pub(crate) fn watch_params_for(server_mode: bool) -> WatchParams {
     let mut params = WatchParams {
         traversal: Some(crate::project::agent_traversal),
         ..WatchParams::default()
@@ -211,6 +236,11 @@ pub(crate) fn watch_params() -> WatchParams {
     // Every attached machine serves its own stage's summary under
     // `DocKey { machine, name }`.
     params.documents.push("backlot".into());
+    if server_mode {
+        params
+            .documents
+            .push(backlot_model::req_wire::CAT_DOC_NAME.into());
+    }
     params
 }
 
@@ -263,6 +293,15 @@ fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::clien
 /// leaves the terminal restored by the caller's guard. `Some` is the
 /// restart path an in-client update asked for.
 pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<PathBuf>, String> {
+    run_with_server(endpoint, None, env, plain).await
+}
+
+pub async fn run_with_server(
+    endpoint: &Endpoint,
+    server: Option<&backlot_stage::server_cfg::ServerTarget>,
+    env: &Env,
+    plain: bool,
+) -> Result<Option<PathBuf>, String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
     let mut loaded = crate::config::load(&config_path);
@@ -286,7 +325,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
         }
     };
     shell.own_theme = own_theme;
-    let params = watch_params();
+    let params = watch_params_for(server.is_some());
     // One framed RPC wire: the watcher's refreshes and the operations
     // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
@@ -343,6 +382,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
     let (panel_config, panel_notice) = crate::panel::load(&crate::panel::config_path(env));
     app.set_panel_config(panel_config, panel_notice, &crate::panel::config_path(env));
     app.set_panel_endpoint(endpoint);
+    app.set_server_target(server.cloned());
 
     // The `[hollywood]` table (H4) from the same config file — the
     // layer starts collapsed with it and stays hidden without it, so
@@ -431,20 +471,71 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
     Ok(restart)
 }
 
-/// Resolves `--remote`/`--session` to an endpoint and runs the client.
+/// Resolves CLI options + `BACKLOT_SERVER` + `[client]` to the endpoint and
+/// optional named server target.
+pub fn resolve_endpoint_and_server_with(
+    options: &Options,
+    env: &Env,
+    platform: &dyn Platform,
+    local_hostname: Option<&str>,
+    current_user: Option<&str>,
+) -> Result<(Endpoint, Option<backlot_stage::server_cfg::ServerTarget>), String> {
+    if options.server.is_some() && (options.remote.is_some() || options.session.is_some()) {
+        return Err("--server cannot be combined with --remote or --session".into());
+    }
+    if options.remote.is_some()
+        || options.session.is_some()
+        || (options.plain && options.server.is_none())
+    {
+        let ep = endpoint::resolve(
+            env,
+            options.session.as_deref(),
+            options.remote.as_deref(),
+            platform,
+        )
+        .map_err(|e| format!("endpoint: {e}"))?;
+        return Ok((ep, None));
+    }
+    match backlot_stage::server_cfg::resolve_os(options.server.as_deref(), env)? {
+        Some(target) => {
+            let ep = backlot_stage::server_cfg::resolve_endpoint_with(
+                &target,
+                env,
+                platform,
+                local_hostname,
+                current_user,
+            )
+            .map_err(|e| format!("endpoint: {e}"))?;
+            Ok((ep, Some(target)))
+        }
+        None => {
+            let ep = endpoint::resolve(env, None, None, platform)
+                .map_err(|e| format!("endpoint: {e}"))?;
+            Ok((ep, None))
+        }
+    }
+}
+
+/// Resolves `--remote`/`--session`/`--server` to an endpoint and runs the client.
 pub async fn run_options(
     options: &Options,
     env: &Env,
     platform: &dyn Platform,
 ) -> Result<Option<PathBuf>, String> {
-    let endpoint = endpoint::resolve(
+    let local_host = backlot_stage::server_cfg::system_hostname();
+    let user = env
+        .get(std::ffi::OsStr::new("USER"))
+        .and_then(|v| v.to_str())
+        .map(str::to_owned)
+        .or_else(|| std::env::var("USER").ok());
+    let (endpoint, server) = resolve_endpoint_and_server_with(
+        options,
         env,
-        options.session.as_deref(),
-        options.remote.as_deref(),
         platform,
-    )
-    .map_err(|e| format!("endpoint: {e}"))?;
-    run(&endpoint, env, options.plain).await
+        local_host.as_deref(),
+        user.as_deref(),
+    )?;
+    run_with_server(&endpoint, server.as_ref(), env, options.plain).await
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::{Action, OPENING_FRAMES, OpeningOpts, PLAIN_HINT, TAGLINE, actions};
+use super::{Action, OPENING_FRAMES, OpeningOpts, PLAIN_HINT, TAGLINE, actions_for};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
@@ -78,14 +78,15 @@ fn layout(area: Rect, rows: usize) -> Option<Layout> {
 
 /// Paint the card. `true` when it drew; `false` sends the caller on to
 /// the plain layout.
-pub(super) fn render(
+pub(super) fn render_server(
     buffer: &mut Buffer,
     area: Rect,
     palette: &Palette,
     opts: &OpeningOpts,
     frame: Option<u8>,
+    server_cmd: Option<&str>,
 ) -> bool {
-    let rows = actions(opts);
+    let rows = actions_for(opts, server_cmd.is_some());
     let Some(layout) = layout(area, rows.len()) else {
         return false;
     };
@@ -104,6 +105,24 @@ pub(super) fn render(
     );
     draw_content(buffer, inner, palette, &rows, layout.art, frame);
     draw_footer(buffer, &layout, palette);
+    if let Some(cmd) = server_cmd {
+        let w = (display_width(cmd) as u16).min(area.width);
+        let x = area.x + area.width.saturating_sub(w) / 2;
+        let below = layout.y + layout.total_h();
+        let row = if below < area.bottom() {
+            below
+        } else {
+            layout.y + layout.total_h() - 1
+        };
+        put_text(
+            buffer,
+            x,
+            row,
+            w,
+            &truncate_end(cmd, w as usize),
+            Style::default().fg(palette.peach),
+        );
+    }
     true
 }
 
