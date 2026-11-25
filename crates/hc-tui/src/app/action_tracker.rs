@@ -77,6 +77,7 @@ impl App {
         let Some(id) = self.actions.start(action.clone()) else {
             return;
         };
+        self.last_dispatched_action_id = Some(id);
         if let Some(bad) = hostile {
             self.sync_pending();
             self.sched.mark_dirty(Instant::now());
@@ -120,32 +121,15 @@ impl App {
         if pending.action.mark == mark::hollywood_setup() {
             self.hw_setup_reply(result.is_ok());
         }
+        if !pending.action.view
+            && pending.action.mark != mark::hollywood_setup()
+            && self.reader_compose_on_reply(id, &result)
+        {
+            return;
+        }
         match result {
             Ok(stdout) if pending.action.view => {
-                let card = pending
-                    .action
-                    .mark
-                    .strip_prefix("card:")
-                    .or_else(|| pending.action.label.strip_prefix("card show "))
-                    .map(str::to_owned);
-                let title = match &card {
-                    Some(id) => id.clone(),
-                    None => match &pending.action.machine {
-                        Some(machine) => format!("{} · {machine}", pending.action.name),
-                        None => pending.action.name.clone(),
-                    },
-                };
-                let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
-                if lines.is_empty() {
-                    self.show_notice("Hollywood", &format!("{title}: nothing to show"));
-                } else {
-                    self.hollywood.view = Some(crate::hollywood::CardView {
-                        card,
-                        title,
-                        lines,
-                        scroll: 0,
-                    });
-                }
+                self.on_view_action_reply(&pending.action, &stdout);
             }
             Ok(_) => {
                 let resolved = self
@@ -184,6 +168,9 @@ impl App {
                 });
             }
             Err(err) => {
+                if pending.action.view {
+                    self.reader_clear_loading();
+                }
                 self.action_toast = Some(ActionToast {
                     title: fail_title(&pending),
                     body: fail_body(&err),

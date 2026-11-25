@@ -40,7 +40,7 @@ pub(super) fn deliveries(sheet: &Sheet, out: &mut Vec<SheetLine>) {
         out.push(line("no deliveries yet", Row::Dim));
     }
     for delivery in &task.deliveries {
-        delivery_line(delivery, out);
+        delivery_line(&task.id, delivery, out);
         for reported in &delivery.checks {
             out.push(line(
                 format!(
@@ -58,7 +58,12 @@ pub(super) fn deliveries(sheet: &Sheet, out: &mut Vec<SheetLine>) {
                 .map(|c| format!("exit {c}"))
                 .unwrap_or_else(|| "no exit".to_string());
             let timeout = if check.timed_out { " · timed out" } else { "" };
-            out.push(file_line(
+            let status = if check.passed() {
+                format!("✓ {} · pass ({exit})", check.name)
+            } else {
+                format!("× {} · FAIL ({exit}){timeout}", check.name)
+            };
+            out.push(file_line_meta(
                 format!(
                     "    {} {} {exit} · {}ms{timeout}",
                     if check.passed() { "✓" } else { "×" },
@@ -67,6 +72,10 @@ pub(super) fn deliveries(sheet: &Sheet, out: &mut Vec<SheetLine>) {
                 ),
                 if check.passed() { Row::Good } else { Row::Bad },
                 check.output.clone(),
+                SheetFileMeta {
+                    task: Some(task.id.clone()),
+                    check_status: Some(status),
+                },
             ));
         }
         for review in task.reviews.iter().filter(|r| r.delivery == delivery.n) {
@@ -100,7 +109,7 @@ fn short_commits(commits: &str) -> String {
 
 /// One delivery's head line: `d2 <runner>/<model> · <commits> ·
 /// v<req>` — the report file rides the row for `o`.
-fn delivery_line(delivery: &DeliveryRecord, out: &mut Vec<SheetLine>) {
+fn delivery_line(task_id: &str, delivery: &DeliveryRecord, out: &mut Vec<SheetLine>) {
     let actor = format!("{}/{}", delivery.actor.runner, delivery.actor.model);
     let commits = if delivery.commits.is_empty() {
         "no commits".to_string()
@@ -114,7 +123,15 @@ fn delivery_line(delivery: &DeliveryRecord, out: &mut Vec<SheetLine>) {
     if delivery.report.is_empty() {
         out.push(line(text, Row::Head));
     } else {
-        out.push(file_line(text, Row::Head, delivery.report.clone()));
+        out.push(file_line_meta(
+            text,
+            Row::Head,
+            delivery.report.clone(),
+            SheetFileMeta {
+                task: Some(task_id.to_string()),
+                check_status: None,
+            },
+        ));
     }
 }
 

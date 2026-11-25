@@ -26,12 +26,21 @@ pub(crate) enum Row {
 }
 
 /// One flattened content line.
+/// Reader context carried by file-backed `Deliveries` rows (`delivery` / `check`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct SheetFileMeta {
+    pub task: Option<String>,
+    pub check_status: Option<String>,
+}
+
 pub(crate) struct SheetLine {
     pub text: String,
     pub row: Row,
     /// The studio-relative file `o` reads — `reports/…`,
     /// `checks/…` — on the rows that carry one.
     pub file: Option<String>,
+    /// Structured task and check status for the Reader metadata row.
+    pub meta: Option<SheetFileMeta>,
     /// Whether the selection may rest here — separator rows are
     /// skipped like the dock's dividers (S2 §4).
     pub selectable: bool,
@@ -42,15 +51,22 @@ pub(super) fn line(text: impl Into<String>, row: Row) -> SheetLine {
         text: text.into(),
         row,
         file: None,
+        meta: None,
         selectable: true,
     }
 }
 
-pub(super) fn file_line(text: impl Into<String>, row: Row, file: impl Into<String>) -> SheetLine {
+pub(super) fn file_line_meta(
+    text: impl Into<String>,
+    row: Row,
+    file: impl Into<String>,
+    meta: SheetFileMeta,
+) -> SheetLine {
     SheetLine {
         text: text.into(),
         row,
         file: Some(file.into()),
+        meta: Some(meta),
         selectable: true,
     }
 }
@@ -60,6 +76,7 @@ pub(super) fn sep() -> SheetLine {
         text: String::new(),
         row: Row::Dim,
         file: None,
+        meta: None,
         selectable: false,
     }
 }

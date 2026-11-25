@@ -131,6 +131,7 @@ async fn modals_dim_backdrop_and_suppress_underlying_cursors_and_highlights() {
         title: "c3".into(),
         lines: vec!["body".into()],
         scroll: 0,
+        ..CardView::default()
     });
     let _ = assert_suppressed(&mut app, "Reader");
     assert!(!app.resolve_host_cursor().visible);

@@ -1401,3 +1401,54 @@ fn summary_exposes_current_requirement_file_when_present() {
         Some("req/v2-checkout.md")
     );
 }
+
+#[test]
+fn legacy_backlot_1_summary_without_exchange_metadata_deserializes_to_none() {
+    let legacy = r#"{
+        "schema": "backlot/1",
+        "updated_ms": 100,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "acme-shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "exchange": [{
+                "seq": 7,
+                "who": "producer",
+                "text": "shipped v1",
+                "file": "reports/7.md"
+            }]
+        }],
+        "hollywood": {
+            "state": "live",
+            "cards": [{
+                "id": "c3",
+                "studio": "acme-shop",
+                "action": "pause t2",
+                "why": "looping"
+            }],
+            "exchange": [{
+                "seq": 9,
+                "who": "hollywood",
+                "text": "triage ready",
+                "has_body": true
+            }]
+        }
+    }"#;
+    let parsed: Summary = serde_json::from_str(legacy).unwrap();
+    let st_ex = &parsed.studios[0].exchange[0];
+    assert_eq!(st_ex.to, None);
+    assert_eq!(st_ex.kind, None);
+    assert_eq!(st_ex.task, None);
+    assert_eq!(st_ex.ts_ms, None);
+
+    let hw = parsed.hollywood.as_ref().unwrap();
+    assert_eq!(hw.cards[0].ts_ms, None);
+    assert_eq!(hw.exchange[0].to, None);
+    assert_eq!(hw.exchange[0].kind, None);
+    assert_eq!(hw.exchange[0].task, None);
+    assert_eq!(hw.exchange[0].ts_ms, None);
+}

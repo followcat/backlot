@@ -349,6 +349,7 @@ async fn an_outside_click_closes_the_show_me_view() {
         title: "c4".into(),
         lines: vec!["one".into(), "two".into()],
         scroll: 0,
+        ..crate::hollywood::CardView::default()
     });
     draw_to(&mut app, 120, 24);
     let hits = app

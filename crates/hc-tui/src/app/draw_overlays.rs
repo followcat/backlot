@@ -90,6 +90,8 @@ pub(super) fn render_overlays_and_cursor(
     // behind an invisible layer. The collapsed strip still waits for
     // the card to leave (U7: with no studio the card is the surface).
     let active_surface = !app.has_active_modal();
+    let panel_active_surface =
+        active_surface || super::draw_overlays_s3::dock_live_with_reader(app, area);
     let band_over_page = app.hollywood.expanded();
     let call_sheet_band = app.call_sheet_band(area);
     let bar_h = if band_over_page && app.opening.ready() {
@@ -169,7 +171,7 @@ pub(super) fn render_overlays_and_cursor(
                 .map(|key| key.label(&crate::config::format_prefix_combos(&app.live.prefix))),
             !app.panel_beside(area.width),
             app.pane.input_refused(),
-            active_surface,
+            panel_active_surface,
             &app.actions,
             &app.shell.palette,
             crate::update_state::now_ms(),
