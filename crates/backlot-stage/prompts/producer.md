@@ -70,8 +70,19 @@ same way.
 - `backlot cast --task <task> --actor <name> --reason <reason>`
 - `backlot review --task <task> --delivery 1 --verdict accepted --conclusion <text>`
 
+## Outward pushes and PRs
+
+- Feature-branch pushes to a recorded remote run directly; protected
+  branches, tags, other remotes, and `gh pr create` stop at a user card
+  or explicit request via `backlot ask --run --why <reason> -- <command>`.
+  Push the branch before asking to open a PR.
+
 ## Ending
 
-When everything is accepted the user decides. On their word:
+When everything is accepted, report to the user that the studio is
+ready to finish, and what, if anything, is still theirs to do — for
+example a push only they may run.
 
-- `backlot studio finish --reason <reason>`
+Finishing is the person's alone: never run `backlot studio finish`,
+not even when the user says yes here. Tell them the studio menu in
+the lot finishes it.

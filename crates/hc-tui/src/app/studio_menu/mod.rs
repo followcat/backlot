@@ -255,6 +255,11 @@ impl App {
                     !self.machine_reachable(studio.machine),
                 ))
             }
+            Target::OutwardCard(key, id) => Some(StudioMenu::card_on(
+                key.machine.clone(),
+                id,
+                !self.machine_reachable(key.machine.as_deref()),
+            )),
             Target::Stage(machine) => {
                 let mut menu = StudioMenu::stage(!self.machine_reachable(machine.as_deref()));
                 menu.machine = machine.clone();
@@ -355,6 +360,11 @@ impl App {
                 Some(m)
             }
             T::Card(id) => Some(StudioMenu::card(id)),
+            T::OutwardCard(key, id) => Some(StudioMenu::card_on(
+                key.machine.clone(),
+                id,
+                !self.machine_reachable(key.machine.as_deref()),
+            )),
             T::Title => {
                 let cfg = self.current_hollywood_cfg();
                 Some(StudioMenu::hollywood_title(cfg.as_ref()))

@@ -91,6 +91,12 @@ impl App {
                 self.hollywood.scroll = 0;
                 self.studio.lot.counts.unread = 0;
             }
+            Target::OutwardCard(key, id) => {
+                self.hollywood.mode = crate::hollywood::LayerMode::Expanded;
+                self.hollywood_select(Target::OutwardCard(key, id));
+                self.hollywood.scroll = 0;
+                self.studio.lot.counts.unread = 0;
+            }
             Target::Ready(key) | Target::Tell(key) => self.focus_studio(&key),
             Target::Stage(machine, offline) => {
                 self.studio_notify_stage(&machine, offline);

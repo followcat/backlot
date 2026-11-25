@@ -108,6 +108,12 @@ pub async fn send_request(
     send_envelope(client, endpoint, &envelope, timeout).await
 }
 
+fn timeout_err(req_id: &str) -> Fail {
+    Fail::refused(format!(
+        "timed out waiting for ack of '{req_id}' (no reply from server)"
+    ))
+}
+
 /// Send a pre-built [`ReqEnvelope`] and wait for its matching [`ResAck`].
 pub async fn send_envelope(
     client: &Client,
@@ -130,10 +136,7 @@ pub async fn send_envelope(
             return Ok(ack);
         }
         let Some(rem) = deadline.checked_duration_since(Instant::now()) else {
-            return Err(Fail::refused(format!(
-                "timed out waiting for ack of '{}'",
-                envelope.req_id
-            )));
+            return Err(timeout_err(&envelope.req_id));
         };
         let wait = rem.min(POLL_FALLBACK);
         if let Some(s) = sub.as_mut() {
@@ -150,10 +153,7 @@ pub async fn send_envelope(
                     if let Some(ack) = find_ack(client, &envelope.req_id).await? {
                         return Ok(ack);
                     }
-                    return Err(Fail::refused(format!(
-                        "timed out waiting for ack of '{}'",
-                        envelope.req_id
-                    )));
+                    return Err(timeout_err(&envelope.req_id));
                 }
             }
         } else {

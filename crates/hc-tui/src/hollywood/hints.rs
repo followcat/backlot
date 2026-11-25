@@ -77,7 +77,9 @@ fn slots(
         Some(target @ Target::Prompt(..)) => {
             [prompt_answers(target), false, false, false, true, agent]
         }
-        Some(Target::Card(_)) => [false, true, false, false, false, agent],
+        Some(Target::Card(_) | Target::OutwardCard(..)) => {
+            [false, true, false, false, false, agent]
+        }
         Some(Target::Stage(_, offline)) => [false, false, false, !offline, false, agent],
         // R3-N5: a READY row has no peek of its own — `p` stays on
         // prompt rows and studio frames only.

@@ -451,7 +451,7 @@ async fn real_two_studios_side_by_side() {
         assert_eq!(delivered["commits"], range, "{delivered}");
     }
     // Finishing is refused while a studio's own task is open.
-    let refused = a.bl_fail("studio finish --as producer");
+    let refused = a.bl_fail("studio finish --as user");
     assert!(refused.contains("t1"), "{refused}");
 
     // Both deliveries accepted; each actor closes inside its own
@@ -484,7 +484,7 @@ async fn real_two_studios_side_by_side() {
     // `acme-shop` finishes while `acme` keeps running: its roles
     // close, the document and `status --all` keep both — one
     // `finished`, one `live`.
-    a.bl("studio finish --reason accepted --as producer");
+    a.bl("studio finish --reason accepted --as user");
     a.wait_kind("studio.finished", 1);
     wait_absent(&client, &a.terminal("producer")).await;
     wait_absent(&client, &a.terminal("director")).await;
@@ -503,7 +503,7 @@ async fn real_two_studios_side_by_side() {
 
     // `acme` finishes its own way; both studios end finished, the
     // stage terminal the only `backlot` one left.
-    b.bl("studio finish --reason accepted --as producer");
+    b.bl("studio finish --reason accepted --as user");
     b.wait_kind("studio.finished", 1);
     wait_absent(&client, &b.terminal("producer")).await;
     wait_absent(&client, &b.terminal("director")).await;

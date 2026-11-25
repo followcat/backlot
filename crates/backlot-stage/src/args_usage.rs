@@ -8,7 +8,7 @@ pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
 pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n       backlot report show --studio <s> --file <relpath>";
-pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
+pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>\n       backlot ask --run [--why <text>] (-- <prog> <args...> | \"<cmd>\")";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin)\n       backlot tell hollywood \"<text>\" [--text <msg>]";
 pub(crate) const U_PROGRESS: &str =
     "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";

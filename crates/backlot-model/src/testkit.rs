@@ -67,6 +67,7 @@ pub fn studio_kind() -> EventKind {
         checks: Vec::new(),
         task_budget_s: None,
         limits: BTreeMap::new(),
+        push: PushPolicy::default(),
     }
 }
 

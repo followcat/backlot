@@ -40,8 +40,8 @@ pub(super) fn commands_of(cmds: &[&str]) -> String {
     call("run_commands", serde_json::json!({"commands": cmds}))
 }
 
-/// Run the generated hook on one payload: `(cancel, message, signals)`.
-pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
+/// Run the generated hook on one payload for a role: `(cancel, message, signals)`.
+pub(super) fn run_as(dir: &Path, role: &str, input: &str) -> (bool, String, String) {
     let signals = dir.join("cline-signals.jsonl");
     let hook = dir.join("PreToolUse.sh");
     fs::write(
@@ -50,6 +50,7 @@ pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
             worktree: WORKTREE,
             signals: &signals,
             allowed: &rules(),
+            role,
         }),
     )
     .unwrap();
@@ -78,6 +79,11 @@ pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
     let msg = v["errorMessage"].as_str().unwrap_or("").to_string();
     let signals = fs::read_to_string(&signals).unwrap_or_default();
     (cancel, msg, signals)
+}
+
+/// Run the generated hook on one payload: `(cancel, message, signals)`.
+pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
+    run_as(dir, "actor-t1-c1", input)
 }
 
 fn commands(cmds: &[&str]) -> String {
@@ -307,6 +313,7 @@ fn a_nameless_call_is_cancelled() {
             worktree: WORKTREE,
             signals: &empty.join("gone/deeper/signals.jsonl"),
             allowed: &rules(),
+            role: "actor-t1-c1",
         }),
     )
     .unwrap();
@@ -334,4 +341,122 @@ fn a_nameless_call_is_cancelled() {
         "a hook never writes to stderr: {:?}",
         String::from_utf8_lossy(&out.stderr)
     );
+}
+
+#[test]
+fn cline_hook_blocks_self_approval_backlot_env_and_mutations() {
+    let dir = tmp("self-approve");
+    for cmd in [
+        "BACKLOT_ROLE=user backlot status",
+        "backlot status $BACKLOT_ROLE",
+        "env -i backlot card apply c1",
+        "env --ignore-environment backlot card apply c1",
+        "backlot card apply c1",
+        "backlot card cancel c1",
+        "backlot --studio acme-shop card apply c1",
+        "backlot perms revoke r1",
+        "backlot approve --person actor-t1-c1 --decision allow",
+    ] {
+        let (cancel, _, _) = run_as(&dir, "actor-t1-c1", &commands(&[cmd]));
+        assert!(cancel, "actor-t1-c1 must cancel `{cmd}`");
+    }
+
+    for role in ["writer", "hollywood"] {
+        let (cancel, _, _) = run_as(
+            &dir,
+            role,
+            &commands(&["backlot approve --person actor-t1-c1 --decision allow"]),
+        );
+        assert!(cancel, "{role} must cancel `backlot approve`");
+    }
+
+    // `director` is blocked on `--as` override or approving self, but allowed for an actor.
+    for bad in [
+        "backlot approve --as user --person actor-t1-c1 --decision allow",
+        "backlot approve --person director --decision allow",
+        "backlot card apply c1",
+    ] {
+        let (cancel, _, _) = run_as(&dir, "director", &commands(&[bad]));
+        assert!(cancel, "director must cancel `{bad}`");
+    }
+    let (cancel, msg, _) = run_as(
+        &dir,
+        "director",
+        &commands(&["backlot approve --person actor-t1-c1 --decision allow"]),
+    );
+    assert!(!cancel, "director approve actor-t1-c1 failed: {msg}");
+}
+
+/// The hook's own escape rules run before the role's allowed list: a
+/// command ruled in (a declared check, or any `backlot` call) still
+/// cannot name the queue/socket, detach, or control the server.
+fn run_with_allowed(dir: &Path, allowed: &[&str], cmd: &str) -> bool {
+    let signals = dir.join("escape-signals.jsonl");
+    let hook = dir.join("PreToolUse-escape.sh");
+    let allowed: Vec<String> = allowed.iter().map(|s| (*s).to_string()).collect();
+    fs::write(
+        &hook,
+        script(&Spec {
+            worktree: WORKTREE,
+            signals: &signals,
+            allowed: &allowed,
+            role: "actor-t1-c1",
+        }),
+    )
+    .unwrap();
+    let mut child = Command::new("sh")
+        .arg(&hook)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(commands_of(&[cmd]).as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
+    v["cancel"].as_bool().unwrap()
+}
+
+#[test]
+fn a_role_escape_is_cancelled_even_when_its_command_is_ruled_in() {
+    let dir = tmp("escape");
+    let allowed = [
+        "backlot",
+        "tmux new -d",
+        "tmux new-session -d",
+        "systemd-run",
+        "python3 -c",
+        "node -e",
+        "rg doc.set",
+        "cargo test -p herdr-core",
+        "git commit -m",
+        "sleep 5",
+    ];
+    for cmd in [
+        "tmux new -d sh -c 'backlot card apply c1'",
+        "tmux new-session -d -- sleep 60",
+        "systemd-run --user --quiet sleep 60",
+        "backlot server stop",
+        "backlot --session backlot server run",
+        "python3 -c 'open(\"plugin.backlot.req\", \"w\").write(\"doc.set\")'",
+        "node -e 'require(\"fs\").readFileSync(process.env.HC_SOCKET)'",
+    ] {
+        assert!(run_with_allowed(&dir, &allowed, cmd), "must cancel `{cmd}`");
+    }
+    // Plain command words naming the queue or the socket dir stay allowed.
+    for cmd in [
+        "sleep 5",
+        "backlot status",
+        "backlot tell producer --text plugin.backlot.req",
+        "rg doc.set crates/",
+        "cargo test -p herdr-core",
+        "git commit -m \"doc.set: keep the queue names\"",
+    ] {
+        assert!(!run_with_allowed(&dir, &allowed, cmd), "must allow `{cmd}`");
+    }
 }

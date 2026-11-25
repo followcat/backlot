@@ -94,9 +94,9 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             {
                 Ok(())
             }
-            EventKind::MessageQueued { purpose: None, .. } | EventKind::RoleRefused { .. } => {
-                Ok(())
-            }
+            EventKind::MessageQueued { purpose: None, .. }
+            | EventKind::RoleRefused { .. }
+            | EventKind::OutwardRequested { .. } => Ok(()),
             EventKind::RoleProgress {
                 role: target, task, ..
             } if target == role && task.as_deref().is_none_or(|t| t == own) => Ok(()),
@@ -109,6 +109,7 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             EventKind::PlanPublished { .. }
                 | EventKind::MessageQueued { purpose: None, .. }
                 | EventKind::RoleRefused { .. }
+                | EventKind::OutwardRequested { .. }
         ) || matches!(
             &new.kind,
             EventKind::RoleProgress { role: target, task: None, .. } if target == role
@@ -128,7 +129,7 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, "the stage"))
         };
     }
-    if let EventKind::AskAnswered { .. } = &new.kind {
+    if let EventKind::AskAnswered { .. } | EventKind::OutwardCompleted { .. } = &new.kind {
         return if role == "stage" {
             Ok(())
         } else {
@@ -175,7 +176,8 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::MessageDropped { .. }
         | EventKind::AttentionRaised { .. }
         | EventKind::AttentionCleared { .. }
-        | EventKind::TaskChecked { .. } => "the stage",
+        | EventKind::TaskChecked { .. }
+        | EventKind::OutwardCompleted { .. } => "the stage",
         EventKind::RoleReopen { .. }
         | EventKind::RoleRelease { .. }
         | EventKind::RoleRestart { .. }
@@ -204,7 +206,8 @@ fn who_can(kind: &EventKind) -> &'static str {
         }
         EventKind::ReportSent { .. } => "the director or the producer",
         EventKind::RoleRefused { .. } => "a role or the stage",
+        EventKind::OutwardRequested { .. } => "a studio role",
         EventKind::RoleProgress { .. } => "a studio role",
-        EventKind::StudioFinished { .. } => "the user or the producer",
+        EventKind::StudioFinished { .. } => "the user",
     }
 }

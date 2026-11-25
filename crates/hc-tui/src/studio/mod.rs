@@ -250,13 +250,24 @@ pub(crate) fn cast_order(studio: &StudioSummary) -> Vec<&RoleSummary> {
         .collect()
 }
 
-/// A studio's `!<n>` count: roles carrying an attention.
+/// A studio's `!<n>` count: roles carrying an attention plus open outward cards.
 pub(crate) fn attention_count(studio: &StudioSummary) -> usize {
     studio
         .roles
         .iter()
         .filter(|role| role.attention.is_some())
         .count()
+        + studio.outward_cards.len()
+}
+
+/// A studio's header `!<n>` urgent count: open attention records plus open outward cards.
+pub(crate) fn waiting_count(studio: &StudioSummary) -> usize {
+    (studio.waiting as usize) + studio.outward_cards.len()
+}
+
+/// True when any urgent item in the studio belongs to the user (red `!n` badge).
+pub(crate) fn waiting_is_user(studio: &StudioSummary) -> bool {
+    !studio.outward_cards.is_empty() || studio.roles.iter().any(|r| r.attention_user)
 }
 
 /// A studio's working count for the collapsed strip.

@@ -140,7 +140,7 @@ fn an_actor_records_only_its_own_delivery_block_and_messages() {
             EventKind::StudioFinished {
                 reason: "done".into(),
             },
-            "the user or the producer",
+            "the user",
         ),
         (studio_kind(), "the user"),
         (
@@ -454,6 +454,9 @@ fn role_refused_and_outward_action_validate_and_roundtrip() {
         task: Some("t1".into()),
         command: "git push origin main".into(),
         cwd: "/home/user/acme-shop".into(),
+        argv: Vec::new(),
+        rule: None,
+        disposition: RefusalDisposition::Refused,
     };
     assert_eq!(refused.name(), "role.refused");
     assert_eq!(OUTWARD_ACTION, "outward action");

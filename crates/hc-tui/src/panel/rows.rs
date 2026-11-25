@@ -4,7 +4,7 @@
 //! stacked block's `╶ id …` line — so the scroll math stays in
 //! one-line steps.
 
-use backlot_model::summary::{RoleSummary, StudioExchange, TaskSummary};
+use backlot_model::summary::{OutwardCardSummary, RoleSummary, StudioExchange, TaskSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
@@ -33,6 +33,8 @@ pub(crate) enum Target {
     Person(StudioKey, String),
     /// `(studio, task)` — a task row with no live actor row.
     Task(StudioKey, String),
+    /// `(studio, card id)` — an open outward push/PR card row.
+    OutwardCard(StudioKey, String),
     /// The `✓ <n> done · <ids>` fold line — Space/Enter opens it.
     Fold(StudioKey),
     /// The `□ <n> closed · <names>` fold line — Space/Enter opens it.
@@ -67,6 +69,7 @@ impl Target {
             | Target::Strip(key)
             | Target::Person(key, _)
             | Target::Task(key, _)
+            | Target::OutwardCard(key, _)
             | Target::Fold(key)
             | Target::ClosedFold(key)
             | Target::Talk(key, _)
@@ -90,6 +93,8 @@ pub(crate) enum Owed {
     Confirm,
     /// `◌ stage stopped · s start`.
     StageDown,
+    /// `◌ <start command>` when server is stopped (read-only).
+    ServerStopped,
     /// `× <machine> unreachable`.
     Offline,
     /// `! <error>` — the ledger/stage error.
@@ -142,6 +147,11 @@ pub(crate) enum Row<'a> {
     StageDown {
         machine: Option<&'a str>,
     },
+    /// Server terminal is gone while `backlot-cat` is present — read-only
+    /// command hint, never starts anything itself.
+    ServerStopped {
+        cmd: String,
+    },
     /// A listed machine that is not connected; its studios cannot
     /// answer.
     Offline {
@@ -192,6 +202,11 @@ pub(crate) enum Row<'a> {
     Task {
         studio: StudioRef<'a>,
         task: &'a TaskSummary,
+    },
+    /// An open outward push/PR card inside a studio block.
+    OutwardCard {
+        studio: StudioRef<'a>,
+        card: &'a OutwardCardSummary,
     },
     /// `✓ <n> done · <ids>` — the fold line when 2+ tasks are done.
     AcceptedFold {
@@ -275,6 +290,7 @@ impl Row<'_> {
                 ..
             } => Target::Stage(machine.clone()),
             Row::Title
+            | Row::ServerStopped { .. }
             | Row::StoppedLedger { .. }
             | Row::Offline { .. }
             | Row::Empty
@@ -290,6 +306,7 @@ impl Row<'_> {
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
+            Row::OutwardCard { studio, card } => Target::OutwardCard(studio.key(), card.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
@@ -328,7 +345,13 @@ fn block_rows<'a>(
             format!("{} unreachable", studio.machine.unwrap_or("local")),
         ))
     } else if !stage {
-        Some((Owed::StageDown, "stage stopped · s start".to_string()))
+        if studio.machine.is_none()
+            && let Some(cmd) = panel.server_stopped_cmd.as_deref()
+        {
+            Some((Owed::ServerStopped, cmd.to_owned()))
+        } else {
+            Some((Owed::StageDown, "stage stopped · s start".to_string()))
+        }
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
     } else if studio.studio.ready_to_finish {
@@ -404,6 +427,9 @@ fn block_rows<'a>(
     };
     for role in live_roles(studio.studio) {
         emit_person(out, role);
+    }
+    for card in &studio.studio.outward_cards {
+        out.push(Row::OutwardCard { studio, card });
     }
     let accepted_open = panel.accepted_open(&studio.key());
     let folds = fold_count(studio.studio);
@@ -501,7 +527,13 @@ pub(crate) fn rows<'a>(
     let mut out = vec![Row::Title];
     if machines.is_empty() {
         if !stage_running(None) {
-            out.push(Row::StageDown { machine: None });
+            if let Some(cmd) = panel.server_stopped_cmd.as_deref() {
+                out.push(Row::ServerStopped {
+                    cmd: cmd.to_owned(),
+                });
+            } else {
+                out.push(Row::StageDown { machine: None });
+            }
         }
         match &panel.stopped {
             Some(stopped) => out.push(Row::StoppedLedger {
@@ -532,9 +564,17 @@ pub(crate) fn rows<'a>(
             continue;
         }
         if !stage_running(machine.machine.as_deref()) {
-            out.push(Row::StageDown {
-                machine: machine.machine.as_deref(),
-            });
+            if machine.machine.is_none()
+                && let Some(cmd) = panel.server_stopped_cmd.as_deref()
+            {
+                out.push(Row::ServerStopped {
+                    cmd: cmd.to_owned(),
+                });
+            } else {
+                out.push(Row::StageDown {
+                    machine: machine.machine.as_deref(),
+                });
+            }
         }
     }
     let studios = super::data::studios(machines);

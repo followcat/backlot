@@ -46,7 +46,7 @@ fn prompts_sort_before_stage_cards_and_ready() {
             Wait::Hollywood(_) => "hollywood",
             Wait::NoRequirement(_) => "new",
             Wait::Stage(_) => "stage",
-            Wait::Card(_) => "card",
+            Wait::Card(_) | Wait::Outward(_) => "card",
             Wait::Ready(_) => "ready",
         })
         .collect();

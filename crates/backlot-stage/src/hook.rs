@@ -170,14 +170,67 @@ fn agy_run_command_line(payload: &serde_json::Value) -> Option<&str> {
         .and_then(|v| v.as_str())
 }
 
-fn agy_deny_json(command: &str) -> String {
-    let reason =
-        format!("refused by backlot: {command} is the person's to run; ask with backlot ask");
+fn agy_deny_json(reason: &str) -> String {
     serde_json::to_string(&serde_json::json!({
         "decision": "deny",
         "reason": reason,
     }))
     .unwrap_or_else(|_| r#"{"decision":"deny","reason":"refused by backlot"}"#.into())
+}
+
+fn agy_classify_pre_tool(
+    payload: &serde_json::Value,
+    env: &crate::cli::Env,
+    cwd: &Path,
+) -> Option<(
+    String,
+    Vec<String>,
+    String,
+    backlot_model::event::RefusalDisposition,
+    PathBuf,
+    String,
+)> {
+    let line = agy_run_command_line(payload)?;
+    let info = crate::guard::load_studio_guard_info(env);
+    let m = crate::guard_shell::classify_command_line_match(
+        line,
+        &info.policy,
+        cwd,
+        env,
+        info.role_dir.as_deref(),
+        info.work_area.as_deref(),
+        info.repo_root.as_deref(),
+        &info.members,
+    );
+    match m.verdict {
+        crate::guard_rules::GuardVerdict::Allow => None,
+        crate::guard_rules::GuardVerdict::Card { command, rule } => {
+            let reason = format!(
+                "refused by backlot ({rule}): sent to the person as a card; wait for the result"
+            );
+            Some((
+                command,
+                m.argv,
+                rule,
+                backlot_model::event::RefusalDisposition::Card,
+                m.cwd,
+                reason,
+            ))
+        }
+        crate::guard_rules::GuardVerdict::Refuse { command, rule } => {
+            let reason = format!(
+                "refused by backlot: {command} is the person's to run; ask with backlot ask ({rule})"
+            );
+            Some((
+                command,
+                m.argv,
+                rule,
+                backlot_model::event::RefusalDisposition::Refused,
+                m.cwd,
+                reason,
+            ))
+        }
+    }
 }
 
 fn line_with_cap(payload: &serde_json::Value, ts_ms: u64) -> String {
@@ -310,7 +363,7 @@ fn run_io_inner(
 
     let is_pre_tool = field(&payload, "hookEventName") == Some("PreToolUse");
     let refused = if is_pre_tool && in_role_env(env) {
-        agy_run_command_line(&payload).and_then(crate::guard_rules::refused_command_line)
+        agy_classify_pre_tool(&payload, env, cwd)
     } else {
         None
     };
@@ -318,7 +371,6 @@ fn run_io_inner(
     let worker_env = crate::cli::Env {
         vars: env.vars.clone(),
     };
-    let worker_cwd = cwd.to_path_buf();
     let refused_for_worker = refused.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -331,7 +383,9 @@ fn run_io_inner(
             append(&f, &l);
         }
         let outcome = match refused_for_worker {
-            Some(ref cmd) => crate::guard::record_refusal(&worker_env, &worker_cwd, cmd),
+            Some((ref cmd, ref argv, ref rule, disp, ref eff_cwd, _)) => {
+                crate::guard::record_verdict(&worker_env, eff_cwd, cmd, argv, Some(rule), disp)
+            }
             None => Ok(()),
         };
         let _ = tx.send(outcome);
@@ -343,8 +397,8 @@ fn run_io_inner(
     }
 
     match (refused, rx.recv_timeout(budget)) {
-        (Some(cmd), Ok(Ok(()))) => {
-            let _ = writeln!(stdout, "{}", agy_deny_json(&cmd));
+        (Some((_, _, _, _, _, reason)), Ok(Ok(()))) => {
+            let _ = writeln!(stdout, "{}", agy_deny_json(&reason));
             let _ = stdout.flush();
         }
         _ => write_agy_allow(stdout),

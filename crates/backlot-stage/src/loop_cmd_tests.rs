@@ -1,7 +1,8 @@
 //! `backlot approve` and `backlot studio finish` end to end: the
-//! events land only for the roles allowed to record them, and the
-//! model's refusals — no open permission prompt, open tasks,
-//! already finished — surface as exit-1 messages.
+//! events land only for the roles allowed to record them, finishing
+//! is the person's alone, and the model's refusals — no open
+//! permission prompt, open tasks, already finished — surface as
+//! exit-1 messages.
 
 use std::path::Path;
 
@@ -36,6 +37,15 @@ fn raise(env: &Env, role: &str, reason: &str) {
         })
     })
     .unwrap();
+}
+
+/// Ledger lines in the studio's own log — a refused command appends
+/// none.
+fn event_lines(env: &Env) -> usize {
+    std::fs::read_to_string(studio_dir(env).join("events.jsonl"))
+        .unwrap()
+        .lines()
+        .count()
 }
 
 fn studio(scratch: &Scratch, env: &Env) {
@@ -146,6 +156,36 @@ fn approve_is_for_user_and_director() {
     );
 }
 
+/// Finishing is the person's alone: every role — the producer
+/// included — is refused with the same line before any state is
+/// read, and nothing joins the ledger. An empty studio still refuses
+/// this way, ahead of the `--force` guard.
+#[test]
+fn only_the_person_finishes_the_studio() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    let before = event_lines(&env);
+    for role in ["producer", "director", "actor-t1-c1"] {
+        let msg = refused(&env, &format!("studio finish --as {role}"));
+        assert_eq!(
+            msg,
+            "finishing the studio is the person's call; say in your report that it is ready, and they finish it from the lot",
+            "{role}"
+        );
+    }
+    // Hollywood is refused earlier still: inside a studio it may only
+    // `tell` the producer, and a finish is no exception.
+    let msg = refused(&env, "studio finish --as hollywood");
+    assert!(msg.contains("cannot do this"), "{msg}");
+    assert_eq!(
+        event_lines(&env),
+        before,
+        "a refused finish wrote to the ledger"
+    );
+    let state = store::load_state(&studio_dir(&env)).unwrap();
+    assert!(state.finished.is_none());
+}
+
 #[test]
 fn finish_refuses_with_open_tasks_and_names_them() {
     let (scratch, env) = scratch();
@@ -162,24 +202,18 @@ fn finish_refuses_with_open_tasks_and_names_them() {
             "task new --title front-page --kind feature --acceptance-file {acceptance} --as director"
         ),
     );
-    let msg = refused(&env, "studio finish --as producer");
+    let msg = refused(&env, "studio finish --as user");
     assert!(msg.contains("open tasks"), "{msg}");
     assert!(msg.contains("t1"), "{msg}");
-    // Abandoning the task makes it terminal; finish then lands.
+    // Abandoning the task makes it terminal; the person's finish then
+    // lands, reason optional.
     ok(&env, "task abandon --task t1 --reason dropped --as user");
-    let out = ok(&env, "studio finish --reason done --as producer");
+    let out = ok(&env, "studio finish --as user");
     assert!(out.contains("studio.finished"), "{out}");
+    let state = store::load_state(&studio_dir(&env)).unwrap();
+    assert!(state.finished.is_some());
     let msg = refused(&env, "studio finish --as user");
     assert!(msg.contains("already finished"), "{msg}");
-}
-
-#[test]
-fn finish_is_for_user_and_producer() {
-    let (scratch, env) = scratch();
-    studio(&scratch, &env);
-    let msg = refused(&env, "studio finish --as director");
-    assert!(msg.contains("the user or the producer"), "{msg}");
-    ok(&env, "studio finish --force --as user");
 }
 
 /// `backlot attention clear` resolves a still-open attention by

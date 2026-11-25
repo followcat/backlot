@@ -181,8 +181,9 @@ Light path: the producer dispatches one task directly to one actor, or does the 
 is recorded in `task.cast`'s `by` and routes the delivery notice to the producer. It is recorded the same way, so the
 two paths can be compared on real work.
 
-When everything is accepted the user decides; `backlot studio finish` records `studio.finished` and the studio stops
-scheduling — only a person explicitly reopened is desired again.
+When everything is accepted the user decides and finishes the studio themselves; the producer reports
+it ready and what is still theirs to do, and never runs the finish. `backlot studio finish` records
+`studio.finished` and the studio stops scheduling — only a person explicitly reopened is desired again.
 
 ## Stop conditions
 
@@ -329,7 +330,9 @@ Whether the stage is running comes from the terminal inventory (`backlot-stage` 
 liveness signal costs no document writes.
 
 An optional `hollywood` object rides in the same document: the overseer's role state, runner and model, its newest
-headline and its open cards. It appears only while `[hollywood]` is configured.
+headline and its open cards. It appears only while `[hollywood]` is configured. Independently of `[hollywood]`, each
+`StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
+and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike.
 
 ## Hollywood
 
@@ -353,7 +356,11 @@ Hollywood changes nothing directly: it proposes **cards**, the user applies or c
 applied card out exactly once — re-checking the card's base, recording the studio event `by: user` through the same
 validation the user's own command would hit, and recording `card.done`, `card.failed` or `card.stale` back in
 Hollywood's ledger. A `studio-new` card re-runs the `studio new --dry-run` checks, writes `studio.created` and queues
-the brief to the new producer. The config gates the agent terminal, never the card pass.
+the brief to the new producer. An `outward` card (proposed by the stage from a carded `role.refused` or explicit
+`backlot ask --run`) re-checks work-area containment, clean local git config, `GuardVerdict::Card` classification, and
+`GitHead` / remote branch staleness, then spawns asynchronously in a stripped person environment (`BACKLOT_*` and
+`GIT_CONFIG_*` removed, guard shims filtered off `PATH`) with output saved to `outward/c<n>.log`, a 120 s timeout, and
+an `"outward"` completion notice back to the requesting role. The config gates the agent terminal, never the card pass.
 
 The bar in the TUI (U7, D15, D16) is studio mode's own surface, not the agent's: it draws with or without a
 `[hollywood]` table, since the studios, the new-studio frame and the setup line need no agent — the line opens the
@@ -554,9 +561,9 @@ user's.
 
 ## Guard (D3)
 
-A role works against local state, never outward: publishing, pushing, opening PRs, modifying remotes or upgrading `hc` stay the person's to run. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
+A role works against local state and controlled feature-branch pushes under its studio's `[push]` policy (`recorded` default allows non-protected branch pushes to recorded studio or member remotes; `any` and `none` widen or close auto-pushes). Protected branches, tags (when permitted by policy), unrecorded remotes, and `gh pr create` classify as `Card`: the guard stops the role cleanly and records `role.refused` (`decision: "card"`, full `argv`) so `stage` proposes an `Outward` card (or the role submits one explicitly via `backlot ask --run [--why <r>] -- <cmd>`). Hard-refused calls (force/mirror pushes, config/transport overrides, non-PR `gh` writes, `hc` control (`update`, `machine`, `server stop`, `run`, `exec`, `send`, `keys`, `connect`), interpreter code (`python -c`, `node -e`, heredocs) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, detach tricks that leave the role's process tree (`systemd-run`, `tmux new -d`/`new-session -d`), `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm`/`cargo publish`, `backlot server run|start|stop|adopt|service`, shell alias or env mutations) record `role.refused` and stop outright. `role_env`/`hrole_env` stamp `BACKLOT_TERMINAL`, and user-privileged CLI verbs (`card`, `--as user`, `approve --as user`, `perms revoke`, and `backlot server …`) verify the calling process tree against `BACKLOT_TERMINAL` so a subshell cannot escape by unsetting `BACKLOT_*`. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
 
-1. **Command shims (`roles/<role>/bin`).** `role_env` and `hrole_env` place `<role>/bin` first on `PATH`, ahead of `exe_dir`. Small shell wrappers invoke `backlot guard <name> -- "$@"`. Writes are refused (`gh` writes `pr`, `release`, `repo`, `issue`, `gist`, `secret`, `workflow run`, and `api` with non-`GET` method or `-f`/`-F`; `hc update`, `hc machine`, `hc server stop`; `scp`; `rsync` with a `host:` spec; `ssh <host> <command>`; `npm publish`; `cargo publish`); read-only calls resolve and `exec` the real binary past `<role>/bin` on `PATH` (skipping shim markers).
+1. **Command shims (`roles/<role>/bin`).** `role_env` and `hrole_env` place `<role>/bin` first on `PATH`, ahead of `exe_dir`. Small shell wrappers invoke `backlot guard <name> -- "$@"`. Writes are refused (`gh` writes `pr`, `release`, `repo`, `issue`, `gist`, `secret`, `workflow run`, and `api` with non-`GET` method or `-f`/`-F`; `hc update`, `hc machine`, `hc server stop`, `hc run|exec|send|keys|connect`; `socat`/`nc`/`ncat` naming a server token; `systemd-run` and detached `tmux new`/`new-session`; `scp`; `rsync` with a `host:` spec; `ssh <host> <command>`; `npm publish`; `cargo publish`); read-only calls resolve and `exec` the real binary past `<role>/bin` on `PATH` (skipping shim markers).
 2. **`git push` hook (`roles/<role>/git-hooks`).** Role env appends `core.hooksPath=<role>/git-hooks` via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` without clobbering any existing `GIT_CONFIG_*` entries. `pre-push` calls `backlot guard git-push -- "$@"`, while client commit/merge/rebase hooks pass through to the repository's own hooks path (`core.hooksPath` or `--git-common-dir`/hooks) when one exists. The user's own `git push` outside the role environment is untouched.
 3. **Refusal record and attention.** A refused call prints `refused by backlot: <command> is the person's to run; ask with backlot ask`, exits 126, appends `role.refused` (`role`, optional `task`, `command` capped at 200 chars, `cwd`) in studio ledgers, and raises one `outward action` attention (`needs_user: true`) once per open attention episode. Hollywood gets the same shims and hooks.
 4. **Hook & runner prefix defence (`agy`).** `agy`'s `PreToolUse` hook runs BEFORE `.agy-settings.json` `permissions.deny`. `backlot hook --runner agy` inspects `run_command` `CommandLine` through `guard_rules::refused_command_line`, records `role.refused` and one `outward action` attention per episode via `guard::record_refusal`, and returns `{"decision":"deny","reason":"refused by backlot: <command> is the person's to run; ask with backlot ask"}` within a 1.5 s internal fail-open budget (per-hook timeout 5 s). Allowed calls, internal errors, and timeouts return `{"decision":"allow"}` because empty output or `{}` denies `agy` tool calls. `runners::agy` also splices `permissions.deny` (`command(<prefix>)`, no trailing ` *`) into session `.agy-settings.json` beside `toolPermission: "always-proceed"` as the fallback when hooks are skipped or not yet loaded.

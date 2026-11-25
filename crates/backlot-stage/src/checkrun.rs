@@ -7,7 +7,7 @@
 //! scripted children.
 
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
@@ -151,20 +151,33 @@ fn drain(mut pipe: impl Read + Send + 'static, sink: Arc<Mutex<CappedBuf>>) -> R
 /// Production [`Spawn`]: `sh -c run` under the stripped environment,
 /// `/dev/null` stdin, both pipes drained into the capped tail.
 pub fn real_spawn(req: &CheckSpawn) -> Result<Box<dyn CheckChild>, String> {
+    let args = vec!["-c".to_string(), req.run.clone()];
+    real_spawn_argv(Path::new("sh"), &args, &req.dir, &req.env)
+}
+
+/// Spawn `bin` directly with `args` (no shell), stdin `/dev/null`, its own
+/// process group, and merged bounded stdout/stderr pipes.
+pub fn real_spawn_argv(
+    bin: &Path,
+    args: &[String],
+    dir: &Path,
+    env: &[(String, String)],
+) -> Result<Box<dyn CheckChild>, String> {
     use std::os::unix::process::CommandExt;
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
-        .arg(&req.run)
-        .current_dir(&req.dir)
+    let mut cmd = Command::new(bin);
+    cmd.args(args)
+        .current_dir(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_clear()
-        .envs(req.env.iter().cloned())
+        .envs(env.iter().cloned())
         // Its own process group: the timeout's TERM/KILL reach every
-        // child the shell spawns, not just the shell.
+        // child the command spawns, not just the root PID.
         .process_group(0);
-    let mut child = cmd.spawn().map_err(|e| format!("spawn sh -c: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn {}: {e}", bin.display()))?;
     let out = Arc::new(Mutex::new(CappedBuf(Vec::new())));
     let readers = vec![
         drain(

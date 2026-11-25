@@ -53,6 +53,18 @@ impl App {
         }
         self.hollywood_sync_history_from(&machines);
         self.panel.sync_histories(&machines);
+        if let Some(cat) = crate::panel::data::catalog(&self.view, None) {
+            self.has_hollywood_cfg = cat.hollywood_cfg.configured;
+            self.panel.hollywood_hint = !self.has_hollywood_cfg;
+        }
+        let panel_w = if self.panel.mode == crate::panel::PanelMode::Expanded {
+            44
+        } else {
+            38
+        };
+        let sheet_w = self.area.0.saturating_sub(self.sidebar_width + 2).max(62) as usize;
+        self.panel.server_stopped_cmd = self.server_stopped_command(Some(panel_w));
+        self.hollywood.server_stopped_cmd = self.server_stopped_command(Some(sheet_w));
         self.sync_lot(&machines);
         // W1b: the empty lot's line — no document lists a studio, but a
         // stopped machine's ledger does. Read here so the panel, its

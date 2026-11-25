@@ -79,10 +79,11 @@ pub(crate) fn render(
                     (" ".into(), palette.text),
                     (health.glyph().to_string(), health.color(palette)),
                 ];
-                if studio.studio.waiting > 0 {
-                    let user = studio.studio.roles.iter().any(|r| r.attention_user);
+                let waiting = crate::studio::waiting_count(studio.studio);
+                if waiting > 0 {
+                    let user = crate::studio::waiting_is_user(studio.studio);
                     segs.push((
-                        format!(" !{}", studio.studio.waiting),
+                        format!(" !{waiting}"),
                         if user { palette.red } else { palette.peach },
                     ));
                 }

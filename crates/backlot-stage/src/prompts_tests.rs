@@ -105,6 +105,7 @@ fn studio_config(checks: Vec<CheckDecl>) -> StudioConfig {
         checks,
         task_budget_s: None,
         limits: BTreeMap::new(),
+        push: Default::default(),
     }
 }
 
@@ -658,6 +659,25 @@ fn the_producer_records_every_question_as_a_tell() {
     assert!(
         text.contains("Every question you put to the user also goes through"),
         "{text}"
+    );
+}
+
+/// The producer reports the studio ready and never finishes it: the
+/// person finishes from the lot.
+#[test]
+fn the_producer_never_finishes_the_studio() {
+    let text = template(RoleKind::Producer);
+    assert!(
+        text.contains("never run `backlot studio finish`"),
+        "producer.md still offers the finish: {text}"
+    );
+    assert!(
+        text.contains("Finishing is the person's alone"),
+        "producer.md does not leave the finish to the person: {text}"
+    );
+    assert!(
+        !text.contains("On their word"),
+        "producer.md still finishes on the person's word: {text}"
     );
 }
 

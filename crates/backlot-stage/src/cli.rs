@@ -49,6 +49,7 @@ const COMMANDS: &[&str] = &[
     "guard",
     "hollywood",
     "card",
+    "perms",
     "runners",
     "repos",
 ];
@@ -484,6 +485,15 @@ pub(crate) fn exec_event(
         }
         *commits = crate::range::check_range(&dir, &caller.studio, &task, &state, commits)?;
     }
+    if let Cmd::AskRun {
+        argv, cwd, command, ..
+    } = &mut cmd
+    {
+        let state = load(&dir)?;
+        let (cmd_text, eff_cwd) = commands::validate_ask_run(&dir, &state, &caller, env, argv)?;
+        *cwd = Some(eff_cwd);
+        *command = Some(cmd_text);
+    }
     // `cast` checks each accepted dependency's delivery already sits
     // on the integration branch — a cast before the merge would cut
     // the task's work area without its dependency's code. A working
@@ -608,18 +618,53 @@ pub(crate) fn exec_event(
 }
 
 /// Entry point for `main`: `None` unless argv[1] is a studio command.
+/// Index of the subcommand word, skipping leading common flags such as
+/// `--server <host>` or `--studio=<name>`.
+pub(crate) fn command_word(args: &[String]) -> Option<usize> {
+    const PREFIX_FLAGS: &[&str] = &[
+        "--studio",
+        "--as",
+        "--task",
+        "--session",
+        "--remote",
+        "--server",
+    ];
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        if PREFIX_FLAGS
+            .iter()
+            .any(|f| arg.starts_with(f) && arg.as_bytes().get(f.len()) == Some(&b'='))
+        {
+            i += 1;
+            continue;
+        }
+        if PREFIX_FLAGS.contains(&arg.as_str()) {
+            i += 2;
+            if i > args.len() {
+                return None;
+            }
+            continue;
+        }
+        return Some(i);
+    }
+    None
+}
+
+/// Dispatches `backlot <command> ...` when the command word is a known
+/// studio verb, returning `None` when the invocation should open the TUI.
 pub fn maybe_run(args: &[String]) -> Option<ExitCode> {
-    let first = args.first()?;
-    if !COMMANDS.contains(&first.as_str()) {
+    let idx = command_word(args)?;
+    let cmd = args[idx].as_str();
+    if !COMMANDS.contains(&cmd) {
         return None;
     }
     // `hook` is the runner hook's own command (S9f): no studio, no
     // ledger, always silent, always 0 — it must never get in its
     // runner's way.
-    if first == "hook" {
+    if idx == 0 && cmd == "hook" {
         return Some(crate::hook::run(&args[1..]));
     }
-    if first == "guard" {
+    if idx == 0 && cmd == "guard" {
         return Some(crate::guard::run(&args[1..]));
     }
     let env = Env::process();

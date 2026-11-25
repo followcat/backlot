@@ -139,8 +139,6 @@ fn plan_refuses_a_bad_profile_and_keeps_going_without_effort() {
 #[test]
 fn settings_splices_tool_permission_only() {
     let expected_deny = [
-        "command(git push)",
-        "command(gh pr)",
         "command(gh release)",
         "command(gh repo)",
         "command(gh issue)",
@@ -148,6 +146,14 @@ fn settings_splices_tool_permission_only() {
         "command(hc update)",
         "command(hc machine)",
         "command(hc server stop)",
+        "command(hc run)",
+        "command(hc exec)",
+        "command(hc send)",
+        "command(hc keys)",
+        "command(hc connect)",
+        "command(systemd-run)",
+        "command(tmux new -d)",
+        "command(tmux new-session -d)",
         "command(scp)",
         "command(rsync)",
         "command(ssh)",

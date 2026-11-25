@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::progress::{
     MAX_PROGRESS_CHARS, MAX_RUNNING_CHARS, age_short, normalize_progress_text,
 };
+pub use crate::push_policy::{PushPolicy, RecordedRemote};
 /// `Usage`/`UsageTotals` live in `crate::usage`; the `event::`
 /// path keeps working for the event payloads that carry them.
 pub use crate::usage::{Usage, UsageTotals};
@@ -119,6 +120,32 @@ pub enum PlanKind {
 pub enum ApprovalDecision {
     Allow,
     Deny,
+}
+
+/// Disposition of a `role.refused` guard verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RefusalDisposition {
+    #[default]
+    Refused,
+    Card,
+}
+
+impl RefusalDisposition {
+    pub(crate) fn is_default(d: &Self) -> bool {
+        *d == Self::Refused
+    }
+}
+
+/// Terminal outcome recorded in `outward.completed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutwardOutcome {
+    Succeeded,
+    Failed,
+    TimedOut,
+    Denied,
+    Stale,
 }
 
 /// The `attention` reason a permission prompt raises (D9): a role
@@ -342,6 +369,9 @@ pub enum EventKind {
         /// Absent on logs that predate the field.
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         limits: BTreeMap<String, u32>,
+        /// Studio outward push policy and recorded remote URLs.
+        #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
+        push: PushPolicy,
     },
     #[serde(rename = "role.started")]
     RoleStarted {
@@ -601,7 +631,7 @@ pub enum EventKind {
     #[serde(rename = "ask.answered")]
     AskAnswered { role: String, target: u64 },
     /// `role.refused`: an outward-action shim or git hook refused a
-    /// command run by a role (D3).
+    /// command run by a role (D3) or routed it to a user card.
     #[serde(rename = "role.refused")]
     RoleRefused {
         role: String,
@@ -609,6 +639,39 @@ pub enum EventKind {
         task: Option<String>,
         command: String,
         cwd: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        argv: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rule: Option<String>,
+        #[serde(default, skip_serializing_if = "RefusalDisposition::is_default")]
+        disposition: RefusalDisposition,
+    },
+    /// `outward.requested`: a role explicitly asked the person to run a
+    /// carded outward write via `backlot ask --run` (push-perms spec §2.2).
+    #[serde(rename = "outward.requested")]
+    OutwardRequested {
+        role: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<String>,
+        command: String,
+        cwd: String,
+        argv: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        why: Option<String>,
+    },
+    /// `outward.completed`: the stage recorded completion, denial, or
+    /// staleness of a carded outward action (`by: stage`).
+    #[serde(rename = "outward.completed")]
+    OutwardCompleted {
+        card: u64,
+        source_seq: u64,
+        outcome: OutwardOutcome,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        output_tail: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        log_file: Option<String>,
     },
     /// `role.progress`: a role's optional one-line step update (D5).
     #[serde(rename = "role.progress")]
@@ -708,6 +771,8 @@ impl EventKind {
             EventKind::StageAnswered { .. } => "stage.answered",
             EventKind::AskAnswered { .. } => "ask.answered",
             EventKind::RoleRefused { .. } => "role.refused",
+            EventKind::OutwardRequested { .. } => "outward.requested",
+            EventKind::OutwardCompleted { .. } => "outward.completed",
             EventKind::RoleProgress { .. } => "role.progress",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",

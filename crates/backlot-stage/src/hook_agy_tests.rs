@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use backlot_model::event::{EventKind, OUTWARD_ACTION};
+use backlot_model::event::{EventKind, OUTWARD_ACTION, RefusalDisposition};
 use backlot_model::summary::Work;
 
 use crate::cli::Env;
@@ -154,23 +154,33 @@ fn agy_pre_tool_use_refuses_outward_command_records_once_and_allows_safe_calls()
     assert_eq!(parsed1["decision"], "deny");
     assert_eq!(
         parsed1["reason"],
-        "refused by backlot: git push origin is the person's to run; ask with backlot ask"
+        "refused by backlot (unrecorded remote URL 'origin'): sent to the person as a card; wait for the result"
     );
 
-    // Second refusal in the same episode records role.refused again, attention stays once.
-    let denied2 = run_agy(&args, &env, &s.files, push_payload);
+    let force_payload = r#"{"conversationId":"conv-1","hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"git push --force origin HEAD"}}}"#;
+    let denied2 = run_agy(&args, &env, &s.files, force_payload);
     let parsed2: serde_json::Value = serde_json::from_str(denied2.trim()).unwrap();
     assert_eq!(parsed2["decision"], "deny");
+    let denied3 = run_agy(&args, &env, &s.files, force_payload);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(denied3.trim()).unwrap()["decision"],
+        "deny"
+    );
 
     let (events, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
+    let card_count = events
+        .iter()
+        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, disposition: RefusalDisposition::Card, .. } if role == "director"))
+        .count();
     let refused_count = events
         .iter()
-        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, command, .. } if role == "director" && command == "git push origin"))
+        .filter(|e| matches!(&e.kind, EventKind::RoleRefused { role, disposition: RefusalDisposition::Refused, .. } if role == "director"))
         .count();
     let attn_count = events
         .iter()
         .filter(|e| matches!(&e.kind, EventKind::AttentionRaised { role, reason, .. } if role == "director" && reason == OUTWARD_ACTION))
         .count();
+    assert_eq!(card_count, 1);
     assert_eq!(refused_count, 2);
     assert_eq!(attn_count, 1);
 }
@@ -214,7 +224,7 @@ fn agy_pre_tool_use_allows_outside_role_env_and_refuses_in_role_env() {
     assert_eq!(parsed["decision"], "deny");
     assert_eq!(
         parsed["reason"],
-        "refused by backlot: git push origin is the person's to run; ask with backlot ask"
+        "refused by backlot (unrecorded remote URL 'origin'): sent to the person as a card; wait for the result"
     );
     let (events_after, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
     assert_eq!(
@@ -271,6 +281,160 @@ fn agy_pre_tool_use_fails_open_on_internal_error_invalid_json_and_timeout() {
     let timed_out = String::from_utf8(out).unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(timed_out.trim()).unwrap()["decision"],
+        "allow"
+    );
+}
+
+#[test]
+fn agy_pre_tool_use_blocks_self_approval_backlot_env_and_mutations() {
+    let (s, env_base) = scratch();
+    let cast = fixture(&s, "cast.toml", CAST_TOML);
+    ok(
+        &env_base,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let sig = s.files.join("signals.jsonl");
+    let args = vec![
+        "--runner".into(),
+        "agy".into(),
+        "--file".into(),
+        sig.to_string_lossy().into_owned(),
+    ];
+    let run_role = |role: &str, cmd: &str| -> String {
+        let mut env = Env {
+            vars: env_base.vars.clone(),
+        };
+        env.vars.insert("BACKLOT_ROLE".into(), role.into());
+        let payload = serde_json::json!({
+            "conversationId": "conv-h3",
+            "hookEventName": "PreToolUse",
+            "toolCall": { "name": "run_command", "args": { "CommandLine": cmd } }
+        })
+        .to_string();
+        let out = run_agy(&args, &env, &s.files, &payload);
+        serde_json::from_str::<serde_json::Value>(out.trim()).unwrap()["decision"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    for cmd in [
+        "echo $BACKLOT_ROLE",
+        "env -i backlot card apply c1",
+        "env --ignore-environment backlot card apply c1",
+        "backlot card apply c1",
+        "backlot card cancel c1",
+        "backlot --studio acme-shop card apply c1",
+        "backlot perms revoke r1",
+        "backlot approve --person actor-t1-c1 --decision allow",
+    ] {
+        assert_eq!(
+            run_role("actor-t1-c1", cmd),
+            "deny",
+            "actor-t1-c1 must deny `{cmd}`"
+        );
+    }
+
+    for role in ["writer", "hollywood"] {
+        assert_eq!(
+            run_role(
+                role,
+                "backlot approve --person actor-t1-c1 --decision allow"
+            ),
+            "deny",
+            "{role} must deny `backlot approve`"
+        );
+    }
+
+    for bad in [
+        "backlot approve --as user --person actor-t1-c1 --decision allow",
+        "backlot approve --person director --decision allow",
+        "backlot card apply c1",
+    ] {
+        assert_eq!(
+            run_role("director", bad),
+            "deny",
+            "director must deny `{bad}`"
+        );
+    }
+    assert_eq!(
+        run_role(
+            "director",
+            "backlot approve --person actor-t1-c1 --decision allow"
+        ),
+        "allow"
+    );
+    assert_eq!(run_role("actor-t1-c1", "backlot card list"), "allow");
+}
+
+/// The command-line layer refuses the role's ways around the seatbelt:
+/// `hc` control, queue/socket scripts, detach tricks and server control.
+/// Reads stay allowed, and the person's own agy outside a role env is
+/// untouched.
+#[test]
+fn agy_pre_tool_use_refuses_role_escapes_and_keeps_reads() {
+    let (s, env_base) = scratch();
+    let cast = fixture(&s, "cast.toml", CAST_TOML);
+    ok(
+        &env_base,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let sig = s.files.join("signals.jsonl");
+    let args = vec![
+        "--runner".into(),
+        "agy".into(),
+        "--file".into(),
+        sig.to_string_lossy().into_owned(),
+    ];
+    let mut env = Env {
+        vars: env_base.vars.clone(),
+    };
+    env.vars.insert("BACKLOT_ROLE".into(), "producer".into());
+
+    let decision = |env: &Env, cmd: &str| -> String {
+        let payload = serde_json::json!({
+            "conversationId": "conv-guard",
+            "hookEventName": "PreToolUse",
+            "toolCall": { "name": "run_command", "args": { "CommandLine": cmd } }
+        })
+        .to_string();
+        let out = run_agy(&args, env, &s.files, &payload);
+        serde_json::from_str::<serde_json::Value>(out.trim()).unwrap()["decision"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    for bad in [
+        "hc run --bg 'backlot card apply c1'",
+        "hc exec t1 -- backlot card apply c1",
+        "hc send t1 hi",
+        "hc keys t1 ctrl-c",
+        "hc connect --session backlot",
+        "python3 -c 'open(\"plugin.backlot.req\", \"w\").write(\"doc.set\")'",
+        "nc -U /run/user/1000/herdr-core/backlot/backlot.sock",
+        "systemd-run --user sh -c 'backlot card apply c1'",
+        "tmux new -d sh -c 'backlot card apply c1'",
+        "backlot server stop",
+    ] {
+        assert_eq!(decision(&env, bad), "deny", "must deny `{bad}`");
+    }
+
+    for good in [
+        "hc ls",
+        "hc get backlot",
+        "hc file read a.txt",
+        "git status",
+        "rg \"plugin.backlot.req\" docs/",
+        "cargo test -p herdr-core",
+        "git commit -m \"doc.set: keep the queue names\"",
+    ] {
+        assert_eq!(decision(&env, good), "allow", "must allow `{good}`");
+    }
+
+    // The person's own agy in the same work area never sees the guard.
+    assert_eq!(
+        decision(&Env::default(), "hc run --bg 'backlot card apply c1'"),
         "allow"
     );
 }

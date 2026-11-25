@@ -35,6 +35,10 @@ pub(crate) fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
     }
 }
 
+/// The line a role hears when it tries to finish a studio: finishing
+/// is the person's alone, and the role's part is to report it ready.
+pub(crate) const FINISH_IS_THE_PERSONS_CALL: &str = "finishing the studio is the person's call; say in your report that it is ready, and they finish it from the lot";
+
 /// `priority`, `reopen` and `close` are person-facing commands: the
 /// user or the director records them; a working role cannot.
 pub(crate) fn person_gate(caller: &Caller) -> Result<(), Fail> {
@@ -61,6 +65,17 @@ pub(crate) fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -
         dest: format!("{subdir}/{leaf}"),
         append: None,
     }
+}
+
+/// `backlot studio new --cast [push]`: branch/tag/default-branch protection.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct CastPush {
+    #[serde(default)]
+    pub(crate) protected_branches: Option<Vec<String>>,
+    #[serde(default)]
+    pub(crate) protect_tags: Option<bool>,
+    #[serde(default)]
+    pub(crate) protect_default_branch: Option<bool>,
 }
 
 /// `backlot studio new --cast` file: role identities and candidates.
@@ -92,6 +107,8 @@ pub(crate) struct CastFile {
     pub(crate) check_env: Vec<String>,
     #[serde(default)]
     pub(crate) checks: Vec<crate::checks::CastCheck>,
+    #[serde(default)]
+    pub(crate) push: CastPush,
 }
 
 /// Read and validate a `--cast` file — the same checks `studio new`
@@ -179,7 +196,35 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
             )));
         }
     }
+    if let Some(branches) = &cast.push.protected_branches
+        && branches.iter().any(|b| b.trim().is_empty())
+    {
+        return Err(Fail::usage(
+            "push.protected_branches cannot contain an empty pattern",
+        ));
+    }
     Ok(cast)
+}
+
+/// Build `PushPolicy` from `[push]` in `cast.toml` plus remotes probed from `repo`/`members`.
+pub(crate) fn build_push_policy(
+    cast_push: &CastPush,
+    repo: &str,
+    members: &[String],
+    no_git: bool,
+) -> PushPolicy {
+    let mut policy = PushPolicy::default();
+    if let Some(branches) = &cast_push.protected_branches {
+        policy.protected_branches = branches.clone();
+    }
+    if let Some(tags) = cast_push.protect_tags {
+        policy.protect_tags = tags;
+    }
+    if let Some(def) = cast_push.protect_default_branch {
+        policy.protect_default_branch = def;
+    }
+    policy.remotes = crate::guard_git::probe_remotes(repo, members, no_git);
+    policy
 }
 
 /// Every runner the cast names — the three fixed roles and each
@@ -299,6 +344,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioMigrate { .. }
         | Cmd::StudioList { .. }
         | Cmd::StudioRestore { .. }
+        | Cmd::PermsRevoke { .. }
         | Cmd::Server(..)
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
@@ -362,6 +408,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             }
             crate::paths::initialize(&repo, &binding.members, binding.no_git, init)?;
             let members = binding.members.clone();
+            let push = build_push_policy(&cast.push, &repo, &members, binding.no_git);
             Ok(Box::new(move |_, _| {
                 Ok(pending(
                     EventKind::StudioCreated {
@@ -388,6 +435,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         checks,
                         task_budget_s: cast.task_budget_s,
                         limits: cast.limits,
+                        push,
                     },
                     by,
                     Vec::new(),
@@ -447,6 +495,34 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         }
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
         Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
+        Cmd::AskRun {
+            argv,
+            why,
+            cwd,
+            command,
+        } => {
+            let role = caller.role.clone();
+            let task = caller.task.clone();
+            let cwd_s = cwd
+                .unwrap_or_else(|| PathBuf::from("."))
+                .to_string_lossy()
+                .into_owned();
+            let cmd_s = command.unwrap_or_else(|| argv.join(" "));
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::OutwardRequested {
+                        role,
+                        task,
+                        command: cmd_s,
+                        cwd: cwd_s,
+                        argv,
+                        why,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Tell { role, source } => message_cmd(by, source_file(&source)?, role, None),
         Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
@@ -655,18 +731,15 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
-        // `studio finish` ends the studio; the model refuses while
-        // any task is not terminal, naming them. A studio with no
-        // requirement and no tasks refuses unless `--force` — an
-        // accidental finish of a just-made studio (L5).
+        // `studio finish` ends the studio and is the person's alone:
+        // a role reports the studio ready and the person finishes it
+        // from the lot. The model refuses while any task is not
+        // terminal, naming them. A studio with no requirement and no
+        // tasks refuses unless `--force` — an accidental finish of a
+        // just-made studio (L5).
         Cmd::StudioFinish { reason, force } => {
-            match caller.role.as_str() {
-                "user" | "producer" => {}
-                other => {
-                    return Err(Fail::refused(format!(
-                        "role '{other}' cannot do this; the user or the producer can"
-                    )));
-                }
+            if caller.role != "user" {
+                return Err(Fail::refused(FINISH_IS_THE_PERSONS_CALL));
             }
             Ok(Box::new(move |state, _| {
                 if !force
@@ -858,4 +931,15 @@ pub(crate) fn read_progress_source(source: &crate::args::TextSource) -> Result<S
         return Err(Fail::refused("progress text must be nonempty"));
     }
     Ok(text)
+}
+
+/// Validate `backlot ask --run` against the studio's `PushPolicy` and role work area.
+pub(crate) fn validate_ask_run(
+    sdir: &Path,
+    state: &StudioState,
+    caller: &Caller,
+    env: &Env,
+    argv: &[String],
+) -> Result<(String, PathBuf), Fail> {
+    crate::hcard_outward::validate_ask_run(sdir, state, caller, env, argv)
 }

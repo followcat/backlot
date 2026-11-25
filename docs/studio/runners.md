@@ -382,7 +382,10 @@ mask file for MCP. Both are rewritten at every start and resume.
     too — `git diff --no-index /proc/self/environ /dev/null` prints the environment and a commit's
     `-F` would echo it — with an `--opt=value`'s value checked as well.
   - the rules limit which programs start, not what code runs: an allowed `cargo test` runs the
-    project's build scripts and tests, which the role itself may have written.
+    project's build scripts and tests, which the role itself may have written. Shell env mutations
+    (`env`, `export`, `unset`, `declare`, `typeset` altering `BACKLOT_*`, `GIT_CONFIG_*`, or `PATH`)
+    and self-approval/mutation calls (`backlot card`, `backlot perms`, `--as user`) are also cancelled
+    in `PreToolUse.sh`.
   - always refused: `web_search`, `fetch_web_content`, `composio_*`, every `<server>__<tool>` MCP name,
     and every tool the list above does not name (`ask_question`, `skills`, an unknown name).
   A cancel ends the turn exactly as cmd's `esc` deny does: the agent does not retry, and it is told the
@@ -451,14 +454,19 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   composer with no dialog; in an untrusted folder it shows the folder-trust dialog first.
 - The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
   before every start and resume, `agy::prepare` writes (or splices byte-preservingly)
-  `toolPermission: "always-proceed"` together with `permissions.deny` containing the outward-action
-  prefixes (`command(git push)`, `command(gh pr)`, `command(gh release)`, `command(gh repo)`,
-  `command(gh issue)`, `command(gh api)`, `command(hc update)`, `command(hc machine)`,
-  `command(hc server stop)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
+  `toolPermission: "always-proceed"` together with policy-aware `permissions.deny` containing the outward-action
+  prefixes (`command(git push)` when policy is `none`, `command(gh pr)` unless `recorded` with `allow_gh_pr`,
+  `command(gh release)`, `command(gh repo)`, `command(gh issue)`, `command(gh api)`, `command(hc update)`,
+  `command(hc machine)`, `command(hc server stop)`, `command(hc run)`, `command(hc exec)`,
+  `command(hc send)`, `command(hc keys)`, `command(hc connect)`, `command(systemd-run)`,
+  `command(tmux new -d)`, `command(tmux new-session -d)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
   `command(npm publish)`, `command(cargo publish)`) — **without** trailing ` *` — while preserving
-  any other top-level settings and any existing `permissions.allow`. agy reads it once at startup,
+  any other top-level settings and any existing `permissions.allow`. Feature-branch pushes under `recorded`/`any`
+  pass `permissions.deny` and are checked at execution time by the per-role `pre-push` hook and `PreToolUse`
+  (`backlot hook --runner agy`), which also rejects segment-level `BACKLOT_*`/`GIT_CONFIG_*`/`PATH` env
+  mutations and `backlot card`/`perms`/`--as user` self-approval attempts. agy reads `.agy-settings.json` once at startup,
   so routine local tools proceed without prompts while outward prefixes are blocked ahead of the
-  shims (`bash -c` still bypasses agy prefix rules and hits the role `PATH` shims and git hook).
+  shims (`bash -c` still bypasses agy prefix rules and hits `PreToolUse`, role `PATH` shims, and git hook).
   Four `toolPermission` values are accepted on 1.5.16:
   `always-proceed`, `request-review`, `strict` and `proceed-in-sandbox` (`prompt`, `ask` and
   `default` are rejected as `unrecognized value`).

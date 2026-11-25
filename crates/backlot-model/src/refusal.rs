@@ -186,6 +186,8 @@ pub enum Refusal {
     RecastUnchanged(String),
     /// A `role.progress` text that is empty, too long, or holds control characters.
     BadProgress(String),
+    /// An invalid `outward.requested` or `outward.completed` payload.
+    InvalidOutward(String),
 }
 
 impl fmt::Display for Refusal {
@@ -396,7 +398,7 @@ impl fmt::Display for Refusal {
             Refusal::RecastUnchanged(role) => {
                 write!(f, "'{role}' already runs that identity")
             }
-            Refusal::BadProgress(msg) => f.write_str(msg),
+            Refusal::BadProgress(msg) | Refusal::InvalidOutward(msg) => f.write_str(msg),
         }
     }
 }

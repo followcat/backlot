@@ -70,7 +70,7 @@ pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
     let mut rows = Vec::new();
     if view.hint {
         rows.push(CastRow::Hint);
-    } else if view.stopped {
+    } else if view.server_stopped || view.stopped {
         rows.push(CastRow::Stopped);
     }
     for role in view

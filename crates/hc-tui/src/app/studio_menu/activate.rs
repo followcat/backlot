@@ -185,7 +185,9 @@ impl App {
             }
             StudioAct::StageStart => {
                 let machine = menu.machine().map(str::to_owned);
-                self.run_action(studio_cmds::stage_start(machine));
+                if self.can_start_stage(machine.as_deref()) {
+                    self.run_action(studio_cmds::stage_start(machine));
+                }
             }
             StudioAct::StageLog => {
                 self.open_stage_log(menu.machine().map(str::to_owned));
@@ -244,12 +246,12 @@ impl App {
             }
             StudioAct::CardApply => {
                 if let Some(id) = &menu.card {
-                    self.run_action(studio_cmds::card_apply(id));
+                    self.run_action(studio_cmds::card_apply_on(menu.machine.clone(), id));
                 }
             }
             StudioAct::CardShow => {
                 if let Some(id) = &menu.card {
-                    self.run_action(studio_cmds::card_show(id));
+                    self.run_action(studio_cmds::card_show_on(menu.machine.clone(), id));
                 }
             }
             StudioAct::CardCancel => {
@@ -257,7 +259,10 @@ impl App {
                     self.studio_dialog = Some(StudioDialog::reason(
                         format!("Cancel card {id}"),
                         false,
-                        ReasonFor::CardCancel { id: id.clone() },
+                        ReasonFor::CardCancel {
+                            machine: menu.machine.clone(),
+                            id: id.clone(),
+                        },
                     ));
                 }
             }

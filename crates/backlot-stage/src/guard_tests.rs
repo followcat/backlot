@@ -13,9 +13,8 @@ use backlot_model::summary::summary;
 
 use crate::cli::Env;
 use crate::cli_testkit::{CAST_TOML, fixture, git, ok, scratch};
-use crate::guard::{
-    SHIM_MARKER, apply_env, find_real_binary, prepare_role, refused_command, run_in,
-};
+use crate::guard::{SHIM_MARKER, apply_env, find_real_binary, prepare_role, run_in};
+use crate::guard_rules::refused_command;
 use crate::runners::executable;
 use crate::store;
 use crate::test_support::TestDir;
@@ -42,10 +41,8 @@ fn shim_allow_and_refuse_cases() {
     let refuse = [
         ("git-push", "origin main"),
         ("git-push", ""),
-        ("gh", "pr create --title x"),
         ("gh", "pr merge 12"),
-        ("gh", "pr list"),
-        ("gh", "-R owner/repo pr create"),
+        ("gh", "-R owner/repo pr close 5"),
         ("gh", "--repo=owner/repo release create v1.0"),
         ("gh", "repo create foo"),
         ("gh", "issue create --title bug"),
@@ -64,6 +61,34 @@ fn shim_allow_and_refuse_cases() {
         ("hc", "machine add host-b"),
         ("hc", "server stop"),
         ("hc", "--json server stop"),
+        ("hc", "send t1 hello"),
+        ("hc", "run --bg 'backlot card apply c1'"),
+        ("hc", "exec t1 -- ls"),
+        ("hc", "keys t1 ctrl-c"),
+        ("hc", "connect --session backlot"),
+        ("hc", "--on t1 send hi"),
+        ("hc", "--session backlot exec t1 -- ls"),
+        (
+            "socat",
+            "- UNIX-CONNECT:/run/user/1000/herdr-core/backlot/backlot.sock",
+        ),
+        (
+            "socat",
+            "STDIO UNIX-CONNECT:/home/alice/.local/state/herdr-core/backlot.sock",
+        ),
+        ("nc", "-U /run/user/1000/herdr-core/backlot/backlot.sock"),
+        ("ncat", "-U $HC_SOCKET"),
+        ("nc", "-U /tmp/queue-plugin.backlot.req.sock"),
+        (
+            "systemd-run",
+            "--user --quiet sh -c 'backlot card apply c1'",
+        ),
+        ("tmux", "new -d sh -c 'backlot card apply c1'"),
+        ("tmux", "new-session -d -- sh -c 'backlot card apply c1'"),
+        ("tmux", "-L backlot-test new -d sleep 60"),
+        ("backlot", "server stop"),
+        ("backlot", "--session backlot server run"),
+        ("backlot", "server adopt --stop-stages"),
         ("scp", "a.txt host-a:/tmp/a.txt"),
         ("scp", "host-a:/tmp/a.txt ."),
         ("rsync", "-avz src/ host-a:/dst/"),
@@ -86,6 +111,8 @@ fn shim_allow_and_refuse_cases() {
     }
 
     let allow = [
+        ("gh", "pr list"),
+        ("gh", "pr view 42"),
         ("gh", "status"),
         ("gh", "auth status"),
         ("gh", "search prs --state open"),
@@ -102,7 +129,21 @@ fn shim_allow_and_refuse_cases() {
         ("hc", "status"),
         ("hc", "list"),
         ("hc", "server status"),
-        ("hc", "send t1 hello"),
+        ("hc", "ls"),
+        ("hc", "get backlot"),
+        ("hc", "read backlot"),
+        ("hc", "wait t1"),
+        ("hc", "events"),
+        ("hc", "templates"),
+        ("hc", "schema"),
+        ("hc", "file read a.txt"),
+        ("socat", "-u /dev/null /tmp/plain.sock"),
+        ("nc", "-l 9999"),
+        ("socat", "TCP:host-a:80"),
+        ("tmux", "ls"),
+        ("screen", "-ls"),
+        ("backlot", "status"),
+        ("backlot", "server status"),
         ("rsync", "-av ./src ./dst"),
         ("rsync", "-av ./a:b /tmp/c:d"),
         ("ssh", "host-a"),
@@ -188,7 +229,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     env.vars.insert("PATH".into(), "/usr/bin:/bin".into());
 
     let work = Path::new("/home/user/acme-shop");
-    let argv: Vec<String> = ["gh", "--", "pr", "create", "--title", "hi"]
+    let argv: Vec<String> = ["gh", "--", "pr", "merge", "42"]
         .into_iter()
         .map(String::from)
         .collect();
@@ -198,7 +239,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     assert_eq!(
         msg.as_deref(),
         Some(
-            "refused by backlot: gh pr create --title hi is the person's to run; ask with backlot ask"
+            "refused by backlot: gh pr merge 42 is the person's to run; ask with backlot ask (gh write)"
         )
     );
 
@@ -219,8 +260,11 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         EventKind::RoleRefused {
             role: "actor-t1-c1".into(),
             task: Some("t1".into()),
-            command: "gh pr create --title hi".into(),
+            command: "gh pr merge 42".into(),
             cwd: "/home/user/acme-shop".into(),
+            argv: vec!["gh".into(), "pr".into(), "merge".into(), "42".into()],
+            rule: Some("gh write".into()),
+            disposition: backlot_model::event::RefusalDisposition::Refused,
         }
     );
 
@@ -239,7 +283,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         EventKind::AttentionRaised {
             role: "actor-t1-c1".into(),
             reason: OUTWARD_ACTION.into(),
-            detail: "gh pr create --title hi".into(),
+            detail: "gh pr merge 42".into(),
             needs_user: true,
         }
     );
@@ -265,7 +309,7 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
     assert!(!actor_row.attention_user);
     assert_eq!(
         actor_row.attention_detail.as_deref(),
-        Some("gh pr create --title hi")
+        Some("gh pr merge 42")
     );
 
     // Clear attention via user env, then refuse again: starts a new episode.
@@ -344,14 +388,29 @@ fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
     let repo = dir.join("repo");
     let work = dir.join("work-t1");
 
-    // Mock `backlot` exe verifying `guard git-push -- ...` invocation from pre-push hook.
+    // Mock `backlot` exe verifying `guard git-push -- ...` invocation from pre-push hook
+    // while passing `guard git -- ...` through to real git so pre-commit and pre-push run.
     write_exec(
         &exe_dir.join("backlot"),
-        "#!/bin/sh\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git-push\" ]; then\n  echo \"refused by backlot: git push is the person's to run; ask with backlot ask\" >&2\n  exit 126\nfi\nexit 0\n",
+        "#!/bin/sh\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git-push\" ]; then\n  echo \"refused by backlot: git push is the person's to run; ask with backlot ask\" >&2\n  exit 126\nfi\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git\" ]; then\n  shift 3\n  PATH=\"${PATH#*:}\" exec git \"$@\"\nfi\nexit 0\n",
     );
     prepare_role(&role_dir, exe_dir.to_str().unwrap()).unwrap();
 
-    for cmd in ["gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"] {
+    for cmd in [
+        "git",
+        "gh",
+        "hc",
+        "scp",
+        "rsync",
+        "ssh",
+        "npm",
+        "cargo",
+        "socat",
+        "nc",
+        "ncat",
+        "systemd-run",
+        "tmux",
+    ] {
         assert!(
             executable(&role_dir.join("bin").join(cmd)),
             "missing shim for {cmd}"
@@ -499,4 +558,57 @@ fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
         String::from_utf8_lossy(&push_user.stderr)
     );
     assert!(!git(&bare, &["rev-list", "--all"]).is_empty());
+}
+
+/// The shim layer refuses each role escape with one line naming the
+/// command and that it is the person's.
+#[test]
+fn shim_refuses_role_escapes_in_one_line() {
+    let dir = TestDir::new("backlot-guard-escapes");
+    let mut vars = BTreeMap::new();
+    vars.insert("PATH".into(), "/usr/bin:/bin".into());
+    let env = Env { vars };
+    for (argv, needle) in [
+        (
+            vec!["hc", "--", "run", "--bg", "backlot card apply c1"],
+            "hc run --bg backlot card apply c1 is the person's to run",
+        ),
+        (
+            vec![
+                "hc", "--", "exec", "t1", "--", "backlot", "card", "apply", "c1",
+            ],
+            "hc exec t1 -- backlot card apply c1 is the person's to run",
+        ),
+        (
+            vec![
+                "nc",
+                "--",
+                "-U",
+                "/run/user/1000/herdr-core/backlot/backlot.sock",
+            ],
+            "nc -U /run/user/1000/herdr-core/backlot/backlot.sock is the person's to run",
+        ),
+        (
+            vec!["socat", "--", "-", "UNIX-CONNECT:/tmp/hc.sock"],
+            "socat - UNIX-CONNECT:/tmp/hc.sock is the person's to run",
+        ),
+        (
+            vec!["systemd-run", "--", "--user", "true"],
+            "systemd-run --user true is the person's to run",
+        ),
+        (
+            vec!["tmux", "--", "new", "-d", "x"],
+            "tmux new -d x is the person's to run",
+        ),
+        (
+            vec!["backlot", "--", "server", "stop"],
+            "backlot server stop is the person's to run",
+        ),
+    ] {
+        let args: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
+        let (code, msg) = run_in(&args, &env, &dir, false);
+        assert_eq!(code, ExitCode::from(126), "{argv:?}: {msg:?}");
+        let msg = msg.expect("a refusal line");
+        assert!(msg.contains(needle), "{argv:?} -> {msg}");
+    }
 }

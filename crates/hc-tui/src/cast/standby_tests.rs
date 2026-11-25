@@ -58,6 +58,7 @@ fn draw_cast(summary: &Summary, width: u16, height: u16) -> Buffer {
         studio_focused: false,
         hint: false,
         stopped: false,
+        server_stopped: false,
     };
     let cfg = ClientShellConfig::from_config(
         &crate::config::Config::default(),
@@ -111,6 +112,7 @@ fn standby_writer_in_cast_renders_dim_blank_mark_and_plan_hint() {
         studio_focused: false,
         hint: false,
         stopped: false,
+        server_stopped: false,
     };
     let order: Vec<&str> = cast_rows(&view)
         .into_iter()
