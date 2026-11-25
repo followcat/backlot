@@ -10,6 +10,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.3 — 2026-11-25
+
+Hollywood can change its own agent with one card. When you ask it to switch to another runner or model, it proposes a `setup` card showing the old and new identity; applying it rewrites `[hollywood]` (keeping `start`) and restarts Hollywood once, and the new Hollywood greets you with what changed instead of re-researching. The Call Sheet title row's `m` menu also offers "Change Hollywood's agent…" directly.
+
 ### Added
 
 - **Hollywood self-setup card and Call Sheet title menu.** Added `CardAction::Setup` (`backlot hollywood propose setup --runner … --model … [--effort …] --why …`), validated at birth like `hollywood setup` against a `HollywoodIdentity` base and displaying `Hollywood: <old> → <new>`. Applied cards write `[hollywood]` while keeping `start` and all other keys, record `card.done` before requesting one fresh restart, and start the new Hollywood with a takeover first prompt (`re-cast from <old> → <new>`), plus a `card.done` passive outcome note (`Hollywood re-cast to <new>`). Added the Call Sheet title row `m` menu (`Change Hollywood's agent…`) opening the prefilled `Recast…` runner/model/effort picker directly via `hollywood setup`. Updated `prompts/hollywood.md`, `prompts/hollywood-cli.md`, `docs/studio/hollywood.md`, and `docs/keys.md`.
