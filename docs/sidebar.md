@@ -127,6 +127,10 @@ outranks real work). Workspace and tab aggregates use that priority. The
 default agent sort is
 `priority` (a backlot difference from herdr, whose configured default is
 space order); an explicit `agent_panel_sort = "spaces"` keeps space order.
+`agent_panel_space_headers = true` heads each space's run of agents in that
+order with the space's name, as the herdr app's grouped list does. With
+several machines, each machine's spaces are headed separately and the header
+does not name the machine.
 The priority sort uses the activity chronology and deterministic receipt
 rule below. Chrome choices the user makes by hand — the sort toggle,
 sidebar width, section split, collapse state and workspace group

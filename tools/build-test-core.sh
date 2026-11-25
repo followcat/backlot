@@ -10,7 +10,7 @@
 # a pin change wipes sources, toolchains and build output first.
 set -eu
 
-CORE=c7517808d64f06609e4ecf0db1757005373cc3a3
+CORE=7cb4de47164f1d65db84dfab294166994f143a15
 GHOSTTY=1e5cdb865807abc990181efb8ebfa9122955cce2
 ZIG_VERSION=0.16.0
 ZIG_SHA256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00

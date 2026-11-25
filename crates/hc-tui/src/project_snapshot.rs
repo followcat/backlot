@@ -59,11 +59,9 @@ pub(super) fn structured_snapshot_from_spaces(
             });
         }
         let mut tab_ids = Vec::new();
-        let mut tab_number = 0usize;
         let mut workspace_status = AgentStatus::Unknown;
         let mut workspace_priority = 0u8;
-        for tab in ordered {
-            tab_number += 1;
+        for (tab_number, tab) in (1usize..).zip(ordered) {
             let tab_id = tab.id.clone();
             let stored = own.tabs.get(&layout_key(machine, &tab_id));
             let membership = tab
@@ -99,7 +97,9 @@ pub(super) fn structured_snapshot_from_spaces(
                 .collect::<Vec<_>>();
             let name = stored.and_then(|l| l.name.as_deref()).unwrap_or(&tab.name);
             let tab_label = if name.is_empty() {
-                tab_number.to_string()
+                live_tab_title(&tab_members)
+                    .or_else(|| running_job(&tab_members))
+                    .unwrap_or_else(|| tab_number.to_string())
             } else {
                 clean(name)
             };
@@ -261,15 +261,7 @@ pub(super) fn structured_snapshot_from_spaces(
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or_else(|| {
-                if space.custom_name {
-                    &space.name
-                } else {
-                    facts
-                        .and_then(|facts| facts.auto_label.as_deref())
-                        .unwrap_or(&space.name)
-                }
-            })),
+            label: clean(space_label(space, adopted, facts, &members, &term_by_id)),
             custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
             branch: facts
                 .filter(|facts| facts.state == "ready")
@@ -323,6 +315,108 @@ pub(super) fn structured_snapshot_from_spaces(
         },
         layouts,
     )
+}
+
+/// The title an unnamed tab shows, as the Herdr app's tab bar does: the
+/// live title of the tab's lead agent (its first live reporter), with
+/// the activity glyph stripped. `None` when the tab has no agent or its
+/// title says nothing beyond the program (empty, a path, `user@host`,
+/// the program's own name), so the caller falls back to [`running_job`].
+fn live_tab_title(members: &[&Terminal]) -> Option<String> {
+    let lead = members.iter().find(|term| is_agent(term))?;
+    let title = crate::chrome::title_text::stripped_terminal_title(&clean(&lead.title))?;
+    let lower = title.to_lowercase();
+    let program_names = lead
+        .status
+        .as_ref()
+        .map(|status| status.app.to_lowercase())
+        .into_iter()
+        .chain(lead.foreground.as_ref().map(|fg| fg.name.to_lowercase()));
+    let telling = !title.starts_with(['~', '/'])
+        && !title.contains('@')
+        && title != lead.address
+        && !program_names.into_iter().any(|name| name == lower);
+    telling.then_some(title)
+}
+
+/// The job an unnamed tab shows when no agent title names it, as the Herdr
+/// app's tab bar does (`zsh`, `vim`, `claude`): the program in the
+/// foreground of the tab's first live terminal, by the name it was started
+/// under — `argv[0]`'s basename, a login shell's leading `-` dropped.
+/// The process name is only the fallback: macOS reports some programs'
+/// process name as their version (Claude Code shows as `2.1.330`). `None`
+/// when no live terminal reports a foreground, so the caller keeps the
+/// tab number.
+fn running_job(members: &[&Terminal]) -> Option<String> {
+    let foreground = members
+        .iter()
+        .find(|term| term.state == "live")?
+        .foreground
+        .as_ref()?;
+    let started_as = foreground.argv.first().map(|arg0| {
+        arg0.rsplit('/')
+            .next()
+            .unwrap_or(arg0)
+            .trim_start_matches('-')
+    });
+    started_as
+        .filter(|name| !name.is_empty())
+        .or_else(|| Some(foreground.name.as_str()).filter(|name| !name.is_empty()))
+        .map(clean)
+}
+
+/// A workspace's row label. A name someone chose wins. An automatic name —
+/// an unnamed Herdr-app space, or an adoption recorded without a chosen
+/// name (a new workspace that kept its suggested label, a promoted unnamed
+/// space) — follows where the space's first terminal works now, like the
+/// reference's `display_name_from_terminals`, instead of keeping the folder
+/// it was created in.
+fn space_label<'a>(
+    space: &'a crate::structure::Space,
+    adopted: Option<&'a crate::structure::Adoption>,
+    facts: Option<&'a hc_proto::terminal::RepositoryFacts>,
+    members: &[String],
+    term_by_id: &BTreeMap<&str, &'a Terminal>,
+) -> &'a str {
+    if let Some(chosen) = adopted.filter(|a| a.custom_label && !a.name.is_empty()) {
+        return &chosen.name;
+    }
+    // A space's own name is a chosen one when the app holds it; an hc-tui
+    // space's `herdr.space` label is only its identity once an adoption
+    // records its name.
+    let automatic_adoption = adopted.is_some();
+    if space.custom_name && (space.from_app || !automatic_adoption) {
+        return &space.name;
+    }
+    (space.from_app || automatic_adoption)
+        .then(|| live_space_folder(members, term_by_id))
+        .flatten()
+        .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
+        .or_else(|| adopted.map(|a| a.name.as_str()).filter(|n| !n.is_empty()))
+        .unwrap_or(&space.name)
+}
+
+/// The folder name an unnamed Herdr-app space shows, as the app's spaces list
+/// does: where its first terminal is working now (the foreground
+/// process's folder, else the shell's), so a space follows its agent
+/// rather than the folder it was created in.
+fn live_space_folder<'a>(
+    members: &[String],
+    term_by_id: &BTreeMap<&str, &'a Terminal>,
+) -> Option<&'a str> {
+    members
+        .iter()
+        .filter_map(|id| term_by_id.get(id.as_str()).copied())
+        .find_map(|term| {
+            let cwd = term
+                .foreground
+                .as_ref()
+                .map(|fg| fg.cwd.as_str())
+                .filter(|cwd| !cwd.is_empty())
+                .unwrap_or(term.cwd.as_str());
+            let name = cwd.trim_end_matches('/').rsplit('/').next()?;
+            (!name.is_empty()).then_some(name)
+        })
 }
 
 #[cfg(test)]

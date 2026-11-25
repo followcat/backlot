@@ -151,6 +151,17 @@ pub(super) async fn run(
                 .await
                 .map_err(|e| format!("Creation failed: {e}; the request was not replayed"))?
                 .terminal;
+            if let Some(proposal) = &mut creation.space_adoption
+                && !proposal.custom_label
+                && proposal.name.is_empty()
+            {
+                let name = crate::app::creation::suggested_name(&terminal.cwd);
+                proposal.name = if name.is_empty() {
+                    "workspace".to_owned()
+                } else {
+                    name
+                };
+            }
             let address = terminal.address.clone();
             let mut edit = creation.edit;
             match &mut edit.change {

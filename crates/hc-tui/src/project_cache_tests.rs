@@ -323,3 +323,45 @@ fn a_dropped_remote_is_pruned_from_the_cache() {
 
     assert!(!cache.endpoints.contains_key(&Some("host-b".into())));
 }
+
+#[test]
+fn a_closed_app_tab_terminal_finishing_invalidates_cached_spaces() {
+    let mut cache = ProjectCache::default();
+    let app_doc = serde_json::json!({
+        "spaces": [{
+            "id": "s1",
+            "name": "work",
+            "folder": "/home/user/proj",
+            "tabs": [{
+                "id": "tab1",
+                "name": "",
+                "root": {"type": "block", "content": {"terminal": "t1"}}
+            }]
+        }]
+    });
+    let t1 = agent("t1", "idle");
+    let t2_live = labeled("t2", "s1", "tbffc6bc4f8e6c92a83f0b407605ffdec5");
+
+    let mut live_view = view(vec![t1.clone(), t2_live.clone()], vec![]);
+    set_doc(&mut live_view, None, "herdr-app", app_doc);
+    let initial = cache.project(&live_view, Some("t1"));
+    assert_eq!(initial.snapshot.tabs.len(), 2);
+    let spaces = Arc::clone(&entry(&cache, None).spaces);
+
+    let mut t2_finished = t2_live;
+    t2_finished.state = "finished".into();
+    t2_finished.reason = Some("killed".into());
+    let mut finished_view = live_view.clone();
+    finished_view
+        .inventory_mut()
+        .replace(2, vec![t1, t2_finished]);
+
+    let rebuilt = cache.project(&finished_view, Some("t1"));
+    assert!(!Arc::ptr_eq(&spaces, &entry(&cache, None).spaces));
+    assert_eq!(rebuilt.snapshot.tabs.len(), 1);
+    assert!(rebuilt.snapshot.panes.iter().all(|p| p.pane_id != "t2"));
+    assert_same_projection(
+        &rebuilt,
+        &crate::project::project(&finished_view, Some("t1")),
+    );
+}

@@ -123,7 +123,14 @@ impl App {
                             .iter()
                             .any(|(_, _, visible)| visible == id)
                     {
-                        self.shell_state.agent_scroll = index.min(self.hit_map.agent_max_scroll);
+                        // The scroll counts rendered entries, space headers included.
+                        let row = crate::chrome::agents::panel_rows(snapshot, &self.shell)
+                            .iter()
+                            .position(|row| {
+                                matches!(row, crate::chrome::agents::PanelRow::Agent(agent) if &agent.pane_id == id)
+                            })
+                            .unwrap_or(index);
+                        self.shell_state.agent_scroll = row.min(self.hit_map.agent_max_scroll);
                     }
                 }
             }
