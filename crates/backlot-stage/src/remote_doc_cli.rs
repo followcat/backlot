@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use backlot_model::event::TaskStateChange;
 use backlot_model::hollywood::HOLLYWOOD;
-use backlot_model::req_wire::ReqAction;
+use backlot_model::req_wire::{CARD_QUEUE_REFUSAL, ReqAction, person_only};
 use backlot_model::summary::Summary;
 use hc_proto::client::Client;
 use hc_proto::doc::DocGetParams;
@@ -220,6 +220,11 @@ pub fn map_cmd(
         }
         _ => MappedCmd::Unsupported,
     };
+    if let MappedCmd::Action(ref action) = mapped
+        && person_only(action)
+    {
+        return Err(Fail::refused(CARD_QUEUE_REFUSAL));
+    }
     Ok(mapped)
 }
 
@@ -257,6 +262,9 @@ pub async fn execute_client(
     action: &ReqAction,
     timeout: Duration,
 ) -> Result<String, Fail> {
+    if person_only(action) {
+        return Err(Fail::refused(CARD_QUEUE_REFUSAL));
+    }
     let ack = crate::doc_client::send_request(client, endpoint, action, None, timeout).await?;
     format_ack(action, ack)
 }
