@@ -178,9 +178,11 @@ The TUI runs the same command for you: while no section exists, the expanded Cal
 band line (`⏎ hollywood setup`), the expanded studio panel's last row and the settings overseer
 row all open the **setup dialog** — a runner picked from `backlot runners --json` (installed
 only), that runner's model catalog with `auto` first and free input kept (`e`), and its effort
-list where the runner has one. With a table already written, `c` on the Call Sheet (or the same
-settings row) opens the dialog prefilled — its `key`/`default_cast` ride along verbatim — and
-changing the runner warns that the agent starts a new conversation while `memory.md` stays.
+list where the runner has one. With a table already written, `m` on the Call Sheet title row
+(`Change Hollywood's agent…` — the same runner/model/effort picker `Recast…` uses, prefilled
+from `[hollywood]`), `c` on the Call Sheet, or the same settings row opens setup — its
+`key`/`default_cast` (plus `start` and other keys in `[hollywood]`) ride along — and changing
+the identity starts a fresh conversation while `memory.md` stays.
 The write and every refusal stay `hsetup`'s own; a success flips the bar to its agent form on
 the next tick.
 
@@ -237,6 +239,7 @@ backlot hollywood propose abandon --studio acme-shop --task t1 --why "wrong appr
 backlot hollywood propose priority --studio acme-shop --task t1 --level high --why "blocks t2" --as hollywood
 backlot hollywood propose close --studio acme-shop --person actor-t1-c1 --why "task done" --as hollywood
 backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "director's runner keeps returning a quota error" --as hollywood
+backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "person asked to switch agent" --as hollywood
 backlot card list
 backlot card apply c1
 backlot card cancel c2 --reason "not now"
@@ -262,7 +265,7 @@ action and its record repeats nothing. Cards execute whether or not `[hollywood]
 the config gates the agent, never the gate.
 
 Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`,
-`recast`. Nothing else — in particular, no card answers a permission prompt; those stay yours,
+`recast`, `setup`. Nothing else — in particular, no card answers a permission prompt; those stay yours,
 answered in the studio.
 
 A `recast` card swaps the agent that plays a fixed role: `producer`, `director` or `writer`. Its
@@ -273,6 +276,12 @@ under the new identity. It never resumes the old session id: that conversation b
 runner that left. The ledger and the messages already queued for the role stay; the new terminal
 takes over the role's work. A recast while the old role has an open permission prompt still closes
 it. Only you may recast, and only while the studio is not finished.
+
+A `setup` card changes Hollywood's own identity (`Hollywood: <old> → <new>`) against a
+`hollywood_identity` base. `propose setup` validates the runner, model and effort rule up front
+just like `backlot hollywood setup`. Applied (`by: user`), the stage runs `hollywood setup`'s
+config write (preserving `start` and every other key in `[hollywood]`), records `card.done`,
+and restarts Hollywood fresh under the new identity with a takeover first prompt naming what changed.
 
 Actionable card failures (`card.failed`, `card.stale`, `card.cancelled`) reach Hollywood's inbox as
 notices; `card.applied` emits no wakeup notice, and `card.done` stays passive context that rides

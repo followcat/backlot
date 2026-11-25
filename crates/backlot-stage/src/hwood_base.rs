@@ -36,30 +36,41 @@ pub(crate) fn resolve_action(
     action: &CardAction,
     env: &Env,
 ) -> Result<CardAction, Fail> {
-    let CardAction::Recast {
-        studio,
-        person,
-        actor,
-    } = action
-    else {
-        return Ok(action.clone());
-    };
-    let s = require_studio(base, studio)?;
-    let current = s
-        .fixed_identity(person)
-        .ok_or_else(|| Fail::refused(format!("no fixed role '{person}' in studio '{studio}'")))?;
-    let mut actor = actor.clone();
-    if actor.permission_profile.trim().is_empty() {
-        actor.permission_profile = current.permission_profile.clone();
+    match action {
+        CardAction::Recast {
+            studio,
+            person,
+            actor,
+        } => {
+            let s = require_studio(base, studio)?;
+            let current = s.fixed_identity(person).ok_or_else(|| {
+                Fail::refused(format!("no fixed role '{person}' in studio '{studio}'"))
+            })?;
+            let mut actor = actor.clone();
+            if actor.permission_profile.trim().is_empty() {
+                actor.permission_profile = current.permission_profile.clone();
+            }
+            backlot_model::recast::check(&s, person, &actor)
+                .map_err(|e| Fail::refused(e.to_string()))?;
+            let named = std::collections::BTreeSet::from([actor.runner.clone()]);
+            crate::draft::check_runners(base, &named, env)?;
+            Ok(CardAction::Recast {
+                studio: studio.clone(),
+                person: person.clone(),
+                actor,
+            })
+        }
+        CardAction::Setup {
+            runner,
+            model,
+            effort,
+            ..
+        } => {
+            crate::hsetup::validate_hollywood_target(env, runner, model, effort.as_deref())?;
+            Ok(action.clone())
+        }
+        _ => Ok(action.clone()),
     }
-    backlot_model::recast::check(&s, person, &actor).map_err(|e| Fail::refused(e.to_string()))?;
-    let named = std::collections::BTreeSet::from([actor.runner.clone()]);
-    crate::draft::check_runners(base, &named, env)?;
-    Ok(CardAction::Recast {
-        studio: studio.clone(),
-        person: person.clone(),
-        actor,
-    })
 }
 
 /// The card's base, computed from the live studio state — or the
@@ -167,6 +178,12 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
                 Fail::refused(format!("no fixed role '{person}' in studio '{studio}'"))
             })?;
             Ok(CardBase::RoleIdentity { actor: current })
+        }
+        CardAction::Setup { .. } => {
+            let current = crate::config::hollywood(&env.vars)
+                .map_err(Fail::refused)?
+                .map(|c| crate::hstage::identity(&c));
+            Ok(CardBase::HollywoodIdentity { actor: current })
         }
     }
 }

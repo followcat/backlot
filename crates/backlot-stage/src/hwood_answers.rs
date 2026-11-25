@@ -103,8 +103,18 @@ pub(crate) fn card_apply(common: &Common, env: &Env, id: u64) -> Result<String, 
         .cards
         .get(&id)
         .ok_or_else(|| Fail::refused(format!("no card 'c{id}'")))?;
-    let sstate = studio_state(&base, card.action.studio())?;
-    let stale = hollywood::stale(&card.action, &card.base, sstate.as_ref());
+    let stale = match &card.action {
+        hollywood::CardAction::Setup { .. } => {
+            let current = crate::config::hollywood(&env.vars)
+                .map_err(Fail::refused)?
+                .map(|c| crate::hstage::identity(&c));
+            hollywood::stale_hollywood(&card.base, current.as_ref())
+        }
+        _ => {
+            let sstate = studio_state(&base, card.action.studio())?;
+            hollywood::stale(&card.action, &card.base, sstate.as_ref())
+        }
+    };
     let by = by_for(common, env);
     let kind = match &stale {
         Some(r) => HollywoodKind::CardStale {

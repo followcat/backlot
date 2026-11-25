@@ -117,6 +117,9 @@ impl App {
     /// ← / → (`h` / `l`) in `Upper`: move the frame cursor, the
     /// new-studio frame included, and keep it in the drawn window.
     pub(crate) fn hollywood_frame_move(&mut self, delta: isize) {
+        if self.hollywood.selected.as_ref() == Some(&Target::Title) {
+            return;
+        }
         let frames = self.hollywood_frames();
         if frames.is_empty() {
             return;
@@ -163,8 +166,25 @@ impl App {
     pub(crate) fn hollywood_row_move(&mut self, delta: isize) {
         match self.hollywood_active_section() {
             Section::Upper => {
+                if self.hollywood.selected.as_ref() == Some(&Target::Title) {
+                    if delta > 0
+                        && let Some(first) = self
+                            .hollywood
+                            .last_upper
+                            .clone()
+                            .filter(|t| self.hollywood_frames().contains(t))
+                            .or_else(|| self.hollywood_frames().first().cloned())
+                    {
+                        self.hollywood_select(first);
+                        self.hollywood_keep_frame_visible();
+                    }
+                    return;
+                }
                 let frames = self.hollywood_frames();
                 if frames.is_empty() {
+                    if delta < 0 {
+                        self.hollywood_select(Target::Title);
+                    }
                     return;
                 }
                 let current = self
@@ -175,7 +195,9 @@ impl App {
                     .unwrap_or(0);
                 let per_row = self.hollywood_frame_window().1.max(1) as isize;
                 let next = current as isize + delta.signum() * per_row;
-                if next >= 0 && (next as usize) < frames.len() {
+                if next < 0 {
+                    self.hollywood_select(Target::Title);
+                } else if (next as usize) < frames.len() {
                     self.hollywood_select(frames[next as usize].clone());
                     self.hollywood_keep_frame_visible();
                 }

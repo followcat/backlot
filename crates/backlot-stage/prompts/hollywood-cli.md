@@ -21,6 +21,8 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 
 - `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--answers <seqs>] --why <line>`
   flags: --studio --task --person --level --runner --model --effort --title --repo --cast --brief --answers --why
+  actions: studio-new | close | reopen | priority | pause | resume | abandon | recast | setup
+  example (`propose setup`): `backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "switch agent"`
 
 - `backlot hollywood report "<headline>" [--body <f>] [--answers <seqs>]`
   flags: --body --answers

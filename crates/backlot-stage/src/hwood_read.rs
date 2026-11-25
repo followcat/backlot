@@ -507,6 +507,24 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
             actor.permission_profile,
         ));
     }
+    if let (
+        backlot_model::hollywood::CardAction::Setup {
+            runner,
+            model,
+            effort,
+            ..
+        },
+        backlot_model::hollywood::CardBase::HollywoodIdentity { actor: old },
+    ) = (&card.action, &card.base)
+    {
+        out.push('\n');
+        out.push_str(&backlot_model::hollywood::format_setup_transition(
+            old.as_ref(),
+            runner,
+            model,
+            effort.as_deref(),
+        ));
+    }
     Ok(out)
 }
 

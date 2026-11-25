@@ -34,6 +34,7 @@ impl StudioMenu {
             MenuKind::Lot => self.lot_items(&item),
             MenuKind::Machine => self.machine_items(&item),
             MenuKind::Hollywood(seq) => self.hollywood_items(seq, &item),
+            MenuKind::HollywoodTitle => self.hollywood_title_items(&item),
             MenuKind::StudioTalk(seq) => self.studio_talk_items(seq, &item),
         };
         // An unreachable machine dims every row that runs a command —

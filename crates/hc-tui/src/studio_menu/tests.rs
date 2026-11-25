@@ -298,11 +298,31 @@ fn an_offline_menu_dims_commands_but_keeps_reads() {
 
 #[test]
 fn every_items_key_hint_is_unique_within_its_menu() {
+    let cfg = backlot_stage::config::HollywoodCfg {
+        runner: "fake".into(),
+        model: "m1".into(),
+        effort: Some("high".into()),
+        key: None,
+        default_cast: None,
+    };
+    let unconfigured = labels(&StudioMenu::hollywood_title(None));
+    assert_eq!(unconfigured, vec!["Change Hollywood's agent…"]);
+    let configured = labels(&StudioMenu::hollywood_title(Some(&cfg)));
+    assert_eq!(
+        configured,
+        vec![
+            "Change Hollywood's agent…",
+            "Focus Hollywood terminal",
+            "Restart Hollywood",
+        ]
+    );
     for menu in [
         StudioMenu::studio(&key(None), &studio(), false, false),
         StudioMenu::role(&key(None), &role("live"), false),
         StudioMenu::card("c3"),
         StudioMenu::task(&key(None), &task(), false),
+        StudioMenu::hollywood_title(None),
+        StudioMenu::hollywood_title(Some(&cfg)),
     ] {
         let mut seen = std::collections::BTreeSet::new();
         for item in menu.items() {

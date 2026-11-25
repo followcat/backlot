@@ -154,7 +154,7 @@ role navigation cleanly from Compose):
 | `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
 | `c` | Reconfigure the agent — the setup dialog prefilled from `[hollywood]` |
-| `m` | The selected row's context menu |
+| `m` | The selected row's context menu (`Change Hollywood's agent…` on the title row opens the runner/model/effort picker) |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | In Compose: rest on `›` keeping any draft (even when empty). In Resting: collapse to the pill |

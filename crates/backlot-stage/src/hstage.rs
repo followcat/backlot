@@ -29,11 +29,11 @@ pub(crate) fn hkey() -> (String, String) {
     (HOLLYWOOD.into(), HOLLYWOOD.into())
 }
 
-/// `role.state` appended by the stage — the lifecycle record.
-fn hrecord(hdir: &Path, kind: HollywoodKind) -> Result<u64, Fail> {
+/// Event appended with explicit actor attribution.
+pub(crate) fn hrecord_as(hdir: &Path, by: EventBy, kind: HollywoodKind) -> Result<u64, Fail> {
     let event = store::append_hollywood(hdir, move |_, _| {
         Ok::<HPending, std::convert::Infallible>(HPending {
-            event: NewHollywoodEvent::new(EventBy::role("stage"), kind),
+            event: NewHollywoodEvent::new(by, kind),
             files: Vec::new(),
         })
     })
@@ -44,6 +44,11 @@ fn hrecord(hdir: &Path, kind: HollywoodKind) -> Result<u64, Fail> {
         store::StoreError::Build(_) => unreachable!("the build closure cannot fail"),
     })?;
     Ok(event.seq)
+}
+
+/// `role.state` appended by the stage — the lifecycle record.
+fn hrecord(hdir: &Path, kind: HollywoodKind) -> Result<u64, Fail> {
+    hrecord_as(hdir, EventBy::role("stage"), kind)
 }
 
 /// One lifecycle record.
@@ -90,10 +95,46 @@ pub(crate) fn identity(cfg: &HollywoodCfg) -> ActorIdentity {
     }
 }
 
+/// Takeover section appended to a newly recast Hollywood's first
+/// prompt (same style as `prompts/recast.md` for fixed studio roles).
+pub(crate) fn hollywood_takeover(old: &ActorIdentity, new: &ActorIdentity) -> String {
+    let from = backlot_model::hollywood::format_spaced_identity(
+        &old.runner,
+        &old.model,
+        old.effort.as_deref(),
+    );
+    let to = backlot_model::hollywood::format_spaced_identity(
+        &new.runner,
+        &new.model,
+        new.effort.as_deref(),
+    );
+    format!(
+        "\n\n## Taking over Hollywood\n\n\
+         You are taking over Hollywood, re-cast from {from} → {to}. \
+         The previous conversation is gone; the ledger is not.\n\n\
+         Before you act, run `backlot status --all` (and read `memory.md` if present), \
+         then greet the person with `backlot hollywood report` naming what changed \
+         rather than re-researching the studios. Messages already queued for you \
+         are delivered as usual."
+    )
+}
+
 /// First-prompt value for `LaunchCtx.prompt`: `None` on resume, a
 /// `<hdir>/prompts/hollywood.first.txt` path for `devin` (`--prompt-file`),
 /// and the inline sentence for every other runner.
+#[cfg(test)]
 pub(crate) fn hfirst_prompt(hdir: &Path, runner: &str, resume: Option<&str>) -> Option<String> {
+    hfirst_prompt_recast(hdir, runner, resume, None)
+}
+
+/// Like [`hfirst_prompt`], appending the takeover section when a
+/// freshly started Hollywood replaces a different previous identity.
+pub(crate) fn hfirst_prompt_recast(
+    hdir: &Path,
+    runner: &str,
+    resume: Option<&str>,
+    recast: Option<(&ActorIdentity, &ActorIdentity)>,
+) -> Option<String> {
     if resume.is_some() {
         return None;
     }
@@ -105,7 +146,10 @@ pub(crate) fn hfirst_prompt(hdir: &Path, runner: &str, resume: Option<&str>) -> 
                 .to_string_lossy()
                 .into_owned(),
         ),
-        _ => Some(line),
+        _ => Some(match recast {
+            Some((old, new)) => format!("{line}{}", hollywood_takeover(old, new)),
+            None => line,
+        }),
     }
 }
 
@@ -177,13 +221,23 @@ pub(crate) fn hplan(
             }
         }
         Some(cfg) => {
+            let desired = identity(cfg);
+            let identity_changed = role
+                .actor
+                .as_ref()
+                .is_some_and(|a| !backlot_model::recast::same_identity(a, &desired));
             if role.live && term {
                 if role.restart.is_some() {
                     // The user's restart: close on purpose with the
                     // `restarted` reason; the start lands next tick.
                     vec![HMove::Restart]
-                } else if role.actor.as_ref().is_some_and(|a| a.runner != cfg.runner) {
-                    vec![HMove::Close("runner changed"), HMove::Start]
+                } else if identity_changed {
+                    let reason = if role.actor.as_ref().is_some_and(|a| a.runner != cfg.runner) {
+                        "runner changed"
+                    } else {
+                        "recast"
+                    };
+                    vec![HMove::Close(reason), HMove::Start]
                 } else {
                     vec![]
                 }
@@ -194,10 +248,9 @@ pub(crate) fn hplan(
                     vec![HMove::Drop]
                 } else if let Some(req) = &role.restart {
                     // The close a restart recorded: start it again —
-                    // resumed when it kept a session, fresh with the
-                    // role's prompt when the request asked for one or
-                    // no session was kept.
-                    if !req.fresh && role.session_id.is_some() {
+                    // resumed when it kept a session and the identity
+                    // stayed the same, fresh when `fresh` or re-cast.
+                    if !req.fresh && !identity_changed && role.session_id.is_some() {
                         vec![HMove::ReviveResume]
                     } else {
                         vec![HMove::Start]
@@ -215,20 +268,28 @@ pub(crate) fn hplan(
                 } else {
                     vec![HMove::Revive]
                 }
-            } else if role.restart.is_some() {
+            } else if !term && !role.recorded() {
+                vec![HMove::Start]
+            } else if let Some(req) = &role.restart {
                 // A lost role a restart names comes back at once,
-                // around the loss guard.
-                vec![HMove::ResumeRun]
+                // around the loss guard — fresh when requested or recast.
+                if !req.fresh && !identity_changed && role.recorded() {
+                    vec![HMove::ResumeRun]
+                } else if term {
+                    vec![HMove::Adopt]
+                } else {
+                    vec![HMove::Start]
+                }
             } else if term {
                 if role.recorded() {
                     vec![HMove::Rejoin]
                 } else {
                     vec![HMove::Adopt]
                 }
-            } else if !role.recorded() {
-                vec![HMove::Start]
             } else if lost_loop(role, now_ms) {
                 vec![HMove::GiveUp]
+            } else if identity_changed {
+                vec![HMove::Start]
             } else {
                 vec![HMove::ResumeRun]
             }
@@ -264,7 +325,19 @@ pub(crate) fn refresh_agents_md(hdir: &Path) -> Result<(), Fail> {
 /// generated CLI reference in place), `prompts/hollywood.first.txt` when
 /// `devin` starts fresh, and `memory.md` (created once and never
 /// overwritten).
+#[cfg(test)]
 pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -> Result<(), Fail> {
+    hprepare_launch_recast(hdir, runner, resume, None)
+}
+
+/// Like [`hprepare_launch`], writing the re-cast takeover section into
+/// `hollywood.first.txt` when `devin` launches fresh for a new identity.
+pub(crate) fn hprepare_launch_recast(
+    hdir: &Path,
+    runner: &str,
+    resume: Option<&str>,
+    recast: Option<(&ActorIdentity, &ActorIdentity)>,
+) -> Result<(), Fail> {
     for sub in [
         "messages",
         "reports",
@@ -280,7 +353,10 @@ pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -
     std::fs::write(&agents, crate::hwcli::agents_md())
         .map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
     if resume.is_none() && runner == "devin" {
-        let line = crate::prompts::first_line(&agents);
+        let mut line = crate::prompts::first_line(&agents);
+        if let Some((old, new)) = recast {
+            line.push_str(&hollywood_takeover(old, new));
+        }
         crate::prompts::first_file(hdir, HOLLYWOOD, &line)
             .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
     }

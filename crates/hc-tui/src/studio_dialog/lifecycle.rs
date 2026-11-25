@@ -101,7 +101,7 @@ pub(crate) enum RecastStep {
 #[derive(Debug, Clone)]
 pub(crate) struct RecastDialog {
     pub(crate) title: String,
-    pub(crate) key: StudioKey,
+    pub(crate) key: Option<StudioKey>,
     pub(crate) role: String,
     pub(crate) role_name: String,
     pub(crate) current_runner: Option<String>,
@@ -126,19 +126,23 @@ pub(crate) struct EffortChoice {
 
 impl RecastDialog {
     pub(crate) fn new(
-        key: &StudioKey,
+        key: Option<&StudioKey>,
         role: &str,
         role_name: &str,
         runner: Option<String>,
         model: Option<String>,
         effort: Option<String>,
     ) -> RecastDialog {
-        RecastDialog {
-            title: format!(
+        let title = match key {
+            Some(key) => format!(
                 "Recast {role_name} · {}",
                 crate::studio_dialog::StudioDialog::place(key)
             ),
-            key: key.clone(),
+            None => "Change Hollywood's agent".to_owned(),
+        };
+        RecastDialog {
+            title,
+            key: key.cloned(),
             role: role.to_owned(),
             role_name: role_name.to_owned(),
             current_runner: runner,
@@ -274,6 +278,7 @@ impl RecastDialog {
                 Some(e) => format!("{r}/{m}/{e}"),
                 None => format!("{r}/{m}"),
             },
+            _ if self.key.is_none() => "(not configured)".to_owned(),
             _ => "(not recorded)".to_owned(),
         };
         let runner = self.runner_name().unwrap_or("-");

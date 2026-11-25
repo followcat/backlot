@@ -64,6 +64,8 @@ mod checks_tests;
 #[cfg(test)]
 mod hollywood_card_tests;
 #[cfg(test)]
+mod hollywood_setup_tests;
+#[cfg(test)]
 mod hollywood_summary_tests;
 #[cfg(test)]
 mod hollywood_tests;

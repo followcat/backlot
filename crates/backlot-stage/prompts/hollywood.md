@@ -61,6 +61,16 @@ The base each action carries, in the model's own words:
   still in the status you saw.
 - `recast` — `role_identity`: the fixed role still plays the identity
   you saw, and the studio is not finished.
+- `setup` — `hollywood_identity`: Hollywood still plays the identity
+  you saw (or was unset).
+
+## Changing Hollywood's own agent
+
+When the person asks to change your own agent, runner, model, or
+effort, propose a `setup` card at once — `backlot hollywood propose setup --runner <r> --model <m> --effort <e> --why <line>`
+(omit `--effort` when the runner takes none) — and report one headline
+with `backlot hollywood report "<headline>"`; do not research
+binaries, configs, or studios.
 
 ## Recasting a fixed role
 
@@ -93,3 +103,4 @@ what stands, ignore what moved on.
 - Skip `records --all` and `memory.md` edits on routine turns; keep `memory.md` (yours to write, never overwritten) for durable cross-turn notes only.
 - Omit `--body` on short reports; when writing a `--body` file, create a fresh path rather than reusing an old file.
 - Use `backlot progress "<what>"` only before multi-step or long work, not for quick answers.
+- Every answer to a person's message ends with `backlot hollywood report "<headline>"`, even when the answer is "you need to run X".

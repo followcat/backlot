@@ -8,6 +8,16 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+### Added
+
+- **Hollywood self-setup card and Call Sheet title menu.** Added `CardAction::Setup` (`backlot hollywood propose setup --runner … --model … [--effort …] --why …`), validated at birth like `hollywood setup` against a `HollywoodIdentity` base and displaying `Hollywood: <old> → <new>`. Applied cards write `[hollywood]` while keeping `start` and all other keys, record `card.done` before requesting one fresh restart, and start the new Hollywood with a takeover first prompt (`re-cast from <old> → <new>`), plus a `card.done` passive outcome note (`Hollywood re-cast to <new>`). Added the Call Sheet title row `m` menu (`Change Hollywood's agent…`) opening the prefilled `Recast…` runner/model/effort picker directly via `hollywood setup`. Updated `prompts/hollywood.md`, `prompts/hollywood-cli.md`, `docs/studio/hollywood.md`, and `docs/keys.md`.
+
+### Fixed
+
+- **`hollywood setup` preserves `[hollywood].start` and detects model/effort changes.** Rewriting `[hollywood]` now keeps `start` and all other keys (instead of reconstructing the table from scratch) and lists `agy` among supported runners; `hplan` now triggers a fresh restart when Hollywood's model or effort changes on the same runner.
+
 ## 0.4.2 — 2026-11-25
 
 This release reworks how the person and Hollywood talk. The person's messages now reach Hollywood first and inline,

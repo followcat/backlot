@@ -15,17 +15,39 @@ use crate::studio_dialog::{
 use super::App;
 
 impl App {
+    /// Current `[hollywood]` config: reads `panel_config_path` when it
+    /// exists on disk (catching setup-card writes since TUI start),
+    /// falling back to `self.hollywood_cfg`.
+    pub(crate) fn current_hollywood_cfg(&self) -> Option<backlot_stage::config::HollywoodCfg> {
+        if self.panel_config_path.is_file()
+            && let Ok(cfg) = backlot_stage::config::hollywood_at(&self.panel_config_path)
+        {
+            return cfg;
+        }
+        self.hollywood_cfg.clone()
+    }
+
     /// `Recast…` — open the picker on the role's current identity and
     /// ask the studio's machine for `runners --json`.
     pub(crate) fn recast_dialog_open(
         &mut self,
-        key: &StudioKey,
+        key: Option<&StudioKey>,
         role: &str,
         role_name: &str,
         runner: Option<String>,
         model: Option<String>,
         effort: Option<String>,
     ) {
+        let (runner, model, effort) = if key.is_none() {
+            let live = self.current_hollywood_cfg();
+            (
+                runner.or_else(|| live.as_ref().map(|c| c.runner.clone())),
+                model.or_else(|| live.as_ref().map(|c| c.model.clone())),
+                effort.or_else(|| live.as_ref().and_then(|c| c.effort.clone())),
+            )
+        } else {
+            (runner, model, effort)
+        };
         self.studio_dialog = Some(StudioDialog::Recast(RecastDialog::new(
             key, role, role_name, runner, model, effort,
         )));
@@ -34,12 +56,12 @@ impl App {
 
     /// The picker's `runners --json` — off the event loop, a stale
     /// generation dropped like every dialog fetch.
-    fn recast_probe(&mut self, key: &StudioKey) {
+    fn recast_probe(&mut self, key: Option<&StudioKey>) {
         self.studio_dialog_gen += 1;
         let epoch = self.studio_dialog_gen;
         let tx = self.dialog_fetch_tx.clone();
         let run = self.ns_runner();
-        let machine = key.machine.clone();
+        let machine = key.and_then(|k| k.machine.clone());
         tokio::spawn(async move {
             let out = run(machine, vec!["runners".into(), "--json".into()], None).await;
             let _ = tx.send((epoch, out)).await;
@@ -172,13 +194,24 @@ impl App {
             RecastStep::Apply => {
                 if let (Some(runner), Some(model)) = (d.runner_name(), d.selected_model()) {
                     let effort = d.selected_effort();
-                    self.run_action(studio_cmds::recast(
-                        &d.key,
-                        &d.role,
-                        runner,
-                        &model,
-                        effort.as_deref(),
-                    ));
+                    let action = match &d.key {
+                        Some(key) => {
+                            studio_cmds::recast(key, &d.role, runner, &model, effort.as_deref())
+                        }
+                        None => {
+                            let existing = self.current_hollywood_cfg();
+                            let cfg = backlot_stage::config::HollywoodCfg {
+                                runner: runner.to_owned(),
+                                model,
+                                effort,
+                                key: existing.as_ref().and_then(|c| c.key.clone()),
+                                default_cast: existing.and_then(|c| c.default_cast),
+                            };
+                            self.hw_setup_pending = Some(cfg.clone());
+                            studio_cmds::hw_setup(&cfg)
+                        }
+                    };
+                    self.run_action(action);
                     return true;
                 }
                 d.error = Some("pick a runner and a model".into());

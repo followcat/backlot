@@ -6,83 +6,15 @@
 //! is the dry run's own message, a bad effort or `--key` is refused
 //! the way the config's own rules refuse it.
 
-use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
 use crate::config::{self, HollywoodCfg};
 
-/// The TOML literal for a config value: quotes and control
-/// characters must not break the table's own shape.
-fn quoted(v: &str) -> String {
-    let mut out = String::from("\"");
-    for c in v.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// The `[hollywood]` table's own text, newline-ended.
-fn table(cfg: &HollywoodCfg) -> String {
-    let mut out = format!(
-        "[hollywood]\nrunner = {}\nmodel = {}\n",
-        quoted(&cfg.runner),
-        quoted(&cfg.model)
-    );
-    if let Some(e) = cfg.effort.as_deref() {
-        let _ = writeln!(out, "effort = {}", quoted(e));
-    }
-    if let Some(k) = cfg.key.as_deref() {
-        let _ = writeln!(out, "key = {}", quoted(k));
-    }
-    if let Some(d) = cfg.default_cast.as_deref() {
-        let _ = writeln!(out, "default_cast = {}", quoted(d));
-    }
-    out
-}
-
-/// A line's first dotted table name when it opens a `[table]` or
-/// `[[array]]` header — `None` for entries, values and comments.
-/// Names cannot hold `#` or `"`, so a trailing comment strips
-/// safely.
-fn header_name(line: &str) -> Option<String> {
-    let bare = line.split('#').next()?.trim();
-    let mut inner = bare.strip_prefix('[')?;
-    inner = inner.strip_prefix('[').unwrap_or(inner);
-    let inner = inner.strip_suffix(']').unwrap_or(inner).trim_end();
-    let inner = inner.strip_suffix(']').unwrap_or(inner).trim();
-    inner.split('.').next().map(|s| s.trim().to_string())
-}
-
-/// The byte range of the `[hollywood]` table family — its header
-/// line through the line before the next table with another name —
-/// or `None` when no such header exists.
-fn hollywood_span(text: &str) -> Option<(usize, usize)> {
-    let mut start = None;
-    let mut offset = 0;
-    for line in text.split_inclusive('\n') {
-        match header_name(line).as_deref() {
-            Some("hollywood") => {
-                if start.is_none() {
-                    start = Some(offset);
-                }
-            }
-            Some(_) if start.is_some() => return Some((start.unwrap(), offset)),
-            _ => {}
-        }
-        offset += line.len();
-    }
-    start.map(|s| (s, text.len()))
-}
+#[path = "hsetup_merge.rs"]
+mod merge;
+use merge::{hollywood_span, table, update_section};
 
 /// A `--key` sanity check — the client does the real binding parse.
 /// Here a direct binding needs a modifier (`alt+y`, not `y`) and a
@@ -104,31 +36,36 @@ fn check_key(key: &str) -> Result<(), Fail> {
     }
 }
 
-/// `hollywood setup --runner <r> --model <m> [--effort <e>] [--key
-/// <k>]` — the user's, never a role terminal's: the table steers the
-/// overseer itself (D17a's gate's shape).
-pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<String, Fail> {
-    if env.get("BACKLOT_ROLE").is_some() {
-        return Err(Fail::refused(
-            "hollywood setup is the user's — BACKLOT_ROLE is set",
-        ));
-    }
-    if cfg.runner.trim().is_empty() {
+/// Validate Hollywood's runner, model, effort and launch binary —
+/// shared between `hollywood setup`, `propose setup` and `Setup` card
+/// execution so bad configs refuse at birth.
+pub(crate) fn validate_hollywood_target(
+    env: &Env,
+    runner: &str,
+    model: &str,
+    effort: Option<&str>,
+) -> Result<std::path::PathBuf, Fail> {
+    if runner.trim().is_empty() {
         return Err(Fail::usage("--runner is empty"));
     }
-    if !crate::runners::supported(&cfg.runner) {
+    if !crate::runners::supported(runner) {
         return Err(Fail::refused(format!(
-            "runner '{}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline)",
-            cfg.runner
+            "runner '{runner}' is not supported (supported: {})",
+            backlot_model::recast::SUPPORTED_RUNNERS.join(", ")
         )));
     }
-    if cfg.model.trim().is_empty() {
+    if model.trim().is_empty() {
         return Err(Fail::usage("--model is empty"));
     }
-    config::effort_rule(&cfg.runner, cfg.effort.as_deref()).map_err(Fail::refused)?;
-    if let Some(k) = cfg.key.as_deref() {
-        check_key(k)?;
-    }
+    let actor = backlot_model::ActorIdentity {
+        runner: runner.to_string(),
+        runner_version: None,
+        model: model.to_string(),
+        effort: effort.map(str::to_string),
+        permission_profile: "standard".into(),
+    };
+    backlot_model::recast::check_model(&actor).map_err(|e| Fail::refused(e.to_string()))?;
+    config::effort_rule(runner, effort).map_err(Fail::refused)?;
     let path = config::config_path(&env.vars);
     // A malformed file refuses before anything writes — the refusal
     // names the parse position only, never the file's text.
@@ -146,24 +83,34 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
     // resolver answers under the PATH the launch actually gets.
     let base = path.parent().unwrap_or_else(|| Path::new("."));
     let scope = crate::runners::detect::scope(env);
-    let named = std::collections::BTreeSet::from([cfg.runner.clone()]);
+    let named = std::collections::BTreeSet::from([runner.to_string()]);
     crate::wizard_paths::ensure_runner_paths(
         base,
         &named,
         env,
-        &mut |runner| crate::runners::detect::find(runner, &scope),
+        &mut |r| crate::runners::detect::find(r, &scope),
         &mut std::io::stderr(),
     )?;
     let config_text = std::fs::read_to_string(&path).unwrap_or_default();
-    crate::runners::resolve::launch_binary(&cfg.runner, &config_text, &scope)
-        .map_err(Fail::refused)?;
-    // The `[runner_env]` write may have appended — the span
-    // replacement works on the file as it stands now.
+    crate::runners::resolve::launch_binary(runner, &config_text, &scope).map_err(Fail::refused)?;
+    Ok(path)
+}
+
+/// Validate and write `[hollywood]` atomically while preserving
+/// `start` and every other key/comment/section in `config.toml`.
+pub(crate) fn write_config(env: &Env, cfg: &HollywoodCfg) -> Result<std::path::PathBuf, Fail> {
+    if let Some(k) = cfg.key.as_deref() {
+        check_key(k)?;
+    }
+    let path = validate_hollywood_target(env, &cfg.runner, &cfg.model, cfg.effort.as_deref())?;
     let old = std::fs::read_to_string(&path).unwrap_or_default();
-    let section = table(cfg);
     let new = match hollywood_span(&old) {
-        Some((a, b)) => format!("{}{section}{}", &old[..a], &old[b..]),
+        Some((a, b)) => {
+            let section = update_section(&old[a..b], cfg);
+            format!("{}{section}{}", &old[..a], &old[b..])
+        }
         None => {
+            let section = table(cfg);
             let mut new = old.clone();
             if !new.is_empty() && !new.ends_with('\n') {
                 new.push('\n');
@@ -184,6 +131,19 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
         // config, never a half table.
         write_atomic(&path, &new)?;
     }
+    Ok(path)
+}
+
+/// `hollywood setup --runner <r> --model <m> [--effort <e>] [--key
+/// <k>]` — the user's, never a role terminal's: the table steers the
+/// overseer itself (D17a's gate's shape).
+pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<String, Fail> {
+    if env.get("BACKLOT_ROLE").is_some() {
+        return Err(Fail::refused(
+            "hollywood setup is the user's — BACKLOT_ROLE is set",
+        ));
+    }
+    let path = write_config(env, cfg)?;
     Ok(format!(
         "[hollywood] written to {} — a running stage sees it on its next tick; restart the TUI for the layer",
         path.display()

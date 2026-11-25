@@ -127,6 +127,7 @@ fn base_fits(action: &CardAction, base: &CardBase) -> Result<(), HRefusal> {
             }
         }
         (CardAction::Recast { .. }, CardBase::RoleIdentity { .. }) => Ok(()),
+        (CardAction::Setup { .. }, CardBase::HollywoodIdentity { .. }) => Ok(()),
         _ => Err(bad()),
     }
 }
@@ -139,6 +140,7 @@ fn base_kind(base: &CardBase) -> &'static str {
         CardBase::TaskPriority { .. } => "task_priority",
         CardBase::TaskStatus { .. } => "task_status",
         CardBase::RoleIdentity { .. } => "role_identity",
+        CardBase::HollywoodIdentity { .. } => "hollywood_identity",
     }
 }
 
@@ -152,6 +154,7 @@ fn action_kind(action: &CardAction) -> &'static str {
         CardAction::Resume { .. } => "resume",
         CardAction::Abandon { .. } => "abandon",
         CardAction::Recast { .. } => "recast",
+        CardAction::Setup { .. } => "setup",
     }
 }
 

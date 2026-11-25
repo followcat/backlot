@@ -260,6 +260,10 @@ mod store_tests;
 mod trust_tests;
 
 #[cfg(test)]
+mod hcard_setup_tests;
+#[cfg(test)]
+mod hwood_setup_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod text_src_tests;

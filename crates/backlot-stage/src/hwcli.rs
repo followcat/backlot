@@ -141,6 +141,18 @@ pub fn generate() -> String {
         if !flags.is_empty() {
             out.push_str(&format!("  flags: {}\n", flags.join(" ")));
         }
+        if cmd.pick == "backlot hollywood propose" {
+            if let Some(actions) = cmd
+                .usage
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("actions: "))
+            {
+                out.push_str(&format!("  actions: {actions}\n"));
+            }
+            out.push_str(
+                "  example (`propose setup`): `backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why \"switch agent\"`\n",
+            );
+        }
     }
     out
 }
