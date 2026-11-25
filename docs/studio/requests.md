@@ -119,3 +119,11 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 
 - **Expiry window:** requests with `ts_ms` more than **60 s** older than the stage clock are refused with `"request expired"`. Up to **60 s** of future clock skew is accepted; further-ahead timestamps are refused.
 - **Restart-safe deduplication:** handled `(req_id, ts_ms, ack)` records append to `<state_dir>/processed-reqs.jsonl` before queue drain. Replayed `req_id`s never execute a verb twice across stage restarts, and entries older than **24 h** are pruned automatically.
+
+---
+
+## Client Routing & Error Lines (`B2`)
+
+- **Server resolution:** both `backlot` TUI and CLI resolve `--server <host>[/<session>]` (default session `backlot`), then `BACKLOT_SERVER`, then `[client] server` / `session` in `~/.config/backlot/config.toml`.
+- **Off-hub vs on-hub:** off-hub clients connect over `ssh <host> hc connect --session <session>`, read `backlot` + `backlot-cat`, and submit `B1a` verbs via `plugin.backlot.req` -> `plugin.backlot.res` (5 s ack timeout). When the resolved host matches the local hub, the CLI keeps writing the local ledger directly (still works while `backlot-server` restarts) while TUI connects locally to the named session.
+- **Client errors & stopped server:** `"server busy"` (full queue or 3 CAS conflicts), `"request expired"`, `"timed out waiting for ack of '<req_id>' (no reply from server)"`, and `"not available through the server yet"` (uncovered verbs such as `studio new`/`finish`/`prune`/`delete`/`restore`). When `backlot-cat` is present with no live `backlot-server` or `backlot-stage` terminal, the TUI displays the start command (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`) without spawning anything itself.
