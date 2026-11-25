@@ -138,12 +138,7 @@ pub(crate) fn write_config(env: &Env, cfg: &HollywoodCfg) -> Result<std::path::P
 /// <k>]` — the user's, never a role terminal's: the table steers the
 /// overseer itself (D17a's gate's shape).
 pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<String, Fail> {
-    if env.get("BACKLOT_ROLE").is_some() {
-        return Err(Fail::refused(
-            "hollywood setup is the user's — BACKLOT_ROLE is set",
-        ));
-    }
-    let path = write_config(env, cfg)?;
+    let (_, path) = crate::verbs_hwood::hollywood_setup(env, cfg)?;
     Ok(format!(
         "[hollywood] written to {} — a running stage sees it on its next tick; restart the TUI for the layer",
         path.display()

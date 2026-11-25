@@ -16,7 +16,6 @@ use backlot_model::state::StudioState;
 use crate::args::{CardCmd, Cmd, Common, HollywoodCmd};
 use crate::cli::{Caller, Env, Fail};
 use crate::commands;
-use crate::config;
 use crate::hrender;
 use crate::hwood_answers::{card_apply, card_cancel, check_answers, hstore_fail, mark_answers};
 use crate::link;
@@ -36,6 +35,7 @@ pub(crate) fn by_for(common: &Common, env: &Env) -> EventBy {
     EventBy {
         role: role(common, env),
         session: env.get("HC_TERMINAL_ID").map(String::from),
+        via: None,
     }
 }
 
@@ -193,36 +193,10 @@ fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFi
 
 /// `tell hollywood "<text>"` — recorded; delivery is H3.
 fn tell_hollywood(common: &Common, env: &Env, text: &str) -> Result<String, Fail> {
-    if text.trim().is_empty() {
-        return Err(Fail::usage("an empty message says nothing"));
-    }
-    if text.contains('\n') {
-        return Err(Fail::usage("tell hollywood sends one line"));
-    }
     let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
-    let text = text.to_string();
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(
-                by,
-                HollywoodKind::MessageSent {
-                    to: "hollywood".into(),
-                    studio: None,
-                    text: Some(text),
-                    file: None,
-                    source_seq: None,
-                },
-            ),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(format!(
-        "{} — delivery to its terminal is the stage's job (H3)",
-        hrender::hconfirm(&event)
-    ))
+    let res = crate::verbs_hwood::tell_hollywood(&base, by, text, &[])?;
+    Ok(crate::verbs_hwood::format_tell_hollywood(&res))
 }
 
 /// `restart --person hollywood [--fresh] [--reason <r>]`: the user
@@ -237,38 +211,10 @@ pub(crate) fn restart(
     fresh: bool,
     reason: &str,
 ) -> Result<String, Fail> {
-    let r = role(common, env);
-    if r != "user" {
-        return Err(Fail::refused(format!(
-            "role '{r}' cannot do this; the user can"
-        )));
-    }
-    if config::hollywood(&env.vars).ok().flatten().is_none() {
-        return Err(Fail::refused(
-            "hollywood is not set up — run 'backlot hollywood setup' first",
-        ));
-    }
     let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
-    let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
-    if !hstate.role.recorded() {
-        return Err(Fail::refused(
-            "hollywood has not started yet — the stage starts it on its next tick",
-        ));
-    }
     let by = by_for(common, env);
-    let reason = (!reason.is_empty()).then(|| reason.to_string());
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, HollywoodKind::RoleRestart { fresh, reason }),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(format!(
-        "{} — the stage stops and relaunches it",
-        hrender::hconfirm(&event)
-    ))
+    let res = crate::verbs_hwood::restart_hollywood(&base, env, by, fresh, reason)?;
+    Ok(crate::verbs::format_restart(&res))
 }
 
 /// `approve --person hollywood --decision allow|deny`: the user's

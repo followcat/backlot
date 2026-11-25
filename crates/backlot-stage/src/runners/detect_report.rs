@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use serde::Serialize;
+use backlot_model::req_wire::RunnerCatalogEntry;
 
 use super::detect::{self, RUNNERS};
 use super::{agy, claude, cline, cmd, codex, cursor, devin, fake, opencode, probe};
@@ -74,21 +74,6 @@ pub fn report(env: &Env) -> Result<String, Fail> {
     Ok(out.trim_end().to_string())
 }
 
-/// One JSON row — the table's fields plus what the dialog's cast
-/// table cycles: `models` (the runner's catalog — free text stays
-/// possible for an id it does not know) and `efforts` (empty
-/// where the runner carries none).
-#[derive(Serialize)]
-struct Row {
-    runner: String,
-    status: &'static str,
-    version: Option<String>,
-    path: Option<String>,
-    needs_path: bool,
-    models: Vec<String>,
-    efforts: Vec<String>,
-}
-
 /// The runner's effort values from its caps, empty where the argv
 /// carries none: `cursor` and `cmd` refuse a declared effort,
 /// `devin` and `opencode` accept and ignore one. The dialog shows the
@@ -133,7 +118,7 @@ fn models(runner: &str) -> Vec<String> {
     out
 }
 
-fn row(scope: &detect::Scope, runner: &str) -> Row {
+fn row(scope: &detect::Scope, runner: &str) -> RunnerCatalogEntry {
     let (status, version, path, needs_path) = match detect::find(runner, scope) {
         Some(f) => {
             let needs_path = f.needs_path();
@@ -150,9 +135,9 @@ fn row(scope: &detect::Scope, runner: &str) -> Row {
         }
         None => ("missing", None, None, false),
     };
-    Row {
+    RunnerCatalogEntry {
         runner: runner.to_string(),
-        status,
+        status: status.to_string(),
         version,
         path,
         needs_path,
@@ -161,13 +146,11 @@ fn row(scope: &detect::Scope, runner: &str) -> Row {
     }
 }
 
-/// `backlot runners --json` (G4): `RUNNERS`' detection plus `fake`
-/// where its script exists — the `BACKLOT_FAKE_RUNNER` override or
-/// the shipped `tools/` script. A dev build offers it, a packaged
-/// one does not.
-pub fn report_json(env: &Env) -> Result<String, Fail> {
+/// Collect runner detection entries shared by `backlot runners --json`
+/// and `backlot-cat.runners`.
+pub(crate) fn rows(env: &Env) -> Vec<RunnerCatalogEntry> {
     let scope = detect::scope(env);
-    let mut rows: Vec<Row> = RUNNERS.iter().map(|r| row(&scope, r)).collect();
+    let mut rows: Vec<RunnerCatalogEntry> = RUNNERS.iter().map(|r| row(&scope, r)).collect();
     let fake_path = probe::fake_runner_path(env.get(probe::FAKE_RUNNER_ENV));
     if fake_path.is_file() {
         let path = fake_path;
@@ -185,9 +168,9 @@ pub fn report_json(env: &Env) -> Result<String, Fail> {
                 .find(|l| !l.is_empty())
                 .map(str::to_string)
         });
-        rows.push(Row {
+        rows.push(RunnerCatalogEntry {
             runner: "fake".to_string(),
-            status: "found",
+            status: "found".to_string(),
             version,
             path: Some(path.to_string_lossy().into_owned()),
             needs_path: false,
@@ -195,5 +178,13 @@ pub fn report_json(env: &Env) -> Result<String, Fail> {
             efforts: efforts("fake"),
         });
     }
-    serde_json::to_string_pretty(&rows).map_err(|e| Fail::refused(format!("runners: {e}")))
+    rows
+}
+
+/// `backlot runners --json` (G4): `RUNNERS`' detection plus `fake`
+/// where its script exists — the `BACKLOT_FAKE_RUNNER` override or
+/// the shipped `tools/` script. A dev build offers it, a packaged
+/// one does not.
+pub fn report_json(env: &Env) -> Result<String, Fail> {
+    serde_json::to_string_pretty(&rows(env)).map_err(|e| Fail::refused(format!("runners: {e}")))
 }
