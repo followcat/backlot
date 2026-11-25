@@ -53,6 +53,10 @@ fn a_collision_with_the_studio_keys_falls_back() {
     let (key, notice) = resolve_key(Some("alt+up"), &keys, None, path());
     assert_eq!(key, HollywoodKey::Direct(parse_key_combo("alt+y").unwrap()));
     assert!(notice.unwrap().contains("previous_role"));
+    // `alt+l` is `focus_lot`.
+    let (key, notice) = resolve_key(Some("alt+l"), &keys, None, path());
+    assert_eq!(key, HollywoodKey::Direct(parse_key_combo("alt+y").unwrap()));
+    assert!(notice.unwrap().contains("focus_lot"));
 }
 
 #[test]

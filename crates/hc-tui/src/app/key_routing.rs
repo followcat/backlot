@@ -170,7 +170,66 @@ impl App {
         if self.copy_or_terminal_mode() != Mode::Copy && self.route_image_paste_key(key).is_some() {
             return None;
         }
-        // The reference's Ctrl+G arm precedes the popup and the lock:
+        // The floating popup eats every key while open — the reference
+        // routes raw input to it before UI bindings (`popup.rs`), and a
+        // shown float takes even the Ctrl+G lock chord and keeps the keys
+        // while the keyboard is locked, so nothing lands on the pane
+        // behind it; its own popup chord still works when locked, so the
+        // float can always be hidden and the lock reached again. A retained popup selection copies on Ctrl/Cmd+C
+        // first; every other key reaching the popup clears it. A
+        // persistent float yields only its popup binding chords: they run
+        // their command, so its own toggle key hides the float rather
+        // than typing into the program. Plain page keys page the popup's
+        // own scrollback under the same rule as a pane's
+        // (`page_keys.rs`); any key the program does get jumps the view
+        // back to the bottom. Intercepted presses record their identity
+        // so the matching release never reaches a program that saw no
+        // press.
+        if self.popup.is_some() {
+            let popup_combo = crate::input::terminal_key_of(&press);
+            if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
+                && matches!(
+                    popup_combo.modifiers,
+                    KeyModifiers::CONTROL | KeyModifiers::SUPER
+                )
+                && self.copy_popup_selection()
+            {
+                self.clear_popup_selection();
+                return None;
+            }
+            self.clear_popup_selection();
+            let intercepted = self
+                .popup
+                .as_ref()
+                .is_some_and(|popup| popup.persistent)
+                .then(|| crate::input::resolve_direct_binding(&self.live.keybinds, &popup_combo))
+                .flatten();
+            match intercepted {
+                Some(crate::input::KeybindMatch::Command(command))
+                    if command.action == crate::config::CustomCommandAction::Popup =>
+                {
+                    self.popup_key_suppress.insert(press.identity());
+                    self.run_custom_command(&command);
+                }
+                _ => {
+                    if self
+                        .popup
+                        .as_mut()
+                        .is_some_and(|popup| popup.pane.page_scroll(key))
+                    {
+                        self.popup_key_suppress.insert(press.identity());
+                        self.sched.mark_dirty(Instant::now());
+                    } else {
+                        if let Some(vt) = self.popup.as_mut().and_then(|popup| popup.pane.vt()) {
+                            vt.scroll_to_bottom();
+                        }
+                        self.popup_key(&press);
+                    }
+                }
+            }
+            return None;
+        }
+        // The reference's Ctrl+G arm precedes the lock:
         // copy mode exits without copying, selections clear, then the
         // lock toggles.
         if key.input.key == Key::Char('g')
@@ -198,76 +257,6 @@ impl App {
         if self.keyboard_locked {
             self.clear_popup_selection();
             return self.pane.target().map(|_| self.pane.generation());
-        }
-        // The floating popup eats every key while open — the reference
-        // routes raw input to it before UI bindings (`popup.rs`). A
-        // retained popup selection copies on Ctrl/Cmd+C first; every
-        // other key reaching the popup clears it. A persistent float
-        // additionally yields two chord families: the direct bindings of
-        // the four navigation actions still navigate (the float parks or
-        // stays with its tab), and every popup binding chord runs its
-        // command — its own toggle key hides the float rather than typing
-        // into the program. Intercepted presses record their identity so
-        // the matching release never reaches a program that saw no press.
-        if self.popup.is_some() {
-            let popup_combo = crate::input::terminal_key_of(&press);
-            if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
-                && matches!(
-                    popup_combo.modifiers,
-                    KeyModifiers::CONTROL | KeyModifiers::SUPER
-                )
-                && self.copy_popup_selection()
-            {
-                self.clear_popup_selection();
-                return None;
-            }
-            self.clear_popup_selection();
-            // U1: studio keys precede the float's herdr direct-binding
-            // intercept; role keys win only in a studio workspace.
-            // Persistent and ephemeral floats alike release on studio nav.
-            if let Some(nav) = self.studio_nav_for_key(&popup_combo) {
-                if self.popup.as_ref().is_some_and(|popup| !popup.persistent) {
-                    self.dismiss_popup();
-                }
-                self.popup_key_suppress.insert(press.identity());
-                self.studio_nav(nav);
-                return None;
-            }
-            // H4: Hollywood's direct toggle parks a persistent float
-            // exactly like the studio keys — ephemeral popups keep it.
-            if self.hollywood_key.is_some_and(|keys| keys.direct.is_some())
-                && self.popup.as_ref().is_some_and(|popup| popup.persistent)
-                && self.hollywood_key_press(&press)
-            {
-                self.popup_key_suppress.insert(press.identity());
-                self.hollywood_toggle();
-                return None;
-            }
-            let intercepted = self
-                .popup
-                .as_ref()
-                .is_some_and(|popup| popup.persistent)
-                .then(|| crate::input::resolve_direct_binding(&self.live.keybinds, &popup_combo))
-                .flatten();
-            use crate::input::{KeybindAction as A, KeybindMatch};
-            match intercepted {
-                Some(KeybindMatch::Action(
-                    action @ (A::PreviousTab | A::NextTab | A::PreviousAgent | A::NextAgent),
-                )) => {
-                    self.popup_key_suppress.insert(press.identity());
-                    self.on_action(action, width);
-                }
-                Some(KeybindMatch::Command(command))
-                    if command.action == crate::config::CustomCommandAction::Popup =>
-                {
-                    self.popup_key_suppress.insert(press.identity());
-                    self.run_custom_command(&command);
-                }
-                _ => {
-                    self.popup_key(&press);
-                }
-            }
-            return None;
         }
         // A popup still opening swallows input — the reference's
         // `popup_pending` arm.
@@ -473,6 +462,17 @@ impl App {
         // studio keys already took theirs.
         if self.hollywood.expanded() || self.hollywood.view.is_some() {
             self.handle_hollywood_key(&press);
+            return None;
+        }
+        // `focus_lot` (`alt+l` by default): opens/focuses the lot on
+        // its last selectable row without starting compose; yields to
+        // floats, modals, Call Sheet overlays, and running compose.
+        if self.focus_lot_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            if key.input.action == Action::Press {
+                self.focus_lot();
+            }
             return None;
         }
         // A focused panel owns every key like the navigator does; the

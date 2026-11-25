@@ -110,6 +110,7 @@ impl App {
                 self.hollywood.editing = true;
             }
             Surface::Dock => self.panel_toggle(),
+            Surface::FocusLot => self.focus_lot(),
             Surface::PaneMenu => self.pane_menu(),
         }
     }

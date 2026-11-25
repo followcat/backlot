@@ -785,6 +785,15 @@ Everything else on the compared surfaces still diffs normally.
   herdr's own value (`agent_panel_sort = "spaces"`), which restores the
   reference header label and agent order; with the previous default the
   header said `priority` and the list followed status order.
+- **Agent-panel space headers.** Opt-in: with `[ui]
+  agent_panel_space_headers = true` and the panel sorted by space, a dim
+  row with the space's name heads each run of that space's agents and a
+  blank line separates the groups, as the herdr app's grouped agents list
+  does. Off by default, so the space order matches the reference, which
+  draws no headers; `priority` and filtered agent views stay flat. With
+  machines added (`hc machine add`), each machine's spaces get their own
+  headers without naming the machine, so a space of the same name on two
+  machines heads two groups.
 - **Persistent float default for a shell popup.** Deliberate: a backlot
   `[[keys.command]]` with `type = "popup"` whose command is a bare
   interactive shell is the tab's persistent float unless the entry says
@@ -792,6 +801,13 @@ Everything else on the compared surfaces still diffs normally.
   harness pins the audited Alt+F entry to `persistent = false` in the
   **candidate's private config copy only**: herdr treats the unknown key
   as a config diagnostic and draws a toast over row 0.
+- **A shown float takes the navigation and lock chords.** Deliberate:
+  while a popup is shown, every key except a `[[keys.command]]` popup
+  chord goes to its program, including the `previous_tab`/`next_tab`/
+  `previous_agent`/`next_agent` bindings and Ctrl+G, and a locked
+  keyboard sends its keys to the popup. Plain page keys page the popup's
+  own scrollback under the pane rule. The reference routes Ctrl+G and the
+  lock before the popup and never pages a popup's scrollback.
 - **Parity harness known differences.** The harness excuses exactly three
   things, each by position and content and recorded per checkpoint under
   `known_differences` with the reason: the running version badge (one
@@ -896,6 +912,36 @@ Everything else on the compared surfaces still diffs normally.
   labels (e.g. `zulu`), so hc-tui suppresses only the generated
   32-hex-digit form — otherwise the command pane's tab renders its
   identity as a visible name the reference never shows.
+- **Herdr-app space and tab names.** Deliberate: hc-tui names an unnamed
+  herdr-app space and tab the way the herdr app does, so one layout reads
+  the same in both. The space takes the folder its first terminal works in
+  now (the foreground process's cwd, else the shell's) rather than the
+  folder it was created in. An unnamed tab — an app tab or one opened
+  from hc-tui — takes its lead agent's terminal title, activity glyph
+  stripped, unless the title is empty, a path, a `user@host`, the
+  terminal address or the program's own name. Failing that it shows the
+  job in the foreground of its first live terminal by the name it was
+  started under (`zsh`, `vim`, `claude`; macOS reports some process
+  names as a version), and only with no live job does it keep its
+  number. A name someone gave still wins, and spaces outside the
+  herdr-app document keep the reference names.
+- **Workspaces hc-tui creates follow their terminal.** As the reference
+  (`display_name_from_terminals`, `focused_pane_cwd_in_workspace`,
+  `resolved_new_workspace_cwd_from_tab`): a workspace whose name nobody
+  chose (it kept the suggested label, or was promoted unnamed) takes the
+  folder its first terminal works in now, like an unnamed app space; a
+  new tab and a new workspace open where the focused terminal works now,
+  falling back to its launch folder and the workspace's
+  `new_workspace_cwd`. Floats keep their repository-root rule.
+- **Terminals of a closed herdr-app tab.** Deliberate: when the app closes
+  a tab, its terminals keep `herdr.space`/`herdr.tab` labels that point at
+  an app space the document no longer lists them in. A finished one is not
+  shown, as in the app; a live one stays reachable as an unnamed tab. The
+  app's `tb` + 32-hex tab id is an identity like `opaque_id()` and is
+  suppressed the same way. Closing a whole space works the same: a
+  finished terminal tagged with an app space id (`sp` + 32 hex) that the
+  document no longer lists is not shown, rather than coming back as a
+  space named by that raw id. A live one stays reachable.
 - **Drain-error isolation.** A dead wire's input-drain failure belongs
   to its terminal, never to the pane's next target: `Pane::want` clears
   a retained `close_error` on retarget, and `Parked`/`Drain`/`Closing`

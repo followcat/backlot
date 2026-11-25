@@ -87,16 +87,19 @@ const DEFAULT_PREVIOUS_STUDIO: &str = "alt+left";
 const DEFAULT_NEXT_STUDIO: &str = "alt+right";
 const DEFAULT_PREVIOUS_ROLE: &str = "alt+up";
 const DEFAULT_NEXT_ROLE: &str = "alt+down";
+const DEFAULT_FOCUS_LOT: &str = "alt+l";
 
-/// The four direct studio keys: `alt+left/right` move between studios,
-/// `alt+up/down` between the current studio's people. `None` is an
-/// unbound key (`""` in the file).
+/// The direct studio keys: `alt+left/right` move between studios,
+/// `alt+up/down` between the current studio's people, and `alt+l`
+/// focuses the lot on its last row. `None` is an unbound key
+/// (`""` in the file).
 #[derive(Debug, Clone)]
 pub(crate) struct StudioKeys {
     pub previous_studio: Option<KeyCombo>,
     pub next_studio: Option<KeyCombo>,
     pub previous_role: Option<KeyCombo>,
     pub next_role: Option<KeyCombo>,
+    pub focus_lot: Option<KeyCombo>,
 }
 
 impl Default for StudioKeys {
@@ -106,11 +109,18 @@ impl Default for StudioKeys {
             next_studio: crate::config::parse_key_combo(DEFAULT_NEXT_STUDIO),
             previous_role: crate::config::parse_key_combo(DEFAULT_PREVIOUS_ROLE),
             next_role: crate::config::parse_key_combo(DEFAULT_NEXT_ROLE),
+            focus_lot: crate::config::parse_key_combo(DEFAULT_FOCUS_LOT),
         }
     }
 }
 
 impl StudioKeys {
+    /// Whether `key` matches the configured `focus_lot` binding.
+    pub(crate) fn focus_lot_matches(&self, key: &crate::config::TerminalKey) -> bool {
+        self.focus_lot
+            .is_some_and(|combo| crate::config::terminal_key_matches_combo(key, combo))
+    }
+
     /// The studio action a key combo resolves to — checked before
     /// herdr's own direct bindings, so a studio key wins in studio
     /// mode even when it shadows one.
@@ -296,6 +306,7 @@ struct KeysSection {
     /// `prev_studio`/`prev_role` spellings from the spec's table.
     prev_studio: Option<String>,
     prev_role: Option<String>,
+    focus_lot: Option<String>,
     call_sheet: Option<String>,
     prefix_call_sheet: Option<String>,
     prefix_dock: Option<String>,
@@ -424,6 +435,13 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             keys.next_role,
             DEFAULT_NEXT_ROLE,
             "next_role",
+            path,
+            &mut notice,
+        );
+        config.keys.focus_lot = studio_key(
+            keys.focus_lot,
+            DEFAULT_FOCUS_LOT,
+            "focus_lot",
             path,
             &mut notice,
         );

@@ -31,6 +31,7 @@ The defaults you'll use most:
 | `Ctrl+B r` | Resize mode |
 | `Ctrl+B x` | Close the pane |
 | `Ctrl+B y` | Toggle the studio panel |
+| `Alt+L` | Focus the lot (`lot · N`) on its last selectable row — `i`/`/` composes, `↑` walks up, `Esc` leaves |
 | `Ctrl+B t` | Focus the left machines tree — `Esc` back, `↑/↓` move, `Enter` acts like a click, `m` opens the row's menu |
 | `Ctrl+G` | Lock the keyboard, so every key goes to the program. Press again to unlock. |
 
@@ -69,6 +70,14 @@ action this tree's `Enter` and `m` run.
 focused closes it; while it is open but unfocused the chord focuses it. A Herdr binding on `y`
 still wins whenever the panel does not own the keys. The chord's tail is `panel.key` in
 `~/.config/backlot/config.toml`.
+
+`Alt+L` (`keys.focus_lot` in `~/.config/backlot/config.toml`) is the direct jump into the lot: if the
+dock is hidden or collapsed it opens expanded, moves keyboard focus to it, and selects the last
+selectable row (such as `› tell producer · / actions`), scrolled into view without starting compose
+(`i` or `/` composes, `↑` walks up to the newest entries, `Esc` leaves as before). Pressed while
+the lot already has focus (and is not composing or confirming), it jumps back to the last row and
+never closes the dock. Like `Alt+Y`, it falls through to the program under `--plain` and yields to
+shown floats, modals, overlays, and active compose. An empty string (`""`) unbinds it.
 
 The panel — the studio dock — has three modes: closed (zero width, no keys), a
 16-column collapsed strip, and an expanded column (38 columns at 160+, 36 at 100+, 28 under) of
@@ -123,7 +132,9 @@ never covers the studios: it opens the new-studio dialog directly instead.
 
 ## The Hollywood bar
 
-`Alt+Y` — a direct key, no prefix — toggles the film-strip band dropped from the top. From Hidden
+The key is `Alt+Y` (`call_sheet`) / `Ctrl+B i` (`prefix_call_sheet`); the lot header advertises both
+`alt+l` (focus the lot on its last row) and `alt+y / ctrl+b i`. `Alt+Y` — a direct key, no prefix —
+toggles the film-strip band dropped from the top. From Hidden
 or Collapsed, one `Alt+Y` expands straight into Compose (`›`) when `[hollywood]` is configured
 (waiting items remain visible above; unconfigured keeps wait/frame landing). From Expanded, one
 `Alt+Y` collapses back keeping any draft. Toast jumps (`Ctrl+B o` or click) still land on their
@@ -223,9 +234,9 @@ behind. In a terminal, `backlot studio new --interactive` still asks the same qu
 
 ## Studio keys
 
-backlot is always in studio mode (start it with `--plain` for the plain multiplexer), so four
-direct keys — no prefix — move between studios and roles. They are bound in
-`~/.config/backlot/config.toml` and default to the `Alt+arrow` chords:
+backlot is always in studio mode (start it with `--plain` for the plain multiplexer), so five
+direct keys — no prefix — move between studios and roles or jump straight to the lot. They are
+bound in `~/.config/backlot/config.toml` and default to `Alt+arrow` and `Alt+L`:
 
 ```toml
 [keys]
@@ -233,12 +244,14 @@ previous_studio = "alt+left"
 next_studio = "alt+right"
 previous_role = "alt+up"
 next_role = "alt+down"
+focus_lot = "alt+l"
 ```
 
 | Keys | Action |
 |---|---|
 | `Alt+Left`, `Alt+Right` | Previous or next studio in document order. Wraps around. Focuses the member last used there — a role or a shell — else the studio's producer, else its first live role, else its first live shell. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one gets a notice. |
 | `Alt+Up`, `Alt+Down` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered member. |
+| `Alt+L` | Expand the right-hand lot dock if hidden or collapsed, move keyboard focus to it, and scroll the selection to its last selectable row (e.g. `› tell producer · / actions`) without starting compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressed while already focused (outside compose or confirm), jumps to the last row again without closing. Yields to floats, modals, the Call Sheet, and running compose. |
 
 Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
 focus — no pane and no program is resized — and a focused dock, the Call Sheet or a card that was
@@ -256,10 +269,10 @@ keys are Herdr's again. Under `--plain` Herdr's
 bindings, or the program, get the keys exactly as before. An empty string unbinds a key; a value
 that does not parse falls back to the default with one notice naming the file.
 
-They also work while the studio panel or a persistent float has the focus — the float parks on
-its tab and keeps running, as it does for the tab and agent keys below. While the keyboard is
-locked (`Ctrl+G`) the program gets them instead, and in copy mode they do what Herdr's
-`previous_tab` does there.
+They also work while the studio panel has the focus. While a float is shown, the float takes
+every key except its popup chord — hide the float first to switch studios or roles, as for the tab
+and agent keys below. While the keyboard is locked (`Ctrl+G`) the program gets them instead, and in
+copy mode they do what Herdr's `previous_tab` does there.
 
 ## Scrolling a pane
 
@@ -270,8 +283,8 @@ mode gets the keys instead, so `less`, `vim` and similar apps keep their own pag
 keys such as `Ctrl+PageUp` always reach the program, and any key the program does get jumps the view
 back to the bottom. The mouse wheel scrolls the pane the same way.
 
-Inside a floating terminal (`type = "popup"`), every key goes to the popup's program, so `PageUp` and
-`PageDown` do not page the pane behind it.
+Inside a floating terminal (`type = "popup"`), the same rule pages the popup's own scrollback, and
+the pane behind it never moves.
 
 ## Copy mode
 
@@ -367,11 +380,12 @@ one-shot: they close and end when you leave the tab. Set `persistent = true` on 
 popup command the same per-tab behavior, or `persistent = false` to keep even a shell one-shot. While a float is
 starting, its own chord is held back until the terminal is up.
 
-While a persistent float is focused, the keys bound to `previous_tab`/`next_tab`/`previous_agent`/`next_agent` — the
-`Alt+arrow` shortcuts above, if you set them — still switch tabs and agents: the float parks on its tab and keeps
-running, exactly as if you had clicked away. Any `[[keys.command]]` popup chord also still works, so `Alt+F` toggles
-the float instead of typing into it. The program loses exactly those chords — press, repeat and release; everything
-else, `Esc` included, reaches it, and an action with no binding loses nothing.
+While a float is shown, it takes every key except the `[[keys.command]]` popup chords: those still run their
+command, so `Alt+F` hides the float instead of typing into it. Everything else reaches the program, including the
+`Alt+arrow` tab and agent shortcuts, `Ctrl+G` and `Esc`; hide the float first to switch tabs or lock the keyboard.
+A locked keyboard sends its keys to the shown float, not to the pane behind it, and the popup chord still hides the
+float. Plain `PageUp` and `PageDown` page the float's scrollback as described under
+[Scrolling a pane](#scrolling-a-pane).
 
 The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
 the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on

@@ -70,7 +70,8 @@ chord tail — an empty string unbinds that slot; `[hollywood] key` fills whiche
 leaves unset (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
 bound in studio mode with or without a `[hollywood]` table; under `--plain` it is not bound, so
 Alt+Y reaches the focused program as always. A key value that does not parse, is a bare printable
-key, or collides with one of the four studio keys or the panel chord falls back to `alt+y` with a
+key, or collides with one of the studio keys (`previous_studio`, `next_studio`,
+`previous_role`, `next_role`, `focus_lot`) or the panel chord falls back to `alt+y` with a
 notice that names the file and never echoes the value. Known costs, said plainly:
 
 1. While bound, **Alt+Y no longer reaches the program in the pane**. Readline and Emacs use `M-y`
@@ -80,7 +81,10 @@ notice that names the file and never echoes the value. Known costs, said plainly
    fixes it.
 3. On **macOS**, the terminal must send Option as Meta.
 
-The studio panel keeps `prefix+y`.
+The studio panel keeps `prefix+y` to toggle, and **`alt+l`** (`[keys] focus_lot`, `""` unbinds)
+focuses the right-hand lot (`lot · N`) on its last selectable row — opening it if hidden or
+collapsed without starting compose or toggling closed (shown beside `alt+y / ctrl+b i` in the lot
+header, `?`, and the launcher; falls through under `--plain`).
 
 Inside the expanded bar: `Tab` / `Shift+Tab` cycles the three zones — `Compose (›)` →
 `Waiting/Exchange` (first waiting item, or newest exchange row) → `Studios` (upper frames) —

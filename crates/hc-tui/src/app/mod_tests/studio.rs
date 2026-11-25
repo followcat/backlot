@@ -364,7 +364,7 @@ async fn the_studio_keys_fire_while_the_panel_owns_the_keys() {
 }
 
 #[tokio::test]
-async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
+async fn a_shown_float_wins_over_the_studio_keys() {
     let mut app = two_studio_app();
     app.area = (120, 24);
     app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
@@ -383,14 +383,12 @@ async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
     });
     app.on_popup_spawned("t50".into(), 50);
     assert!(app.popup.is_some(), "the float shows");
+    let focus_before = app.studio.focus.clone();
     alt(&mut app, hc_vt::Key::ArrowRight);
-    assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(
-        app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "night-owl"
-        )))
-    );
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
+    assert_eq!(app.studio.focus, focus_before);
+    assert_eq!(app.popup.as_ref().unwrap().pane.input_backlog().0, 1);
+    assert_eq!(app.pane.input_backlog().0, 0);
 }
 
 #[tokio::test]

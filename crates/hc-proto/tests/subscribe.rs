@@ -250,3 +250,25 @@ async fn cancelling_open_during_subscribe_ends_the_wire() {
     );
     joined(server).await;
 }
+
+#[tokio::test]
+async fn subscribe_params_with_docs_only_is_filtered() {
+    let (core, read, write) = pair(64 * 1024);
+    let server = tokio::spawn(async move {
+        let mut core = core;
+        let request =
+            serve_subscribe(&mut core, ALL_METHODS, subscribe::snapshot_value(1, vec![])).await;
+        assert_eq!(request["params"]["docs"], json!(["herdr-app"]));
+        core.expect_eof_line().await;
+        core
+    });
+    let p = SubscribeParams {
+        docs: vec!["herdr-app".into()],
+        ..SubscribeParams::default()
+    };
+    let sub = opening(read, write, &p).await;
+    assert!(sub.filtered());
+    assert!(sub.inventory().filtered());
+    drop(sub);
+    joined(server).await;
+}
