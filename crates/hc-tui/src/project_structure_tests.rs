@@ -504,3 +504,27 @@ fn a_finished_terminal_of_a_space_the_app_did_not_make_stays() {
         assert_eq!(workspaces_with_tagged(space, true), 2, "{space}");
     }
 }
+
+#[test]
+fn a_closed_app_space_hides_its_finished_terminals_whatever_their_order() {
+    // A live terminal created before a finished one gives the closed space
+    // a row of its own; the finished one must still stay hidden.
+    let kept = crate::sidebar::fixture::agent("t1", "idle");
+    let mut live = tagged(term("t2"), CLOSED_SPACE, CLOSED_TAB);
+    live.created_ms = 1;
+    let mut killed = tagged(term("t3"), CLOSED_SPACE, CLOSED_TAB);
+    killed.created_ms = 2;
+    killed.state = "finished".into();
+    killed.reason = Some("killed".into());
+    let mut v = view(vec![kept, live, killed], vec![]);
+    doc(
+        &mut v,
+        "herdr-app",
+        None,
+        json!({"spaces":[app_space("s1", "", "/w", &[("tab1", "", "t1")])]}),
+    );
+    let snapshot = project(&v, Some("t1")).snapshot;
+    let panes: Vec<&str> = snapshot.panes.iter().map(|p| p.pane_id.as_str()).collect();
+    assert!(panes.contains(&"t2"), "{panes:?}");
+    assert!(!panes.contains(&"t3"), "{panes:?}");
+}

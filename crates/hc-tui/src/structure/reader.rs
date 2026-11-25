@@ -266,21 +266,17 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     spaces
 }
 
-/// A tab key that is an identity, not a name: an adoption promotion's
-/// 128-bit hex id (creation.rs `opaque_id`) or the Herdr app's own tab id
-/// (`tb` and the same 32 hex digits), which a terminal keeps in
-/// `herdr.tab` after the app drops its tab.
 /// Whether the herdr app closed the place `terminal` was tagged into: its
 /// space is still an app space (so only its tab was closed), or it carries an
-/// app-made space id that no space in the document has any more.
+/// app-made space id that no space in the document has any more. The second
+/// holds even after a live terminal of that closed space has given it a row
+/// here, so the answer never depends on which terminal came first.
 fn closed_by_app(terminal: &Terminal, at: Option<&usize>, spaces: &[Space]) -> bool {
-    match at {
-        Some(&at) => spaces[at].from_app,
-        None => terminal
+    at.is_some_and(|&at| spaces[at].from_app)
+        || terminal
             .labels
             .get("herdr.space")
-            .is_some_and(|space| is_app_space_id(space)),
-    }
+            .is_some_and(|space| is_app_space_id(space))
 }
 
 /// The herdr app's own space id: `sp` + 32 hex digits. hc-tui's are bare
@@ -291,6 +287,10 @@ fn is_app_space_id(label: &str) -> bool {
         .is_some_and(|hex| hex.len() == 32 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// A tab key that is an identity, not a name: an adoption promotion's
+/// 128-bit hex id (creation.rs `opaque_id`) or the Herdr app's own tab id
+/// (`tb` and the same 32 hex digits), which a terminal keeps in
+/// `herdr.tab` after the app drops its tab.
 fn is_opaque_tab_id(label: &str) -> bool {
     let hex = label
         .strip_prefix("tb")
