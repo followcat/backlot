@@ -69,7 +69,7 @@ fn tell_and_person_verbs_round_trip_through_fake_core_and_format_ok_lines() {
     let dir = TestDir::new("blrem-ok");
     let (rt, env, base, core, stage, mut consumer, stalled_seq, recast_card_seq, _) =
         seeded_fake_core(&dir);
-    let _setup_card_seq = recast_card_seq + 1;
+    let setup_card_seq = recast_card_seq + 1;
 
     let mut run_cli = |owned: Vec<String>| -> String {
         let (common, cmd) = args::parse(&owned).unwrap();
@@ -142,6 +142,10 @@ fn tell_and_person_verbs_round_trip_through_fake_core_and_format_ok_lines() {
         ),
         (&format!("card show c{recast_card_seq}"), "producer"),
         (
+            &format!("card cancel c{setup_card_seq} --reason hold"),
+            "card.cancelled",
+        ),
+        (
             &format!("attention clear --studio acme-shop {stalled_seq}"),
             "attention",
         ),
@@ -149,6 +153,12 @@ fn tell_and_person_verbs_round_trip_through_fake_core_and_format_ok_lines() {
         let out = run_cli(words(line));
         assert!(out.contains(needle), "{line} -> {out}");
     }
+
+    assert!(
+        !run_cli(words(&format!("card apply c{recast_card_seq}")))
+            .trim()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -287,97 +297,4 @@ fn config_client_does_not_hijack_agent_pinned_state_dir() {
     )
     .unwrap();
     assert!(out.contains("message.queued"), "{out}");
-}
-
-#[test]
-fn remote_card_apply_and_cancel_refuse_without_writing_doc_while_hub_local_keeps_applying() {
-    let dir = TestDir::new("blrem-card-refuse");
-    let (rt, env, base, core, _stage, _consumer, _s, recast_card_seq, _) = seeded_fake_core(&dir);
-    let setup_card_seq = recast_card_seq + 1;
-
-    // 1. Remote `execute_client` refuses card apply/cancel before touching `plugin.backlot.req`.
-    for action in [
-        ReqAction::CardApply {
-            id: recast_card_seq,
-        },
-        ReqAction::CardCancel {
-            id: setup_card_seq,
-            reason: "hold".into(),
-        },
-    ] {
-        let err = rt
-            .block_on(async {
-                let client = core.client().await;
-                let ep = core.endpoint();
-                execute_client(&client, Some(&ep), &action, Duration::from_secs(1)).await
-            })
-            .unwrap_err();
-        assert_eq!(
-            err.message(),
-            "card approvals are not taken over the server queue; apply it on the server host"
-        );
-    }
-    assert_eq!(core.doc_writes(REQ_DOC_NAME), 0);
-
-    // 2. Remote CLI (`--server host-a/backlot` on `host-b`) refuses immediately without touching the hub ledger.
-    let mut remote_env = Env {
-        vars: env.vars.clone(),
-    };
-    remote_env.vars.insert(
-        "XDG_CONFIG_HOME".into(),
-        dir.join("xdg").to_string_lossy().into_owned(),
-    );
-    for argv in [
-        words(&format!(
-            "--server host-a/backlot card apply c{recast_card_seq}"
-        )),
-        words(&format!(
-            "--server host-a/backlot card cancel c{setup_card_seq} --reason nope"
-        )),
-    ] {
-        let err = crate::cli_run::run_stdin_with_host(
-            &argv,
-            &remote_env,
-            None,
-            Some("host-b"),
-            Some("alice"),
-        )
-        .unwrap_err();
-        assert_eq!(
-            err.message(),
-            "card approvals are not taken over the server queue; apply it on the server host"
-        );
-    }
-
-    // 3. On the hub itself (`host-a`), direct ledger card apply & cancel keep working.
-    let hub_out = crate::cli_run::run_stdin_with_host(
-        &words(&format!(
-            "--server host-a/backlot card apply c{recast_card_seq} --as user"
-        )),
-        &env,
-        None,
-        Some("host-a"),
-        Some("alice"),
-    )
-    .expect("hub CLI applies cards directly");
-    assert!(!hub_out.trim().is_empty());
-
-    let hub_cancel = crate::cli_run::run_stdin_with_host(
-        &words(&format!(
-            "--server host-a/backlot card cancel c{setup_card_seq} --reason hold --as user"
-        )),
-        &env,
-        None,
-        Some("host-a"),
-        Some("alice"),
-    )
-    .expect("hub CLI cancels cards directly");
-    assert!(hub_cancel.contains("card.cancelled"), "{hub_cancel}");
-
-    let (hevents, _) = store::load_hevents(&store::hollywood_dir(&base)).unwrap();
-    assert!(
-        hevents
-            .iter()
-            .any(|e| matches!(e.kind, backlot_model::hollywood::HollywoodKind::CardApplied { card } if card == recast_card_seq))
-    );
 }
