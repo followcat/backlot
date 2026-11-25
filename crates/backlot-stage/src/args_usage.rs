@@ -8,7 +8,7 @@ pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
 pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n       backlot report show --studio <s> --file <relpath>";
-pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
+pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>\n       backlot ask --run [--why <text>] (-- <prog> <args...> | \"<cmd>\")";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin)\n       backlot tell hollywood \"<text>\" [--text <msg>]";
 pub(crate) const U_PROGRESS: &str =
     "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";
@@ -35,5 +35,6 @@ pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--al
 pub(crate) const U_RECORDS: &str =
     "usage: backlot records [--studio <name>] [--all] [--kind <task_kind>] [--json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
+pub(crate) const U_SERVER: &str = "usage: backlot server run [--session <s>]\n       backlot server start|stop [--session <s>] [--remote <t>]\n       backlot server adopt [--dry-run] [--stop-stages] [--core <id>]\n       backlot server service [--print | --write] [--session <s>]";
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
 pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>] [--all]\n       dot-directories stay hidden unless --all is given";

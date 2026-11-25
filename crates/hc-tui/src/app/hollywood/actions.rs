@@ -123,25 +123,67 @@ impl App {
         self.run_action(studio_cmds::finish(key, None));
     }
 
+    fn card_machine(&self, id: &str) -> Option<String> {
+        if let Some(crate::hollywood::Target::OutwardCard(key, cid)) =
+            self.hollywood.selected.as_ref()
+            && self.hollywood.expanded()
+            && cid == id
+        {
+            return key.machine.clone();
+        }
+        if let Some(crate::panel::Target::OutwardCard(key, cid)) = self.panel.selected.as_ref()
+            && cid == id
+        {
+            return key.machine.clone();
+        }
+        let machines = self.panel_summaries();
+        if crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .is_some_and(|h| h.cards.iter().any(|c| c.id == id))
+        {
+            return None;
+        }
+        machines
+            .iter()
+            .find(|m| {
+                m.summary
+                    .studios
+                    .iter()
+                    .any(|s| s.outward_cards.iter().any(|c| c.id == id))
+            })
+            .and_then(|m| m.machine.clone())
+    }
+
+    pub(super) fn hollywood_card_apply_on(&mut self, machine: Option<String>, id: &str) {
+        self.run_action(studio_cmds::card_apply_on(machine, id));
+    }
+
+    pub(super) fn hollywood_card_cancel_on(&mut self, machine: Option<String>, id: &str) {
+        self.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
+            format!("Cancel card {id}"),
+            false,
+            crate::studio_dialog::ReasonFor::CardCancel {
+                machine,
+                id: id.to_owned(),
+            },
+        ));
+    }
+
+    pub(super) fn hollywood_card_show_on(&mut self, machine: Option<String>, id: &str) {
+        self.run_action(studio_cmds::card_show_on(machine, id));
+    }
+
     /// `a` / Apply on the selected card: `backlot card apply <id>`.
     pub(super) fn hollywood_card_apply(&mut self, id: &str) {
-        self.run_action(studio_cmds::card_apply(id));
+        let machine = self.card_machine(id);
+        self.hollywood_card_apply_on(machine, id);
     }
 
     /// `x` / Cancel on the selected card: the reason dialog asks
     /// first (§2.1 — a card cancel's reason is optional).
     pub(super) fn hollywood_card_cancel(&mut self, id: &str) {
-        self.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
-            format!("Cancel card {id}"),
-            false,
-            crate::studio_dialog::ReasonFor::CardCancel { id: id.to_owned() },
-        ));
-    }
-
-    /// `s` / Show me on any card: `backlot card show <id>` in the
-    /// read-only view.
-    pub(super) fn hollywood_card_show(&mut self, id: &str) {
-        self.run_action(studio_cmds::card_show(id));
+        let machine = self.card_machine(id);
+        self.hollywood_card_cancel_on(machine, id);
     }
 
     /// A plain key on the selected row — the Call Sheet's own
@@ -211,6 +253,15 @@ impl App {
             }
             (Some(Target::Card(id)), KeyCode::Char('a')) => self.hollywood_card_apply(&id),
             (Some(Target::Card(id)), KeyCode::Char('x')) => self.hollywood_card_cancel(&id),
+            (Some(Target::OutwardCard(key, id)), KeyCode::Char('a' | 'y')) => {
+                self.hollywood_card_apply_on(key.machine, &id);
+            }
+            (Some(Target::OutwardCard(key, id)), KeyCode::Char('x' | 'd')) => {
+                self.hollywood_card_cancel_on(key.machine, &id);
+            }
+            (Some(Target::OutwardCard(key, id)), KeyCode::Char('s')) => {
+                self.hollywood_card_show_on(key.machine, &id);
+            }
             // `s` is stage-start only (R3-M11) — a card's read is
             // `⏎`, so no card arm names `s` anymore.
             (Some(Target::Ready(key)), KeyCode::Char('f')) => {

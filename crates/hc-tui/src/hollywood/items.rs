@@ -147,7 +147,7 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 }]
             }
         }
-        Wait::Card(_) => vec![
+        Wait::Card(_) | Wait::Outward(_) => vec![
             Chip {
                 label: "apply",
                 key: "a",
@@ -185,7 +185,7 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
 /// `open ↵`).
 pub(crate) fn default_chip_index(wait: &Wait<'_>, chips: &[Chip]) -> usize {
     match wait {
-        Wait::Card(_) => chips.iter().position(|c| c.key == "↵").unwrap_or(0),
+        Wait::Card(_) | Wait::Outward(_) => chips.iter().position(|c| c.key == "↵").unwrap_or(0),
         _ => chips.iter().position(|c| c.primary).unwrap_or(0),
     }
 }
@@ -287,6 +287,18 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             format!("CARD {}  {} · {}", card.id, card.studio, card.action),
             "◆",
         ),
+        Wait::Outward(item) => {
+            let machine = machine_label(item.machine, local, multi);
+            let where_ = if machine.is_empty() {
+                item.studio.id.clone()
+            } else {
+                format!("{} · {machine}", item.studio.id)
+            };
+            (
+                format!("CARD {}  {where_} · {}", item.card.id, item.card.command),
+                "◆",
+            )
+        }
         Wait::Ready(ReadyItem {
             machine, studio, ..
         }) => {
@@ -358,6 +370,7 @@ pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
         Wait::NoRequirement(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
+        Wait::Outward(item) => &item.card.id,
         Wait::Ready(item) => &item.studio.id,
     }
 }

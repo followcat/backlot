@@ -123,6 +123,10 @@ pub(crate) fn role_env(
     env.extend(runner_env);
     env.insert("BACKLOT_STUDIO".into(), studio.into());
     env.insert("BACKLOT_ROLE".into(), start.role.clone());
+    env.insert(
+        "BACKLOT_TERMINAL".into(),
+        format!("bl-{studio}-{}", start.role),
+    );
     if let Some(task) = &start.task {
         env.insert("BACKLOT_TASK".into(), task.clone());
     }

@@ -32,6 +32,11 @@ pub(crate) fn run_stdin_with_host(
     {
         return res;
     }
+    if matches!(cmd, Cmd::StudioNew { .. }) && common.remote.is_some() {
+        return Err(Fail::refused(
+            "remote studio placement is Phase 2; create studios on the server host",
+        ));
+    }
     if let Cmd::StudioNew {
         interactive: true,
         title,
@@ -57,15 +62,19 @@ pub(crate) fn run_stdin_with_host(
             env,
         );
     }
-    // `approve --person hollywood` answers a prompt on Hollywood's
-    // own screen: its own ledger, no studio (D13, D9).
     if let Cmd::Approve {
         ref person,
         decision,
     } = cmd
-        && person == backlot_model::hollywood::HOLLYWOOD
     {
-        return crate::hwood::approve(&common, env, decision);
+        crate::proc_guard::check_cli_gate(
+            crate::proc_guard::CliVerb::Approve { person },
+            &common,
+            env,
+        )?;
+        if person == backlot_model::hollywood::HOLLYWOOD {
+            return crate::hwood::approve(&common, env, decision);
+        }
     }
     // `restart --person hollywood` restarts the overseer's own
     // terminal: its own ledger, carried out by the stage's `hplan`.
@@ -103,9 +112,33 @@ pub(crate) fn run_stdin_with_host(
             check_stage_caller(&common, env)?;
             return crate::service::run(&common, env, write);
         }
+        Cmd::Server(scmd) => {
+            check_stage_caller(&common, env)?;
+            return match scmd {
+                crate::args::ServerCmd::Run => crate::server_mode::run(&common, env),
+                crate::args::ServerCmd::Start => crate::server_mode::start(&common, env),
+                crate::args::ServerCmd::Stop => crate::server_mode::stop(&common, env),
+                crate::args::ServerCmd::Adopt {
+                    dry_run,
+                    stop_stages,
+                    core,
+                } => crate::server_adopt::run(&common, env, dry_run, stop_stages, core.as_deref()),
+                crate::args::ServerCmd::Service { write } => {
+                    crate::server_service::run(&common, env, write)
+                }
+            };
+        }
         // Hollywood's own ledger needs no studio at all (D13).
         Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::TellHollywood { .. } => {
             return crate::hwood::run(common, cmd, env);
+        }
+        Cmd::PermsRevoke { .. } => {
+            crate::proc_guard::check_cli_gate(
+                crate::proc_guard::CliVerb::PermsRevoke,
+                &common,
+                env,
+            )?;
+            return Err(Fail::refused("perms revoke is not implemented in Phase 1"));
         }
         // `runners` is local detection only — no core, no ledger.
         Cmd::Runners { json } => {

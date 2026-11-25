@@ -225,6 +225,7 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                     checks: Vec::new(),
                     task_budget_s: None,
                     limits: Default::default(),
+                    push: Default::default(),
                 },
             ),
             files: Vec::new(),

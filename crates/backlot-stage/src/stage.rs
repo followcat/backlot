@@ -5,11 +5,10 @@
 //! stage per core. `run` executes the loop inside that terminal and
 //! refuses anywhere else (`BACKLOT_STAGE=1` is the proof).
 
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 use hc_proto::endpoint::Endpoint;
-use hc_proto::terminal::{ListParams, RunParams, Terminal, TerminalParams};
+use hc_proto::terminal::{ListParams, Terminal, TerminalParams};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
@@ -17,11 +16,6 @@ use crate::{daemon, link};
 
 /// The stage terminal's name — unique among live terminals.
 pub const STAGE_NAME: &str = "backlot-stage";
-
-/// POSIX single-quote escaping for one shell word.
-fn sh_quote(word: &str) -> String {
-    format!("'{}'", word.replace('\'', "'\\''"))
-}
 
 /// The message for a remote host without `backlot` — names the target
 /// and the fix.
@@ -33,54 +27,24 @@ fn not_installed(target: &str) -> String {
     )
 }
 
-/// The remote stage's shell line: the host's own `backlot`, and exit
-/// 127 when it is missing so `start` can say why.
-fn remote_stage_line(session: &str) -> String {
-    format!(
-        "command -v backlot >/dev/null 2>&1 || exit 127; exec backlot stage run --session {}",
-        sh_quote(session)
-    )
-}
-
 /// The exact `terminal.run` for the stage process. Local: this exe,
 /// this state dir. Remote: the core's host is the one that runs the
 /// terminal, so its `backlot` from `PATH`, `--session` alone, and no
 /// `BACKLOT_STATE_DIR` — this machine's path means nothing there.
-fn stage_params(exe: &str, endpoint: &Endpoint, env: &Env) -> RunParams {
-    let mut tenv = BTreeMap::from([("BACKLOT_STAGE".into(), "1".into())]);
-    let (argv, line) = match endpoint {
-        Endpoint::Local(local) => {
-            if let Some(d) = env.get("BACKLOT_STATE_DIR") {
-                tenv.insert("BACKLOT_STATE_DIR".into(), d.into());
-            }
-            (
-                vec![
-                    exe.to_string(),
-                    "stage".into(),
-                    "run".into(),
-                    "--session".into(),
-                    local.session.clone(),
-                ],
-                None,
-            )
-        }
-        Endpoint::Remote(remote) => (Vec::new(), Some(remote_stage_line(&remote.session))),
-    };
-    RunParams {
-        argv,
-        line,
-        name: Some(STAGE_NAME.into()),
-        labels: BTreeMap::from([
-            ("backlot.role".into(), "stage".into()),
-            ("herdr.space".into(), "backlot".into()),
-            ("herdr.tab".into(), "stage".into()),
-            ("herdr.seen".into(), "0".into()),
-        ]),
-        env: tenv,
-        no_parent: true,
-        no_notify: true,
-        ..RunParams::default()
-    }
+#[cfg(test)]
+fn stage_params(exe: &str, endpoint: &Endpoint, env: &Env) -> hc_proto::terminal::RunParams {
+    crate::server_mode::daemon_params(
+        exe,
+        endpoint,
+        env,
+        crate::server_mode::DaemonSpawnSpec {
+            name: STAGE_NAME,
+            tab: "stage",
+            subcmd: &["stage", "run"],
+            set_stage_env: true,
+            session_override: None,
+        },
+    )
 }
 
 /// What a remote stage start's polls learned.
@@ -215,6 +179,9 @@ async fn await_remote_start<S: StageHost>(stage: &S, target: &str) -> Result<(),
 }
 
 async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
+    if common.remote.is_none() {
+        crate::server_lock::refuse_if_server_or_retired(&env.vars, None)?;
+    }
     let link = link::connect(
         env,
         common.session.as_deref().map(std::ffi::OsStr::new),
@@ -226,52 +193,29 @@ async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
 
 /// Whether `t` is this core's own `backlot-stage` (never a federated
 /// `machine/tN` terminal imported from another host).
-fn is_local_stage(t: &Terminal) -> bool {
+pub(crate) fn is_local_stage(t: &Terminal) -> bool {
     !t.address.contains('/') && t.name.as_deref() == Some(STAGE_NAME)
 }
 
-/// Best-effort removal of finished local `backlot-stage` tombstones so
-/// `stage stop` / restarts do not pile up `finished·killed` tabs.
-async fn reap_finished_stages(client: &hc_proto::client::Client, terminals: &[Terminal]) {
-    for t in terminals
-        .iter()
-        .filter(|t| t.state == "finished" && is_local_stage(t))
-    {
-        let _ = client
-            .terminal_rm(TerminalParams {
-                terminal: t.address.clone(),
-                caller: None,
-            })
-            .await;
-    }
-}
-
-/// The idempotent start on an already-connected core — `stage start`
-/// and `stage watch --restart` share this one path.
-pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fail> {
-    let list = link
-        .client
-        .terminal_list(ListParams {
-            all: true,
-            ..ListParams::default()
-        })
-        .await
-        .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
-    reap_finished_stages(&link.client, &list.terminals).await;
-    if let Some(t) = list
-        .terminals
-        .iter()
-        .find(|t| t.state == "live" && is_local_stage(t))
-    {
-        return Ok(format!("{STAGE_NAME} is already running ({})", t.address));
-    }
+/// Spawn a daemon terminal (`backlot-stage` or `backlot-server`) and await remote readiness.
+pub(crate) async fn spawn_daemon_terminal(
+    link: &link::Link,
+    env: &Env,
+    spec: crate::server_mode::DaemonSpawnSpec<'_>,
+) -> Result<String, Fail> {
+    let name = spec.name;
     let exe = std::env::current_exe()
         .map_err(|e| Fail::refused(format!("cannot find this executable: {e}")))?
         .to_string_lossy()
         .into_owned();
     let run = link
         .client
-        .terminal_run(stage_params(&exe, &link.endpoint, env))
+        .terminal_run(crate::server_mode::daemon_params(
+            &exe,
+            &link.endpoint,
+            env,
+            spec,
+        ))
         .await
         .map_err(|e| Fail::refused(format!("terminal.run failed: {e}")))?;
     if let Endpoint::Remote(remote) = &link.endpoint {
@@ -282,7 +226,43 @@ pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fai
         };
         await_remote_start(&stage, &remote.target).await?;
     }
-    Ok(format!("{STAGE_NAME} started ({})", run.terminal.address))
+    Ok(format!("{name} started ({})", run.terminal.address))
+}
+
+/// The idempotent start on an already-connected core — `stage start`
+/// and `stage watch --restart` share this one path.
+pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fail> {
+    if matches!(link.endpoint, Endpoint::Local(_)) {
+        crate::server_lock::refuse_if_server_or_retired(&env.vars, Some(&link.core_id))?;
+    }
+    let list = link
+        .client
+        .terminal_list(ListParams {
+            all: true,
+            ..ListParams::default()
+        })
+        .await
+        .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
+    crate::server_mode::reap_finished_matching(&link.client, &list.terminals, is_local_stage).await;
+    if let Some(t) = list
+        .terminals
+        .iter()
+        .find(|t| t.state == "live" && is_local_stage(t))
+    {
+        return Ok(format!("{STAGE_NAME} is already running ({})", t.address));
+    }
+    spawn_daemon_terminal(
+        link,
+        env,
+        crate::server_mode::DaemonSpawnSpec {
+            name: STAGE_NAME,
+            tab: "stage",
+            subcmd: &["stage", "run"],
+            set_stage_env: true,
+            session_override: None,
+        },
+    )
+    .await
 }
 
 /// `stage start`: idempotent — an already-live name answers "already
@@ -322,30 +302,10 @@ async fn stop_async(common: &Common, env: &Env) -> Result<String, Fail> {
         })
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
-    reap_finished_stages(&link.client, &list.terminals).await;
+    crate::server_mode::reap_finished_matching(&link.client, &list.terminals, is_local_stage).await;
     let (address, report) = stop_verdict(&list.terminals);
     if let Some(terminal) = address {
-        link.client
-            .terminal_kill(TerminalParams {
-                terminal: terminal.clone(),
-                caller: None,
-            })
-            .await
-            .map_err(|e| Fail::refused(format!("terminal.kill failed: {e}")))?;
-        for _ in 0..10 {
-            let params = TerminalParams {
-                terminal: terminal.clone(),
-                caller: None,
-            };
-            match link.client.terminal_get(params.clone()).await {
-                Ok(t) if t.state == "finished" => {
-                    let _ = link.client.terminal_rm(params).await;
-                    break;
-                }
-                Ok(_) => tokio::time::sleep(Duration::from_millis(50)).await,
-                Err(_) => break,
-            }
-        }
+        crate::server_mode::stop_terminal(&link.client, &terminal).await?;
     }
     Ok(report.into())
 }
@@ -360,6 +320,9 @@ pub fn run(common: &Common, env: &Env) -> Result<String, Fail> {
         return Err(Fail::refused(
             "stage run belongs inside the stage terminal; start it with 'backlot stage start'",
         ));
+    }
+    if common.remote.is_none() {
+        crate::server_lock::refuse_if_server_or_retired(&env.vars, None)?;
     }
     link::runtime()?.block_on(daemon::run(common, env))?;
     Ok(String::new())

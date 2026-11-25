@@ -44,6 +44,7 @@ mod narrow;
 mod new_studio;
 mod observer_policy_tests;
 mod opening;
+mod outward_cards;
 mod overlay_reset;
 mod own_theme;
 mod page_keys;

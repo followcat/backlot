@@ -351,6 +351,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         worktree: ctx.cwd,
         signals: &signals,
         allowed: &allow_commands(ctx.role, ctx.checks),
+        role: ctx.role,
     });
     Ok(Launch {
         argv,

@@ -246,3 +246,48 @@ fn screenshot_case_renders_selected_full_and_unselected_folded_at_36x40() {
         std::fs::write(&out_path, format!("{text}\n")).unwrap();
     }
 }
+
+#[test]
+fn folded_studio_outward_card_counts_in_header_and_keeps_folded_height() {
+    let mut summary = two_studio_summary();
+    let blog = &mut summary.studios[1];
+    blog.waiting = 0;
+    for r in &mut blog.roles {
+        r.attention = None;
+        r.attention_class = None;
+        r.attention_user = false;
+        r.attention_detail = None;
+    }
+    blog.outward_cards
+        .push(backlot_model::summary::OutwardCardSummary {
+            id: "c1".into(),
+            role: "actor-a".into(),
+            command: "git push origin HEAD:main".into(),
+            rule: "protected branch 'main'".into(),
+            why: "release_main".into(),
+            repo: "/home/user/repo".into(),
+            remote_url: "git@host-a:blog/app.git".into(),
+            commits: vec![],
+            commits_total: 1,
+        });
+    let list = machines(Some(&summary));
+    let mut p = panel(PanelMode::Expanded);
+    p.selected = Some(Target::Studio("acme-shop".into()));
+
+    let all = rows(&list, |_| true, |_| true, &p, p.mode, None, 100);
+    let blog_rows = studio_rows(&all, "blog");
+    assert_eq!(blog_rows.len(), folded_block_height(&summary.studios[1]));
+    assert!(
+        !blog_rows
+            .iter()
+            .any(|r| matches!(r, Row::OutwardCard { .. })),
+        "folded studio must keep folded height: {blog_rows:?}"
+    );
+
+    let lines = render_lines(&summary, &p, Some("acme-shop"), 36, 40);
+    let text = lines.join("\n");
+    assert!(
+        lines.iter().any(|l| l.contains("blog") && l.contains("!1")),
+        "expected folded blog line to show !1:\n{text}"
+    );
+}

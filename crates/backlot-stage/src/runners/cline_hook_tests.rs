@@ -40,8 +40,8 @@ pub(super) fn commands_of(cmds: &[&str]) -> String {
     call("run_commands", serde_json::json!({"commands": cmds}))
 }
 
-/// Run the generated hook on one payload: `(cancel, message, signals)`.
-pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
+/// Run the generated hook on one payload for a role: `(cancel, message, signals)`.
+pub(super) fn run_as(dir: &Path, role: &str, input: &str) -> (bool, String, String) {
     let signals = dir.join("cline-signals.jsonl");
     let hook = dir.join("PreToolUse.sh");
     fs::write(
@@ -50,6 +50,7 @@ pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
             worktree: WORKTREE,
             signals: &signals,
             allowed: &rules(),
+            role,
         }),
     )
     .unwrap();
@@ -78,6 +79,11 @@ pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
     let msg = v["errorMessage"].as_str().unwrap_or("").to_string();
     let signals = fs::read_to_string(&signals).unwrap_or_default();
     (cancel, msg, signals)
+}
+
+/// Run the generated hook on one payload: `(cancel, message, signals)`.
+pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
+    run_as(dir, "actor-t1-c1", input)
 }
 
 fn commands(cmds: &[&str]) -> String {
@@ -307,6 +313,7 @@ fn a_nameless_call_is_cancelled() {
             worktree: WORKTREE,
             signals: &empty.join("gone/deeper/signals.jsonl"),
             allowed: &rules(),
+            role: "actor-t1-c1",
         }),
     )
     .unwrap();
@@ -334,4 +341,48 @@ fn a_nameless_call_is_cancelled() {
         "a hook never writes to stderr: {:?}",
         String::from_utf8_lossy(&out.stderr)
     );
+}
+
+#[test]
+fn cline_hook_blocks_self_approval_backlot_env_and_mutations() {
+    let dir = tmp("self-approve");
+    for cmd in [
+        "BACKLOT_ROLE=user backlot status",
+        "backlot status $BACKLOT_ROLE",
+        "env -i backlot card apply c1",
+        "env --ignore-environment backlot card apply c1",
+        "backlot card apply c1",
+        "backlot card cancel c1",
+        "backlot --studio acme-shop card apply c1",
+        "backlot perms revoke r1",
+        "backlot approve --person actor-t1-c1 --decision allow",
+    ] {
+        let (cancel, _, _) = run_as(&dir, "actor-t1-c1", &commands(&[cmd]));
+        assert!(cancel, "actor-t1-c1 must cancel `{cmd}`");
+    }
+
+    for role in ["writer", "hollywood"] {
+        let (cancel, _, _) = run_as(
+            &dir,
+            role,
+            &commands(&["backlot approve --person actor-t1-c1 --decision allow"]),
+        );
+        assert!(cancel, "{role} must cancel `backlot approve`");
+    }
+
+    // `director` is blocked on `--as` override or approving self, but allowed for an actor.
+    for bad in [
+        "backlot approve --as user --person actor-t1-c1 --decision allow",
+        "backlot approve --person director --decision allow",
+        "backlot card apply c1",
+    ] {
+        let (cancel, _, _) = run_as(&dir, "director", &commands(&[bad]));
+        assert!(cancel, "director must cancel `{bad}`");
+    }
+    let (cancel, msg, _) = run_as(
+        &dir,
+        "director",
+        &commands(&["backlot approve --person actor-t1-c1 --decision allow"]),
+    );
+    assert!(!cancel, "director approve actor-t1-c1 failed: {msg}");
 }

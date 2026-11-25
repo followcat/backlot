@@ -49,6 +49,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             checks,
             task_budget_s,
             limits,
+            push,
         } => {
             state.studio = Some(StudioConfig {
                 title: title.clone(),
@@ -66,6 +67,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 checks: checks.clone(),
                 task_budget_s: *task_budget_s,
                 limits: limits.clone(),
+                push: push.clone(),
             });
             state.targets.insert(seq, SeqTarget::Studio);
         }
@@ -590,7 +592,64 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
             });
         }
-        EventKind::RoleRefused { .. } => {}
+        EventKind::RoleRefused {
+            role,
+            task,
+            command,
+            cwd,
+            argv,
+            rule,
+            disposition,
+        } => {
+            if *disposition == RefusalDisposition::Card {
+                state.outward_requests.push(OutwardRequestRecord {
+                    seq,
+                    ts_ms: ts,
+                    role: role.clone(),
+                    task: task.clone(),
+                    command: command.clone(),
+                    cwd: cwd.clone(),
+                    argv: argv.clone(),
+                    why: None,
+                    rule: rule.clone(),
+                });
+            }
+        }
+        EventKind::OutwardRequested {
+            role,
+            task,
+            command,
+            cwd,
+            argv,
+            why,
+        } => state.outward_requests.push(OutwardRequestRecord {
+            seq,
+            ts_ms: ts,
+            role: role.clone(),
+            task: task.clone(),
+            command: command.clone(),
+            cwd: cwd.clone(),
+            argv: argv.clone(),
+            why: why.clone(),
+            rule: None,
+        }),
+        EventKind::OutwardCompleted {
+            card,
+            source_seq,
+            outcome,
+            exit_code,
+            output_tail,
+            log_file,
+        } => state.outward_completions.push(OutwardCompletedRecord {
+            seq,
+            ts_ms: ts,
+            card: *card,
+            source_seq: *source_seq,
+            outcome: *outcome,
+            exit_code: *exit_code,
+            output_tail: output_tail.clone(),
+            log_file: log_file.clone(),
+        }),
         EventKind::RoleProgress { role, text, .. } => {
             let record = crate::progress::RoleProgress {
                 text: text.clone(),

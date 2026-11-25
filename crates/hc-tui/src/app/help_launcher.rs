@@ -169,6 +169,31 @@ impl App {
                         },
                     });
                 }
+                Wait::Outward(item) => {
+                    let menu =
+                        StudioMenu::card_on(item.machine.map(str::to_string), &item.card.id, false);
+                    rows.push(HelpRow {
+                        label: format!(
+                            "Apply card {}: {} · {}",
+                            item.card.id, item.card.command, item.studio.id
+                        ),
+                        hint: self.sheet_hint("a"),
+                        glyph: "◆",
+                        launch: Launch::Act {
+                            menu: Box::new(menu.clone()),
+                            act: StudioAct::CardApply,
+                        },
+                    });
+                    rows.push(HelpRow {
+                        label: format!("Cancel card {}…", item.card.id),
+                        hint: self.sheet_hint("x"),
+                        glyph: "◆",
+                        launch: Launch::Act {
+                            menu: Box::new(menu),
+                            act: StudioAct::CardCancel,
+                        },
+                    });
+                }
                 Wait::Ready(item) => {
                     let key = StudioKey {
                         machine: item.machine.map(str::to_string),

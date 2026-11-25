@@ -86,6 +86,15 @@ pub enum Cmd {
     Ask {
         file: PathBuf,
     },
+    AskRun {
+        argv: Vec<String>,
+        why: Option<String>,
+        cwd: Option<PathBuf>,
+        command: Option<String>,
+    },
+    PermsRevoke {
+        id: String,
+    },
     Tell {
         role: String,
         source: TextSource,
@@ -270,6 +279,24 @@ pub enum Cmd {
     Hollywood(HollywoodCmd),
     /// `backlot card list|apply|cancel` — the card gate (D17a).
     Card(CardCmd),
+    /// `backlot server run|start|stop|adopt|service` — single-server mode (B3).
+    Server(ServerCmd),
+}
+
+/// Subcommands under `backlot server`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerCmd {
+    Run,
+    Start,
+    Stop,
+    Adopt {
+        dry_run: bool,
+        stop_stages: bool,
+        core: Option<String>,
+    },
+    Service {
+        write: bool,
+    },
 }
 
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
@@ -471,7 +498,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             Cmd::Dispatch { file }
         }),
         "report" => args_studio::report(&mut common, &mut it),
-        "ask" => args_studio::one_file(&mut common, &mut it, U_ASK, |file| Cmd::Ask { file }),
+        "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
@@ -509,6 +536,23 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "records" => args_task::records(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
+        "perms" => match it.next().as_deref() {
+            Some("revoke") => {
+                let id = it
+                    .next()
+                    .ok_or_else(|| usage("missing <id>", "usage: backlot perms revoke <id>"))?;
+                Ok((common, Cmd::PermsRevoke { id }))
+            }
+            Some("-h" | "--help") => Ok((common, Cmd::Help("usage: backlot perms revoke <id>"))),
+            Some(s) => Err(usage(
+                format!("unknown perms subcommand '{s}'"),
+                "usage: backlot perms revoke <id>",
+            )),
+            None => Err(usage(
+                "missing perms subcommand",
+                "usage: backlot perms revoke <id>",
+            )),
+        },
         "stage" => {
             let Some(sub) = it.next() else {
                 return Err(usage("missing stage subcommand", U_STAGE));
@@ -521,6 +565,38 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "service" => args_studio::stage_service(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STAGE))),
                 _ => Err(usage(format!("unknown stage subcommand '{sub}'"), U_STAGE)),
+            }
+        }
+        "server" => {
+            let Some(sub) = it.next() else {
+                return Err(usage("missing server subcommand", U_SERVER));
+            };
+            match sub.as_str() {
+                "run" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Run),
+                ),
+                "start" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Start),
+                ),
+                "stop" => args_studio::common_only(
+                    &mut common,
+                    &mut it,
+                    U_SERVER,
+                    Cmd::Server(ServerCmd::Stop),
+                ),
+                "adopt" => args_studio::server_adopt(&mut common, &mut it),
+                "service" => args_studio::server_service(&mut common, &mut it),
+                "-h" | "--help" => Ok((common, Cmd::Help(U_SERVER))),
+                _ => Err(usage(
+                    format!("unknown server subcommand '{sub}'"),
+                    U_SERVER,
+                )),
             }
         }
         "runners" => args_studio::runners(&mut common, &mut it),

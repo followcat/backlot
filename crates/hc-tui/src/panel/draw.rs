@@ -14,8 +14,8 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_input, draw_owed, draw_person, draw_person_line, draw_reopen, draw_talk, draw_top,
-    draw_usage, frame_style,
+    draw_input, draw_outward_card, draw_owed, draw_person, draw_person_line, draw_reopen,
+    draw_talk, draw_top, draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
 use super::draw_tasks::{draw_closed_fold, draw_drawer, draw_fold, draw_task};
@@ -231,14 +231,10 @@ pub(crate) fn render(
 
     let dim = Style::default().fg(palette.overlay0);
     let selected = panel.selected.as_ref();
-    let selected_studio = selected.and_then(|t| t.studio().cloned());
-    let frame_of = |studio: &StudioKey| {
-        frame_style(
-            selected_studio.as_ref() == Some(studio),
-            panel.focused && active_surface,
-            palette,
-        )
-    };
+    let studio_refs = super::data::studios(machines);
+    let selected_studio = super::rows_fold::selected_studio(&studio_refs, panel, current);
+    let frame_of =
+        |studio: &StudioKey| frame_style(selected_studio.as_ref() == Some(studio), palette);
     let mut y = body.y;
     for row in all.iter().skip(1 + start) {
         let height = row.height();
@@ -262,6 +258,7 @@ pub(crate) fn render(
                 Row::BlockTop { .. }
                     | Row::Person { .. }
                     | Row::Task { .. }
+                    | Row::OutwardCard { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Stacked(_)
@@ -278,6 +275,7 @@ pub(crate) fn render(
                 row,
                 Row::Person { .. }
                     | Row::Task { .. }
+                    | Row::OutwardCard { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }
@@ -357,6 +355,7 @@ pub(crate) fn render(
                 );
             }
             Row::BlockTop { studio, health } => {
+                let is_selected = selected_studio.as_ref() == Some(&studio.key());
                 let frame = frame_of(&studio.key());
                 draw_top(
                     buf,
@@ -364,6 +363,7 @@ pub(crate) fn render(
                     *studio,
                     &label(*studio),
                     *health,
+                    is_selected,
                     mark == Some(&studio.key()),
                     frame,
                     palette,
@@ -412,6 +412,9 @@ pub(crate) fn render(
             }
             Row::Task { studio, task } => {
                 draw_task(buf, rect, *studio, task, frame_of(&studio.key()), palette);
+            }
+            Row::OutwardCard { studio, card } => {
+                draw_outward_card(buf, rect, card, frame_of(&studio.key()), palette);
             }
             Row::AcceptedFold { studio, open } => {
                 draw_fold(buf, rect, *studio, *open, frame_of(&studio.key()), palette);
@@ -482,13 +485,22 @@ pub(crate) fn render(
                     rect,
                     *studio,
                     &label(*studio),
+                    selected_studio.as_ref() == Some(&studio.key()),
                     panel.spin,
                     palette,
                     &mut hits,
                 );
             }
             Row::Strip { studio, health } => {
-                draw_strip(buf, rect, *studio, *health, local, palette);
+                draw_strip(
+                    buf,
+                    rect,
+                    *studio,
+                    *health,
+                    selected_studio.as_ref() == Some(&studio.key()),
+                    local,
+                    palette,
+                );
             }
             Row::StripRole { role, .. } => {
                 draw_strip_role(buf, rect, role, palette);
@@ -529,6 +541,7 @@ pub(crate) fn render(
                 row,
                 Row::Person { .. }
                     | Row::Task { .. }
+                    | Row::OutwardCard { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }
@@ -663,6 +676,9 @@ fn hint_tiers(
             }
         }
         Some(Target::Task(..)) => s(&["v sheet  +- pri  i tell  m", "v +- i m", "v m"]),
+        Some(Target::OutwardCard(..)) => {
+            s(&["a/y apply  x/d cancel  s/⏎ show  m", "a/y x/d s/⏎ m", "s m"])
+        }
         Some(Target::Studio(_) | Target::Block(_) | Target::Strip(_)) => {
             s(&["⏎ focus  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
         }

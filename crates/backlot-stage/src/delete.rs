@@ -120,7 +120,7 @@ async fn run_local(
         .await?;
         let base = match env.get("BACKLOT_STATE_DIR") {
             Some(d) => PathBuf::from(d),
-            None => store::base_dir(&env.vars, &link.core_id),
+            None => crate::server_lock::effective_base(&env.vars, &link.core_id),
         };
         (base, Some(link))
     } else {

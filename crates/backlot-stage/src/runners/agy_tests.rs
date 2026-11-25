@@ -139,8 +139,6 @@ fn plan_refuses_a_bad_profile_and_keeps_going_without_effort() {
 #[test]
 fn settings_splices_tool_permission_only() {
     let expected_deny = [
-        "command(git push)",
-        "command(gh pr)",
         "command(gh release)",
         "command(gh repo)",
         "command(gh issue)",

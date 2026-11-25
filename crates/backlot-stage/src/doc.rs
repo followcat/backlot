@@ -134,6 +134,7 @@ mod tests {
                     roles: Vec::new(),
                     exchange: Vec::new(),
                     pending_tell: false,
+                    outward_cards: Vec::new(),
                 })
                 .collect(),
             hollywood: None,

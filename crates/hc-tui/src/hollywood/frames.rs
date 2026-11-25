@@ -263,8 +263,9 @@ fn draw_studio(
         studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
     );
     let mut right_w = rev.chars().count() as u16;
-    let chip = if studio.studio.waiting > 0 {
-        format!(" !{} ", studio.studio.waiting)
+    let waiting = crate::studio::waiting_count(studio.studio);
+    let chip = if waiting > 0 {
+        format!(" !{waiting} ")
     } else {
         String::new()
     };
@@ -278,7 +279,7 @@ fn draw_studio(
         rx += rev.chars().count() as u16;
         if !chip.is_empty() {
             rx += 1;
-            let user = studio.studio.roles.iter().any(|r| r.attention_user);
+            let user = crate::studio::waiting_is_user(studio.studio);
             put_text(
                 buf,
                 rx,

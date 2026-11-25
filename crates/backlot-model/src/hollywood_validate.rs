@@ -128,6 +128,28 @@ fn base_fits(action: &CardAction, base: &CardBase) -> Result<(), HRefusal> {
         }
         (CardAction::Recast { .. }, CardBase::RoleIdentity { .. }) => Ok(()),
         (CardAction::Setup { .. }, CardBase::HollywoodIdentity { .. }) => Ok(()),
+        (
+            CardAction::Outward {
+                studio,
+                role,
+                argv,
+                repo,
+                ..
+            },
+            CardBase::GitHead {
+                repo: base_repo, ..
+            },
+        ) => {
+            if studio.trim().is_empty()
+                || role.trim().is_empty()
+                || argv.is_empty()
+                || repo != base_repo
+            {
+                Err(HRefusal::BadCard("invalid outward card base".into()))
+            } else {
+                Ok(())
+            }
+        }
         _ => Err(bad()),
     }
 }
@@ -141,6 +163,7 @@ fn base_kind(base: &CardBase) -> &'static str {
         CardBase::TaskStatus { .. } => "task_status",
         CardBase::RoleIdentity { .. } => "role_identity",
         CardBase::HollywoodIdentity { .. } => "hollywood_identity",
+        CardBase::GitHead { .. } => "git_head",
     }
 }
 
@@ -155,6 +178,7 @@ fn action_kind(action: &CardAction) -> &'static str {
         CardAction::Abandon { .. } => "abandon",
         CardAction::Recast { .. } => "recast",
         CardAction::Setup { .. } => "setup",
+        CardAction::Outward { .. } => "outward",
     }
 }
 
@@ -165,8 +189,20 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
     let role = new.by.role.as_str();
     match &new.kind {
         HollywoodKind::CardProposed { action, why, base } => {
-            if role != HOLLYWOOD {
-                return Err(role_bound(role, "hollywood"));
+            let allowed = if matches!(action, CardAction::Outward { .. }) {
+                role == HOLLYWOOD || role == "stage"
+            } else {
+                role == HOLLYWOOD
+            };
+            if !allowed {
+                return Err(role_bound(
+                    role,
+                    if matches!(action, CardAction::Outward { .. }) {
+                        "hollywood or the stage"
+                    } else {
+                        "hollywood"
+                    },
+                ));
             }
             if why.trim().is_empty() {
                 return Err(HRefusal::BadCard("a card's why is empty".into()));

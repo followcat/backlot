@@ -9,7 +9,6 @@ use hc_proto::client::Client;
 use hc_proto::endpoint::{self, Endpoint};
 
 use crate::cli::{Env, Fail};
-use crate::store;
 
 /// A negotiated connection and who it is talking to.
 pub struct Link {
@@ -62,7 +61,7 @@ pub async fn state_dir(
         return Ok(PathBuf::from(d));
     }
     let link = connect(env, session, remote).await?;
-    Ok(store::base_dir(&env.vars, &link.core_id))
+    Ok(crate::server_lock::effective_base(&env.vars, &link.core_id))
 }
 
 /// Build a current-thread runtime; a failure is a refusal, not a panic.

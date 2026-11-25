@@ -384,7 +384,7 @@ async fn server_mode_card_apply_and_cancel_send_requests_over_the_doc_queue() {
         })
         .unwrap(),
     ));
-    app.run_action(studio_cmds::card_apply("c3"));
+    app.run_action(studio_cmds::card_apply_on(None, "c3"));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
     let toast = app.action_toast.as_ref().unwrap();
@@ -405,7 +405,7 @@ async fn server_mode_card_apply_and_cancel_send_requests_over_the_doc_queue() {
         })
         .unwrap(),
     ));
-    app.run_action(studio_cmds::card_cancel("c4", Some("hold")));
+    app.run_action(studio_cmds::card_cancel_on(None, "c4", Some("hold")));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
     let toast = app.action_toast.as_ref().unwrap();

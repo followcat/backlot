@@ -88,8 +88,8 @@ impl App {
             ReasonFor::Finish { key } => {
                 self.run_action(studio_cmds::finish(key, reason));
             }
-            ReasonFor::CardCancel { id } => {
-                self.run_action(studio_cmds::card_cancel(id, reason));
+            ReasonFor::CardCancel { machine, id } => {
+                self.run_action(studio_cmds::card_cancel_on(machine.clone(), id, reason));
             }
         }
     }

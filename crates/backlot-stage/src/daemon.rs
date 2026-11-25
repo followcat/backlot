@@ -162,6 +162,11 @@ pub(crate) struct Stage {
     /// `studio` → the one check process in flight for it; a restart
     /// re-derives what is owed from the ledger.
     pub(crate) checking: std::cell::RefCell<BTreeMap<String, checkwork::Running>>,
+    /// How outward push/PR card commands spawn (`real_spawn_argv` live, scripted in tests).
+    pub(crate) spawn_outward: Box<crate::hcard_outward::OutwardSpawn>,
+    /// In-flight non-blocking outward card processes, keyed by `card.seq`.
+    pub(crate) outward_running:
+        std::cell::RefCell<BTreeMap<u64, crate::hcard_outward::OutwardRunning>>,
     /// Studios whose leftover `checks/run-*` trees the first pass
     /// already swept.
     pruned: std::cell::RefCell<BTreeSet<String>>,
@@ -390,6 +395,13 @@ impl Stage {
         self.exchange_cache.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_watch.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
+        let mut outward = self.outward_running.borrow_mut();
+        for entry in outward.values_mut() {
+            if !present.contains(&entry.studio) {
+                entry.child.kill();
+            }
+        }
+        outward.retain(|_, r| present.contains(&r.studio));
     }
 
     /// Evict a single studio key across all in-memory caches (used when a
@@ -433,6 +445,13 @@ impl Stage {
             .retain(|(s, _), _| s != name);
         self.ask_watch.borrow_mut().retain(|(s, _), _| s != name);
         self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
+        let mut outward = self.outward_running.borrow_mut();
+        for entry in outward.values_mut() {
+            if entry.studio == name {
+                entry.child.kill();
+            }
+        }
+        outward.retain(|_, r| r.studio != name);
     }
 
     /// Reload changed ledgers, reconcile each studio and act. Each
@@ -778,6 +797,7 @@ impl Stage {
             &proc_running,
             0,
         );
+        summary::attach_outward_cards(&mut s, &self.hstate.borrow());
         // U6c: the stage's own version rides the document so clients
         // read each machine's backlot version without probing. The
         // build id joins it when the build provided one (S2).
@@ -862,6 +882,8 @@ impl Stage {
             git: std::cell::RefCell::new(Box::new(workareas::real_git)),
             spawn_check: Box::new(checkrun::real_spawn),
             checking: std::cell::RefCell::new(BTreeMap::new()),
+            spawn_outward: Box::new(checkrun::real_spawn_argv),
+            outward_running: std::cell::RefCell::new(BTreeMap::new()),
             pruned: std::cell::RefCell::new(BTreeSet::new()),
             versions: std::cell::RefCell::new(BTreeMap::new()),
             found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
@@ -939,16 +961,44 @@ pub(crate) fn resolved_base(base: PathBuf) -> PathBuf {
 
 /// `stage run`: connect, then tick on every hc event and once a
 /// second on the ledger lengths.
+/// Start the stage daemon loop (used by `backlot stage run`).
 pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
+    run_impl(common, None, env, None, true).await
+}
+
+/// Start the daemon loop with an optional pre-resolved base directory and server
+/// lease guard (used by `backlot server run`).
+pub(crate) async fn run_with(
+    common: &Common,
+    base_override: PathBuf,
+    env: &Env,
+    lease: Option<&mut crate::server_lock::ServerLockGuard>,
+) -> Result<(), Fail> {
+    run_impl(common, Some(base_override), env, lease, false).await
+}
+
+async fn run_impl(
+    common: &Common,
+    base_override: Option<PathBuf>,
+    env: &Env,
+    mut lease: Option<&mut crate::server_lock::ServerLockGuard>,
+    check_stage_guard: bool,
+) -> Result<(), Fail> {
     let link = link::connect(
         env,
         common.session.as_deref().map(std::ffi::OsStr::new),
         common.remote.as_deref(),
     )
     .await?;
-    let base = resolved_base(match env.get("BACKLOT_STATE_DIR") {
-        Some(d) => PathBuf::from(d),
-        None => store::base_dir(&env.vars, &link.core_id),
+    if check_stage_guard && matches!(link.endpoint, hc_proto::endpoint::Endpoint::Local(_)) {
+        crate::server_lock::refuse_if_server_or_retired(&env.vars, Some(&link.core_id))?;
+    }
+    let base = resolved_base(match base_override {
+        Some(dir) => dir,
+        None => match env.get("BACKLOT_STATE_DIR") {
+            Some(d) => PathBuf::from(d),
+            None => crate::server_lock::effective_base(&env.vars, &link.core_id),
+        },
     });
     let exe_dir = std::env::current_exe()
         .ok()
@@ -969,6 +1019,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         git: std::cell::RefCell::new(Box::new(workareas::real_git)),
         spawn_check: Box::new(checkrun::real_spawn),
         checking: std::cell::RefCell::new(BTreeMap::new()),
+        spawn_outward: Box::new(checkrun::real_spawn_argv),
+        outward_running: std::cell::RefCell::new(BTreeMap::new()),
         pruned: std::cell::RefCell::new(BTreeSet::new()),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
@@ -1036,6 +1088,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     let mut live_written: Option<crate::live::Live> = None;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
+        if let Some(guard) = lease.as_deref_mut() {
+            guard.refresh_if_due();
+        }
         step_daemon(
             &mut stage,
             &live,

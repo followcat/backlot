@@ -49,6 +49,7 @@ const COMMANDS: &[&str] = &[
     "guard",
     "hollywood",
     "card",
+    "perms",
     "runners",
     "repos",
 ];
@@ -322,9 +323,10 @@ pub(crate) fn resolve_base(
                 .flatten()
                 .map(|e| e.file_name().to_string_lossy().into_owned())
                 .filter(|core| {
-                    store::studio_dir(&root.join(core), name)
-                        .join("events.jsonl")
-                        .is_file()
+                    !crate::server_lock::is_pointer_dir(&root.join(core))
+                        && store::studio_dir(&root.join(core), name)
+                            .join("events.jsonl")
+                            .is_file()
                 })
                 .collect()
         })
@@ -482,6 +484,15 @@ pub(crate) fn exec_event(
             return Err(Fail::refused(format!("task '{task}' has no cast")));
         }
         *commits = crate::range::check_range(&dir, &caller.studio, &task, &state, commits)?;
+    }
+    if let Cmd::AskRun {
+        argv, cwd, command, ..
+    } = &mut cmd
+    {
+        let state = load(&dir)?;
+        let (cmd_text, eff_cwd) = commands::validate_ask_run(&dir, &state, &caller, env, argv)?;
+        *cwd = Some(eff_cwd);
+        *command = Some(cmd_text);
     }
     // `cast` checks each accepted dependency's delivery already sits
     // on the integration branch — a cast before the merge would cut

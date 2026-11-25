@@ -86,8 +86,34 @@ impl App {
         }
     }
 
+    /// `a` on a selected outward card row in the Studio Dock.
+    pub(super) fn panel_card_apply(&mut self) {
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        if let Some(Target::OutwardCard(key, id)) = targets.get(index).cloned() {
+            self.run_action(studio_cmds::card_apply_on(key.machine, &id));
+        }
+    }
+
+    /// `x` on a selected outward card row in the Studio Dock.
+    pub(super) fn panel_card_cancel(&mut self) {
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        if let Some(Target::OutwardCard(key, id)) = targets.get(index).cloned() {
+            self.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
+                format!("Cancel card {id}"),
+                false,
+                crate::studio_dialog::ReasonFor::CardCancel {
+                    machine: key.machine,
+                    id,
+                },
+            ));
+        }
+    }
+
     /// `y`/`d` while the dock owns the keys: an armed finish confirm
     /// answers first — `y` runs `studio finish`, `d` stands down;
+    /// on an outward card row, `y` applies and `d` cancels;
     /// otherwise the key answers a selected person's prompt. A
     /// user-owned prompt answers at once; a director-routed one
     /// asks the override confirm first (D9, S3 §2.2).
@@ -101,6 +127,21 @@ impl App {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
+        if let Some(Target::OutwardCard(key, id)) = targets.get(index).cloned() {
+            if allow {
+                self.run_action(studio_cmds::card_apply_on(key.machine, &id));
+            } else {
+                self.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
+                    format!("Cancel card {id}"),
+                    false,
+                    crate::studio_dialog::ReasonFor::CardCancel {
+                        machine: key.machine,
+                        id,
+                    },
+                ));
+            }
+            return;
+        }
         let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
             return;
         };
@@ -134,6 +175,10 @@ impl App {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
+        if let Some(Target::OutwardCard(key, id)) = targets.get(index).cloned() {
+            self.run_action(studio_cmds::card_show_on(key.machine, &id));
+            return;
+        }
         let machine = match targets.get(index) {
             // The stage-down row's own machine (U6c) — Enter/click
             // already runs it; `s` on the row does too.

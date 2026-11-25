@@ -36,10 +36,22 @@ mod draft;
 mod exchange_read;
 mod gitcmd;
 mod guard;
+mod guard_git;
+mod guard_git_env;
+mod guard_git_parse;
+mod guard_git_probe;
+mod guard_git_push;
+mod guard_git_push_opts;
+mod guard_prep;
 mod guard_rules;
 mod guard_shell;
+mod guard_shell_lex;
 mod hcard;
 mod hcard_new;
+mod hcard_outward;
+mod hcard_outward_env;
+mod hcard_outward_exec;
+mod hcard_outward_git;
 mod hdeliver;
 mod hdeliver_fmt;
 mod hfinished;
@@ -72,6 +84,9 @@ mod paths;
 mod paths_tests;
 mod permission;
 mod permit;
+mod proc_guard;
+#[cfg(test)]
+mod proc_guard_tests;
 mod prompts;
 mod prune;
 mod prune_paths;
@@ -88,6 +103,11 @@ mod restore;
 mod runners;
 mod sample;
 mod sendfail;
+mod server_adopt;
+mod server_adopt_fs;
+mod server_lock;
+mod server_mode;
+mod server_service;
 mod service;
 pub mod signals;
 mod stage;
@@ -180,6 +200,10 @@ mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;
 #[cfg(test)]
+mod guard_git_review1_tests;
+#[cfg(test)]
+mod guard_git_tests;
+#[cfg(test)]
 mod guard_line_tests;
 #[cfg(test)]
 mod guard_tests;
@@ -229,6 +253,10 @@ mod notices_tests;
 #[cfg(test)]
 mod nudge_tests;
 #[cfg(test)]
+mod outward_card_tests;
+#[cfg(test)]
+mod outward_exec_tests;
+#[cfg(test)]
 mod permit_cmd_tests;
 #[cfg(test)]
 mod permit_tests;
@@ -266,6 +294,18 @@ mod restore_tests;
 mod role_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
+
+#[cfg(test)]
+mod server_adopt_tests;
+
+#[cfg(test)]
+mod server_fake_core;
+
+#[cfg(test)]
+mod server_mode_tests;
+
+#[cfg(test)]
+mod server_service_tests;
 
 #[cfg(test)]
 mod signals_tests;

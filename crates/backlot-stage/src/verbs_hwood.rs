@@ -126,7 +126,9 @@ pub(crate) fn card_apply(
         }
         _ => {
             let sstate = studio_state(base, card.action.studio())?;
-            hollywood::stale(&card.action, &card.base, sstate.as_ref())
+            hollywood::stale(&card.action, &card.base, sstate.as_ref()).or_else(|| {
+                crate::hcard_outward::outward_stale(&card.action, &card.base, sstate.as_ref())
+            })
         }
     };
     let kind = match &stale {

@@ -34,6 +34,7 @@ pub(super) fn mark(
         row,
         Row::Person { .. }
             | Row::Task { .. }
+            | Row::OutwardCard { .. }
             | Row::AcceptedFold { .. }
             | Row::ClosedFold { .. }
             | Row::Talk { .. }

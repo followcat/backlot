@@ -67,6 +67,11 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
         (None, Some(file)) => Some(TextSource::File(file)),
         _ => None,
     };
+    if common.remote.is_some() {
+        return Err(Fail::refused(
+            "remote studio placement is Phase 2; create studios on the server host",
+        ));
+    }
     let cmd = match interactive {
         // The wizard resolves whatever the flags left unset — the
         // only pre-checks here are the ones that always hold.
@@ -450,31 +455,84 @@ pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, C
 /// `--session`, and no `--remote` — a systemd user unit runs on the
 /// local host.
 pub(crate) fn stage_service(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    service_cmd(common, it, U_STAGE, |write| Cmd::StageService { write })
+}
+
+/// `server service`: `--print` (the default) or `--write`, the common
+/// `--session`, and no `--remote`.
+pub(crate) fn server_service(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    service_cmd(common, it, U_SERVER, |write| {
+        Cmd::Server(ServerCmd::Service { write })
+    })
+}
+
+fn service_cmd(
+    common: &mut Common,
+    it: &mut It,
+    u: &'static str,
+    make: impl FnOnce(bool) -> Cmd,
+) -> Result<(Common, Cmd), Fail> {
     let mut print = false;
     let mut write = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
-            return Ok((std::mem::take(common), Cmd::Help(U_STAGE)));
+            return Ok((std::mem::take(common), Cmd::Help(u)));
         }
-        if common_flag(it, common, &arg, U_STAGE)? {
+        if common_flag(it, common, &arg, u)? {
             continue;
         }
         match arg.as_str() {
             "--print" => print = true,
             "--write" => write = true,
-            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STAGE)),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), u)),
         }
     }
     if print && write {
-        return Err(usage("give --print or --write, not both", U_STAGE));
+        return Err(usage("give --print or --write, not both", u));
     }
     if common.remote.is_some() {
         return Err(usage(
             "--remote does not apply: a systemd --user unit runs on the local host",
-            U_STAGE,
+            u,
         ));
     }
-    Ok((std::mem::take(common), Cmd::StageService { write }))
+    Ok((std::mem::take(common), make(write)))
+}
+
+/// `server adopt [--dry-run] [--stop-stages] [--core <id>]`.
+pub(crate) fn server_adopt(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut dry_run = false;
+    let mut stop_stages = false;
+    let mut core = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_SERVER)));
+        }
+        if common_flag(it, common, &arg, U_SERVER)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--stop-stages" => stop_stages = true,
+            "--core" => core = Some(it.value("--core", U_SERVER)?),
+            _ if eq(&arg, "--core").is_some() => core = eq(&arg, "--core").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_SERVER)),
+        }
+    }
+    if common.remote.is_some() {
+        return Err(usage(
+            "--remote does not apply: server adopt runs on the local host",
+            U_SERVER,
+        ));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Server(ServerCmd::Adopt {
+            dry_run,
+            stop_stages,
+            core,
+        }),
+    ))
 }
 
 /// Commands taking just `--file`.
@@ -701,4 +759,84 @@ pub(crate) fn repos(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), F
         }
     }
     Ok((std::mem::take(common), Cmd::Repos { json, from, all }))
+}
+
+/// `ask --file <f>` or `ask --run [--why <text>] (-- <prog> <args...> | "<cmd>")`.
+pub(crate) fn ask(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut file = None;
+    let mut run = false;
+    let mut why = None;
+    let mut raw_cmd = None;
+    let mut run_argv = Vec::new();
+    while let Some(arg) = it.next() {
+        if arg == "--" {
+            if !run {
+                return Err(usage(
+                    "unexpected `--` (pass --run for outward commands)",
+                    U_ASK,
+                ));
+            }
+            while let Some(a) = it.next() {
+                run_argv.push(a);
+            }
+            break;
+        }
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_ASK)));
+        }
+        if common_flag(it, common, &arg, U_ASK)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--file" => file = Some(PathBuf::from(it.value("--file", U_ASK)?)),
+            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
+            "--run" => run = true,
+            "--why" => why = Some(it.value("--why", U_ASK)?),
+            _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
+            _ if run && raw_cmd.is_none() && !arg.starts_with('-') => raw_cmd = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_ASK)),
+        }
+    }
+    if file.is_some() && run {
+        return Err(usage("pick one of --file or --run", U_ASK));
+    }
+    if !run {
+        let file = file.ok_or_else(|| usage("missing --file", U_ASK))?;
+        return Ok((std::mem::take(common), Cmd::Ask { file }));
+    }
+    if let Some(ref w) = why
+        && w.trim().is_empty()
+    {
+        return Err(usage("--why must not be empty", U_ASK));
+    }
+    let argv = if !run_argv.is_empty() {
+        if raw_cmd.is_some() {
+            return Err(usage(
+                "pick either `-- <prog> ...` or a command string, not both",
+                U_ASK,
+            ));
+        }
+        run_argv
+    } else if let Some(cmd_str) = raw_cmd {
+        let parsed = crate::guard_shell_lex::split_shell_segments_checked(&cmd_str)
+            .map_err(|r| Fail::refused(format!("invalid outward command: {r}")))?;
+        if !parsed.nested.is_empty() || parsed.segments.len() != 1 {
+            return Err(Fail::refused("ask --run expects a single simple command"));
+        }
+        parsed.segments.into_iter().next().unwrap_or_default()
+    } else {
+        return Err(usage("missing command after --run", U_ASK));
+    };
+    if argv.is_empty() {
+        return Err(usage("missing command after --run", U_ASK));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::AskRun {
+            argv,
+            why,
+            cwd: None,
+            command: None,
+        },
+    ))
 }

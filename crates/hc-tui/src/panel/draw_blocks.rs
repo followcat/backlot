@@ -2,7 +2,7 @@
 //! frame pieces, one-line people with their badges and cue lines,
 //! task rows, the accepted fold, the `Space` drawer lines, the
 //! stacked single-line block and the collapsed strip's rows.
-use backlot_model::summary::RoleSummary;
+use backlot_model::summary::{OutwardCardSummary, RoleSummary};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -14,11 +14,10 @@ use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
-/// The frame's colour: accent only while the panel owns the keys AND
-/// the block owns the selected row — every block is `surface1`
-/// otherwise, focused or not (A2.3, A7.2).
-pub(super) fn frame_style(selected: bool, focused: bool, palette: &Palette) -> Style {
-    Style::default().fg(if focused && selected {
+/// The frame's colour: `accent` for the selected studio (whether or
+/// not the lot owns the keys), `surface1` for every other block.
+pub(super) fn frame_style(selected: bool, palette: &Palette) -> Style {
+    Style::default().fg(if selected {
         palette.accent
     } else {
         palette.surface1
@@ -47,6 +46,7 @@ pub(super) fn draw_top(
     studio: StudioRef<'_>,
     label: &StudioLabel,
     health: Health,
+    selected: bool,
     focused_terminal: bool,
     frame: Style,
     palette: &Palette,
@@ -57,7 +57,7 @@ pub(super) fn draw_top(
     // The right-hand tail: `● r1·1/4 !1` when the whole label fits
     // beside it, else `●!1` — the progress part drops before the
     // waiting count does.
-    let waiting = studio.studio.waiting;
+    let waiting = crate::studio::waiting_count(studio.studio);
     let progress = format!(
         "r{}·{}/{}",
         studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
@@ -68,7 +68,8 @@ pub(super) fn draw_top(
         format!("{} {progress}", health.glyph())
     };
     let marker_w = u16::from(focused_terminal) * 2;
-    let interior = rect.width.saturating_sub(3); // `╭─ ` … `╮`
+    let chip_pad = u16::from(selected);
+    let interior = rect.width.saturating_sub(4 + chip_pad);
     let full_fits = display_width(&label.full) as u16 + display_width(&full_tail) as u16
         <= interior.saturating_sub(marker_w);
     let tail = if full_fits || waiting == 0 {
@@ -88,11 +89,11 @@ pub(super) fn draw_top(
             Style::default().fg(health.color(palette)),
         );
     }
-    // `!<n>` is its own colour — red while a person waits on the
-    // user, peach for director-owned waits (S2 §2).
+    // `!<n>` is its own colour — red while a person or outward card waits on
+    // the user, peach for director-owned waits (S2 §2).
     if waiting > 0 {
         let mark_w = display_width(&format!("!{waiting}")) as u16;
-        let user = studio.studio.roles.iter().any(|r| r.attention_user);
+        let user = crate::studio::waiting_is_user(studio.studio);
         put_text(
             buf,
             right.saturating_sub(1 + mark_w),
@@ -102,41 +103,77 @@ pub(super) fn draw_top(
             Style::default().fg(if user { palette.red } else { palette.peach }),
         );
     }
-    // `▸ ` before the label while its terminal is the focused pane.
-    let id_end = tail_x.saturating_sub(1);
-    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w);
-    if focused_terminal && id_end > rect.x + 2 {
-        put_text(
-            buf,
-            rect.x + 2,
-            rect.y,
-            1,
-            glyphs::FOCUSED_STUDIO,
-            Style::default()
-                .fg(palette.text)
-                .add_modifier(Modifier::BOLD),
-        );
-    }
     // R14: an experimental studio's `exp` badge rides after the
     // label — the label gets the full budget and a dock too narrow
-    // for both drops the badge first.
-    let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
+    // for both drops the badge first. Selected blocks wrap `[▸ ]label`
+    // in a bold padded `accent` chip (` ▸ label `).
+    let id_end = tail_x.saturating_sub(1);
+    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w + chip_pad);
     let id_text = label.fit(id_width as usize);
     let drawn = display_width(&id_text) as u16;
-    if id_width > 0 {
+    if selected && id_width > 0 {
+        let chip_style = Style::default()
+            .fg(glyphs::contrast_fg(palette))
+            .bg(palette.accent)
+            .add_modifier(Modifier::BOLD);
+        put_text(buf, rect.x + 1, rect.y, 1, " ", chip_style);
+        if focused_terminal {
+            put_text(
+                buf,
+                rect.x + 2,
+                rect.y,
+                2,
+                &format!("{} ", glyphs::FOCUSED_STUDIO),
+                chip_style,
+            );
+        }
         put_text(
             buf,
             rect.x + 2 + marker_w,
             rect.y,
             id_width,
             &id_text,
-            Style::default().fg(if focused_terminal {
-                palette.text
-            } else {
-                palette.subtext0
-            }),
+            chip_style,
         );
+        if drawn > 0 {
+            put_text(
+                buf,
+                rect.x + 2 + marker_w + drawn,
+                rect.y,
+                1,
+                " ",
+                chip_style,
+            );
+        }
+    } else {
+        if focused_terminal && id_end > rect.x + 2 {
+            put_text(
+                buf,
+                rect.x + 2,
+                rect.y,
+                1,
+                glyphs::FOCUSED_STUDIO,
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+        if id_width > 0 {
+            put_text(
+                buf,
+                rect.x + 2 + marker_w,
+                rect.y,
+                id_width,
+                &id_text,
+                Style::default().fg(if focused_terminal {
+                    palette.text
+                } else {
+                    palette.subtext0
+                }),
+            );
+        }
     }
+    let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
     if badge && fill_start + 3 < id_end {
         put_text(
@@ -566,4 +603,59 @@ pub(super) fn draw_person_line(
         &truncate_end(&text, rect.width.saturating_sub(5) as usize),
         style,
     );
+}
+
+/// One open outward push/PR card inside an expanded block:
+/// `│ ◆ c1 git push origin HEAD:main      a/y x/d ⏎ │` (shortening hints first).
+pub(super) fn draw_outward_card(
+    buf: &mut Buffer,
+    rect: Rect,
+    card: &OutwardCardSummary,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    if rect.width < 6 {
+        return;
+    }
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        1,
+        "◆",
+        Style::default().fg(palette.accent),
+    );
+    let inner = rect.width.saturating_sub(5) as usize;
+    let hint = "a/y x/d ⏎";
+    let hint_w = display_width(hint);
+    let label = format!("{} {}", card.id, card.command);
+    if inner > display_width(&label) + hint_w {
+        let label_w = inner - hint_w - 1;
+        put_text(
+            buf,
+            rect.x + 4,
+            rect.y,
+            label_w as u16,
+            &truncate_end(&label, label_w),
+            Style::default().fg(palette.text),
+        );
+        put_text(
+            buf,
+            rect.x + 4 + (inner - hint_w) as u16,
+            rect.y,
+            hint_w as u16,
+            hint,
+            Style::default().fg(palette.overlay0),
+        );
+    } else {
+        put_text(
+            buf,
+            rect.x + 4,
+            rect.y,
+            inner as u16,
+            &truncate_end(&label, inner),
+            Style::default().fg(palette.text),
+        );
+    }
 }

@@ -59,6 +59,7 @@ fn created(title: &str, repo: &str) -> EventKind {
         checks: Vec::new(),
         task_budget_s: None,
         limits: Default::default(),
+        push: Default::default(),
     }
 }
 
