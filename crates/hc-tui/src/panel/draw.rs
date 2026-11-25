@@ -231,14 +231,10 @@ pub(crate) fn render(
 
     let dim = Style::default().fg(palette.overlay0);
     let selected = panel.selected.as_ref();
-    let selected_studio = selected.and_then(|t| t.studio().cloned());
-    let frame_of = |studio: &StudioKey| {
-        frame_style(
-            selected_studio.as_ref() == Some(studio),
-            panel.focused && active_surface,
-            palette,
-        )
-    };
+    let studio_refs = super::data::studios(machines);
+    let selected_studio = super::rows_fold::selected_studio(&studio_refs, panel, current);
+    let frame_of =
+        |studio: &StudioKey| frame_style(selected_studio.as_ref() == Some(studio), palette);
     let mut y = body.y;
     for row in all.iter().skip(1 + start) {
         let height = row.height();
@@ -347,6 +343,7 @@ pub(crate) fn render(
                 );
             }
             Row::BlockTop { studio, health } => {
+                let is_selected = selected_studio.as_ref() == Some(&studio.key());
                 let frame = frame_of(&studio.key());
                 draw_top(
                     buf,
@@ -354,6 +351,7 @@ pub(crate) fn render(
                     *studio,
                     &label(*studio),
                     *health,
+                    is_selected,
                     mark == Some(&studio.key()),
                     frame,
                     palette,
@@ -472,13 +470,22 @@ pub(crate) fn render(
                     rect,
                     *studio,
                     &label(*studio),
+                    selected_studio.as_ref() == Some(&studio.key()),
                     panel.spin,
                     palette,
                     &mut hits,
                 );
             }
             Row::Strip { studio, health } => {
-                draw_strip(buf, rect, *studio, *health, local, palette);
+                draw_strip(
+                    buf,
+                    rect,
+                    *studio,
+                    *health,
+                    selected_studio.as_ref() == Some(&studio.key()),
+                    local,
+                    palette,
+                );
             }
             Row::StripRole { role, .. } => {
                 draw_strip_role(buf, rect, role, palette);
