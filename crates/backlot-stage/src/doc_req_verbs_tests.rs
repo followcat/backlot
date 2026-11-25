@@ -9,9 +9,9 @@ use std::time::Duration;
 use backlot_model::event::{EventKind, Priority, TaskStateChange};
 use backlot_model::hollywood::HollywoodKind;
 use backlot_model::req_results::{
-    AttentionClearResult, CardShowResult, CloseResult, HollywoodSetupResult, RecastResult,
-    ReopenResult, RestartResult, TaskPriorityResult, TaskStateResult, TellHollywoodResult,
-    TellResult,
+    AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult, CloseResult,
+    HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, TaskPriorityResult,
+    TaskStateResult, TellHollywoodResult, TellResult,
 };
 use backlot_model::req_wire::ReqAction;
 
@@ -152,46 +152,34 @@ fn all_fourteen_verbs_match_cli_ledger_events_with_via_doc() {
     assert_eq!(draft.studio, "beta-tools");
     assert!(draft.brief_text.unwrap().contains("Build CLI helpers"));
 
-    // 4. card-apply & 5. card-cancel are person-only and refused over the queue.
-    for (req_id, action) in [
-        (
-            "refuse-card-apply",
-            ReqAction::CardApply {
-                id: recast_card_seq,
-            },
-        ),
-        (
-            "refuse-card-cancel",
-            ReqAction::CardCancel {
-                id: setup_card_seq,
-                reason: "hold off".into(),
-            },
-        ),
-    ] {
-        let cli_c = c_client.clone();
-        let ep_c = c_ep.clone();
-        let ack = rt.block_on(async {
-            let fut = tokio::spawn(async move {
-                doc_client::send_request(&cli_c, Some(&ep_c), &action, None, Duration::from_secs(2))
-                    .await
-            });
-            loop {
-                if fut.is_finished() {
-                    break fut.await.unwrap().unwrap();
-                }
-                let _ = consumer
-                    .process(&stage, crate::live::now_ms())
-                    .await
-                    .unwrap();
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        });
-        assert!(!ack.ok, "{req_id}");
-        assert_eq!(
-            ack.error.as_deref(),
-            Some(backlot_model::req_wire::CARD_QUEUE_REFUSAL)
-        );
-    }
+    // 4. card-apply & 5. card-cancel
+    cli_ok(&cli_env, &["card", "apply", &format!("c{recast_card_seq}")]);
+    let apply_res: CardApplyResult = run_doc!(
+        CardApplyResult,
+        ReqAction::CardApply {
+            id: recast_card_seq
+        }
+    );
+    assert!(apply_res.stale.is_none());
+
+    cli_ok(
+        &cli_env,
+        &[
+            "card",
+            "cancel",
+            &format!("c{setup_card_seq}"),
+            "--reason",
+            "hold off",
+        ],
+    );
+    let cancel_res: CardCancelResult = run_doc!(
+        CardCancelResult,
+        ReqAction::CardCancel {
+            id: setup_card_seq,
+            reason: "hold off".into(),
+        }
+    );
+    assert_eq!(cancel_res.reason, "hold off");
 
     // 6. attention-clear (non-prompt stalled)
     cli_ok(

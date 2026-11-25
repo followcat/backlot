@@ -156,8 +156,6 @@ mod discover_tests;
 #[cfg(test)]
 mod doc_req_cap_tests;
 #[cfg(test)]
-mod doc_req_card_tests;
-#[cfg(test)]
 mod doc_req_fake_core;
 #[cfg(test)]
 mod doc_req_tests;

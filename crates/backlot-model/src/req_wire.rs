@@ -26,21 +26,6 @@ pub const REQ_TTL_MS: u64 = 60_000;
 pub const REQ_FUTURE_SKEW_MS: u64 = 60_000;
 pub const DEDUPE_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 
-/// Refusal returned when person-only card approvals/cancellations arrive
-/// over the unauthenticated server document queue or from a remote client.
-pub const CARD_QUEUE_REFUSAL: &str =
-    "card approvals are not taken over the server queue; apply it on the server host";
-
-/// One place deciding which [`ReqAction`] verbs stay restricted to direct
-/// execution on the server host until core write attestation identifies
-/// callers outside role terminals.
-pub fn person_only(action: &ReqAction) -> bool {
-    matches!(
-        action,
-        ReqAction::CardApply { .. } | ReqAction::CardCancel { .. }
-    )
-}
-
 /// Match herdr-core's document name rule: `^[a-z0-9_][a-z0-9_.-]{0,31}$`.
 pub fn is_valid_doc_name(name: &str) -> bool {
     let bytes = name.as_bytes();
