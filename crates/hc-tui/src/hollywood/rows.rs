@@ -106,6 +106,9 @@ pub(crate) enum Live<'a> {
     Working(Option<&'a str>),
     /// A user-owned permission prompt stands on its screen.
     Prompt(&'a str),
+    /// Hollywood's screen reads idle and the line still has no answer
+    /// — a reply that never came. The row offers `open ↵`.
+    Idle,
 }
 
 /// One band row, borrowing its data from the documents.
@@ -120,8 +123,12 @@ pub(crate) enum Row<'a> {
     /// A line of the user's exchange with Hollywood — the dialog's
     /// half drawn above the input (D21).
     Talk(&'a Exchange),
+    /// `… <n> earlier · ↵ read` — the lines older than the last two
+    /// turns, folded into one dim row. `newest` is the last folded
+    /// entry, the one Enter opens.
+    Fold { count: usize, newest: u64 },
     /// Hollywood's live progress under the newest unanswered `user ›`
-    /// line — pending, working, or a user-owned prompt.
+    /// line — pending, working, idle, or a user-owned prompt.
     Live(Live<'a>),
     /// `› <input>` — the `tell hollywood` line.
     Input,
@@ -135,6 +142,7 @@ impl Row<'_> {
         match self {
             Row::Headline(_) => Target::Headline,
             Row::Talk(line) => Target::Talk(line.seq),
+            Row::Fold { newest, .. } => Target::Talk(*newest),
             Row::Live(_) => Target::HollywoodLive,
             Row::Wait(i) => waits[*i].target(),
             Row::Calm { .. } => Target::Calm,
@@ -176,17 +184,24 @@ pub(crate) fn band_rows<'a>(
     } else {
         out.extend((0..waits.len()).map(Row::Wait));
     }
-    // The dialog's visible half: the newest exchange lines, oldest
-    // first, right above the input they continue into. Hollywood's
-    // live row follows the newest `user ›` line while that line has
-    // no reply after it.
+    // The dialog's visible half: the newest turn and the turn before
+    // it, oldest first, right above the input they continue into.
+    // Older lines fold into one dim row. Hollywood's live row follows
+    // the newest `user ›` line while that line has no reply after it.
     if agent {
         let talk = summary
             .and_then(|s| s.hollywood.as_ref())
             .map(|h| h.exchange.as_slice())
             .unwrap_or(&[]);
+        let start = visible_start(talk);
+        if start > 0 {
+            out.push(Row::Fold {
+                count: start,
+                newest: talk[start - 1].seq,
+            });
+        }
         let live = hollywood_live(machines);
-        for (i, line) in talk.iter().enumerate() {
+        for (i, line) in talk.iter().enumerate().skip(start) {
             out.push(Row::Talk(line));
             if let Some((index, live)) = live
                 && index == i
@@ -199,10 +214,28 @@ pub(crate) fn band_rows<'a>(
     (waits, out)
 }
 
+/// The index the talk window starts at: a turn is a `user ›` line and
+/// everything after it up to the next one, and the newest turn plus
+/// the turn before it stay; with no user line the newest two lines.
+pub(crate) fn visible_start(talk: &[Exchange]) -> usize {
+    let users: Vec<usize> = talk
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.who == "user")
+        .map(|(i, _)| i)
+        .collect();
+    match users.len() {
+        0 => talk.len().saturating_sub(2),
+        n => users[n.saturating_sub(2)],
+    }
+}
+
 /// The live row and the exchange index it follows: the newest `user ›`
-/// line with no Hollywood reply after it. A prompt wins over a pending
-/// line (it is what blocks the delivery the person must clear), which
-/// wins over `working`; a calm Hollywood shows nothing.
+/// line with no Hollywood reply after it — a report or a card (both
+/// `who: hollywood`). A prompt wins over a pending line (it is what
+/// blocks the delivery the person must clear), which wins over
+/// `working`, which wins over an idle screen that still has not
+/// answered; a calm Hollywood with no unanswered line shows nothing.
 pub(crate) fn hollywood_live(machines: &[MachineSummary]) -> Option<(usize, Live<'_>)> {
     let hw = local_summary(machines)?.hollywood.as_ref()?;
     let newest_user = hw.exchange.iter().rposition(|e| e.who == "user")?;
@@ -223,6 +256,8 @@ pub(crate) fn hollywood_live(machines: &[MachineSummary]) -> Option<(usize, Live
         Live::Pending
     } else if hw.work == Some(Work::Working) {
         Live::Working(hw.doing.as_deref())
+    } else if hw.work == Some(Work::Waiting) {
+        Live::Idle
     } else {
         return None;
     };

@@ -174,6 +174,48 @@ pub struct TaskStateResult {
     pub reason: String,
 }
 
+/// Result of `studio new` — the ledger line the CLI prints, or the
+/// dry run's verdict. `seq`/`ask_seq` are `None` on a dry run;
+/// `first_message` is the dry run's one-line restatement of `--ask`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StudioNewResult {
+    pub studio: String,
+    pub title: String,
+    pub repo: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask_seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_message: Option<String>,
+}
+
+/// Result of `studio finish`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StudioFinishResult {
+    pub studio: String,
+    pub seq: u64,
+    pub reason: String,
+}
+
+/// A destructive commit that arrived without the dry run's token.
+pub const ERR_NEEDS_REVIEW: &str = "confirm this from a dry run first";
+
+/// A destructive commit whose fresh dry run differs from the reviewed
+/// report.
+pub const ERR_STALE_PLAN: &str = "the studio changed since you reviewed it; run it again";
+
+/// A destructive verb's dry run: the report the person reviewed and
+/// the token the commit must echo (`sha256` of the report's canonical
+/// JSON).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StudioPlan<T> {
+    pub report: T,
+    pub confirm_token: String,
+}
+
 /// Result of `hollywood-setup`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HollywoodSetupResult {

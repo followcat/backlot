@@ -181,6 +181,7 @@ pub enum Cmd {
         all_finished: bool,
         dry_run: bool,
         force: bool,
+        json: bool,
     },
     /// `studio delete`: finish (if live), close terminals, prune
     /// worktrees/branches safely, and archive the ledger.
@@ -278,6 +279,7 @@ pub enum Cmd {
         archived: String,
         new_name: Option<String>,
         dry_run: bool,
+        json: bool,
     },
     /// `backlot hollywood propose|report` — Hollywood's own ledger.
     Hollywood(HollywoodCmd),

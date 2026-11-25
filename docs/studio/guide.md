@@ -500,8 +500,11 @@ The expanded strip, top to bottom:
   `<n> cast · r<version>` on the right;
 - the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
 - below them, with an agent: the newest headline, one row per open card with `apply`,
-  `cancel` and `show`, and the `tell hollywood` line. Without one: the `⏎ hollywood setup`
-  line — the setup dialog's button.
+  `cancel` and `show`, the recent conversation (the newest turn and the one before it, older
+  lines folded into `… <n> earlier · ↵ read`) and the `tell hollywood` line. A card Hollywood
+  proposes draws under the person's line as its own reply; the newest Hollywood line wraps to a
+  few rows so its end is never cut off. Without one: the `⏎ hollywood setup` line — the setup
+  dialog's button.
 
 Keys in the expanded bar: `←`/`→` (or `h`/`l`) move between the frames, the new-studio frame
 included; `↓`/`↑` (or `j`/`k`) leave the frames for the cards and the input line and come back;
@@ -796,7 +799,7 @@ stage can raise:
 | Reason | Meaning | What to do |
 |---|---|---|
 | `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
-| `outward action` | An outward-action guard layer stopped a role from running a blocked outward command, or queued a cardable push/PR action. | User-owned (`needs_user: true`). For carded pushes or `gh pr create` (or requests sent with `backlot ask --run [--why <r>] -- <cmd>`), apply (`a`/`y`), cancel (`x`/`d`), or inspect (`s`/Enter `card show`) the open card in the Call Sheet or Studio Dock (works with or without `[hollywood]`). Hard-refused commands cannot run via a card — run outside backlot yourself if wanted, then clear (`backlot attention clear <seq>`). Open `outward action` attentions also clear (`role moved on`) once the stage delivers new work (`outward` completion notices report push/PR results back to the role). |
+| `outward action` | An outward-action guard layer stopped a role from running a blocked outward command, or queued a cardable push/PR action. | Informational (`needs_user: false`): the role was told to `backlot ask` if it still needs the command, so nothing waits on you and it never counts as "needs you". For a carded push or `gh pr create` (or a request sent with `backlot ask --run [--why <r>] -- <cmd>`) apply (`a`/`y`), cancel (`x`/`d`), or inspect (`s`/Enter `card show`) the open card in the Call Sheet or Studio Dock (works with or without `[hollywood]`). A hard-refused command cannot run via a card — run it outside backlot yourself if wanted. Either way an open `outward action` attention clears (`role moved on`) as soon as the role writes anything else to the ledger after it, or the stage delivers it new work (`outward` completion notices report push/PR results back to the role). |
 | `question` | A role's screen has sat on a non-permission question or unrecognised dialog picker for two seconds (`agy` `kind: "question"`, a recognised question picker, or D2's generic picker rule). | An actor's notices its task reviewer; `director` and `writer` notice `producer`; `producer` and Hollywood wait for you (`needs you`). The saved screen is under `attention/<seq>.txt`; it clears `dialog closed` after two seconds out of the dialog. |
 | `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a producer's stall also tells a live director, and `backlot status` leads with a `producer alert:` line. A changed screen or a newer signal clears the attention. |
 | `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — a live director is told only so it does not wait, and `backlot status` shows a `producer alert:` line. There is no automatic way on for a fixed role; only you (or Hollywood) can intervene. |
@@ -1019,9 +1022,17 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
   Role terminals cannot use `hc run|exec|send|keys|connect`, interpreter code (`python -c`, `node -e`, a
   heredoc) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, or detach tricks such as
   `systemd-run` and `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
-  overeager agent, not isolation. Verbs not yet covered on the queue
-  (`studio new`, `finish`, `prune`, `delete`, `restore`) refuse with
-  `not available through the server yet`.
+  overeager agent, not isolation.
+- **Studio operations over the same queue:** `studio new`, `finish`, `prune`, `delete`, `restore`, and the New
+  Studio dialog's `repos` / `runners` probes are requests too. `--cast`, `--cast -`, `--ask` and `--ask-file`
+  are read on the client and travel as content; the hub parses the cast, canonicalizes `--repo` against its own
+  filesystem and runs the same code the local CLI runs. `studio delete` and `studio prune` (and `studio restore
+  --name`, because it renames) are reviewed: a `--dry-run` returns `{ report, confirm_token }`, where the token is
+  `sha256` of the report's canonical JSON. The CLI's single invocation sends the dry run, then the commit with that
+  token; a commit without a token refuses with
+  `confirm this from a dry run first`, and one whose fresh dry run differs refuses with
+  `the studio changed since you reviewed it; run it again`. `studio new --interactive` runs where its terminal is
+  and is not a server verb, and `--remote` on `studio new` still refuses: placement is Phase 2.
 - **On the hub itself:** when the resolved server host matches the local machine (`host-a`), CLI
   verbs keep writing the local ledger directly (pointing at the resolved session) so they keep
   working even while the server restarts; the TUI connects to the local server session directly.

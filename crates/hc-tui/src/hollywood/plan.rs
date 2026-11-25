@@ -13,11 +13,15 @@ use ratatui::layout::Rect;
 
 use super::rows::{self, Row, Target};
 use super::sheet::{Status, Wait};
-use super::{Confirm, Hollywood, LayerOpts, frames};
+use super::{Confirm, Hollywood, LayerOpts, frames, talk};
 use crate::panel::data::MachineSummary;
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
+/// The most rows the newest Hollywood line wraps to on a wide band.
+pub(crate) const WRAP_TALK_ROWS: u16 = 4;
+/// The cap on a narrow/mobile band.
+pub(crate) const WRAP_TALK_ROWS_MOBILE: u16 = 2;
 
 /// The band's height while expanded — the dock's seam (A5.2) reads
 /// the same number before it picks its own `y`.
@@ -56,6 +60,14 @@ pub(crate) fn plan(
     let confirming = hollywood.confirm.as_ref().map(|c| match c {
         Confirm::Finish(key) => Target::Ready(key.clone()),
     });
+    let talk_lines: Vec<&backlot_model::summary::Exchange> = band_rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Talk(e) => Some(*e),
+            _ => None,
+        })
+        .collect();
+    let wrap_seq = talk_lines.iter().rposition(|e| e.who == "hollywood");
     let mut plan = Plan {
         top_sprocket: true,
         title: true,
@@ -70,13 +82,34 @@ pub(crate) fn plan(
         shown: waits.len(),
         talk: band_rows
             .iter()
-            .filter(|r| matches!(r, Row::Talk(_)))
+            .filter(|r| matches!(r, Row::Talk(_) | Row::Fold { .. }))
             .count() as u16,
+        wrap: 0,
+        wrap_keep: wrap_seq.map(|p| (talk_lines.len() - p) as u16).unwrap_or(0),
+        wrap_seq: wrap_seq.map(|p| talk_lines[p].seq),
         live: band_rows.iter().any(|r| matches!(r, Row::Live(_))),
         tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
         hints: true,
         bottom_sprocket: true,
     };
+    // The newest Hollywood line wraps to a few rows at the band's own
+    // width — never more than the mobile or wide cap, and never past
+    // the band's height.
+    if let Some(line) = plan.wrap_seq.and_then(|seq| {
+        band_rows.iter().find_map(|r| match r {
+            Row::Talk(e) if e.seq == seq => Some(*e),
+            _ => None,
+        })
+    }) {
+        let text_w = talk::talk_text_width(frame.width, &line.who);
+        let cap = if opts.mobile {
+            WRAP_TALK_ROWS_MOBILE
+        } else {
+            WRAP_TALK_ROWS
+        };
+        let rows = crate::hollywood::reader_wrap::wrap_plain(&line.text, text_w, cap as usize);
+        plan.wrap = (rows.len() as u16).saturating_sub(1);
+    }
     fit(&mut plan, cap, frame.height, selected_wait);
     plan
 }
@@ -101,6 +134,13 @@ pub(crate) struct Plan {
     /// How many exchange lines the dialog shows above the input —
     /// the oldest lines leave first when the band runs short.
     pub talk: u16,
+    /// The seq of the newest Hollywood line that wraps, if any.
+    pub wrap_seq: Option<u64>,
+    /// How many talk rows from the wrapped line to the newest — the
+    /// wrap only draws while that many talk rows survive the ladder.
+    pub wrap_keep: u16,
+    /// The extra rows that line's wrap adds beyond its first row.
+    pub wrap: u16,
     /// Hollywood's live progress row under the newest user line.
     pub live: bool,
     /// The tell/setup/calm tail rows — always drawn, `calm` or
@@ -111,8 +151,19 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
+    /// The wrapped line's extra rows, counted only while the line is
+    /// still drawn (the ladder has not dropped `talk` past it).
+    pub(crate) fn wrap_rows(&self) -> u16 {
+        if self.wrap_keep > 0 && self.talk >= self.wrap_keep {
+            self.wrap
+        } else {
+            0
+        }
+    }
+
     /// The plan's full height in rows. `shown` waiting rows each
-    /// take one line plus their detail when kept.
+    /// take one line plus their detail when kept; the wrapped newest
+    /// Hollywood line adds its extra rows while it is still drawn.
     pub fn height(&self) -> u16 {
         let waits: u16 = self
             .details
@@ -120,6 +171,7 @@ impl Plan {
             .take(self.shown)
             .map(|d| 1 + u16::from(*d))
             .sum();
+        let talk = self.talk + self.wrap_rows();
         u16::from(self.top_sprocket)
             + u16::from(self.title)
             + u16::from(self.blank_1)
@@ -127,7 +179,7 @@ impl Plan {
             + u16::from(self.blank_2)
             + u16::from(self.headline)
             + waits
-            + self.talk
+            + talk
             + u16::from(self.live)
             + self.tail_rows
             + u16::from(self.hints)
@@ -161,6 +213,10 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
             plan.headline = false;
         } else if plan.hints {
             plan.hints = false;
+        } else if plan.wrap_rows() > 0 {
+            // The wrap gives its extra rows back, down to the one
+            // line, before a talk line or any waiting row is dropped.
+            plan.wrap -= 1;
         } else if plan.talk > 0 {
             plan.talk -= 1;
         } else if plan.live {

@@ -393,8 +393,160 @@ fn the_live_row_follows_the_newest_user_line_until_a_reply() {
     assert!(hollywood_live(&list).is_none());
 }
 
-/// Only a user-owned prompt lights the row's `y`/`d`; every other
-/// state leaves them to the footer's silence.
+/// A card Hollywood proposed after the person's line reads as a talk
+/// line under it — the same `who: hollywood` side a report takes —
+/// and ends the live row, so the person sees the answer where they
+/// spoke.
+#[test]
+fn a_card_after_the_user_line_is_a_talk_line_and_ends_the_live_row() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 8, "who": "user", "text": "recast the producer" },
+        { "seq": 9, "who": "hollywood", "kind": "card",
+          "text": "proposed card c3 · acme-shop · pause t1" },
+    ]);
+    value["hollywood"]["work"] = "working".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let talk: Vec<(&str, Option<&str>)> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Talk(line) => Some((line.who.as_str(), line.kind.as_deref())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        talk,
+        [("user", None), ("hollywood", Some("card"))],
+        "the card is Hollywood's line"
+    );
+    assert!(
+        !rows.iter().any(|r| matches!(r, Row::Live(_))),
+        "a card ends the live row like a report"
+    );
+    assert!(hollywood_live(&list).is_none());
+    // Enter on the card line opens its entry, keyed by the ledger seq.
+    let card = rows
+        .iter()
+        .find_map(|r| match r {
+            Row::Talk(line) if line.kind.as_deref() == Some("card") => Some(*line),
+            _ => None,
+        })
+        .expect("the card line");
+    assert_eq!(
+        Row::Talk(card).target(&waits),
+        Target::Talk(9),
+        "the card line keeps the ledger's identity"
+    );
+}
+
+/// An idle Hollywood with an unanswered `user ›` line shows the live
+/// row's idle word — a reply that never came, not silence.
+#[test]
+fn an_idle_hollywood_says_it_has_not_answered() {
+    let summary = with_live(serde_json::json!({ "work": "waiting" }));
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter().any(|r| matches!(r, Row::Live(Live::Idle))),
+        "the idle live row: {:?}",
+        rows.iter()
+            .filter_map(|r| match r {
+                Row::Live(live) => Some(*live),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        crate::hollywood::items::live_head(&Live::Idle),
+        (
+            "hollywood is idle and has not answered · open ↵".into(),
+            "○"
+        )
+    );
+}
+
+/// The talk keeps the newest turn and the turn before it; older lines
+/// fold into one row. Enter on the fold opens the newest folded entry.
+#[test]
+fn older_turns_fold_into_one_row() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "first ask" },
+        { "seq": 2, "who": "hollywood", "text": "first answer" },
+        { "seq": 3, "who": "user", "text": "second ask" },
+        { "seq": 4, "who": "hollywood", "text": "second answer" },
+        { "seq": 5, "who": "user", "text": "third ask" },
+        { "seq": 6, "who": "hollywood", "text": "third answer" },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    // The newest turn (#5, #6) and the one before (#3, #4) stay; the
+    // two oldest lines (#1, #2) fold.
+    let fold = rows
+        .iter()
+        .position(|r| matches!(r, Row::Fold { .. }))
+        .expect("a fold row");
+    assert!(
+        matches!(
+            rows[fold],
+            Row::Fold {
+                count: 2,
+                newest: 2
+            }
+        ),
+        "{:?}",
+        rows.iter().map(|r| r.target(&waits)).collect::<Vec<_>>()
+    );
+    let talk: Vec<u64> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Talk(line) => Some(line.seq),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(talk, [3, 4, 5, 6]);
+    // Enter on the fold opens the newest folded entry (#2).
+    assert_eq!(rows[fold].target(&waits), Target::Talk(2));
+}
+
+/// With no user line at all, the newest two lines show and the rest
+/// fold.
+#[test]
+fn without_a_user_line_the_newest_two_lines_show() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "hollywood", "text": "one" },
+        { "seq": 2, "who": "hollywood", "text": "two" },
+        { "seq": 3, "who": "hollywood", "text": "three" },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let fold = rows
+        .iter()
+        .position(|r| matches!(r, Row::Fold { .. }))
+        .expect("a fold row");
+    assert!(matches!(
+        rows[fold],
+        Row::Fold {
+            count: 1,
+            newest: 1
+        }
+    ));
+    let talk: Vec<u64> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Talk(line) => Some(line.seq),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(talk, [2, 3]);
+    assert_eq!(rows[fold].target(&waits), Target::Talk(1));
+}
+
 #[test]
 fn hollywood_asking_tracks_the_user_owned_prompt() {
     let list = machines(Some(&with_live(serde_json::json!({

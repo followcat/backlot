@@ -257,7 +257,7 @@ fn render_band(
     let mut wait_seen = 0usize;
     let talk_total = band_rows
         .iter()
-        .filter(|r| matches!(r, Row::Talk(_)))
+        .filter(|r| matches!(r, Row::Talk(_) | Row::Fold { .. }))
         .count();
     let mut talk_seen = 0usize;
     for row in &band_rows {
@@ -307,13 +307,18 @@ fn render_band(
                 y += h;
             }
             // The dialog keeps its newest lines: when the plan cut
-            // `talk` short the oldest rows skip without a row.
-            Row::Talk(_) => {
+            // `talk` short the oldest rows skip without a row. The
+            // newest Hollywood line draws tall when its wrap survives.
+            Row::Talk(_) | Row::Fold { .. } => {
                 talk_seen += 1;
                 if talk_seen <= talk_total.saturating_sub(plan.talk as usize) {
                     continue;
                 }
-                let rect = Rect::new(area.x, y, area.width, 1);
+                let h = match row {
+                    Row::Talk(line) if plan.wrap_seq == Some(line.seq) => plan.wrap_rows() + 1,
+                    _ => 1,
+                };
+                let rect = Rect::new(area.x, y, area.width, h);
                 band::draw_row(
                     buf,
                     rect,
@@ -328,7 +333,7 @@ fn render_band(
                     palette,
                     &mut hits,
                 );
-                y += 1;
+                y += h;
             }
             Row::Live(_) if plan.live => {
                 let rect = Rect::new(area.x, y, area.width, 1);

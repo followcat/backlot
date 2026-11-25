@@ -48,14 +48,25 @@ pub(super) fn hollywood_exchange_meta(
         return meta;
     };
     if let Some((idx, entry)) = h.exchange.iter().enumerate().find(|(_, e)| e.seq == seq) {
-        meta.kind = if entry.who == "user" {
-            ReaderKind::Tell
+        if entry.who == "user" {
+            meta.kind = ReaderKind::Tell;
+        } else if entry.kind.as_deref() == Some("card") {
+            // A card line reads as the card it names: its open summary
+            // carries the studio, the action and the open status.
+            meta.kind = ReaderKind::Card;
+            let id = format!("c{seq}");
+            if let Some(card) = h.cards.iter().find(|c| c.id == id) {
+                meta.studio = Some(card.studio.clone());
+                meta.card_action = Some(card.action.clone());
+                meta.card_status = Some("open".into());
+                meta.ts_ms = card.ts_ms;
+            }
         } else {
-            ReaderKind::Report
-        };
+            meta.kind = ReaderKind::Report;
+        }
         meta.from = Some(entry.who.clone());
         meta.to = entry.to.clone();
-        meta.ts_ms = entry.ts_ms;
+        meta.ts_ms = meta.ts_ms.or(entry.ts_ms);
         meta.nav_index = Some(idx + 1);
         meta.nav_total = Some(h.exchange.len());
     } else {

@@ -38,6 +38,10 @@ pub struct DeleteReport {
     pub kept: Vec<String>,
     pub archive: String,
     pub archived: bool,
+    /// A real run that kept items without `--force`: nothing was
+    /// archived, and the caller turns this into the refusal.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blocked: bool,
 }
 
 pub(crate) fn run(
@@ -130,7 +134,25 @@ async fn run_local(
         )
     };
     let base = crate::cli::resolve_base(env, common, &base, id)?;
-    let dir = store::studio_dir(&base, id);
+    let client = connected.as_ref().map(|l| &l.client);
+    let report = execute(&base, id, by, client, dry_run, force).await?;
+    if report.blocked {
+        return Err(Fail::refused(format_report(&report, json)?));
+    }
+    format_report(&report, json)
+}
+
+/// The work itself, on an explicit base and (when the caller has one)
+/// a connected core: shared by the local CLI and the request queue.
+pub(crate) async fn execute(
+    base: &Path,
+    id: &str,
+    by: EventBy,
+    client: Option<&hc_proto::client::Client>,
+    dry_run: bool,
+    force: bool,
+) -> Result<DeleteReport, Fail> {
+    let dir = store::studio_dir(base, id);
     if !dir.join("events.jsonl").is_file() {
         return Err(Fail::refused(format!("no studio '{id}'")));
     }
@@ -141,7 +163,7 @@ async fn run_local(
 
     let archive_name = format!("{id}-{}", utc_stamp_now());
     let rel_archive = format!("archive/{archive_name}");
-    let dest = store::archive_dir(&base).join(&archive_name);
+    let dest = store::archive_dir(base).join(&archive_name);
     if dest.exists() {
         return Err(Fail::refused(format!(
             "archive target already exists: {}",
@@ -171,8 +193,8 @@ async fn run_local(
     }
 
     // Step 2: Close studio terminals and prevent stage resume.
-    let matched = match &connected {
-        Some(link) => list_studio_terminals(&link.client, id).await?,
+    let matched = match client {
+        Some(client) => list_studio_terminals(client, id).await?,
         None => Vec::new(),
     };
     let closed_terminals: Vec<String> = matched
@@ -181,8 +203,8 @@ async fn run_local(
         .collect();
     if !dry_run {
         close_roles_in_ledger(&dir, &state, &by)?;
-        if let Some(link) = &connected {
-            close_terminals(&link.client, &matched).await?;
+        if let Some(client) = client {
+            close_terminals(client, &matched).await?;
         }
     }
 
@@ -221,8 +243,16 @@ async fn run_local(
         pruned_worktrees: Vec::new(),
         deleted_branches: Vec::new(),
         kept: Vec::new(),
-        archive: rel_archive.clone(),
+        // A dry run names the shape, not the second it happened to
+        // run in — the review's token must survive the commit's own
+        // fresh dry run.
+        archive: if dry_run {
+            format!("archive/{id}-<stamp>")
+        } else {
+            rel_archive.clone()
+        },
         archived: false,
+        blocked: false,
     };
     for step in steps {
         match step {
@@ -236,12 +266,13 @@ async fn run_local(
     }
 
     if !dry_run && !force && !report.kept.is_empty() {
-        return Err(Fail::refused(format_report(&report, json)?));
+        report.blocked = true;
+        return Ok(report);
     }
 
     // Step 4: Archive ledger.
     if !dry_run {
-        fs::create_dir_all(store::archive_dir(&base))
+        fs::create_dir_all(store::archive_dir(base))
             .map_err(|e| Fail::refused(format!("cannot create archive dir: {e}")))?;
         if dest.exists() {
             return Err(Fail::refused(format!(
@@ -264,5 +295,5 @@ async fn run_local(
         report.archived = true;
     }
 
-    format_report(&report, json)
+    Ok(report)
 }

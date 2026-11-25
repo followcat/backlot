@@ -10,8 +10,6 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use backlot_model::summary::Exchange;
-
 use super::draw::{CHIP_GAP, HollywoodRender};
 use super::items::{
     chip_text, chips_of, default_chip_index, live_head, target_label, ultra_head, wait_head,
@@ -108,7 +106,10 @@ pub(crate) fn draw_row(
                 base.fg(palette.overlay1),
             );
         }
-        Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
+        Row::Talk(line) => {
+            super::talk::draw_talk(buf, rect, line, selected, palette);
+        }
+        Row::Fold { count, .. } => super::talk::draw_fold(buf, rect, *count, selected, palette),
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
         Row::Input => draw_input(
             buf,
@@ -386,52 +387,6 @@ fn draw_detail(
     );
 }
 
-/// One exchange line: `✦ <text>` for Hollywood's half (its reported
-/// headline, the accent the headline row already carries), the
-/// sender's `who ›` for every other line — dimmer, the dialog's
-/// other side.
-fn draw_talk(
-    buf: &mut Buffer,
-    rect: Rect,
-    line: &Exchange,
-    selected: bool,
-    palette: &Palette,
-    hits: &mut HollywoodRender,
-) {
-    let _ = hits;
-    let base = if selected {
-        Style::default().bg(palette.active_row_bg)
-    } else {
-        Style::default().bg(palette.surface_dim)
-    };
-    buf.set_style(rect, base);
-    let (marker, who_style, text_style) = if line.who == "hollywood" {
-        (
-            "✦".to_string(),
-            base.fg(palette.accent),
-            base.fg(palette.text),
-        )
-    } else {
-        (
-            format!("{} ›", line.who),
-            base.fg(palette.subtext0),
-            base.fg(palette.subtext0),
-        )
-    };
-    let x = rect.x + MARGIN;
-    let left = marker.chars().count() as u16;
-    put_text(buf, x, rect.y, left, &marker, who_style);
-    let width = rect.width.saturating_sub(MARGIN + left + 1);
-    put_text(
-        buf,
-        x + left + 1,
-        rect.y,
-        width,
-        &truncate_end(&line.text, width as usize),
-        text_style,
-    );
-}
-
 /// Hollywood's live row under the newest `user ›` line: `… sending to
 /// hollywood`, `⠶ hollywood: <doing>` or `⚠ hollywood asks: <prompt>` —
 /// one line, cut to the width, on the band's own background.
@@ -447,6 +402,7 @@ fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, pale
         Live::Pending => (palette.overlay0, false),
         Live::Working(_) => (palette.yellow, false),
         Live::Prompt(_) => (palette.red, true),
+        Live::Idle => (palette.overlay0, false),
     };
     let mut x = rect.x;
     if selected {

@@ -466,7 +466,7 @@ fn role_refused_and_outward_action_validate_and_roundtrip() {
     );
     assert_eq!(
         crate::attention::AttentionClass::of(OUTWARD_ACTION, false),
-        crate::attention::AttentionClass::NeedsYou
+        crate::attention::AttentionClass::Info
     );
     for caller in ["actor-t1-c1", "writer", "producer", "director", "stage"] {
         assert_eq!(

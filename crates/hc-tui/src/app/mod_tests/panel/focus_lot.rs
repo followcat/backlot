@@ -333,6 +333,7 @@ async fn alt_l_does_not_fire_inside_float_modal_or_compose() {
             title: "Confirm?".into(),
             body: "Proceed".into(),
             loading: false,
+            error: None,
             for_: crate::studio_dialog::ConfirmFor::StageStop { machine: None },
         },
     ));

@@ -52,16 +52,22 @@ pub(crate) enum ConfirmFor {
     },
     /// `studio delete <id> [--force] --json --as user` — finishes if
     /// live, closes terminals, prunes safely, and archives the ledger.
+    /// `token` is the plan's confirm token when the dialog reviewed
+    /// one over a server.
     DeleteStudio {
         key: StudioKey,
         force: bool,
         kept: Vec<String>,
+        token: Option<String>,
     },
     /// `studio finish --force` on a studio with no requirement and no
     /// tasks — the L5 guard, said in plain words first.
     FinishEmpty { key: StudioKey },
     /// `studio prune <studio> --as user` after its `--dry-run` plan.
-    Prune { key: StudioKey },
+    Prune {
+        key: StudioKey,
+        token: Option<String>,
+    },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -128,6 +134,9 @@ pub(crate) struct ConfirmDialog {
     pub(crate) body: String,
     /// When true, the Confirm key/button is disabled while a dry-run loads.
     pub(crate) loading: bool,
+    /// A refused confirm — a stale server plan — shown in the dialog;
+    /// `r`/Enter reviews the plan again.
+    pub(crate) error: Option<String>,
     pub(crate) for_: ConfirmFor,
 }
 
@@ -161,6 +170,7 @@ impl StudioDialog {
             title,
             body,
             loading: false,
+            error: None,
             for_,
         })
     }
@@ -183,6 +193,7 @@ impl StudioDialog {
                 if allow { "allow" } else { "deny" }
             ),
             loading: false,
+            error: None,
             for_: ConfirmFor::DirOverride {
                 key: key.clone(),
                 role: role.to_owned(),
@@ -198,10 +209,12 @@ impl StudioDialog {
             title: format!("Delete studio · {}", Self::place(key)),
             body: "Inspecting studio…".to_owned(),
             loading: true,
+            error: None,
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
                 force: false,
                 kept: Vec::new(),
+                token: None,
             },
         })
     }
@@ -217,178 +230,36 @@ impl StudioDialog {
                 kept.join("; ")
             ),
             loading: false,
+            error: None,
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
                 force: true,
                 kept: Vec::new(),
+                token: None,
             },
+        })
+    }
+
+    /// A server plan went stale under the confirm: the dialog stays,
+    /// says why, and Enter/`r` reviews the plan again.
+    pub(crate) fn confirm_stale(
+        title: String,
+        body: String,
+        error: String,
+        for_: ConfirmFor,
+    ) -> StudioDialog {
+        StudioDialog::Confirm(ConfirmDialog {
+            title,
+            body,
+            loading: false,
+            error: Some(error),
+            for_,
         })
     }
 }
 
-/// The 4-row editor the Tell and Revise bodies share (§2.3/§2.4):
-/// lines, a cursor, Enter splits, paste lands as text — the body the
-/// submit serialises with `\n` joins.
-#[derive(Debug)]
-pub(crate) struct BodyEditor {
-    pub(crate) lines: Vec<Vec<char>>,
-    pub(crate) row: usize,
-    /// The cursor's char index inside `lines[row]`.
-    pub(crate) col: usize,
-}
-
-impl Default for BodyEditor {
-    /// An empty body — one empty row, since every edit indexes
-    /// `lines[row]`.
-    fn default() -> Self {
-        BodyEditor {
-            lines: vec![Vec::new()],
-            row: 0,
-            col: 0,
-        }
-    }
-}
-
-impl BodyEditor {
-    /// A body seeded with `text` (the revise prefill) — the cursor
-    /// starts at the top.
-    pub(crate) fn new(text: &str) -> BodyEditor {
-        let mut lines: Vec<Vec<char>> = text.lines().map(|l| l.chars().collect()).collect();
-        if lines.is_empty() {
-            lines.push(Vec::new());
-        }
-        BodyEditor {
-            lines,
-            ..BodyEditor::default()
-        }
-    }
-
-    /// The buffer text — `\n`-joined rows.
-    pub(crate) fn text(&self) -> String {
-        self.lines
-            .iter()
-            .map(|l| l.iter().collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    fn clamp(&mut self) {
-        if self.row >= self.lines.len() {
-            self.row = self.lines.len() - 1;
-        }
-        self.col = self.col.min(self.lines[self.row].len());
-    }
-
-    /// Insert `text` — `\n` splits rows; `\r` pairs merge.
-    pub(crate) fn insert(&mut self, text: &str) {
-        for ch in text.chars() {
-            match ch {
-                '\r' => {}
-                '\n' => {
-                    let rest: Vec<char> = self.lines[self.row].split_off(self.col);
-                    self.lines.insert(self.row + 1, rest);
-                    self.row += 1;
-                    self.col = 0;
-                }
-                c if !c.is_control() => {
-                    self.lines[self.row].insert(self.col, c);
-                    self.col += 1;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    /// The key handling Tell/Revise share — `Enter` is the caller's
-    /// (Tell submits on a single line, Revise splits), `Esc` always
-    /// cancels above this. Answers `false` for keys it does not own.
-    pub(crate) fn key(
-        &mut self,
-        code: crossterm::event::KeyCode,
-        mods: crossterm::event::KeyModifiers,
-    ) -> bool {
-        use crossterm::event::{KeyCode, KeyModifiers};
-        let ctrl = mods.contains(KeyModifiers::CONTROL);
-        match (code, ctrl) {
-            (KeyCode::Char(c), false) if mods.difference(KeyModifiers::SHIFT).is_empty() => {
-                self.insert(&c.to_string());
-            }
-            (KeyCode::Char(c), false) if mods == KeyModifiers::SHIFT => self.insert(&c.to_string()),
-            (KeyCode::Char(' '), _) if mods.is_empty() => self.insert(" "),
-            (KeyCode::Enter, _) => {
-                let rest: Vec<char> = self.lines[self.row].split_off(self.col);
-                self.lines.insert(self.row + 1, rest);
-                self.row += 1;
-                self.col = 0;
-            }
-            (KeyCode::Backspace, _) => {
-                if self.col > 0 {
-                    self.lines[self.row].remove(self.col - 1);
-                    self.col -= 1;
-                } else if self.row > 0 {
-                    let row = self.lines.remove(self.row);
-                    self.row -= 1;
-                    self.col = self.lines[self.row].len();
-                    self.lines[self.row].extend(row);
-                }
-            }
-            (KeyCode::Delete, _) => {
-                if self.col < self.lines[self.row].len() {
-                    self.lines[self.row].remove(self.col);
-                } else if self.row + 1 < self.lines.len() {
-                    let row = self.lines.remove(self.row + 1);
-                    self.lines[self.row].extend(row);
-                }
-            }
-            (KeyCode::Left, _) => {
-                if self.col > 0 {
-                    self.col -= 1;
-                } else if self.row > 0 {
-                    self.row -= 1;
-                    self.col = self.lines[self.row].len();
-                }
-            }
-            (KeyCode::Right, _) => {
-                if self.col < self.lines[self.row].len() {
-                    self.col += 1;
-                } else if self.row + 1 < self.lines.len() {
-                    self.row += 1;
-                    self.col = 0;
-                }
-            }
-            (KeyCode::Up, _) => {
-                self.row = self.row.saturating_sub(1);
-            }
-            (KeyCode::Down, _) => {
-                self.row = (self.row + 1).min(self.lines.len() - 1);
-            }
-            (KeyCode::Home, _) | (KeyCode::Char('a'), true) => self.col = 0,
-            (KeyCode::End, _) | (KeyCode::Char('e'), true) => self.col = self.lines[self.row].len(),
-            (KeyCode::Char('u'), true) => {
-                self.lines[self.row].drain(..self.col);
-                self.col = 0;
-            }
-            (KeyCode::Char('k'), true) => {
-                self.lines[self.row].truncate(self.col);
-            }
-            (KeyCode::Char('w'), true) => {
-                // Word-back: drop spaces, then the word behind them.
-                let mut at = self.col;
-                while at > 0 && self.lines[self.row][at - 1] == ' ' {
-                    at -= 1;
-                }
-                while at > 0 && self.lines[self.row][at - 1] != ' ' {
-                    at -= 1;
-                }
-                self.lines[self.row].drain(at..self.col);
-                self.col = at;
-            }
-            _ => return false,
-        }
-        self.clamp();
-        true
-    }
-}
+mod body_editor;
+pub(crate) use body_editor::BodyEditor;
 
 #[cfg(test)]
 #[path = "studio_dialog_tests.rs"]

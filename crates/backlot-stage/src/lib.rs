@@ -19,6 +19,7 @@ pub mod cli;
 mod cli_run;
 pub mod commands;
 pub mod config;
+mod confirm;
 mod connerr;
 mod daemon;
 mod delete;
@@ -31,6 +32,7 @@ mod doc;
 pub mod doc_client;
 pub(crate) mod doc_dedupe;
 mod doc_dispatch;
+mod doc_dispatch_studio;
 pub(crate) mod doc_req;
 mod draft;
 mod exchange_read;
@@ -95,6 +97,7 @@ mod prompts;
 mod prune;
 mod prune_paths;
 mod prune_render;
+mod prune_report;
 mod question;
 mod range;
 mod ratelimit;
@@ -120,6 +123,7 @@ mod stale;
 mod stall;
 pub mod store;
 mod studio_cast;
+mod studio_fmt;
 mod studio_list;
 mod supervise;
 mod verbs;
@@ -188,6 +192,12 @@ mod doc_req_cap_tests;
 mod doc_req_card_tests;
 #[cfg(test)]
 mod doc_req_fake_core;
+#[cfg(test)]
+mod doc_req_studio_json_tests;
+#[cfg(test)]
+mod doc_req_studio_seed;
+#[cfg(test)]
+mod doc_req_studio_tests;
 #[cfg(test)]
 mod doc_req_tests;
 #[cfg(test)]
@@ -353,6 +363,8 @@ mod workareas_tests;
 pub mod remote_doc_cli;
 #[cfg(test)]
 mod remote_doc_cli_tests;
+#[cfg(test)]
+mod remote_doc_studio_tests;
 pub mod server_cfg;
 #[cfg(test)]
 mod server_cfg_tests;

@@ -219,6 +219,115 @@ fn the_writer_is_wanted_between_plan_and_dispatch() {
     );
 }
 
+/// A plain `tell` wakes a closed writer: it stays wanted while it is
+/// undelivered, so the stage starts it again to receive the message.
+#[test]
+fn a_tell_to_a_closed_writer_starts_it() {
+    let mut events = studio();
+    // Plan, then dispatch closes the writer; the write is not wanted now.
+    events.extend([plan_request(3), dispatch(4)]);
+    events.push(started(5, "writer", "t3", "s"));
+    events.push(closed(6, "writer"));
+    let quiet = reconcile(STUDIO, &log(events.clone()), &live(&[]), NOW);
+    assert!(
+        !starts(&quiet).iter().any(|s| s.role == "writer"),
+        "dispatch released the writer: {quiet:?}"
+    );
+
+    // The producer's tell still waits on it: the writer comes back.
+    events.push(ev(
+        7,
+        "producer",
+        EventKind::MessageQueued {
+            to: "writer".into(),
+            file: Some("messages/7-tell.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
+    assert!(
+        starts(&actions).iter().any(|s| s.role == "writer"),
+        "an undelivered tell wakes the closed writer: {actions:?}"
+    );
+}
+
+/// Once the woken role answers — its own ledger write after delivery —
+/// the tell no longer holds it, so a finished turn lets it close again.
+#[test]
+fn an_answered_tell_releases_the_writer() {
+    let mut events = studio();
+    events.extend([plan_request(3), dispatch(4)]);
+    events.push(started(5, "writer", "t3", "s"));
+    events.push(closed(6, "writer"));
+    events.push(ev(
+        7,
+        "producer",
+        EventKind::MessageQueued {
+            to: "writer".into(),
+            file: Some("messages/7-tell.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(8, "stage", EventKind::MessageDelivered { target: 7 }));
+    let state = log(events.clone());
+    assert!(
+        starts(&reconcile(STUDIO, &state, &live(&[]), NOW))
+            .iter()
+            .any(|s| s.role == "writer"),
+        "a delivered, unanswered tell still holds the writer"
+    );
+
+    // The writer's note back is its answer; the next pass closes it.
+    events.push(ev(
+        9,
+        "writer",
+        EventKind::MessageQueued {
+            to: "producer".into(),
+            file: Some("messages/9-note.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    let state = log(events);
+    assert!(
+        !starts(&reconcile(STUDIO, &state, &live(&[]), NOW))
+            .iter()
+            .any(|s| s.role == "writer"),
+        "once answered the tell no longer holds the writer"
+    );
+}
+
+/// A finished studio wakes nobody, whatever a tell still waits on.
+#[test]
+fn a_finished_studio_wakes_no_one_for_a_tell() {
+    let mut events = studio();
+    events.push(closed(3, "writer"));
+    events.push(ev(
+        4,
+        "producer",
+        EventKind::MessageQueued {
+            to: "writer".into(),
+            file: Some("messages/4-tell.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(
+        5,
+        "user",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
+    assert!(
+        !starts(&actions).iter().any(|s| s.role == "writer"),
+        "a finished studio starts nobody: {actions:?}"
+    );
+}
+
 /// A live role whose terminal vanished is `role.lost`, never a stop —
 /// and a lost role is not relaunched as a fresh `role.started`.
 #[test]

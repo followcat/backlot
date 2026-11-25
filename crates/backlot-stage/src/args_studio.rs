@@ -77,7 +77,13 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
         // only pre-checks here are the ones that always hold.
         true => Cmd::StudioNew {
             title,
-            repo: repo.map(|r| repo_path(&r)).transpose()?,
+            repo: match repo {
+                Some(r) => {
+                    check_repo_absolute(&r)?;
+                    Some(r)
+                }
+                None => None,
+            },
             cast_file,
             dry_run,
             interactive: true,
@@ -86,19 +92,21 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             no_git,
             ask,
         },
-        false => Cmd::StudioNew {
-            title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
-            repo: Some(repo_path(
-                &repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?,
-            )?),
-            cast_file: Some(cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?),
-            dry_run,
-            interactive: false,
-            mode,
-            init,
-            no_git,
-            ask,
-        },
+        false => {
+            let repo = repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?;
+            check_repo_absolute(&repo)?;
+            Cmd::StudioNew {
+                title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
+                repo: Some(repo),
+                cast_file: Some(cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?),
+                dry_run,
+                interactive: false,
+                mode,
+                init,
+                no_git,
+                ask,
+            }
+        }
     };
     Ok((std::mem::take(common), cmd))
 }
@@ -115,22 +123,36 @@ fn parse_mode(v: &str) -> Result<backlot_model::event::StudioMode, Fail> {
 }
 
 /// `--repo` must be absolute: a relative path would bind the studio
-/// to whatever cwd the stage happened to run from. An existing path
-/// is canonicalized so `..` and symlink spellings of one folder
-/// cannot masquerade as two; a path that does not exist yet is kept
-/// as spelled.
-pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
-    let path = Path::new(repo);
-    if !path.is_absolute() {
+/// to whatever cwd the stage happened to run from. The check runs on
+/// the client; canonicalization stays with the machine that owns the
+/// path — a remote `studio new` must never resolve a hub path against
+/// its own filesystem.
+pub(crate) fn check_repo_absolute(repo: &str) -> Result<(), Fail> {
+    if !Path::new(repo).is_absolute() {
         return Err(usage(
             format!("--repo must be an absolute path, got '{repo}'"),
             U_STUDIO,
         ));
     }
-    Ok(match path.canonicalize() {
+    Ok(())
+}
+
+/// An existing path is canonicalized so `..` and symlink spellings of
+/// one folder cannot masquerade as two; a path that does not exist yet
+/// is kept as spelled. Runs where the repository lives, never on a
+/// client that only names a hub path.
+pub(crate) fn canonical_repo(repo: &str) -> String {
+    match Path::new(repo).canonicalize() {
         Ok(p) => p.to_string_lossy().into_owned(),
-        Err(_) => repo.into(),
-    })
+        Err(_) => repo.to_string(),
+    }
+}
+
+/// Absolute check plus canonicalization — the local CLI and wizard
+/// path.
+pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
+    check_repo_absolute(repo)?;
+    Ok(canonical_repo(repo))
 }
 
 /// `studio cast show [--json]` / `studio cast set --file <toml>
@@ -221,6 +243,7 @@ pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, 
     let mut all_finished = false;
     let mut dry_run = false;
     let mut force = false;
+    let mut json = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -232,6 +255,7 @@ pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, 
             "--all-finished" => all_finished = true,
             "--dry-run" => dry_run = true,
             "--force" => force = true,
+            "--json" => json = true,
             _ if arg.starts_with('-') => {
                 return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
             }
@@ -252,6 +276,7 @@ pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, 
             all_finished,
             dry_run,
             force,
+            json,
         },
     ))
 }
@@ -363,6 +388,7 @@ pub(crate) fn studio_restore(common: &mut Common, it: &mut It) -> Result<(Common
     let mut archived = None;
     let mut new_name = None;
     let mut dry_run = false;
+    let mut json = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -374,6 +400,7 @@ pub(crate) fn studio_restore(common: &mut Common, it: &mut It) -> Result<(Common
             "--name" => new_name = Some(it.value("--name", U_STUDIO)?),
             _ if eq(&arg, "--name").is_some() => new_name = eq(&arg, "--name").map(String::from),
             "--dry-run" => dry_run = true,
+            "--json" => json = true,
             _ if arg.starts_with('-') => {
                 return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
             }
@@ -387,6 +414,7 @@ pub(crate) fn studio_restore(common: &mut Common, it: &mut It) -> Result<(Common
             archived: archived.ok_or_else(|| usage("missing <archived-name>", U_STUDIO))?,
             new_name,
             dry_run,
+            json,
         },
     ))
 }
