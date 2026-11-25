@@ -11,9 +11,10 @@ use crate::guard_git::GitContext;
 use crate::guard_git_env::run_real_git;
 use crate::guard_git_parse::parse_git_invocation;
 use crate::guard_git_probe::{
-    current_branch, git_config_get, is_local_tag, remote_default_branch, resolve_default_remote,
-    resolve_remote_push_urls, url_matches_policy,
+    check_local_push_config, current_branch, git_config_get, is_local_tag, remote_default_branch,
+    resolve_default_remote, resolve_remote_push_urls, url_matches_policy,
 };
+use crate::guard_git_push_opts::parse_push_args;
 use crate::hcard_outward_env::stage_probe_env;
 
 pub(crate) fn is_gh_pr_create(argv: &[String]) -> bool {
@@ -33,20 +34,7 @@ pub(crate) fn verify_local_git_clean(cwd: &Path, env: &Env) -> Result<(), String
             return Err(format!("local git config tampered ({key})"));
         }
     }
-    if let Some((0, val, _)) = run_real_git(
-        &[
-            "config",
-            "--local",
-            "--get-regexp",
-            r"^remote\..*\.receivepack$",
-        ],
-        cwd,
-        env,
-        None,
-    ) && !val.trim().is_empty()
-    {
-        return Err("local git config tampered (remote.*.receivepack)".into());
-    }
+    check_local_push_config(cwd, env, None, "local git config tampered")?;
     Ok(())
 }
 
@@ -181,28 +169,9 @@ pub(crate) fn inspect_git_push(
     head_oid: &str,
 ) -> Result<(String, String, String, Vec<String>, u32), String> {
     let parsed = parse_git_invocation(args);
-    let mut repo_flag = None;
-    let mut pos = Vec::new();
-    let mut i = 0;
-    let mut after_dd = false;
-    while i < parsed.sub_args.len() {
-        let a = parsed.sub_args[i].as_str();
-        if !after_dd && a == "--" {
-            after_dd = true;
-        } else if !after_dd && a == "--repo" {
-            repo_flag = parsed.sub_args.get(i + 1).cloned();
-            i += 2;
-            continue;
-        } else if !after_dd && let Some(r) = a.strip_prefix("--repo=") {
-            repo_flag = Some(r.to_string());
-        } else if !after_dd && matches!(a, "-o" | "--push-option") {
-            i += 2;
-            continue;
-        } else if after_dd || !a.starts_with('-') {
-            pos.push(a.to_string());
-        }
-        i += 1;
-    }
+    let pushed = parse_push_args(&parsed.sub_args)?;
+    let repo_flag = pushed.repo_flag;
+    let pos = pushed.positional;
     let cur = current_branch(cwd, ctx);
     let remote = pos
         .first()

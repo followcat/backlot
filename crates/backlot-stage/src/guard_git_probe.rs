@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use crate::cli::Env;
 use crate::guard_git::{GitContext, common_dir_of};
 use crate::guard_git_env::{normalize_resolve, run_real_git};
 
@@ -143,4 +144,141 @@ pub(crate) fn is_local_tag(name: &str, eff_cwd: &Path, ctx: &GitContext<'_>) -> 
         ctx.role_dir,
     )
     .is_some_and(|(code, _, _)| code == 0)
+}
+
+pub(crate) fn is_safe_push_recurse_submodules(val: &str) -> bool {
+    matches!(
+        val.trim().to_ascii_lowercase().as_str(),
+        "no" | "check" | "false" | "off" | "0"
+    )
+}
+
+/// Check local repo config for `remote.*.mirror`, `remote.*.receivepack`, and
+/// `push.recurseSubmodules` overrides that redirect or expand pushes.
+pub(crate) fn check_local_push_config(
+    cwd: &Path,
+    env: &Env,
+    role_dir: Option<&Path>,
+    label: &str,
+) -> Result<(), String> {
+    if let Some((0, raw_mirrors, _)) = run_real_git(
+        &["config", "--local", "--get-regexp", r"^remote\..*\.mirror$"],
+        cwd,
+        env,
+        role_dir,
+    ) && !raw_mirrors.trim().is_empty()
+    {
+        let Some((0, bool_mirrors, _)) = run_real_git(
+            &[
+                "config",
+                "--local",
+                "--bool",
+                "--get-regexp",
+                r"^remote\..*\.mirror$",
+            ],
+            cwd,
+            env,
+            role_dir,
+        ) else {
+            return Err(format!("{label} (remote.*.mirror)"));
+        };
+        for line in bool_mirrors
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+        {
+            if !matches!(line.rsplit_once(' '), Some((_, "false"))) {
+                return Err(format!("{label} (remote.*.mirror)"));
+            }
+        }
+    }
+    if let Some((0, val, _)) = run_real_git(
+        &["config", "--local", "--get", "push.recurseSubmodules"],
+        cwd,
+        env,
+        role_dir,
+    ) && !is_safe_push_recurse_submodules(&val)
+    {
+        return Err(format!("{label} (push.recurseSubmodules)"));
+    }
+    if let Some((0, val, _)) = run_real_git(
+        &[
+            "config",
+            "--local",
+            "--get-regexp",
+            r"^remote\..*\.receivepack$",
+        ],
+        cwd,
+        env,
+        role_dir,
+    ) && !val.trim().is_empty()
+    {
+        return Err(format!("{label} (remote.*.receivepack)"));
+    }
+    Ok(())
+}
+
+/// True when `remote.<remote>.mirror` is configured to a non-false / truthy value.
+pub(crate) fn remote_is_mirror(remote: &str, eff_cwd: &Path, ctx: &GitContext<'_>) -> bool {
+    let key = format!("remote.{remote}.mirror");
+    let Some((0, _, _)) = run_real_git(
+        &["config", "--get-all", &key],
+        eff_cwd,
+        ctx.env,
+        ctx.role_dir,
+    ) else {
+        return false;
+    };
+    !matches!(
+        run_real_git(
+            &["config", "--bool", "--get", &key],
+            eff_cwd,
+            ctx.env,
+            ctx.role_dir
+        ),
+        Some((0, out, _)) if out.trim() == "false"
+    )
+}
+
+/// Refuse effective `push.recurseSubmodules` (`on-demand` / `only` / unknown) or
+/// `submodule.recurse=true` when not safely overridden.
+pub(crate) fn check_effective_submodule_recurse(
+    eff_cwd: &Path,
+    ctx: &GitContext<'_>,
+    explicit_no_or_check: bool,
+) -> Result<(), String> {
+    if let Some((0, val, _)) = run_real_git(
+        &["config", "--get", "push.recurseSubmodules"],
+        eff_cwd,
+        ctx.env,
+        ctx.role_dir,
+    ) {
+        if !is_safe_push_recurse_submodules(&val) {
+            return Err(format!(
+                "submodule push (push.recurseSubmodules={})",
+                val.trim()
+            ));
+        }
+        return Ok(());
+    }
+    if !explicit_no_or_check
+        && let Some((0, _, _)) = run_real_git(
+            &["config", "--get", "submodule.recurse"],
+            eff_cwd,
+            ctx.env,
+            ctx.role_dir,
+        )
+        && !matches!(
+            run_real_git(
+                &["config", "--bool", "--get", "submodule.recurse"],
+                eff_cwd,
+                ctx.env,
+                ctx.role_dir
+            ),
+            Some((0, out, _)) if out.trim() == "false"
+        )
+    {
+        return Err("submodule push (submodule.recurse)".into());
+    }
+    Ok(())
 }

@@ -125,12 +125,20 @@ pub(crate) fn run_real_git(
 
 pub(crate) fn is_blocked_config_key(key: &str) -> bool {
     let lower = key.trim().to_ascii_lowercase();
-    matches!(lower.as_str(), "core.sshcommand" | "core.fsmonitor")
-        || lower.starts_with("alias.")
+    matches!(
+        lower.as_str(),
+        "core.sshcommand"
+            | "core.fsmonitor"
+            | "gpg.program"
+            | "push.gpgsign"
+            | "push.recursesubmodules"
+            | "submodule.recurse"
+    ) || lower.starts_with("alias.")
         || (lower.starts_with("remote.")
             && (lower.ends_with(".push")
                 || lower.ends_with(".pushurl")
-                || lower.ends_with(".receivepack")))
+                || lower.ends_with(".receivepack")
+                || lower.ends_with(".mirror")))
         || (lower.starts_with("url.")
             && (lower.ends_with(".insteadof") || lower.ends_with(".pushinsteadof")))
 }
@@ -150,11 +158,16 @@ pub(crate) fn check_git_config_env(
             "core.hookspath",
             "core.sshcommand",
             "core.fsmonitor",
+            "gpg.program",
+            "push.gpgsign",
+            "push.recursesubmodules",
+            "submodule.recurse",
             "alias.",
             "pushurl",
             "insteadof",
             "pushinsteadof",
             "receivepack",
+            ".mirror",
         ] {
             if lower.contains(needle) {
                 return Err(format!(
@@ -200,7 +213,7 @@ pub(crate) fn check_git_config_env(
     Ok(())
 }
 
-/// Verify `core.hooksPath` and local `core.sshCommand` / `core.fsmonitor` integrity before push.
+/// Verify `core.hooksPath` and local push-related config integrity before push.
 pub(crate) fn verify_hook_integrity(
     eff_cwd: &Path,
     env: &Env,
@@ -250,6 +263,12 @@ pub(crate) fn verify_hook_integrity(
             return Err(format!("git local config tampered ({key})"));
         }
     }
+    crate::guard_git_probe::check_local_push_config(
+        eff_cwd,
+        env,
+        role_dir,
+        "git local config tampered",
+    )?;
     Ok(())
 }
 

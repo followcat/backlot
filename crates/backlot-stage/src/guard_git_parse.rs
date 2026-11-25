@@ -9,6 +9,7 @@ pub(crate) struct GitParsed {
     pub c_configs: Vec<(String, String)>,
     pub config_envs: Vec<String>,
     pub exec_path_override: bool,
+    pub unknown_global_opt: Option<String>,
     pub subcmd: Option<String>,
     pub sub_args: Vec<String>,
 }
@@ -21,6 +22,30 @@ const VALUE_GLOBAL_FLAGS: &[&str] = &[
     "--namespace",
     "--super-prefix",
     "--config-env",
+    "--attr-source",
+];
+
+const STANDALONE_GLOBAL_FLAGS: &[&str] = &[
+    "-v",
+    "--version",
+    "-h",
+    "--help",
+    "--html-path",
+    "--man-path",
+    "--info-path",
+    "-p",
+    "--paginate",
+    "-P",
+    "--no-pager",
+    "--bare",
+    "--no-replace-objects",
+    "--no-lazy-fetch",
+    "--no-optional-locks",
+    "--no-advice",
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
 ];
 
 /// Parse git global flags up to the first subcommand token.
@@ -32,6 +57,7 @@ pub(crate) fn parse_git_invocation(args: &[String]) -> GitParsed {
         c_configs: Vec::new(),
         config_envs: Vec::new(),
         exec_path_override: false,
+        unknown_global_opt: None,
         subcmd: None,
         sub_args: Vec::new(),
     };
@@ -71,7 +97,7 @@ pub(crate) fn parse_git_invocation(args: &[String]) -> GitParsed {
             i += 1;
             continue;
         }
-        if a.starts_with("--exec-path=") {
+        if a == "--exec-path" || a.starts_with("--exec-path=") {
             parsed.exec_path_override = true;
             i += 1;
             continue;
@@ -79,6 +105,7 @@ pub(crate) fn parse_git_invocation(args: &[String]) -> GitParsed {
         if a.starts_with("--namespace=")
             || a.starts_with("--super-prefix=")
             || a.starts_with("--list-cmds=")
+            || a.starts_with("--attr-source=")
         {
             i += 1;
             continue;
@@ -96,10 +123,20 @@ pub(crate) fn parse_git_invocation(args: &[String]) -> GitParsed {
                 i += 2;
                 continue;
             }
+            parsed
+                .unknown_global_opt
+                .get_or_insert_with(|| a.to_string());
+            i += 1;
+            continue;
+        }
+        if STANDALONE_GLOBAL_FLAGS.contains(&a) {
             i += 1;
             continue;
         }
         if a.starts_with('-') {
+            parsed
+                .unknown_global_opt
+                .get_or_insert_with(|| a.to_string());
             i += 1;
             continue;
         }

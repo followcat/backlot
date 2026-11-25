@@ -7,9 +7,11 @@ use crate::guard_git::{GitContext, with_alias};
 use crate::guard_git_env::{run_real_git, verify_hook_integrity};
 use crate::guard_git_parse::GitParsed;
 use crate::guard_git_probe::{
-    configured_remote_push, current_branch, git_config_get, is_local_tag, remote_default_branch,
-    resolve_default_remote, resolve_remote_push_urls, url_matches_policy,
+    check_effective_submodule_recurse, configured_remote_push, current_branch, git_config_get,
+    is_local_tag, remote_default_branch, remote_is_mirror, resolve_default_remote,
+    resolve_remote_push_urls, url_matches_policy,
 };
+use crate::guard_git_push_opts::parse_push_args;
 use crate::guard_rules::{GuardVerdict, cap_command};
 
 /// Classify a resolved `git push` invocation against `PushPolicy` and recorded remotes.
@@ -42,89 +44,17 @@ pub(crate) fn classify_push(
         return refuse("git exec-path override on push".into());
     }
 
-    let mut repo_flag: Option<String> = None;
-    let mut tags_flag = false;
-    let mut all_flag = false;
-    let mut pos: Vec<String> = Vec::new();
-    let mut after_dd = false;
-    let mut i = 0usize;
-    while i < parsed.sub_args.len() {
-        let a = parsed.sub_args[i].as_str();
-        if !after_dd && a == "--" {
-            after_dd = true;
-            i += 1;
-            continue;
-        }
-        if !after_dd && a.starts_with('-') {
-            if a == "--no-verify" {
-                return refuse("hook bypass (--no-verify)".into());
-            }
-            if a == "--exec" || a.starts_with("--exec=") {
-                return refuse("git push override (--exec)".into());
-            }
-            if a == "--receive-pack" || a.starts_with("--receive-pack=") {
-                return refuse("git push override (--receive-pack)".into());
-            }
-            if a == "--upload-pack" || a.starts_with("--upload-pack=") {
-                return refuse("git push override (--upload-pack)".into());
-            }
-            if a == "--force"
-                || a == "--force-with-lease"
-                || a.starts_with("--force-with-lease=")
-                || a == "--force-if-includes"
-            {
-                return refuse("force push".into());
-            }
-            if a == "--mirror" {
-                return refuse("mirror push".into());
-            }
-            if a == "--delete" {
-                return refuse("remote delete".into());
-            }
-            if a == "--prune" {
-                return refuse("remote prune".into());
-            }
-            if a == "--tags" || a == "--follow-tags" {
-                tags_flag = true;
-                i += 1;
-                continue;
-            }
-            if a == "--all" || a == "--branches" {
-                all_flag = true;
-                i += 1;
-                continue;
-            }
-            if a == "--repo" {
-                repo_flag = parsed.sub_args.get(i + 1).cloned();
-                i += 2;
-                continue;
-            }
-            if let Some(r) = a.strip_prefix("--repo=") {
-                repo_flag = Some(r.to_string());
-                i += 1;
-                continue;
-            }
-            if a == "-o" || a == "--push-option" {
-                i += 2;
-                continue;
-            }
-            if !a.starts_with("--") && !a.starts_with("-o") {
-                for ch in a[1..].chars() {
-                    if ch == 'f' {
-                        return refuse("force push".into());
-                    }
-                    if ch == 'd' {
-                        return refuse("remote delete".into());
-                    }
-                }
-            }
-            i += 1;
-            continue;
-        }
-        pos.push(a.to_string());
-        i += 1;
+    let push_args = match parse_push_args(&parsed.sub_args) {
+        Ok(p) => p,
+        Err(rule) => return refuse(rule),
+    };
+    if let Err(rule) =
+        check_effective_submodule_recurse(eff_cwd, ctx, push_args.explicit_recurse_no_or_check)
+    {
+        return refuse(rule);
     }
 
+    let pos = &push_args.positional;
     let refspecs: &[String] = if pos.len() > 1 { &pos[1..] } else { &[] };
     for rs in refspecs {
         if rs.starts_with('+') {
@@ -139,8 +69,12 @@ pub(crate) fn classify_push(
     let remote = pos
         .first()
         .cloned()
-        .or(repo_flag)
+        .or(push_args.repo_flag)
         .unwrap_or_else(|| resolve_default_remote(eff_cwd, cur_branch.as_deref(), ctx));
+
+    if remote_is_mirror(&remote, eff_cwd, ctx) {
+        return refuse(format!("mirror push (remote.{remote}.mirror)"));
+    }
 
     let Some(urls) = resolve_remote_push_urls(&remote, eff_cwd, ctx) else {
         return card(format!("unrecorded remote URL '{remote}'"));
@@ -154,10 +88,10 @@ pub(crate) fn classify_push(
         }
     }
 
-    if tags_flag && ctx.policy.protect_tags {
+    if (push_args.tags_flag || push_args.follow_tags_flag) && ctx.policy.protect_tags {
         return card("tag push".into());
     }
-    if all_flag {
+    if push_args.all_flag || push_args.branches_flag {
         return card("pushes all local branches".into());
     }
 
@@ -204,6 +138,9 @@ fn classify_refspec(
     ctx: &GitContext<'_>,
     card: &dyn Fn(String) -> GuardVerdict,
 ) -> GuardVerdict {
+    if rs.contains('*') {
+        return card(format!("glob refspec '{rs}'"));
+    }
     if let Some((src, dst)) = rs.split_once(':') {
         if dst.is_empty() {
             return card(format!("ambiguous ref '{rs}'"));
@@ -264,6 +201,9 @@ fn check_target_ref(
     ctx: &GitContext<'_>,
     card: &dyn Fn(String) -> GuardVerdict,
 ) -> GuardVerdict {
+    if dst.contains('*') {
+        return card(format!("glob refspec '{dst}'"));
+    }
     if is_tag || dst.starts_with("refs/tags/") {
         return if ctx.policy.protect_tags {
             card("tag push".into())

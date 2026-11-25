@@ -184,10 +184,12 @@ fn check_containment(
 /// Fast path check for non-push `git` invocations: no ledger I/O when `true`.
 pub(crate) fn is_fast_path(args: &[String], ctx: &GitContext<'_>) -> bool {
     let parsed = parse_git_invocation(args);
-    if parsed
-        .c_configs
-        .iter()
-        .any(|(k, _)| k.eq_ignore_ascii_case("core.hooksPath"))
+    if parsed.exec_path_override
+        || parsed.unknown_global_opt.is_some()
+        || parsed
+            .c_configs
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("core.hooksPath"))
     {
         return false;
     }
@@ -237,25 +239,31 @@ pub(crate) fn classify_git(
     loop {
         let parsed = parse_git_invocation(&cur_args);
         let eff = effective_cwd(ctx.cwd, &parsed.c_dirs);
-        if let Err(rule) = check_containment(ctx, &parsed, &eff) {
+        let pre_err = check_containment(ctx, &parsed, &eff)
+            .err()
+            .or_else(|| {
+                parsed
+                    .exec_path_override
+                    .then(|| "git exec-path override".into())
+            })
+            .or_else(|| {
+                parsed
+                    .unknown_global_opt
+                    .as_ref()
+                    .map(|opt| format!("unknown git global option ({opt})"))
+            })
+            .or_else(|| {
+                parsed
+                    .c_configs
+                    .iter()
+                    .any(|(k, _)| k.eq_ignore_ascii_case("core.hooksPath"))
+                    .then(|| "git hooksPath tampered".into())
+            });
+        if let Some(rule) = pre_err {
             return (
                 GuardVerdict::Refuse {
                     command: raw_cmd,
                     rule: with_alias(rule, via_alias.as_deref()),
-                },
-                with_git_prefix(&cur_args),
-                eff,
-            );
-        }
-        if parsed
-            .c_configs
-            .iter()
-            .any(|(k, _)| k.eq_ignore_ascii_case("core.hooksPath"))
-        {
-            return (
-                GuardVerdict::Refuse {
-                    command: raw_cmd,
-                    rule: with_alias("git hooksPath tampered".into(), via_alias.as_deref()),
                 },
                 with_git_prefix(&cur_args),
                 eff,

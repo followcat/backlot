@@ -19,21 +19,21 @@ use crate::hook::run_io_with_delay;
 use crate::runners::agy;
 use crate::store;
 
-fn argv(words: &[&str]) -> Vec<String> {
+pub(super) fn argv(words: &[&str]) -> Vec<String> {
     words.iter().map(|s| (*s).to_string()).collect()
 }
 
-struct GitStudio {
-    scratch: crate::cli_testkit::Scratch,
-    env: Env,
-    bare: PathBuf,
-    repo: PathBuf,
-    work: PathBuf,
-    sdir: PathBuf,
-    role_dir: PathBuf,
+pub(super) struct GitStudio {
+    pub scratch: crate::cli_testkit::Scratch,
+    pub env: Env,
+    pub bare: PathBuf,
+    pub repo: PathBuf,
+    pub work: PathBuf,
+    pub sdir: PathBuf,
+    pub role_dir: PathBuf,
 }
 
-fn setup_git_studio(cast_toml: &str) -> GitStudio {
+pub(super) fn setup_git_studio(cast_toml: &str) -> GitStudio {
     let (scratch, mut env) = scratch();
     let bare = scratch.files.join("bare.git");
     let repo = scratch.files.join("repo");
@@ -108,7 +108,7 @@ fn setup_git_studio(cast_toml: &str) -> GitStudio {
     }
 }
 
-fn studio_policy(sdir: &Path) -> PushPolicy {
+pub(super) fn studio_policy(sdir: &Path) -> PushPolicy {
     store::load_state(sdir).unwrap().studio.unwrap().push
 }
 
