@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.5 — 2026-11-25
+
+The lot stays short: only the studio you are in shows everything, and closed seats and done tasks fold into one line each. `Alt+L` jumps to the lot, and backlot is now based on hc-tui v0.1.20.
+
 ### Added
 
 - **`Alt+L` (`[keys] focus_lot`) focuses the lot on its last selectable row.** Pressing `Alt+L` opens/expands the right-hand lot dock (`lot · N`) if hidden or collapsed, focuses it, and scrolls the selection to its last selectable row (e.g. `› tell producer · / actions`) without entering Compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressing `Alt+L` while the lot is already focused jumps to the last row again without toggling the dock closed. Configurable via `[keys] focus_lot` (empty string unbinds), falls through to the focused program under `--plain`, yields to floats, modals, the Call Sheet, and running compose, and appears in the lot header, `?` help, launcher, and docs (`docs/keys.md`, `docs/studio/hollywood.md`, `docs/studio/panel.md`).
