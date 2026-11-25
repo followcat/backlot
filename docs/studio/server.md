@@ -40,6 +40,28 @@ While `backlot-server` is running on a machine:
   `backlot-server` and its session:
   - `"backlot-server is already running (--session backlot); cannot start backlot-stage"`
 
+## Studio operations from a client
+
+A client on another machine (`--server host-a[/backlot]`, `BACKLOT_SERVER`, or `[client]` in
+`~/.config/backlot/config.toml`) starts and ends studios on the hub over the same
+`plugin.backlot.req` -> `plugin.backlot.res` queue as the other person verbs:
+
+- `studio new` sends the cast and the first message as content; the hub parses them and
+  canonicalizes `--repo` against its own filesystem, so a client path is never resolved
+  locally. `studio new --interactive` stays on the machine whose terminal it uses.
+- `studio finish` is the person's verb; the queue's caller is `user`.
+- `studio delete` and `studio prune` are reviewed. Their dry run (also over the queue)
+  returns `{ report, confirm_token }` where `confirm_token = sha256(canonical JSON of the
+  report)`. The commit must carry that token; a missing token refuses with
+  `confirm this from a dry run first`, and a report that changed between review and commit
+  refuses with `the studio changed since you reviewed it; run it again`. `studio restore`
+  needs the token when its dry run would rename the copy.
+- `repos` and `runners` answer from the hub, which is what the New Studio dialog's folder and
+  runner Steps browse and list.
+
+The hub-local CLI keeps writing the ledger directly, with no token. Remote studio *placement*
+(`--remote` on `studio new`) is still Phase 2 and refuses as before.
+
 ## Adopting existing `<core_id>` state
 
 `backlot server adopt` migrates an existing per-core `~/.local/state/backlot/<core_id>/` layout

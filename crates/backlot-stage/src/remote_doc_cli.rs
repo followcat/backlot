@@ -3,23 +3,23 @@
 
 use std::fs;
 use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 
-use backlot_model::event::TaskStateChange;
-use backlot_model::hollywood::HOLLYWOOD;
 use backlot_model::req_wire::ReqAction;
 use backlot_model::summary::Summary;
 use hc_proto::client::Client;
 use hc_proto::doc::DocGetParams;
 use hc_proto::endpoint::{Endpoint, Sys};
 
-use crate::args::{CardCmd, Cmd, Common, HollywoodCmd, TextSource};
+use crate::args::{Cmd, Common, TextSource};
 use crate::cli::{Env, Fail};
 use crate::server_cfg::{self, SERVER_ENV, ServerTarget};
 
 #[path = "remote_doc_fmt.rs"]
 mod remote_doc_fmt;
 
+pub(crate) use remote_doc_fmt::format_ack_json;
 pub use remote_doc_fmt::{format_ack, format_hollywood_setup};
 
 /// Exact user-facing refusal for commands not yet supported in B1a.
@@ -60,6 +60,30 @@ fn read_text_source(source: &TextSource, stdin: Option<&str>) -> Result<String, 
     Ok(body)
 }
 
+/// A file or `-` for stdin, read on the client — the body travels as
+/// content, never as a path the hub would resolve.
+fn read_body(path: &Path, stdin: Option<&str>, flag: &str) -> Result<String, Fail> {
+    if path == Path::new("-") {
+        return match stdin {
+            Some(s) => Ok(s.to_owned()),
+            None => {
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .map_err(|e| Fail::refused(format!("{flag} -: {e}")))?;
+                Ok(buf)
+            }
+        };
+    }
+    if !path.is_file() {
+        return Err(Fail::usage(format!(
+            "{flag}: file not found: {}",
+            path.display()
+        )));
+    }
+    fs::read_to_string(path).map_err(|e| Fail::usage(format!("{flag}: {e}")))
+}
+
 fn check_user_caller(common: &Common, env: &Env) -> Result<(), Fail> {
     let role = common
         .role
@@ -97,6 +121,14 @@ fn with_studio(
     }
 }
 
+#[path = "remote_doc_exec.rs"]
+mod remote_doc_exec;
+#[path = "remote_doc_map.rs"]
+mod remote_doc_map;
+
+pub(crate) use remote_doc_exec::execute_client_with;
+pub use remote_doc_exec::{execute_client_confirmed, execute_plan};
+
 /// Convert a CLI `Cmd` into a [`MappedCmd`] without touching network I/O.
 pub fn map_cmd(
     common: &Common,
@@ -104,150 +136,19 @@ pub fn map_cmd(
     env: &Env,
     stdin: Option<&str>,
 ) -> Result<MappedCmd, Fail> {
-    if !matches!(cmd, Cmd::Card(CardCmd::Show { .. })) {
-        if matches!(cmd, Cmd::Recast { .. }) && env.get("BACKLOT_ROLE").is_some() {
-            return Err(Fail::refused(
-                "a recast is the user's — BACKLOT_ROLE is set",
-            ));
-        }
-        check_user_caller(common, env)?;
-    }
-    let mapped = match cmd {
-        Cmd::Tell { role, source } => {
-            let (role, text) = (role.clone(), read_text_source(source, stdin)?);
-            with_studio(common, env, move |studio| ReqAction::Tell {
-                studio,
-                role,
-                text,
-            })
-        }
-        Cmd::TellHollywood { text } => MappedCmd::Action(ReqAction::TellHollywood {
-            text: text.clone(),
-            answers: Vec::new(),
-        }),
-        Cmd::Card(CardCmd::Show { id }) => MappedCmd::Action(ReqAction::CardShow { id: *id }),
-        Cmd::Card(CardCmd::Apply { id }) => MappedCmd::Action(ReqAction::CardApply { id: *id }),
-        Cmd::Card(CardCmd::Cancel { id, reason }) => MappedCmd::Action(ReqAction::CardCancel {
-            id: *id,
-            reason: reason.clone(),
-        }),
-        Cmd::AttentionClear { target } => {
-            let target = *target;
-            with_studio(common, env, move |studio| ReqAction::AttentionClear {
-                studio,
-                target,
-            })
-        }
-        Cmd::Recast {
-            person,
-            runner,
-            model,
-            effort,
-            permission_profile,
-            reason,
-        } => {
-            let (p, r, m, e, pp, re) = (
-                person.clone(),
-                runner.clone(),
-                model.clone(),
-                effort.clone(),
-                permission_profile.clone(),
-                reason.clone(),
-            );
-            with_studio(common, env, move |studio| ReqAction::Recast {
-                studio,
-                person: p,
-                runner: r,
-                model: m,
-                effort: e,
-                permission_profile: pp,
-                reason: re,
-            })
-        }
-        Cmd::Restart {
-            person,
-            fresh,
-            reason,
-        } => {
-            let (person, fresh, reason) = (person.clone(), *fresh, reason.clone());
-            if person == HOLLYWOOD {
-                MappedCmd::Action(ReqAction::Restart {
-                    studio: None,
-                    person,
-                    fresh,
-                    reason,
-                })
-            } else {
-                with_studio(common, env, move |studio| ReqAction::Restart {
-                    studio: Some(studio),
-                    person,
-                    fresh,
-                    reason,
-                })
-            }
-        }
-        Cmd::Close { person } => {
-            let person = person.clone();
-            with_studio(common, env, move |studio| ReqAction::Close {
-                studio,
-                person,
-            })
-        }
-        Cmd::Reopen { person } => {
-            let person = person.clone();
-            with_studio(common, env, move |studio| ReqAction::Reopen {
-                studio,
-                person,
-            })
-        }
-        Cmd::Priority { level } => {
-            let (task, level) = (task_pin(common, env)?, *level);
-            with_studio(common, env, move |studio| ReqAction::TaskPriority {
-                studio,
-                task,
-                level,
-            })
-        }
-        Cmd::TaskState { change, reason } => map_task_state(common, env, *change, reason)?,
-        Cmd::Hollywood(HollywoodCmd::Setup { cfg }) => {
-            MappedCmd::Action(ReqAction::HollywoodSetup {
-                runner: cfg.runner.clone(),
-                model: cfg.model.clone(),
-                effort: cfg.effort.clone(),
-                key: cfg.key.clone(),
-                default_cast: cfg.default_cast.clone(),
-            })
-        }
-        _ => MappedCmd::Unsupported,
-    };
-    Ok(mapped)
+    remote_doc_map::map(common, cmd, env, stdin)
 }
 
-fn map_task_state(
-    common: &Common,
-    env: &Env,
-    change: TaskStateChange,
-    reason: &str,
-) -> Result<MappedCmd, Fail> {
-    let (task, reason) = (task_pin(common, env)?, reason.to_owned());
-    Ok(match change {
-        TaskStateChange::Paused => with_studio(common, env, move |s| ReqAction::TaskPause {
-            studio: s,
-            task,
-            reason,
-        }),
-        TaskStateChange::Resumed => with_studio(common, env, move |s| ReqAction::TaskResume {
-            studio: s,
-            task,
-            reason,
-        }),
-        TaskStateChange::Abandoned => with_studio(common, env, move |s| ReqAction::TaskAbandon {
-            studio: s,
-            task,
-            reason,
-        }),
-        TaskStateChange::TakenOver | TaskStateChange::Blocked => MappedCmd::Unsupported,
-    })
+/// Whether the command's output is its `--json` document.
+pub fn wants_json(cmd: &Cmd) -> bool {
+    match cmd {
+        Cmd::StudioPrune { json, .. }
+        | Cmd::StudioDelete { json, .. }
+        | Cmd::StudioRestore { json, .. }
+        | Cmd::Repos { json, .. }
+        | Cmd::Runners { json } => *json,
+        _ => false,
+    }
 }
 
 /// Send `action` on an already-connected `Client` and format the reply.
@@ -257,10 +158,8 @@ pub async fn execute_client(
     action: &ReqAction,
     timeout: Duration,
 ) -> Result<String, Fail> {
-    let ack = crate::doc_client::send_request(client, endpoint, action, None, timeout).await?;
-    format_ack(action, ack)
+    execute_client_with(client, endpoint, action, timeout, false).await
 }
-
 async fn resolve_remote_studio(client: &Client) -> Result<String, Fail> {
     let doc = client
         .doc_get(DocGetParams {
@@ -292,6 +191,7 @@ pub(crate) fn run(
     if matches!(mapped, MappedCmd::Unsupported) {
         return Err(Fail::refused(ERR_NOT_AVAILABLE));
     }
+    let json = wants_json(cmd);
     let proto_env = crate::link::endpoint_env(env);
     let endpoint = server_cfg::resolve_endpoint_with(target, &proto_env, &Sys, None, None)
         .map_err(|e| Fail::refused(format!("cannot resolve server endpoint: {e}")))?;
@@ -305,7 +205,7 @@ pub(crate) fn run(
             MappedCmd::NeedsStudio(make) => make(resolve_remote_studio(&client).await?),
             MappedCmd::Unsupported => unreachable!(),
         };
-        execute_client(&client, Some(&endpoint), &action, DEFAULT_ACK_TIMEOUT).await
+        execute_client_with(&client, Some(&endpoint), &action, DEFAULT_ACK_TIMEOUT, json).await
     })
 }
 

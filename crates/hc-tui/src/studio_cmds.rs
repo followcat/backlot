@@ -154,8 +154,9 @@ pub(crate) fn recast(
     a
 }
 
-/// `studio prune <studio>` (L7) — after its `--dry-run` plan.
-pub(crate) fn prune(key: &StudioKey) -> Action {
+/// `studio prune <studio>` (L7) — after its `--dry-run` plan. On a
+/// server the dialog's reviewed `token` rides along.
+pub(crate) fn prune(key: &StudioKey, token: Option<&str>) -> Action {
     let mut a = action(
         format!("pruning {}", key.id),
         format!("pruned work areas of {}", key.id),
@@ -167,7 +168,17 @@ pub(crate) fn prune(key: &StudioKey) -> Action {
         .into_iter()
         .map(str::to_owned)
         .collect();
+    push_token(&mut a.argv, token);
     a
+}
+
+/// A reviewed plan's token — a server-only hidden flag the queue path
+/// strips and a local run never carries.
+fn push_token(argv: &mut Vec<String>, token: Option<&str>) {
+    if let Some(token) = token {
+        argv.push("--confirm-token".into());
+        argv.push(token.to_owned());
+    }
 }
 
 /// `reopen --person <role>` (§4).
@@ -450,12 +461,24 @@ pub(crate) fn tell_hollywood(text: &str) -> Action {
 /// `hollywood show <seq>` — full report body or message text, opened
 /// in the read-only `CardView`.
 pub(crate) fn hollywood_show(seq: u64) -> Action {
+    hollywood_exchange(seq, false)
+}
+
+/// One Hollywood exchange entry in the read-only `CardView`: a report
+/// or message reads `hollywood show <seq>`, a card line `card show
+/// c<seq>`. Both keep the same `hollywood #{seq}` name and mark so the
+/// Reader's sibling stepping walks the whole conversation.
+pub(crate) fn hollywood_exchange(seq: u64, card: bool) -> Action {
     Action {
         label: format!("reading #{seq}"),
         done: format!("read #{seq}"),
         name: format!("hollywood #{seq}"),
         mark: mark::hollywood_entry(seq),
-        argv: plain_argv(&["hollywood".into(), "show".into(), seq.to_string()]),
+        argv: if card {
+            plain_argv(&["card".into(), "show".into(), format!("c{seq}")])
+        } else {
+            plain_argv(&["hollywood".into(), "show".into(), seq.to_string()])
+        },
         machine: None,
         stdin: None,
         view: true,
@@ -515,6 +538,7 @@ pub(crate) fn restore(
     archived: &str,
     name: &str,
     dry_run: bool,
+    token: Option<&str>,
 ) -> Action {
     let mut argv = vec![
         "studio".into(),
@@ -527,6 +551,7 @@ pub(crate) fn restore(
         argv.push("--dry-run".into());
     }
     argv.extend(["--as".into(), "user".into()]);
+    push_token(&mut argv, token);
     Action {
         label: format!("restoring {archived}"),
         done: format!("restored {archived}"),
@@ -539,7 +564,7 @@ pub(crate) fn restore(
     }
 }
 
-pub(crate) fn delete_studio(key: &StudioKey, force: bool) -> Action {
+pub(crate) fn delete_studio(key: &StudioKey, force: bool, token: Option<&str>) -> Action {
     let mut a = action(
         format!("deleting {}", key.id),
         format!("deleted studio {}", key.id),
@@ -552,5 +577,6 @@ pub(crate) fn delete_studio(key: &StudioKey, force: bool) -> Action {
         .chain(force.then_some("--force"))
         .map(str::to_owned)
         .collect();
+    push_token(&mut a.argv, token);
     a
 }

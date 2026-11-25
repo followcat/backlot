@@ -72,7 +72,11 @@ pub struct StudioSummary {
     pub mode: StudioMode,
     /// Delivered tasks still awaiting a review.
     pub open_reviews: u32,
-    /// Open attention records — what is waiting on a person.
+    /// Open attentions that wait on a person — every class but `info`.
+    /// The stage's own `info` bookkeeping (an `outward action` refusal
+    /// the role moved past, the cursor/XDG/hooks notes) shows on the
+    /// role's record but never counts here, in the header's `!n` or the
+    /// lot's studio count.
     pub waiting: u32,
     /// The stage's last error for this studio — an unreadable ledger
     /// or a failed pass — while it stays broken.
@@ -611,7 +615,13 @@ pub fn summary_with_running(
                 .values()
                 .filter(|t| t.status == TaskStatus::Delivered)
                 .count() as u32,
-            waiting: state.open_attention().count() as u32,
+            // `info` is the stage's own bookkeeping — it shows on the
+            // role's record but never counts as something the person
+            // must act on.
+            waiting: state
+                .open_attention()
+                .filter(|a| AttentionClass::of(&a.reason, a.needs_user) != AttentionClass::Info)
+                .count() as u32,
             error,
             next: crate::steps::next_steps(state)
                 .first()

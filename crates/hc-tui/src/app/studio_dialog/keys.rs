@@ -48,6 +48,18 @@ impl App {
                     }
                     return;
                 }
+                // A stale server plan offers a re-review: Enter/`y`/`r`
+                // run the dry run again instead of the commit.
+                if d.error.is_some() {
+                    match combo.code {
+                        KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('r') => {
+                            self.confirm_review(&d.for_);
+                        }
+                        KeyCode::Esc => {}
+                        _ => self.studio_dialog = Some(StudioDialog::Confirm(d)),
+                    }
+                    return;
+                }
                 self.studio_dialog = None;
                 match combo.code {
                     KeyCode::Enter | KeyCode::Char('y') if combo.modifiers.is_empty() => {
@@ -109,19 +121,34 @@ impl App {
             ConfirmFor::DirOverride { key, role, allow } => {
                 self.run_action(studio_cmds::decide(key, role, *allow));
             }
-            ConfirmFor::DeleteStudio { key, force, kept } => {
+            ConfirmFor::DeleteStudio {
+                key,
+                force,
+                kept,
+                token,
+            } => {
                 if !*force && !kept.is_empty() {
                     self.studio_dialog = Some(StudioDialog::delete_studio_force(key, kept));
                 } else {
-                    self.run_action(studio_cmds::delete_studio(key, *force));
+                    self.run_action(studio_cmds::delete_studio(key, *force, token.as_deref()));
                 }
             }
             ConfirmFor::FinishEmpty { key } => {
                 self.run_action(studio_cmds::finish_force(key));
             }
-            ConfirmFor::Prune { key } => {
-                self.run_action(studio_cmds::prune(key));
+            ConfirmFor::Prune { key, token } => {
+                self.run_action(studio_cmds::prune(key, token.as_deref()));
             }
+        }
+    }
+
+    /// The stale-plan review: open the destructive dialog again, which
+    /// fetches a fresh dry run and a fresh token.
+    fn confirm_review(&mut self, for_: &ConfirmFor) {
+        match for_ {
+            ConfirmFor::DeleteStudio { key, .. } => self.delete_studio_open(key),
+            ConfirmFor::Prune { key, .. } => self.prune_open(key),
+            _ => {}
         }
     }
 
@@ -300,6 +327,8 @@ impl App {
                 Some(StudioDialog::Confirm(d)) => {
                     if d.loading {
                         self.studio_dialog = Some(StudioDialog::Confirm(d));
+                    } else if d.error.is_some() {
+                        self.confirm_review(&d.for_);
                     } else {
                         self.confirm_submit(&d.for_);
                     }
@@ -327,7 +356,9 @@ impl App {
                         self.studio_dialog = self.restore_dry_run(d);
                     }
                     crate::studio_dialog::RestoreStep::Confirm => {
-                        if !d.loading && d.error.is_none() {
+                        if d.error.is_some() {
+                            self.studio_dialog = self.restore_dry_run(d);
+                        } else if !d.loading {
                             self.restore_apply(&d);
                         } else {
                             self.studio_dialog = Some(StudioDialog::Restore(d));

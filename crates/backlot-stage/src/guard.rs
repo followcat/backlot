@@ -144,7 +144,9 @@ enum Skip {
 }
 
 /// Append `role.refused` and (for `Refused` only, once per open episode) raise an
-/// `outward action` attention (`needs_user: true`) in the studio ledger.
+/// informational `outward action` attention (`needs_user: false`) in the studio
+/// ledger: the role was told to `backlot ask` if it still needs the command, so
+/// nothing waits on the person.
 pub(crate) fn record_verdict(
     env: &Env,
     cwd: &Path,
@@ -206,7 +208,7 @@ pub(crate) fn record_verdict(
                     role: role_s,
                     reason: OUTWARD_ACTION.into(),
                     detail,
-                    needs_user: true,
+                    needs_user: false,
                 },
             ),
             files: Vec::new(),

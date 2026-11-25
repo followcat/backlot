@@ -18,6 +18,9 @@ use crate::testcore;
 pub(super) struct MemDocs {
     pub(super) docs: BTreeMap<String, (u64, Value)>,
     pub(super) auto_ack: Option<ResAck>,
+    /// Scripted acks per request `kind`, popped one per `doc.set` —
+    /// a destructive commit's dry run and commit are two of a kind.
+    pub(super) by_kind: BTreeMap<String, std::collections::VecDeque<ResAck>>,
 }
 
 pub(super) fn catalog_json(configured: bool) -> Value {
@@ -93,18 +96,30 @@ fn handle_rpc_req(store: &Mutex<MemDocs>, req: &Value) -> Result<Value, Value> {
                 && let Ok(req_doc) = serde_json::from_value::<ReqDoc>(val)
                 && let Some(last) = req_doc.queue.last()
                 && let Ok(env) = serde_json::from_value::<ReqEnvelope>(last.clone())
-                && let Some(mut ack) = st.auto_ack.take()
             {
-                ack.req_id = env.req_id;
-                let res_doc = ResDoc {
-                    schema: RES_SCHEMA.into(),
-                    acks: vec![ack],
-                };
-                let rv = st.docs.get(RES_DOC_NAME).map(|(v, _)| *v).unwrap_or(0) + 1;
-                st.docs.insert(
-                    RES_DOC_NAME.into(),
-                    (rv, serde_json::to_value(res_doc).unwrap()),
-                );
+                let kind = env
+                    .action
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned();
+                let mut ack = st
+                    .by_kind
+                    .get_mut(&kind)
+                    .and_then(std::collections::VecDeque::pop_front)
+                    .or_else(|| st.auto_ack.take());
+                if let Some(ack) = ack.as_mut() {
+                    ack.req_id = env.req_id;
+                    let res_doc = ResDoc {
+                        schema: RES_SCHEMA.into(),
+                        acks: vec![ack.clone()],
+                    };
+                    let rv = st.docs.get(RES_DOC_NAME).map(|(v, _)| *v).unwrap_or(0) + 1;
+                    st.docs.insert(
+                        RES_DOC_NAME.into(),
+                        (rv, serde_json::to_value(res_doc).unwrap()),
+                    );
+                }
             }
             Ok(json!({ "version": new_ver }))
         }

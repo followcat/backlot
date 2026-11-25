@@ -494,6 +494,205 @@ fn the_live_row_draws_under_the_user_line() {
     );
 }
 
+/// A card Hollywood proposed after the person's line draws as a talk
+/// line under it, and the idle live row under that line names the
+/// missing answer.
+#[test]
+fn a_card_line_draws_and_the_idle_row_names_the_missing_answer() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 8, "who": "user", "text": "recast the producer and the director" },
+        { "seq": 9, "who": "hollywood", "kind": "card",
+          "text": "proposed card c3 · acme-shop · pause t1" },
+    ]);
+    value["hollywood"]["work"] = "waiting".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let rows = lines(&buf, area);
+    let card = rows
+        .iter()
+        .position(|l| l.contains("proposed card c3 · acme-shop · pause t1"))
+        .expect("the card line");
+    assert!(rows[card].trim_start().starts_with('✦'), "{rows:?}");
+    assert!(
+        rows[card - 1].contains("user › recast the producer and the director"),
+        "the card sits under the person's line: {rows:?}"
+    );
+    // The card ends the live row, and the idle-Hollywood line shows on
+    // a later unanswered tell only; here the card answered it.
+    assert!(
+        !rows
+            .iter()
+            .any(|l| l.contains("hollywood is idle and has not answered")),
+        "no idle row after a card: {rows:?}"
+    );
+}
+
+/// An unanswered `user ›` line under an idle Hollywood draws the idle
+/// live row word.
+#[test]
+fn an_idle_unanswered_line_draws_the_idle_row() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    value["hollywood"]["work"] = "waiting".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("hollywood is idle and has not answered · open ↵"),
+        "{text}"
+    );
+}
+
+/// A tweet-sized long report from Hollywood over the person's line:
+/// its point sits at the end, past a single band row.
+fn long_report_summary() -> Summary {
+    let long = "the producer of acme-shop has stopped at its prompt and will not deliver until you \
+                answer; there is only one of you and the lot is busy, so choose 1 to keep waiting \
+                or 2 to recast the producer onto a fresh identity now";
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "status?" },
+        { "seq": 2, "who": "hollywood", "text": long },
+    ]);
+    serde_json::from_value(value).unwrap()
+}
+
+/// The newest Hollywood line wraps to a few rows (its end survives);
+/// every other line stays one row.
+#[test]
+fn the_newest_report_wraps_and_an_older_one_does_not() {
+    let summary = long_report_summary();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 80, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let rows = lines(&buf, area);
+    let first = rows
+        .iter()
+        .position(|l| l.contains("✦ the producer of acme-shop"))
+        .expect("the wrap's first row");
+    // The point at the end ("choose 1 … recast … now") survives across
+    // the wrapped rows.
+    let joined = rows[first..].join(" ");
+    assert!(joined.contains("choose 1"), "{rows:?}");
+    assert!(joined.contains("now"), "{rows:?}");
+    // The person's line is still one row.
+    let user = rows
+        .iter()
+        .position(|l| l.contains("user › status?"))
+        .expect("the user line");
+    assert!(!rows[user + 1].contains("status?"));
+}
+
+/// A short band gives the wrap back — down to one row — before it
+/// drops a waiting row.
+#[test]
+fn a_short_band_gives_the_wrap_back_before_dropping_a_wait() {
+    use crate::hollywood::plan::Plan;
+    // Two waiting rows, three talk lines and a four-row wrap on the
+    // newest one (wrap = 3 extra rows). Details, hints and sprockets are
+    // already gone, so only the wrap, the talk lines and the waiting
+    // window can give rows back.
+    let base = || Plan {
+        top_sprocket: false,
+        title: true,
+        blank_1: false,
+        frames_h: 1,
+        blank_2: false,
+        headline: false,
+        details: vec![false, false],
+        shown: 2,
+        talk: 3,
+        wrap_seq: Some(6),
+        wrap_keep: 1,
+        wrap: 3,
+        live: false,
+        tail_rows: 1,
+        hints: false,
+        bottom_sprocket: false,
+    };
+    // Full height: the whole wrap shows and both waiting rows survive.
+    let mut full = base();
+    let full_h = full.height();
+    crate::hollywood::plan::fit(&mut full, full_h, 30, None);
+    assert_eq!(full.wrap, 3, "the whole wrap at full height");
+    assert_eq!(full.shown, 2, "both waiting rows at full height");
+
+    // One row short: the wrap gives one row back, both waits stay.
+    let mut short = base();
+    crate::hollywood::plan::fit(&mut short, full_h - 1, 30, None);
+    assert_eq!(short.wrap, 2, "the wrap gave a row back first");
+    assert_eq!(short.shown, 2, "no waiting row dropped yet");
+
+    // Short enough that the wrap is one row: the waits still hold.
+    let mut one = base();
+    crate::hollywood::plan::fit(&mut one, full_h - 3, 30, None);
+    assert_eq!(one.wrap, 0, "the wrap is back to one row");
+    assert_eq!(one.shown, 2, "the waits still hold at the one-row wrap");
+
+    // Only once the wrap is gone do older talk lines leave, and a
+    // waiting row leaves last.
+    let mut dropped = base();
+    crate::hollywood::plan::fit(&mut dropped, full_h - 4, 30, None);
+    assert_eq!(dropped.wrap, 0);
+    assert_eq!(dropped.talk, 2, "an older talk line leaves before a wait");
+    assert_eq!(dropped.shown, 2, "the waiting rows hold");
+}
+
+/// At a narrow/mobile width the wrap still applies, capped at two
+/// rows, and every older line stays one row.
+#[test]
+fn a_mobile_band_wraps_the_newest_line_at_two_rows() {
+    let summary = long_report_summary();
+    let area = Rect::new(0, 0, 60, 30);
+    let list = machines(Some(&summary));
+    let status: &crate::hollywood::sheet::Status = &stage_up;
+    let (waits, rows) = crate::hollywood::band_rows(&list, status, true);
+    let hollywood = layer(LayerMode::Expanded);
+    let plan = crate::hollywood::plan::plan(
+        area,
+        &waits,
+        &rows,
+        &hollywood,
+        LayerOpts {
+            agent: true,
+            mobile: true,
+            ..LayerOpts::default()
+        },
+    );
+    assert_eq!(
+        plan.wrap_rows(),
+        1,
+        "the mobile wrap caps at two rows, so one extra row"
+    );
+}
+
 /// A selected Hollywood prompt row names the answers it takes — the
 /// same `y/d answer` and `p peek` a studio prompt rows carries.
 #[test]

@@ -1205,7 +1205,7 @@ async fn question_and_outward_action_on_same_role_do_not_clear_each_other() {
 
     assert_eq!(
         AttentionClass::of(OUTWARD_ACTION, false),
-        AttentionClass::NeedsYou
+        AttentionClass::Info
     );
     assert_eq!(
         AttentionClass::of(OUTWARD_ACTION, true),
@@ -1226,7 +1226,7 @@ async fn question_and_outward_action_on_same_role_do_not_clear_each_other() {
                     role: "actor-t1-c1".into(),
                     reason: OUTWARD_ACTION.into(),
                     detail: "git push origin main".into(),
-                    needs_user: true,
+                    needs_user: false,
                 },
             ),
             files: Vec::new(),

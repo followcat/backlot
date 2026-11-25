@@ -548,22 +548,101 @@ fn hollywood_section_populates_exchange_and_card_metadata() {
     assert_eq!(s.cards.len(), 1);
     assert_eq!(s.cards[0].ts_ms, Some(1000));
 
-    assert_eq!(s.exchange.len(), 3);
-    assert_eq!(s.exchange[0].to.as_deref(), Some("hollywood"));
-    assert_eq!(s.exchange[0].kind.as_deref(), Some("tell"));
-    assert_eq!(s.exchange[0].task, None);
-    assert_eq!(s.exchange[0].ts_ms, Some(2000));
-
-    assert_eq!(s.exchange[1].to.as_deref(), Some("user"));
-    assert_eq!(s.exchange[1].kind.as_deref(), Some("report"));
+    // The card Hollywood proposed (#1) leads the talk, then the tell
+    // and the report.
+    assert_eq!(s.exchange.len(), 4);
+    assert_eq!(s.exchange[0].who, "hollywood");
+    assert_eq!(s.exchange[0].kind.as_deref(), Some("card"));
+    assert_eq!(
+        s.exchange[0].text,
+        "proposed card c1 · acme-shop · pause t1"
+    );
+    assert_eq!(s.exchange[1].to.as_deref(), Some("hollywood"));
+    assert_eq!(s.exchange[1].kind.as_deref(), Some("tell"));
     assert_eq!(s.exchange[1].task, None);
-    assert_eq!(s.exchange[1].ts_ms, Some(3000));
+    assert_eq!(s.exchange[1].ts_ms, Some(2000));
 
-    assert_eq!(s.exchange[2].ts_ms, None);
+    assert_eq!(s.exchange[2].to.as_deref(), Some("user"));
+    assert_eq!(s.exchange[2].kind.as_deref(), Some("report"));
+    assert_eq!(s.exchange[2].task, None);
+    assert_eq!(s.exchange[2].ts_ms, Some(3000));
+
+    assert_eq!(s.exchange[3].ts_ms, None);
 
     let v = serde_json::to_value(&s).unwrap();
-    assert!(v["exchange"][0].get("task").is_none());
     assert!(v["exchange"][1].get("task").is_none());
-    assert!(v["exchange"][2].get("ts_ms").is_none());
+    assert!(v["exchange"][2].get("task").is_none());
+    assert!(v["exchange"][3].get("ts_ms").is_none());
     assert_eq!(v["cards"][0]["ts_ms"], 1000);
+}
+
+/// Hollywood's own `card.proposed` lines join the exchange — `who` is
+/// `hollywood`, `kind` is `card`, and the text names the card and its
+/// action in the CARD row's words. A card the stage proposed (an
+/// `Outward` card) is not Hollywood's word and never draws a line.
+#[test]
+fn the_exchange_carries_hollywood_s_own_cards_only() {
+    let mut state = HollywoodState::default();
+    // #1: a card Hollywood proposed (a pause).
+    apply(&mut state, &hev(1, "hollywood", hpropose("t1")));
+    // #2: the person's line that asked for it.
+    apply(
+        &mut state,
+        &hev(
+            2,
+            "user",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: Some("recast producer and director".into()),
+                file: None,
+                source_seq: None,
+            },
+        ),
+    );
+    // #3: a card the stage proposed (an outward push) — not Hollywood's.
+    apply(
+        &mut state,
+        &hev(
+            3,
+            "stage",
+            HollywoodKind::CardProposed {
+                action: CardAction::Outward {
+                    studio: "acme-shop".into(),
+                    role: "actor-a".into(),
+                    source_seq: 9,
+                    argv: vec!["git".into(), "push".into(), "origin".into(), "HEAD".into()],
+                    cwd: "/home/user/work".into(),
+                    repo: "repo-a".into(),
+                    remote_url: "git@host-a:acme/repo-a.git".into(),
+                    rule: "recorded".into(),
+                    commits: Vec::new(),
+                    commits_total: 0,
+                },
+                why: "the actor asked".into(),
+                base: CardBase::StudioAbsent,
+            },
+        ),
+    );
+    let s = hollywood_section(&state, "live", None, None, None);
+    let lines: Vec<(&str, Option<&str>, &str)> = s
+        .exchange
+        .iter()
+        .map(|e| (e.who.as_str(), e.kind.as_deref(), e.text.as_str()))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            (
+                "hollywood",
+                Some("card"),
+                "proposed card c1 · acme-shop · pause t1"
+            ),
+            ("user", Some("tell"), "recast producer and director"),
+        ],
+        "only Hollywood's card line joins the talk"
+    );
+    // The card line's text carries the same words the CARD row uses.
+    assert_eq!(s.exchange[0].to.as_deref(), Some("user"));
+    assert!(!s.exchange[0].has_body);
 }

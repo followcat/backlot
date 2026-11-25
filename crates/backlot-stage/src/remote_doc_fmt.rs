@@ -2,13 +2,17 @@
 
 use backlot_model::req_results::{
     AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult, CloseResult,
-    HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, TaskPriorityResult,
-    TaskStateResult, TellHollywoodResult, TellResult,
+    HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, StudioFinishResult,
+    StudioNewResult, StudioPlan, TaskPriorityResult, TaskStateResult, TellHollywoodResult,
+    TellResult,
 };
 use backlot_model::req_wire::{ReqAction, ResAck};
 use serde::de::DeserializeOwned;
 
 use crate::cli::Fail;
+use crate::delete::DeleteReport;
+use crate::prune::PruneReport;
+use crate::restore::RestoreReport;
 use crate::{verbs_card_show, verbs_fmt, verbs_hwood};
 
 fn parse_res<T: DeserializeOwned>(ack: &ResAck) -> Result<T, Fail> {
@@ -29,8 +33,23 @@ pub fn format_hollywood_setup(r: &HollywoodSetupResult) -> String {
     format!("[hollywood] {} ({} {}){note}", r.action, r.runner, r.model)
 }
 
+/// A destructive verb's dry-run report, unwrapped from its plan.
+fn report<T: DeserializeOwned>(ack: &ResAck, dry_run: bool) -> Result<T, Fail> {
+    if dry_run {
+        Ok(parse_res::<StudioPlan<T>>(ack)?.report)
+    } else {
+        parse_res::<T>(ack)
+    }
+}
+
 /// Format a positive (`ok == true`) or negative (`ok == false`) `ResAck`.
 pub fn format_ack(action: &ReqAction, ack: ResAck) -> Result<String, Fail> {
+    format_ack_json(action, ack, false)
+}
+
+/// The same, printing a command's `--json` document when it asked for
+/// one.
+pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<String, Fail> {
     if !ack.ok {
         let msg = ack
             .error
@@ -72,6 +91,44 @@ pub fn format_ack(action: &ReqAction, ack: ResAck) -> Result<String, Fail> {
         ReqAction::HollywoodSetup { .. } => {
             format_hollywood_setup(&parse_res::<HollywoodSetupResult>(&ack)?)
         }
+        ReqAction::StudioNew { .. } => {
+            crate::studio_fmt::studio_new(&parse_res::<StudioNewResult>(&ack)?)
+        }
+        ReqAction::StudioFinish { .. } => {
+            crate::studio_fmt::studio_finish(&parse_res::<StudioFinishResult>(&ack)?)
+        }
+        ReqAction::StudioPrune { dry_run, .. } => {
+            let r: PruneReport = report(&ack, *dry_run)?;
+            crate::prune_render::format_report(&r, json)?
+        }
+        ReqAction::StudioDelete { dry_run, .. } => {
+            let r: DeleteReport = report(&ack, *dry_run)?;
+            if r.blocked {
+                return Err(Fail::refused(crate::delete_render::format_report(
+                    &r, json,
+                )?));
+            }
+            crate::delete_render::format_report(&r, json)?
+        }
+        ReqAction::StudioRestore { dry_run, .. } => {
+            let r: RestoreReport = report(&ack, *dry_run)?;
+            crate::restore::format_report(&r, json)?
+        }
+        ReqAction::Repos { .. } => {
+            let listing: crate::repos::Listing = parse_res(&ack)?;
+            crate::repos::format_listing(&listing, json)?
+        }
+        ReqAction::Runners => {
+            let rows: Vec<backlot_model::req_wire::RunnerCatalogEntry> = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&rows)
+                    .map_err(|e| Fail::refused(format!("runners: {e}")))?
+            } else {
+                // The hub's HOME is not on the wire; paths stay absolute.
+                crate::runners::detect_report::format_rows(&rows, &crate::cli::Env::default())
+            }
+        }
+        ReqAction::Version => parse_res::<String>(&ack)?,
     };
     Ok(out)
 }

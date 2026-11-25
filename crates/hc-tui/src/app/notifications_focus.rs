@@ -101,7 +101,10 @@ impl App {
             Target::Stage(machine, offline) => {
                 self.studio_notify_stage(&machine, offline);
             }
-            Target::Talk(seq) => self.run_action(crate::studio_cmds::hollywood_show(seq)),
+            Target::Talk(seq) => {
+                let card = self.hollywood_exchange_is_card(seq);
+                self.run_action(crate::studio_cmds::hollywood_exchange(seq, card));
+            }
             Target::Headline => self.hollywood_headline_open(),
             // The remaining targets are not studio events today: a
             // studio frame, the new-studio entry, the title, the calm

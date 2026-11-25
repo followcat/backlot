@@ -905,3 +905,43 @@ fn server_control_is_refused_from_a_role_terminal() {
         Err(other) => panic!("unexpected: {other:?}"),
     }
 }
+
+/// A `tell` to an actor whose task is abandoned is refused with a line
+/// naming the task and its state; one to a still-running actor records.
+#[test]
+fn a_tell_to_an_actor_of_a_done_task_is_refused() {
+    let (scratch, env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let req = fixture(&scratch, "req.md", "# req\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary s --as producer"),
+    );
+    let acc = fixture(&scratch, "acc.md", "# acc\n");
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+    ok(
+        &env,
+        "cast --task t1 --actor actor-a --reason strongest --as director",
+    );
+    let note = fixture(&scratch, "note.md", "how is it going?\n");
+
+    // While t1 runs, the tell records fine.
+    let out = ok(&env, &format!("tell actor-t1-c1 --file {note} --as user"));
+    assert!(out.contains("message.queued"), "{out}");
+
+    // Abandon t1: a later tell to its actor is refused.
+    ok(
+        &env,
+        "task abandon --task t1 --reason dropped --as director",
+    );
+    let m = refused(&env, &format!("tell actor-t1-c1 --file {note} --as user"));
+    assert!(m.contains("t1"), "{m}");
+    assert!(m.contains("Abandoned"), "{m}");
+}

@@ -371,12 +371,20 @@ impl App {
         if entry.shape() == new_studio::PathShape::Plain {
             argv.push(if d.no_git { "--no-git" } else { "--init" }.into());
         }
-        // The first message: written to a temp file on the target
-        // machine, then passed as `--ask-file`. A remote machine
-        // gets `/tmp` — this host's `TMPDIR` means nothing there.
+        // The first message: on a server it travels as content (the
+        // request queue has no client temp path); otherwise it is
+        // written to a temp file on the target machine and passed as
+        // `--ask-file`. A remote machine gets `/tmp` — this host's
+        // `TMPDIR` means nothing there.
         let ask = {
             let text = d.build_text();
             if text.is_empty() {
+                None
+            } else if self.server_mode() && d.machine_name().is_none() {
+                argv.push(crate::server_action::ASK_FLAG.into());
+                argv.push(crate::selection::base64_encode(
+                    format!("{text}\n").as_bytes(),
+                ));
                 None
             } else {
                 let dir = match d.machine_name() {
@@ -557,10 +565,13 @@ impl App {
         let write = self.ns_ask_writer(&call);
         let run = self.ns_runner();
         let tx = self.ns_tx.clone();
+        // On the hub the queue's server is the stage already: there is
+        // no separate `stage start` to run.
+        let server_local = self.server_mode() && call.machine.is_none();
         let Some(d) = &mut self.new_studio else {
             return;
         };
-        let start_stage = d.start_stage;
+        let start_stage = d.start_stage && !server_local;
         let id = d.id.as_str().to_string();
         d.creating = true;
         d.create_gen += 1;

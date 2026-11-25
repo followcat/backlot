@@ -175,7 +175,7 @@ fn a_prune_issues_its_git_through_the_driver() {
         }
     });
     let driver = LocalDriver::with_git(git);
-    crate::prune::run_with(&driver, &root, Some("acme".into()), false, true, false).unwrap();
+    crate::prune::report_with(&driver, &root, Some("acme".into()), false, true, false).unwrap();
     let seen = recorded.lock().unwrap();
     assert!(
         seen.iter()

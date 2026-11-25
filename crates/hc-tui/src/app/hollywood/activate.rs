@@ -95,13 +95,24 @@ impl App {
             }
             Some(Target::Headline) => self.hollywood_headline_open(),
             Some(Target::Talk(seq)) => {
-                self.run_action(crate::studio_cmds::hollywood_show(seq));
+                let card = self.hollywood_exchange_is_card(seq);
+                self.run_action(crate::studio_cmds::hollywood_exchange(seq, card));
             }
             // U7's setup line: the in-TUI dialog — runner/model/
             // effort pickers, the write through `hollywood setup`.
             Some(Target::Setup) => self.hw_setup_open(),
             _ => {}
         }
+    }
+
+    /// Whether the exchange entry at `seq` is Hollywood's own card
+    /// line (reads `card show`), not a report or message.
+    pub(crate) fn hollywood_exchange_is_card(&self, seq: u64) -> bool {
+        let machines = self.panel_summaries();
+        hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .and_then(|h| h.exchange.iter().find(|e| e.seq == seq))
+            .is_some_and(|e| e.kind.as_deref() == Some("card"))
     }
 
     /// Resolve the ledger `seq` backing `Target::Headline` — prefers
