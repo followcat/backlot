@@ -48,6 +48,16 @@ impl App {
                     self.hollywood_card_cancel(&card);
                 }
             }
+            crossterm::event::KeyCode::Left | crossterm::event::KeyCode::Char('[')
+                if plain && press =>
+            {
+                self.reader_step(-1);
+            }
+            crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char(']')
+                if plain && press =>
+            {
+                self.reader_step(1);
+            }
             crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j')
                 if plain && active =>
             {
@@ -84,13 +94,16 @@ impl App {
         }
     }
 
-    /// The view's mouse: the wheel scrolls, a press outside closes,
-    /// inside is eaten.
+    /// The view's mouse: the wheel scrolls, `◀`/`▶` step siblings,
+    /// beside-dock `Talk` clicks switch in place, other outside clicks close.
     pub(super) fn hollywood_view_mouse(&mut self, mouse: &input::MouseInput) -> bool {
         let Some(hits) = self.hollywood_hits.view.as_ref() else {
             return false;
         };
+        let (area, prev_hit, next_hit, metrics) =
+            (hits.area, hits.prev_hit, hits.next_hit, hits.metrics);
         let point = (mouse.col, mouse.row);
+        let pos = ratatui::layout::Position::from(point);
         use input::{MouseButton, MouseEventKind};
         match mouse.kind {
             MouseEventKind::ScrollUp => {
@@ -99,12 +112,42 @@ impl App {
                 }
             }
             MouseEventKind::ScrollDown => {
-                if let (Some(view), Some(metrics)) = (self.hollywood.view.as_mut(), hits.metrics) {
+                if let (Some(view), Some(metrics)) = (self.hollywood.view.as_mut(), metrics) {
                     view.scroll = (view.scroll + 1).min(metrics.max_offset_from_bottom);
                 }
             }
-            MouseEventKind::Down(MouseButton::Left) if !hits.area.contains(point.into()) => {
-                self.hollywood.view = None;
+            MouseEventKind::Down(MouseButton::Left)
+                if prev_hit.is_some_and(|r| r.contains(pos)) =>
+            {
+                self.reader_step(-1);
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if next_hit.is_some_and(|r| r.contains(pos)) =>
+            {
+                self.reader_step(1);
+            }
+            MouseEventKind::Down(MouseButton::Left) if !area.contains(pos) => {
+                let dock_talk = (self.panel_beside(self.area.0)
+                    && self.sheet.is_none()
+                    && !self.hollywood.expanded()
+                    && self.panel_hits.area.contains(pos))
+                .then(|| {
+                    self.panel_hits.rows.iter().find_map(|(r, t)| {
+                        if r.contains(pos)
+                            && let crate::panel::Target::Talk(key, seq) = t
+                        {
+                            Some((key.clone(), *seq))
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .flatten();
+                if let Some((key, seq)) = dock_talk {
+                    self.reader_switch_dock_talk(&key, seq);
+                } else {
+                    self.hollywood.view = None;
+                }
             }
             _ => {}
         }

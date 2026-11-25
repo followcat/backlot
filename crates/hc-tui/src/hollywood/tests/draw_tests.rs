@@ -965,6 +965,7 @@ fn the_card_view_draws_over_the_layer() {
         title: "c4".into(),
         lines: (0..30).map(|i| format!("draft line {i}")).collect(),
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -986,6 +987,7 @@ fn the_card_view_has_a_complete_border_and_footer() {
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1050,6 +1052,7 @@ fn the_card_views_footer_shows_the_pending_mark() {
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1070,6 +1073,7 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
             "detail line".into(),
         ],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1301,6 +1305,7 @@ fn card_view_cjk_title_places_right_corners_at_exact_right_edge() {
         title: "OUTCOME #188 · acme-shop · 已记录最终需求 v6".into(),
         lines: vec!["ok".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1330,6 +1335,7 @@ fn card_view_wraps_cjk_and_paths_without_ellipsis_and_keeps_kinsoku() {
         title: "wrap check".into(),
         lines: vec![cjk_90.into(), path_90.into()],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
@@ -1378,6 +1384,7 @@ fn card_view_sizes_adaptively_for_short_and_long_notes() {
         title: "OUTCOME #188".into(),
         lines: vec!["line one".into(), "line two".into()],
         scroll: 0,
+        ..CardView::default()
     };
     let mut buf = Buffer::empty(area);
     let short_rendered =
@@ -1393,6 +1400,7 @@ fn card_view_sizes_adaptively_for_short_and_long_notes() {
         title: "REPORT #188".into(),
         lines: (1..=60).map(|i| format!("report line {i}")).collect(),
         scroll: 0,
+        ..CardView::default()
     };
     let mut buf = Buffer::empty(area);
     let long_rendered = crate::hollywood::render_view(&mut buf, area, &long, None, &palettes()[0]);
@@ -1433,6 +1441,7 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
             "```".into(),
         ],
         scroll: 0,
+        ..CardView::default()
     };
     let area = Rect::new(0, 0, 100, 30);
     let mut buf = Buffer::empty(area);
@@ -1478,6 +1487,7 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
             "test result: ok. 18 passed".into(),
         ],
         scroll: 0,
+        ..CardView::default()
     };
     let narrow = Rect::new(0, 0, 60, 24);
     let mut log_buf = Buffer::empty(narrow);
@@ -1506,4 +1516,224 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
         })
         .expect("ok line");
     assert_eq!(log_buf[(log_ren.area.x + 2, ok_y)].fg, palette.green);
+}
+
+#[test]
+fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
+    use crate::hollywood::{ReaderKind, ReaderMeta, ReaderOrigin, age_label};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let now_ms = 10 * 86_400_000;
+    assert_eq!(
+        age_label(Some(now_ms - 5_000), now_ms).as_deref(),
+        Some("now")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 4 * 60_000), now_ms).as_deref(),
+        Some("4m")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 3 * 3_600_000), now_ms).as_deref(),
+        Some("3h")
+    );
+    assert_eq!(
+        age_label(Some(now_ms - 2 * 86_400_000), now_ms).as_deref(),
+        Some("2d")
+    );
+    assert_eq!(age_label(None, now_ms), None);
+
+    let area = Rect::new(0, 0, 100, 16);
+
+    // 1a. Studio Outcome with full metadata & working square mark (yellow).
+    let outcome = CardView {
+        card: None,
+        title: "acme-shop #12".into(),
+        lines: vec!["Build summary".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(12),
+            from: Some("producer".into()),
+            to: Some("user".into()),
+            task: Some("t1".into()),
+            file: Some("reports/12.md".into()),
+            ts_ms: Some(now_ms - 4 * 60_000),
+            role: Some("producer".into()),
+            role_state: Some("working".into()),
+            runner: Some("agy".into()),
+            model: Some("pro".into()),
+            nav_index: Some(3),
+            nav_total: Some(6),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut buf = Buffer::empty(area);
+    let ren = crate::hollywood::render_view_at(&mut buf, area, &outcome, None, palette, now_ms);
+    assert!(ren.prev_hit.is_some(), "◀ hit rect recorded");
+    assert!(ren.next_hit.is_some(), "▶ hit rect recorded");
+    let top_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y);
+    let ctx_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y + 1);
+    assert!(top_row.contains("■ OUTCOME #12 · acme-shop"), "{top_row}");
+    assert!(top_row.contains("◀ 3/6 ▶ · 4m"), "{top_row}");
+    assert!(
+        ctx_row.contains("producer → you · agy · pro · ■ working"),
+        "{ctx_row}"
+    );
+    assert!(ctx_row.contains("t1 · reports/12.md"), "{ctx_row}");
+    assert_eq!(
+        buf[(ren.area.x, ren.area.y + 2)].symbol(),
+        "├",
+        "Row 2 header divider present"
+    );
+    let sq_x = (ren.area.x..ren.area.right())
+        .find(|&x| buf[(x, ren.area.y + 1)].symbol() == "■")
+        .expect("working square mark");
+    assert_eq!(buf[(sq_x, ren.area.y + 1)].fg, palette.yellow);
+
+    // 1b. Legacy studio entry with absent optional fields: no `· ·` or stray `→`.
+    let legacy = CardView {
+        card: None,
+        title: "acme-shop #12".into(),
+        lines: vec!["Legacy body".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Outcome,
+            studio: Some("acme-shop".into()),
+            seq: Some(12),
+            from: Some("producer".into()),
+            file: Some("reports/12.md".into()),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 12),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut lbuf = Buffer::empty(area);
+    let lren = crate::hollywood::render_view_at(&mut lbuf, area, &legacy, None, palette, now_ms);
+    let ltop = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y);
+    let lctx = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y + 1);
+    assert!(ltop.contains("■ OUTCOME #12 · acme-shop"), "{ltop}");
+    assert!(!ltop.contains("◀"), "{ltop}");
+    assert!(lctx.contains("producer"), "{lctx}");
+    assert!(lctx.contains("reports/12.md"), "{lctx}");
+    assert!(!lctx.contains("→"), "no stray arrow: {lctx}");
+    assert!(!lctx.contains("· ·"), "no stray separator: {lctx}");
+    assert!(!lctx.contains("●") && !lctx.contains("○"), "{lctx}");
+
+    // 2. Hollywood report / tell + closed role square mark.
+    let hw = CardView {
+        card: None,
+        title: "hollywood #8".into(),
+        lines: vec!["Digest".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Report,
+            studio: Some("hollywood".into()),
+            seq: Some(8),
+            from: Some("hollywood".into()),
+            to: Some("user".into()),
+            ts_ms: Some(now_ms - 120_000),
+            role_state: Some("closed".into()),
+            runner: Some("claude".into()),
+            model: Some("sonnet".into()),
+            resumable: true,
+            nav_index: Some(2),
+            nav_total: Some(4),
+            origin: ReaderOrigin::HollywoodExchange(8),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut hbuf = Buffer::empty(area);
+    let hren = crate::hollywood::render_view_at(&mut hbuf, area, &hw, None, palette, now_ms);
+    let htop = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y);
+    let hctx = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y + 1);
+    assert!(htop.contains("■ REPORT #8 · hollywood"), "{htop}");
+    assert!(htop.contains("◀ 2/4 ▶ · 2m"), "{htop}");
+    assert!(hctx.contains("□ closed"), "{hctx}");
+    let closed_x = (hren.area.x..hren.area.right())
+        .find(|&x| hbuf[(x, hren.area.y + 1)].symbol() == "□")
+        .expect("closed hollow square mark");
+    assert_eq!(hbuf[(closed_x, hren.area.y + 1)].fg, palette.overlay0);
+
+    // 3. Actionable card (`■ CARD c3 · acme-shop · open`).
+    let card = CardView {
+        card: Some("c3".into()),
+        title: "c3".into(),
+        lines: vec!["Action: pause t2".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Card,
+            studio: Some("acme-shop".into()),
+            machine: Some("host-a".into()),
+            from: Some("hollywood".into()),
+            ts_ms: Some(now_ms - 60_000),
+            card_action: Some("pause t2".into()),
+            card_status: Some("open".into()),
+            nav_index: Some(1),
+            nav_total: Some(2),
+            origin: ReaderOrigin::Card("c3".into()),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut cbuf = Buffer::empty(area);
+    let cren = crate::hollywood::render_view_at(&mut cbuf, area, &card, None, palette, now_ms);
+    let ctop = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y);
+    let cctx = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y + 1);
+    assert!(ctop.contains("■ CARD c3 · acme-shop · open"), "{ctop}");
+    assert!(ctop.contains("◀ 1/2 ▶ · 1m"), "{ctop}");
+    assert!(cctx.contains("hollywood proposes: pause t2"), "{cctx}");
+    assert!(cctx.contains("host-a"), "{cctx}");
+
+    // 4. Task Sheet Check artifact (`■ CHECK · acme-shop`) + loading tag.
+    let check = CardView {
+        card: None,
+        title: "checks/d1-units.txt".into(),
+        lines: vec!["cargo test failed".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Check,
+            studio: Some("acme-shop".into()),
+            task: Some("t1".into()),
+            file: Some("checks/d1-units.txt".into()),
+            check_status: Some("FAIL (exit 1)".into()),
+            nav_index: Some(2),
+            nav_total: Some(3),
+            loading_label: Some("#13".into()),
+            origin: ReaderOrigin::SheetDeliveries(StudioKey::local("acme-shop"), Some("t1".into())),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut kbuf = Buffer::empty(area);
+    let kren = crate::hollywood::render_view_at(&mut kbuf, area, &check, None, palette, now_ms);
+    let ktop = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y);
+    let kctx = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y + 1);
+    assert!(ktop.contains("■ loading #13…"), "{ktop}");
+    assert!(
+        kctx.contains("task t1 · FAIL (exit 1)") && kctx.contains("checks/d1-units.txt"),
+        "{kctx}"
+    );
+
+    // 5. Actor Records (`■ RECORDS · acme-shop`).
+    let records = CardView {
+        card: None,
+        title: "records acme-shop".into(),
+        lines: vec!["task-1 accepted".into()],
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Records,
+            studio: Some("acme-shop".into()),
+            machine: Some("host-a".into()),
+            studio_counts: Some((2, 3, 5)),
+            origin: ReaderOrigin::Records(StudioKey::local("acme-shop")),
+            ..ReaderMeta::default()
+        },
+    };
+    let mut rbuf = Buffer::empty(area);
+    let rren = crate::hollywood::render_view_at(&mut rbuf, area, &records, None, palette, now_ms);
+    let rtop = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y);
+    let rctx = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y + 1);
+    assert!(rtop.contains("■ RECORDS · acme-shop"), "{rtop}");
+    assert!(rtop.contains("host-a"), "{rtop}");
+    assert!(rctx.contains("2/3 tasks · 5 roles"), "{rctx}");
 }

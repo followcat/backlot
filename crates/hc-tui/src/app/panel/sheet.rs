@@ -27,6 +27,7 @@ pub(crate) enum SheetReply {
         epoch: u64,
         view_epoch: u64,
         title: String,
+        meta: Box<crate::hollywood::ReaderMeta>,
         out: Result<String, String>,
     },
 }
@@ -110,56 +111,6 @@ impl App {
         }
     }
 
-    /// `⏎` inside the sheet: the selected line's file streams
-    /// through `backlot report show` — a local studio's run reads
-    /// its own file; a remote studio's runs the same G3 command on
-    /// its machine (S2 §3). On the Deliveries tab only.
-    pub(crate) fn sheet_open_file(&mut self) {
-        let Some(sheet) = self.sheet.as_ref() else {
-            return;
-        };
-        if sheet.view.is_some() || sheet.tab != SheetTab::Deliveries {
-            return;
-        }
-        let summary = self
-            .panel_summaries()
-            .iter()
-            .find_map(|m| m.summary.studios.iter().find(|s| s.id == sheet.studio.id))
-            .cloned();
-        let file = lines_for(sheet, summary.as_ref())
-            .get(sheet.sel)
-            .and_then(|l| l.file.clone());
-        let Some(file) = file else {
-            return;
-        };
-        let run = self.ns_runner();
-        let machine = sheet.studio.machine.clone();
-        let argv = vec![
-            "report".into(),
-            "show".into(),
-            "--studio".into(),
-            sheet.studio.id.clone(),
-            "--file".into(),
-            file.clone(),
-        ];
-        let epoch = sheet.epoch;
-        let sheet_mut = self.sheet.as_mut().expect("checked above");
-        sheet_mut.view_epoch += 1;
-        let view_epoch = sheet_mut.view_epoch;
-        let tx = self.sheet_tx.clone();
-        tokio::spawn(async move {
-            let out = run(machine, argv, None).await;
-            let _ = tx
-                .send(SheetReply::Report {
-                    epoch,
-                    view_epoch,
-                    title: file,
-                    out,
-                })
-                .await;
-        });
-    }
-
     /// A reply off `sheet_rx` — landed only while the sheet it was
     /// fetched for is still open (a second open bumped `epoch`).
     pub(crate) fn on_sheet_reply(&mut self, reply: SheetReply) {
@@ -187,6 +138,7 @@ impl App {
                 epoch,
                 view_epoch,
                 title,
+                meta,
                 out,
             } => {
                 if epoch != sheet.epoch || view_epoch != sheet.view_epoch {
@@ -198,9 +150,13 @@ impl App {
                             title,
                             lines: text.lines().map(str::to_string).collect(),
                             scroll: 0,
+                            meta: *meta,
                         });
                     }
                     Err(err) => {
+                        if let Some(sv) = sheet.view.as_mut() {
+                            sv.meta.loading_label = None;
+                        }
                         self.show_notice("Report", &err);
                     }
                 }
@@ -220,12 +176,18 @@ impl App {
         let Some(sheet) = self.sheet.as_mut() else {
             return;
         };
-        // An opened report eats movement as its own scroll; `Esc`,
-        // `⏎` or `q` retires it back to the tab body.
+        // An opened report eats movement as its own scroll; `←`/`→`/`[`/`]`
+        // step sibling files; `Esc`, `⏎` or `q` retires it back to the tab body.
         if sheet.view.is_some() {
             match combo.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
                     sheet.view = None;
+                }
+                KeyCode::Left | KeyCode::Char('[') => {
+                    self.sheet_step_file(-1);
+                }
+                KeyCode::Right | KeyCode::Char(']') => {
+                    self.sheet_step_file(1);
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     if let Some(view) = sheet.view.as_mut() {
@@ -291,13 +253,18 @@ impl App {
         // An opened report renders in the unified top-level Reader (`R3-M2`):
         // wheel scrolls it, clicks outside Reader close only the Reader.
         if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-            let reader_area = self.hollywood_hits.view.as_ref().map(|v| v.area);
-            let max_scroll = self
+            let (reader_area, prev_hit, next_hit, max_scroll) = self
                 .hollywood_hits
                 .view
                 .as_ref()
-                .and_then(|v| v.metrics)
-                .map(|m| m.max_offset_from_bottom);
+                .map_or((None, None, None, None), |v| {
+                    (
+                        Some(v.area),
+                        v.prev_hit,
+                        v.next_hit,
+                        v.metrics.map(|m| m.max_offset_from_bottom),
+                    )
+                });
             match mouse.kind {
                 MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
                     let delta: isize = if mouse.kind == MouseEventKind::ScrollDown {
@@ -309,6 +276,12 @@ impl App {
                         let next = view.scroll.saturating_add_signed(delta);
                         view.scroll = max_scroll.map_or(next, |max| next.min(max));
                     }
+                }
+                MouseEventKind::Down(MouseButton::Left) if prev_hit.is_some_and(hit) => {
+                    self.sheet_step_file(-1);
+                }
+                MouseEventKind::Down(MouseButton::Left) if next_hit.is_some_and(hit) => {
+                    self.sheet_step_file(1);
                 }
                 MouseEventKind::Down(MouseButton::Left) if reader_area.is_none_or(|r| !hit(r)) => {
                     if let Some(sheet) = self.sheet.as_mut() {
@@ -379,15 +352,5 @@ impl App {
     fn sheet_page(&mut self, delta: isize) {
         let page = self.sheet_hits.body.height.max(1) as isize;
         self.sheet_move(delta.saturating_mul(page));
-    }
-
-    /// The sheet's studio summary — the instant detail the tabs show
-    /// while the ledger reads are out.
-    fn sheet_summary(&self) -> Option<backlot_model::summary::StudioSummary> {
-        let sheet = self.sheet.as_ref()?;
-        self.panel_summaries()
-            .into_iter()
-            .flat_map(|m| m.summary.studios.into_iter())
-            .find(|s| s.id == sheet.studio.id)
     }
 }

@@ -62,12 +62,13 @@ impl SheetTab {
 /// A report the sheet opened with `o` — the file's lines, scrolled.
 /// The delivery report and each stage-check log read through
 /// `backlot report show` (G3), locally or on the studio's machine.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct SheetView {
     /// The footer/title text — `reports/d1.md` and friends.
     pub title: String,
     pub lines: Vec<String>,
     pub scroll: usize,
+    pub meta: crate::hollywood::ReaderMeta,
 }
 
 /// The whole client-local sheet state.

@@ -321,6 +321,7 @@ async fn alt_l_does_not_fire_inside_float_modal_or_compose() {
         title: "test".into(),
         lines: vec!["line".into()],
         scroll: 0,
+        ..crate::hollywood::CardView::default()
     });
     alt_l(&mut app);
     assert_eq!(app.panel.mode, PanelMode::Closed);

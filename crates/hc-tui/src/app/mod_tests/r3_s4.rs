@@ -167,6 +167,7 @@ async fn unified_reader_geometry_matches_across_callsheet_dock_and_sheet() {
         title: "c3".into(),
         lines: (0..60).map(|i| format!("line {i}")).collect(),
         scroll: 0,
+        ..CardView::default()
     };
 
     // 1. At 160x47 with 25-col sidebar and beside-Dock open, Call Sheet,
@@ -197,6 +198,7 @@ async fn unified_reader_geometry_matches_across_callsheet_dock_and_sheet() {
         title: "reports/d1.md".into(),
         lines: (0..60).map(|i| format!("line {i}")).collect(),
         scroll: 0,
+        ..SheetView::default()
     });
     draw_to(&mut app, 160, 47);
     let from_sheet = app.hollywood_hits.view.as_ref().unwrap().area;
@@ -255,6 +257,7 @@ async fn reader_dims_panes_and_sidebar_while_keeping_beside_dock_undimmed() {
         title: "acme-shop #1".into(),
         lines: vec!["已记录最终需求 v6".into()],
         scroll: 0,
+        ..CardView::default()
     });
 
     let backend = draw_to(&mut app, 160, 40);
@@ -347,7 +350,122 @@ async fn slice2_visual_shots() {
             title: "OUTCOME #188 · acme-shop".into(),
             lines,
             scroll: 0,
+            ..CardView::default()
         });
+        let backend = draw_to(&mut app, w, h);
+        std::fs::write(format!("{dir}/{name}"), dump(backend.buffer(), w, h)).unwrap();
+    }
+}
+
+#[tokio::test]
+async fn slice3_visual_shots() {
+    use unicode_width::UnicodeWidthStr;
+    let Ok(dir) = std::env::var("LOT_READER_SHOTS") else {
+        return;
+    };
+    let dump = |buf: &ratatui::buffer::Buffer, w: u16, h: u16| -> String {
+        (0..h)
+            .map(|y| {
+                let mut row = String::new();
+                let mut x = 0u16;
+                while x < w {
+                    let sym = buf[(x, y)].symbol();
+                    row.push_str(sym);
+                    x += UnicodeWidthStr::width(sym).max(1) as u16;
+                }
+                row
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let send_key = |app: &mut App, code: hc_vt::Key, w: u16| {
+        app.on_input(
+            crate::app::input::UiEvent::Key(term_key(
+                code,
+                hc_vt::Mods::NONE,
+                hc_vt::Action::Press,
+            )),
+            w,
+        );
+    };
+
+    for (name, w, h) in [
+        ("s3-80x24.txt", 80u16, 24u16),
+        ("s3-120x36.txt", 120, 36),
+        ("s3-200x44.txt", 200, 44),
+    ] {
+        let mut app = s4_app();
+        let mut doc = serde_json::json!({
+            "schema": "backlot/1",
+            "updated_ms": 1,
+            "studios": [{
+                "id": "acme-shop",
+                "title": "Acme shop",
+                "state": "live",
+                "requirement_version": 6,
+                "mode": "standard",
+                "open_reviews": 1,
+                "waiting": 0,
+                "tasks_done": 1,
+                "tasks_total": 3,
+                "next": "review t2 · director",
+                "roles": [
+                    { "role": "producer", "name": "producer", "terminal": "t1", "runner": "agy", "model": "pro", "state": "live", "work": "waiting" },
+                    { "role": "director", "name": "director", "terminal": "t1", "runner": "agy", "model": "pro", "state": "live", "work": "working" },
+                    { "role": "writer", "name": "writer", "state": "closed", "runner": "claude", "model": "sonnet" }
+                ],
+                "exchange": [
+                    { "seq": 185, "who": "producer", "to": "user", "kind": "outcome", "text": "已完成 v6 初稿校对", "file": "reports/185.md" },
+                    { "seq": 186, "who": "user", "to": "director", "kind": "tell", "text": "请优先处理 T1", "file": "messages/186.txt" },
+                    { "seq": 188, "who": "director", "to": "user", "kind": "report", "task": "t1", "text": "已记录最终需求 v6，并已派发方案", "file": "reports/188.md" },
+                    { "seq": 189, "who": "producer", "to": "user", "kind": "outcome", "task": "t2", "text": "已派发 T2 回归用例", "file": "messages/189.md" }
+                ]
+            }]
+        });
+        doc["studios"][0]["tasks"] = serde_json::json!([]);
+        app.view.documents_mut().insert(
+            hc_proto::watch::DocKey {
+                machine: None,
+                name: "backlot".into(),
+            },
+            hc_proto::watch::Document {
+                value: doc,
+                ..hc_proto::watch::Document::default()
+            }
+            .into(),
+        );
+        app.reconcile_published_view();
+        app.hollywood.mode = LayerMode::Collapsed;
+        app.set_ns_run(std::sync::Arc::new(|_m, argv, _s| {
+            let joined = argv.join(" ");
+            let body = if joined.contains("188.md") {
+                "已完成 `crates/backlot-stage/src/` 下全部门控检查：\n- `crates/hc-tui/src/hollywood/view.rs:82` — 修复宽字符标题列宽计算\n- `crates/hc-tui/src/panel/rows.rs` — 同步基线校验通过"
+            } else if joined.contains("189.md") {
+                "已派发 T2 回归用例\n- 检查 `panel::exchange` 异步跳转"
+            } else {
+                "已完成 v6 初稿校对"
+            };
+            Box::pin(async move { Ok(body.to_owned()) })
+        }));
+        app.area = (w, h);
+        app.panel.mode = PanelMode::Expanded;
+        app.panel.focused = true;
+        app.panel.selected = Some(crate::panel::Target::Talk("acme-shop".into(), 185));
+        send_key(&mut app, hc_vt::Key::Enter, w);
+        tokio::task::yield_now().await;
+        while let Ok(r) = app.action_rx.try_recv() {
+            app.on_action_reply(r);
+        }
+        // Step across 3+ entries so `◀ 3/4 ▶` (#188) and dock `▌` sync cleanly.
+        for _ in 0..2 {
+            send_key(&mut app, hc_vt::Key::ArrowRight, w);
+            tokio::task::yield_now().await;
+            while let Ok(r) = app.action_rx.try_recv() {
+                app.on_action_reply(r);
+            }
+        }
         let backend = draw_to(&mut app, w, h);
         std::fs::write(format!("{dir}/{name}"), dump(backend.buffer(), w, h)).unwrap();
     }

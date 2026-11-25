@@ -4,37 +4,44 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
+use ratatui::style::Style;
 
+use super::reader_chrome::{
+    draw_action_strip, draw_bottom_border, draw_context_row, draw_divider, draw_top_border,
+    put_styled_line,
+};
+use super::reader_meta::{HeaderLayout, ReaderMeta};
 use super::reader_wrap::{body_mode_for_title, natural_body_width, render_body_lines};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
-use crate::chrome::text::{display_width, fit_hints, truncate_end};
+use crate::chrome::text::display_width;
 
 /// The open view: `card` is `Some(id)` when showing an actionable
 /// card (`a`/`x` apply/cancel it) and `None` for read-only views
 /// (`hollywood show`, `report show`, `records`).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct CardView {
     pub card: Option<String>,
     pub title: String,
     pub lines: Vec<String>,
     pub scroll: usize,
+    pub meta: ReaderMeta,
 }
 
-/// What the mouse needs: the box's rect, the scrollable body and the
-/// scrollbar track when the text overflows.
+/// What the mouse needs: the box's rect, the scrollable body, the
+/// scrollbar track when the text overflows, and header nav hit rects.
 #[derive(Debug, Default)]
 pub(crate) struct ViewRender {
     pub area: Rect,
     pub body: Rect,
     pub scrollbar: Rect,
+    pub prev_hit: Option<Rect>,
+    pub next_hit: Option<Rect>,
     pub metrics: Option<ScrollMetrics>,
 }
 
-/// Draw the adaptive content-sized Reader centered inside `surface`.
+/// Draw the adaptive content-sized Reader centered inside `surface` using wall-clock time.
 pub(crate) fn render_view(
     buf: &mut Buffer,
     surface: Rect,
@@ -42,24 +49,66 @@ pub(crate) fn render_view(
     pending: Option<&str>,
     palette: &Palette,
 ) -> ViewRender {
+    render_view_at(
+        buf,
+        surface,
+        view,
+        pending,
+        palette,
+        crate::update_state::now_ms(),
+    )
+}
+
+/// Draw the adaptive content-sized Reader centered inside `surface` relative to `now_ms`.
+pub(crate) fn render_view_at(
+    buf: &mut Buffer,
+    surface: Rect,
+    view: &CardView,
+    pending: Option<&str>,
+    palette: &Palette,
+    now_ms: u64,
+) -> ViewRender {
     let mut hits = ViewRender::default();
     if surface.is_empty() {
         return hits;
     }
 
-    let mode = body_mode_for_title(&view.title);
+    let header = HeaderLayout::build(view, now_ms, palette);
+    let path_hint = view.meta.file.as_deref().unwrap_or(&view.title);
+    let mode = body_mode_for_title(path_hint);
     let min_w = 52u16.min(surface.width);
     let max_w = surface.width.saturating_sub(4).min(92).max(min_w);
-    let header_w = (display_width(&view.title) + 6).min(max_w as usize);
+
+    let row1_w = display_width(&header.left)
+        + 6
+        + if header.right.is_empty() {
+            0
+        } else {
+            display_width(&header.right) + 3
+        };
+    let row2_state_w = header
+        .row2_state
+        .as_ref()
+        .map_or(0, |(w, g, _)| display_width(g) + 1 + display_width(w) + 3);
+    let row2_w = display_width(&header.row2_left)
+        + row2_state_w
+        + if header.row2_right.is_empty() {
+            0
+        } else {
+            display_width(&header.row2_right) + 2
+        }
+        + 4;
+    let header_w = row1_w.max(row2_w).min(max_w as usize);
+
     let body_nat_w = natural_body_width(&view.lines, mode);
     let base_w = body_nat_w
         .max(header_w)
         .saturating_add(4)
         .clamp(min_w as usize, max_w as usize) as u16;
 
-    // Chrome rows without secondary metadata: top border, divider above
-    // action strip, action strip, bottom border (`chrome_h = 4`).
-    let chrome_h = 4u16;
+    // Chrome rows: 4 without secondary context row, 6 with Row 2 + divider.
+    let show_row2 = header.has_row2 && surface.height >= 8;
+    let chrome_h: u16 = if show_row2 { 6 } else { 4 };
     let min_h = 8u16.min(surface.height);
     let max_h = surface.height.saturating_sub(2).min(32).max(min_h);
     let body_cap = max_h.saturating_sub(chrome_h).max(1);
@@ -102,7 +151,9 @@ pub(crate) fn render_view(
     buf.set_style(area, Style::default().bg(palette.panel_bg));
 
     let edge = Style::default().fg(palette.accent);
-    draw_top_border(buf, area, &view.title, edge);
+    let (prev_hit, next_hit) = draw_top_border(buf, area, &header, edge, palette);
+    hits.prev_hit = prev_hit;
+    hits.next_hit = next_hit;
 
     let bottom = area.bottom() - 1;
     for y in area.y + 1..bottom {
@@ -117,12 +168,18 @@ pub(crate) fn render_view(
         return hits;
     }
 
+    let show_row2 = show_row2 && area.height >= 6;
+    if show_row2 {
+        draw_context_row(buf, area, area.y + 1, &header, palette);
+        draw_divider(buf, area, area.y + 2, edge, palette);
+    }
+
     let action_y = bottom - 1;
     let div_y = bottom - 2;
     draw_divider(buf, area, div_y, edge, palette);
     draw_action_strip(buf, area, action_y, view.card.is_some(), pending, palette);
 
-    let body_y = area.y + 1;
+    let body_y = area.y + if show_row2 { 3 } else { 1 };
     let body_h = div_y.saturating_sub(body_y);
     if body_h == 0 || area.width <= 4 {
         draw_bottom_border(buf, area, bottom, None, edge, palette);
@@ -159,142 +216,4 @@ pub(crate) fn render_view(
     });
     draw_bottom_border(buf, area, bottom, scroll_range, edge, palette);
     hits
-}
-
-fn draw_top_border(buf: &mut Buffer, area: Rect, title: &str, edge: Style) {
-    if area.width < 2 {
-        return;
-    }
-    let max_title_w = (area.width as usize).saturating_sub(4);
-    let left = format!("╭ {} ", truncate_end(title, max_title_w));
-    let left_w = display_width(&left) as u16;
-    put_text(
-        buf,
-        area.x,
-        area.y,
-        left_w.min(area.width - 1),
-        &left,
-        edge.add_modifier(Modifier::BOLD),
-    );
-    let fill = (area.width - 1).saturating_sub(left_w);
-    if fill > 0 {
-        put_text(
-            buf,
-            area.x + left_w,
-            area.y,
-            fill,
-            &"─".repeat(fill as usize),
-            edge,
-        );
-    }
-    put_text(buf, area.right() - 1, area.y, 1, "╮", edge);
-}
-
-fn draw_divider(buf: &mut Buffer, area: Rect, y: u16, edge: Style, palette: &Palette) {
-    put_text(buf, area.x, y, 1, "├", edge);
-    if area.width > 2 {
-        put_text(
-            buf,
-            area.x + 1,
-            y,
-            area.width - 2,
-            &"─".repeat(usize::from(area.width - 2)),
-            Style::default().fg(palette.surface1),
-        );
-    }
-    if area.width >= 2 {
-        put_text(buf, area.right() - 1, y, 1, "┤", edge);
-    }
-}
-
-fn draw_action_strip(
-    buf: &mut Buffer,
-    area: Rect,
-    y: u16,
-    is_card: bool,
-    pending: Option<&str>,
-    palette: &Palette,
-) {
-    if area.width <= 2 {
-        return;
-    }
-    let strip = Rect::new(area.x + 1, y, area.width - 2, 1);
-    let bg = Style::default().bg(palette.surface0);
-    buf.set_style(strip, bg);
-    let avail = usize::from(area.width.saturating_sub(4));
-    let label = match (is_card, pending) {
-        (true, Some(lbl)) => truncate_end(&format!("… {lbl}"), avail),
-        (true, None) => fit_hints(&["a apply  x cancel  esc back", "a x  esc"], avail).to_string(),
-        (false, _) => fit_hints(&["↑↓ scroll  esc back", "↑↓  esc"], avail).to_string(),
-    };
-    put_text(
-        buf,
-        area.x + 2,
-        y,
-        avail as u16,
-        &label,
-        bg.fg(palette.subtext0),
-    );
-}
-
-fn draw_bottom_border(
-    buf: &mut Buffer,
-    area: Rect,
-    y: u16,
-    scroll_range: Option<(usize, usize, usize)>,
-    edge: Style,
-    palette: &Palette,
-) {
-    put_text(buf, area.x, y, 1, "╰", edge);
-    if area.width < 2 {
-        return;
-    }
-    let mut used = 1u16;
-    if let Some((a, b, total)) = scroll_range
-        && area.width > 6
-    {
-        let label = format!(" lines {a}–{b} of {total} ");
-        let max_lbl = usize::from(area.width - 3);
-        let fitted = truncate_end(&label, max_lbl);
-        let lbl_w = display_width(&fitted) as u16;
-        put_text(buf, area.x + 1, y, 1, "─", edge);
-        put_text(
-            buf,
-            area.x + 2,
-            y,
-            lbl_w,
-            &fitted,
-            Style::default().fg(palette.subtext0),
-        );
-        used = 2 + lbl_w;
-    }
-    let fill = (area.width - 1).saturating_sub(used);
-    if fill > 0 {
-        put_text(
-            buf,
-            area.x + used,
-            y,
-            fill,
-            &"─".repeat(fill as usize),
-            edge,
-        );
-    }
-    put_text(buf, area.right() - 1, y, 1, "╯", edge);
-}
-
-fn put_styled_line(buf: &mut Buffer, x: u16, y: u16, max_w: u16, line: &Line<'_>) {
-    let mut cx = x;
-    let right = x.saturating_add(max_w);
-    for span in &line.spans {
-        if cx >= right {
-            break;
-        }
-        let text = span.content.as_ref();
-        let rem = right.saturating_sub(cx);
-        let w = display_width(text).min(usize::from(rem)) as u16;
-        if w > 0 {
-            put_text(buf, cx, y, rem, text, span.style);
-            cx = cx.saturating_add(w);
-        }
-    }
 }

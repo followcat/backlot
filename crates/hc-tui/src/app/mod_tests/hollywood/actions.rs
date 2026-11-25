@@ -123,6 +123,7 @@ async fn a_card_answer_from_the_view_closes_it_on_success() {
         title: "c3".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..crate::hollywood::CardView::default()
     });
     app.hollywood.mode = LayerMode::Expanded;
     key(&mut app, hc_vt::Key::Char('a'));
@@ -147,6 +148,7 @@ async fn a_failed_card_answer_keeps_the_view_and_notices() {
         title: "c3".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
+        ..crate::hollywood::CardView::default()
     });
     app.hollywood.mode = LayerMode::Expanded;
     app.on_hollywood_action(("card apply c3".into(), Err("no card 'c3'".into()), false));
@@ -524,7 +526,7 @@ async fn records_action_opens_read_only_card_view_without_stuffing_card_id() {
     assert_eq!(view.card, None);
     assert_eq!(view.title, "records acme-shop");
     let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
-    assert!(text.contains("records acme-shop"), "{text}");
+    assert!(text.contains("■ RECORDS · acme-shop"), "{text}");
     assert!(text.contains("↑↓ scroll  esc back"), "{text}");
     assert!(!text.contains("a apply"), "{text}");
 
@@ -568,4 +570,123 @@ async fn enter_on_hollywood_ask_runs_allow_by_default_and_open_when_moved_right(
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused.as_deref(), Some("t10"));
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+}
+
+#[tokio::test]
+async fn stepping_walks_hollywood_exchange_and_open_cards_syncing_selection() {
+    let mut app = app_with_hollywood();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 1,
+                "studios": [{
+                    "id": "acme-shop",
+                    "title": "Acme",
+                    "state": "live",
+                    "requirement_version": 1,
+                    "mode": "standard",
+                    "open_reviews": 0,
+                    "waiting": 0,
+                    "roles": []
+                }],
+                "hollywood": {
+                    "state": "live",
+                    "work": "waiting",
+                    "runner": "agy",
+                    "model": "pro",
+                    "headline": "report #9",
+                    "headline_seq": 9,
+                    "cards": [
+                        { "id": "c3", "studio": "acme-shop", "action": "pause t1", "why": "looping", "ts_ms": 1000 },
+                        { "id": "c4", "studio": "acme-shop", "action": "resume t2", "why": "unblocked", "ts_ms": 2000 }
+                    ],
+                    "exchange": [
+                        { "seq": 8, "who": "user", "to": "hollywood", "kind": "tell", "text": "check acme", "has_body": true },
+                        { "seq": 9, "who": "hollywood", "to": "user", "kind": "report", "text": "report #9", "has_body": true }
+                    ]
+                }
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_hollywood_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv.clone());
+        let joined = argv.join(" ");
+        let body = if joined.contains("hollywood show 8") {
+            "hollywood body #8"
+        } else if joined.contains("hollywood show 9") {
+            "hollywood body #9"
+        } else if joined.contains("card show c3") {
+            "card body c3"
+        } else {
+            "card body c4"
+        };
+        Box::pin(async move { Ok(body.to_owned()) })
+    }));
+    app.area = (120, 36);
+    alt_y(&mut app);
+
+    async fn next_reply(app: &mut App) -> (u64, Result<String, String>) {
+        tokio::time::timeout(std::time::Duration::from_millis(100), app.action_rx.recv())
+            .await
+            .expect("step action dispatched")
+            .unwrap()
+    }
+
+    // 1. Hollywood exchange stepping: #8 -> #9 -> #8.
+    app.hollywood_select(Target::Talk(8));
+    key(&mut app, hc_vt::Key::Enter);
+    let r1 = next_reply(&mut app).await;
+    app.on_action_reply(r1);
+    let t8 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(t8.contains("■ TELL #8 · hollywood"), "{t8}");
+    assert!(t8.contains("◀ 1/2 ▶"), "{t8}");
+
+    key(&mut app, hc_vt::Key::ArrowRight);
+    let r2 = next_reply(&mut app).await;
+    app.on_action_reply(r2);
+    let t9 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(t9.contains("■ REPORT #9 · hollywood"), "{t9}");
+    assert!(t9.contains("◀ 2/2 ▶"), "{t9}");
+    assert!(
+        matches!(
+            app.hollywood.selected,
+            Some(Target::Talk(9) | Target::Headline)
+        ),
+        "expected selected on #9 or Headline, got {:?}",
+        app.hollywood.selected
+    );
+
+    key(&mut app, hc_vt::Key::Char('['));
+    let r3 = next_reply(&mut app).await;
+    app.on_action_reply(r3);
+    assert_eq!(app.hollywood.selected, Some(Target::Talk(8)));
+    key(&mut app, hc_vt::Key::Escape);
+
+    // 2. Open cards stepping: c3 -> c4 -> c3.
+    app.hollywood_select(Target::Card("c3".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    let rc3 = next_reply(&mut app).await;
+    app.on_action_reply(rc3);
+    let tc3 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(tc3.contains("■ CARD c3 · acme-shop · open"), "{tc3}");
+    assert!(tc3.contains("◀ 1/2 ▶"), "{tc3}");
+
+    key(&mut app, hc_vt::Key::Char(']'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c4".into())));
+    let rc4 = next_reply(&mut app).await;
+    app.on_action_reply(rc4);
+    let tc4 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(tc4.contains("■ CARD c4 · acme-shop · open"), "{tc4}");
+    assert!(tc4.contains("◀ 2/2 ▶"), "{tc4}");
+    assert!(tc4.contains("card body c4"), "{tc4}");
+
+    key(&mut app, hc_vt::Key::ArrowLeft);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
 }

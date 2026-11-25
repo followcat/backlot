@@ -169,7 +169,7 @@ async fn enter_on_talk_opens_read_only_cardview_and_esc_returns_to_dock_row() {
 
     // CardView renders even while `hollywood.mode == Hidden`, scrolls on `j`, ignores `a`/`x`.
     let screen = screen_lines(&draw_to(&mut app, 120, 20)).join("\n");
-    assert!(screen.contains("acme-shop #12"), "{screen}");
+    assert!(screen.contains("■ OUTCOME #12 · acme-shop"), "{screen}");
     assert!(
         screen.contains("Checkout Report") && !screen.contains("# Checkout Report"),
         "{screen}"
@@ -278,4 +278,170 @@ async fn remote_studio_talk_click_and_menu_route_report_show_to_remote_machine()
     drain_actions(&mut app).await;
     assert_eq!(calls.lock().unwrap().len(), 2);
     assert!(app.hollywood.view.is_some());
+}
+
+#[tokio::test]
+async fn stepping_with_arrows_and_brackets_walks_studio_exchange_and_syncs_dock() {
+    let mut app = app_with_panel_doc();
+    let mut doc = summary_json();
+    doc["studios"][0]["exchange"] = serde_json::json!([
+        {
+            "seq": 10,
+            "who": "user",
+            "to": "producer",
+            "kind": "tell",
+            "text": "check baseline",
+            "file": "messages/10-tell.txt"
+        },
+        {
+            "seq": 11,
+            "who": "user",
+            "to": "producer",
+            "kind": "tell",
+            "text": "inline blocker check"
+        },
+        {
+            "seq": 12,
+            "who": "producer",
+            "to": "user",
+            "kind": "report",
+            "task": "task-1",
+            "text": "Checkout verified",
+            "file": "reports/12-checkout.md"
+        },
+        {
+            "seq": 13,
+            "who": "director",
+            "to": "user",
+            "kind": "tell",
+            "task": "task-2",
+            "text": "Dispatch ready",
+            "file": "messages/13-dispatch.md"
+        }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app.area = (120, 36);
+
+    let calls: std::sync::Arc<std::sync::Mutex<Vec<RecordedCall>>> = Default::default();
+    let sink = calls.clone();
+    app.set_ns_run(std::sync::Arc::new(move |machine, argv, _stdin| {
+        let joined = argv.join(" ");
+        sink.lock().unwrap().push((machine, argv));
+        let body = if joined.contains("messages/10-tell.txt") {
+            "body of #10"
+        } else if joined.contains("messages/13-dispatch.md") {
+            "body of #13"
+        } else {
+            "body of #12"
+        };
+        Box::pin(async move { Ok(body.to_owned()) })
+    }));
+
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Talk("acme-shop".into(), 12));
+    key(&mut app, hc_vt::Key::Enter);
+    drain_actions(&mut app).await;
+    let text12 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text12.contains("■ REPORT #12 · acme-shop"), "{text12}");
+    assert!(text12.contains("◀ 3/4 ▶"), "{text12}");
+    assert!(text12.contains("body of #12"), "{text12}");
+
+    // `ArrowRight` starts fetch for #13, syncs `panel.selected` immediately and shows loading tag.
+    key(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Talk("acme-shop".into(), 13)),
+        "dock cursor tracks stepped entry live"
+    );
+    let loading = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(loading.contains("■ loading #13…"), "{loading}");
+    drain_actions(&mut app).await;
+    let text13 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text13.contains("■ OUTCOME #13 · acme-shop"), "{text13}");
+    assert!(text13.contains("◀ 4/4 ▶"), "{text13}");
+    assert!(text13.contains("body of #13"), "{text13}");
+
+    // `[` twice steps #13 -> #12 -> inline #11 (no file RPC spawned for #11).
+    key(&mut app, hc_vt::Key::Char('['));
+    drain_actions(&mut app).await;
+    let count_before_inline = calls.lock().unwrap().len();
+    key(&mut app, hc_vt::Key::Char('['));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Talk("acme-shop".into(), 11))
+    );
+    assert_eq!(calls.lock().unwrap().len(), count_before_inline);
+    let text11 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text11.contains("■ TELL #11 · acme-shop"), "{text11}");
+    assert!(text11.contains("◀ 2/4 ▶"), "{text11}");
+    assert!(text11.contains("inline blocker check"), "{text11}");
+
+    // `]` steps forward again across inline #11 -> #12.
+    key(&mut app, hc_vt::Key::Char(']'));
+    drain_actions(&mut app).await;
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Talk("acme-shop".into(), 12))
+    );
+}
+
+#[tokio::test]
+async fn clicking_sibling_talk_in_undimmed_beside_dock_switches_reader_in_place() {
+    let mut app = app_with_studio_exchange();
+    let calls: std::sync::Arc<std::sync::Mutex<Vec<RecordedCall>>> = Default::default();
+    let sink = calls.clone();
+    app.set_ns_run(std::sync::Arc::new(move |machine, argv, _stdin| {
+        let joined = argv.join(" ");
+        sink.lock().unwrap().push((machine, argv));
+        let body = if joined.contains("messages/10-tell.txt") {
+            "sibling body #10"
+        } else {
+            "original body #12"
+        };
+        Box::pin(async move { Ok(body.to_owned()) })
+    }));
+    app.area = (120, 36);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Talk("acme-shop".into(), 12));
+    key(&mut app, hc_vt::Key::Enter);
+    drain_actions(&mut app).await;
+    draw_to(&mut app, 120, 36);
+
+    let talk10 = app
+        .panel_hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Talk("acme-shop".into(), 10))
+        .map(|(r, _)| *r)
+        .expect("Talk(10) hit rect on beside dock");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        talk10.x + 2,
+        talk10.y,
+    ));
+    assert!(
+        app.hollywood.view.is_some(),
+        "clicking sibling Talk row on undimmed dock must keep Reader open"
+    );
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Talk("acme-shop".into(), 10))
+    );
+    drain_actions(&mut app).await;
+    let text10 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text10.contains("■ TELL #10 · acme-shop"), "{text10}");
+    assert!(text10.contains("sibling body #10"), "{text10}");
+
+    // Clicking dimmed pane area outside Reader & dock Talk rows still closes Reader.
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), 1, 1));
+    assert!(app.hollywood.view.is_none());
 }

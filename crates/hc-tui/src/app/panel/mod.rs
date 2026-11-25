@@ -11,6 +11,7 @@ mod layout;
 mod mouse;
 mod select;
 pub(crate) mod sheet;
+mod sheet_nav;
 
 use std::time::{Duration, Instant};
 
