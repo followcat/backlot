@@ -157,13 +157,12 @@ fn borders_are_honest_about_focus() {
     let (buf, _) = draw(area, Some(&summary), &focused, None);
     assert_eq!(buf[corner].fg, palette().accent);
     assert_eq!(buf[(area.x, top_y)].symbol(), "▌");
-    // Unfocused, the same selection still draws `surface1` (A2.3) —
-    // the focused-terminal studio's mark is the `▸`, not the border,
-    // and no part of the selection shows: the `╭` is back, no `▌`.
+    // Unfocused, the row cursor hides (`╭` is back, no `▌`), while the
+    // selected solo studio still draws its `accent` frame.
     let mut unfocused = panel(PanelMode::Expanded);
     unfocused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
-    assert_eq!(buf[corner].fg, palette().surface1);
+    assert_eq!(buf[corner].fg, palette().accent);
     assert_eq!(buf[(area.x, top_y)].symbol(), "╭");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");

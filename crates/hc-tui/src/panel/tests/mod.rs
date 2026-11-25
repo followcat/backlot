@@ -1,6 +1,7 @@
 //! Panel unit tests — the row model, the document read, the config
 //! file and the renderer. Neutral fixture data only: `acme-shop`,
 //! `alice`, `host-a`.
+mod accent_tests;
 mod config_tests;
 mod data_tests;
 mod draw_tests;
