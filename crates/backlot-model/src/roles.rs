@@ -86,6 +86,16 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, "the user"))
         };
     }
+    // Changing the studio's cast after creation is the person's alone:
+    // a card's execution appends `studio.cast` under `by: user` too, so
+    // no role terminal can change the roles, candidates or limits.
+    if let EventKind::StudioCast { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
+        };
+    }
     if let Some(own) = actor_task(role) {
         return match &new.kind {
             EventKind::TaskDelivered { task, .. } => may_deliver(state, role, task),
@@ -164,7 +174,9 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
 /// or the stage for the ledger-internal events.
 fn who_can(kind: &EventKind) -> &'static str {
     match kind {
-        EventKind::StudioCreated { .. } | EventKind::StudioDeleted { .. } => "the user",
+        EventKind::StudioCreated { .. }
+        | EventKind::StudioCast { .. }
+        | EventKind::StudioDeleted { .. } => "the user",
         EventKind::RoleStarted { .. }
         | EventKind::RoleLost { .. }
         | EventKind::RoleResumed { .. }

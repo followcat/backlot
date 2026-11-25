@@ -367,8 +367,12 @@ pub(crate) fn exec_event(
     );
     // A recast is the user's — a role terminal is refused before the
     // ledger or the discovery scan is touched, exactly like `card
-    // apply`.
-    if matches!(cmd, Cmd::Recast { .. }) && env.get("BACKLOT_ROLE").is_some() {
+    // apply`. So is a `studio cast set`: it changes who plays a role.
+    if matches!(
+        cmd,
+        Cmd::Recast { .. } | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
+    ) && env.get("BACKLOT_ROLE").is_some()
+    {
         return Err(Fail::refused(
             "a recast is the user's — BACKLOT_ROLE is set",
         ));
@@ -376,7 +380,9 @@ pub(crate) fn exec_event(
     let caller = match &cmd {
         // `studio new` runs before any role terminal exists; the user
         // records it (`--as`/`BACKLOT_ROLE` may still override).
-        Cmd::StudioNew { .. } | Cmd::Recast { .. } => Caller {
+        Cmd::StudioNew { .. }
+        | Cmd::Recast { .. }
+        | Cmd::StudioCast(crate::args::CastCmd::Set { .. }) => Caller {
             studio: studio_name(&common, env)?,
             role: common
                 .role
@@ -575,6 +581,13 @@ pub(crate) fn exec_event(
         Cmd::Priority { level } => Some(crate::verbs::format_task_priority(
             &crate::verbs::task_priority(base, env, &caller, level)?,
         )),
+        Cmd::StudioCast(crate::args::CastCmd::Set {
+            file,
+            dry_run,
+            json,
+        }) => Some(crate::verbs::format_cast_set(&crate::verbs::cast_set(
+            base, env, &caller, &file, dry_run, json,
+        )?)),
         Cmd::TaskState { change, reason }
             if matches!(
                 change,

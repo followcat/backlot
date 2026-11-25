@@ -538,6 +538,17 @@ pub struct RecastRecord {
     pub ts_ms: u64,
 }
 
+/// A `role.restart` record, in log order — the card gate's
+/// "already done" marker reads the reason it carried.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RestartRecord {
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub seq: u64,
+    pub ts_ms: u64,
+}
+
 /// An `ask.answered` record: the stage saw `role` start a new turn in
 /// its terminal after the `tell user` at `target`, clearing the
 /// waiting indicator while keeping the question in the exchange.
@@ -586,6 +597,10 @@ pub struct StudioState {
     /// a fixed role wins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recasts: Vec<RecastRecord>,
+    /// `role.restart` records, in log order — the card gate's
+    /// idempotence marker.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub restarts: Vec<RestartRecord>,
     /// `ask.answered` records, in log order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ask_answers: Vec<AskAnswerRecord>,
@@ -598,6 +613,15 @@ pub struct StudioState {
     pub finished: Option<FinishRecord>,
     #[serde(default)]
     pub corrections: Vec<CorrectionRecord>,
+    /// The seq of the newest `studio.cast` — the settings event a
+    /// `cast` card bases on, so a change in between makes it stale.
+    /// `None` on a studio whose cast has never changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cast_seq: Option<u64>,
+    /// The `c<n>` marker on the newest `studio.cast`, when a card
+    /// carried the change out — the gate's "already done" key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cast_card: Option<String>,
     /// seq → what the event touched, for corrections and links.
     #[serde(default)]
     pub targets: BTreeMap<u64, SeqTarget>,
@@ -710,7 +734,8 @@ impl StudioState {
 
     /// The identity a fixed role plays now: the newest `role.recast`
     /// for it, else the `studio.created` cast. `None` for an actor
-    /// key — actors are recast through `cast`, not `role.recast`.
+    /// key — an actor's identity lives on its task's newest cast
+    /// record (`Task.cast`), which a recast of the actor key rewrites.
     pub fn fixed_identity(&self, role: &str) -> Option<&ActorIdentity> {
         let cfg = self.studio.as_ref()?;
         if !matches!(role, "producer" | "director" | "writer") {

@@ -155,6 +155,60 @@ pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
     Ok(canonical_repo(repo))
 }
 
+/// `studio cast show [--json]` / `studio cast set --file <toml>
+/// [--dry-run] [--json]`.
+pub(crate) fn studio_cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let Some(sub) = it.next() else {
+        return Err(usage("missing studio cast subcommand", U_STUDIO_CAST));
+    };
+    let mut file = None;
+    let mut dry_run = false;
+    let mut json = false;
+    let show = match sub.as_str() {
+        "show" => true,
+        "set" => false,
+        "-h" | "--help" => return Ok((std::mem::take(common), Cmd::Help(U_STUDIO_CAST))),
+        _ => {
+            return Err(usage(
+                format!("unknown studio cast subcommand '{sub}'"),
+                U_STUDIO_CAST,
+            ));
+        }
+    };
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO_CAST)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO_CAST)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--dry-run" if !show => dry_run = true,
+            "--file" if !show => file = Some(PathBuf::from(it.value("--file", U_STUDIO_CAST)?)),
+            _ if !show && eq(&arg, "--file").is_some() => {
+                file = eq(&arg, "--file").map(PathBuf::from)
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO_CAST)),
+        }
+    }
+    if show {
+        Ok((
+            std::mem::take(common),
+            Cmd::StudioCast(CastCmd::Show { json }),
+        ))
+    } else {
+        Ok((
+            std::mem::take(common),
+            Cmd::StudioCast(CastCmd::Set {
+                file: file.ok_or_else(|| usage("missing --file", U_STUDIO_CAST))?,
+                dry_run,
+                json,
+            }),
+        ))
+    }
+}
+
 /// `studio finish [--reason <r>] [--force]`: the reason is optional
 /// and open tasks refuse the finish — the check is the model's.
 /// `--force` finishes a studio with no requirement and no tasks

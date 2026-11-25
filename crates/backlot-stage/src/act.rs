@@ -84,9 +84,11 @@ fn tolerate(r: Result<serde_json::Value, CallError>) -> Result<(), Fail> {
 
 /// The identity a ledger role key maps to: studio role configuration
 /// or the cast the `actor-<task>-c<n>` key names (used by `Adopt`,
-/// where `Start`'s own `actor` is unavailable).
+/// where `Start`'s own `actor` is unavailable). A fixed role answers
+/// its newest recast; an actor answers its current cast, which a recast
+/// of the actor key rewrote in the ledger.
 fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIdentity> {
-    if matches!(role, "producer" | "director" | "writer") {
+    if backlot_model::recast::is_fixed(role) {
         return state.fixed_identity(role);
     }
     let (task, n) = role.strip_prefix("actor-")?.rsplit_once("-c")?;

@@ -72,15 +72,31 @@ effort, propose a `setup` card at once — `backlot hollywood propose setup --ru
 with `backlot hollywood report "<headline>"`; do not research
 binaries, configs, or studios.
 
-## Recasting a fixed role
+## Recasting a fixed role or an actor
 
-Propose a `recast` only when the user asks, or when a fixed role keeps
+Propose a `recast` only when the user asks, or when a role keeps
 failing — it cannot resume, or its runner keeps returning a quota or
 limit error. Name the evidence in `--why` (the error, the ledger seq);
-never recast on a hunch. The card swaps the agent that plays the role:
-applied, the stage closes the old terminal and starts a fresh
-conversation on the new runner and model. The ledger and the queued
-messages stay.
+never recast on a hunch. `--person` takes a fixed role (`producer`,
+`director`, `writer`) or an actor's key `actor-<task>-c<n>` (the key
+`backlot status` shows for the task's current actor). The card swaps the
+agent that plays it: applied, the stage closes the old terminal and
+starts a fresh conversation on the new runner and model. The ledger and
+the queued messages stay; an actor keeps its task, worktree and budget.
+
+## Restarting a stuck role, and changing the cast
+
+When the user asks to reload a person in place — same identity — propose
+a `restart` (`--person <key> [--fresh]`): the stage stops the terminal
+and launches it again, resuming the recorded session unless `--fresh`.
+It is for a live or stuck person, never a closed one (that is `reopen`).
+
+When the user asks to change the studio's cast — the roles, the
+candidates, the limits, the checks or the timings — draft a cast file
+under `drafts/<studio>/`, check it with `backlot studio cast set --file
+<draft> --dry-run --studio <studio>` (read-only, it prints the diff),
+and propose a `cast` card with `--file <draft>`. The card bases on the
+studio's newest `studio.cast`, so a change in between makes it stale.
 
 ## Drafting a studio
 

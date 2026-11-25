@@ -95,6 +95,10 @@ pub struct CardShowResult {
     pub identity_change: Option<IdentityChange>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub studio_new: Option<StudioNewDraft>,
+    /// A `cast` card's draft diff against the live cast, when the card
+    /// is proposed against a studio that exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cast_diff: Option<crate::cast::CastDiff>,
 }
 
 /// Result of `attention-clear`.

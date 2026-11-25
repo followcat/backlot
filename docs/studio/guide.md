@@ -678,20 +678,31 @@ held seats keep it.
 
 ## Changing who plays a role
 
-Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —
-are swapped with `backlot recast`:
+`backlot recast` swaps the agent that plays a **fixed role** — producer, director or writer — or
+an **actor**, by its key `actor-<task>-c<n>` (the key `backlot status` shows for the task's
+current actor):
 
 ```sh
 backlot recast --person director --runner cmd --model deepseek-v4.1-flash --reason "quota errors" --studio acme-shop
+backlot recast --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effort medium --reason "the runner keeps timing out" --studio acme-shop
 ```
 
 The new identity takes the runner, model, effort, permission profile and, at launch, the runner
 version. `--permission-profile standard|worktree` overrides the profile the role plays now; without
 it the current one is kept. The command is the user's: a role terminal is refused, exactly like
 `card apply`. It runs the same identity and seat rules `studio new --dry-run` does — a supported,
-installed runner, the cast file's effort and cline-model rules, and the studio's `[limits]` still
-seating the fixed roles — and refuses a `finished` studio, an actor key (recast actors with
-`cast`), and an identity that changes nothing.
+installed runner, the cast file's effort and cline-model rules, and, for a fixed role, the
+studio's `[limits]` still seating the fixed roles — and refuses a `finished` studio and an
+identity that changes nothing.
+
+An **actor's** key keeps its terminal name and its work area (the task's own worktree on the task
+branch); only the agent moves. Its first prompt takes the task over and names what to read first:
+the task and its acceptance list, `backlot status`, `backlot records` and the commits already on
+the branch. The task and everything recorded against it — deliveries, rework rounds, the budget
+clock — stay as they were; the one-raise-over-budget and rework-cap rules keep counting per task,
+across the recast. Only the task's newest actor key is recastable: a `c<n>` the task has already
+left is refused with `is not the task's current actor`. To cast a *different* candidate onto a
+task, use `backlot cast` instead (that mints the next `c<n>`).
 
 The stage carries it out on its next tick: the old terminal is closed deliberately (`role.closed`,
 reason `recast` — never counted as a loss) and a fresh terminal starts under the same
@@ -723,6 +734,49 @@ runner that requires an effort lists its levels with one preselected, an optiona
 empty choice, and a runner with no effort flag has no effort step at all. A summary line shows
 the old identity beside the new one before Enter runs `backlot recast … --as user`; a refusal
 comes back verbatim.
+
+## Changing a studio after it starts
+
+The cast file you give `backlot studio new` only **initializes** the studio. The roles, the
+`[[candidates]]`, the `[limits]`, the checks and the timings can all change afterwards — the
+binding (`repo`, `members`, `no_git`, `mode`) and the push remotes recorded at creation do not.
+
+`backlot studio cast show` prints the cast the studio **plays now** as a cast file: the fixed
+roles as their newest recast has them, everything else as last set. Pipe it to a file, edit it, and
+`backlot studio cast set` records it:
+
+Print the effective cast, write it to a file, edit it — drop a candidate, add a check, move
+the director's model — then check and record it:
+
+```sh
+backlot studio cast show --studio acme-shop
+backlot studio cast set --file /home/user/acme-shop.cast.toml --dry-run --studio acme-shop
+backlot studio cast set --file /home/user/acme-shop.cast.toml --studio acme-shop
+```
+
+`--dry-run` prints a readable diff — the roles whose identity moved, the candidates added, removed
+or changed, the limits, the checks and the timings — and records nothing; `--json` prints the same
+structured. `set` records a `studio.cast` event carrying the whole new settings, and the earlier
+events keep what they recorded.
+
+`set` runs the same **runnable** checks `studio new --dry-run` does, and only those: every runner
+has an adapter and launches on this machine, the effort and cline-model rules hold, every limit is
+a positive number, and `[limits]` can still seat the fixed roles. A file that says what the studio
+already plays is refused with `nothing changes`. It is the user's command — a role terminal is
+refused — and a finished studio must be reopened or restored first, like every other change.
+
+A fixed role whose identity the file moves is carried out as a `role.recast` for that role, in the
+same apply: the stage closes the old terminal (reason `recast`) and starts a fresh conversation, as
+[a recast](#changing-who-plays-a-role) does. The other changes land in place:
+
+- **Live actors keep running.** Removing a candidate only stops future `backlot cast` picks; an
+  actor already cast from it is untouched.
+- **New limits apply to the next start.** A role that is already live is never stopped by a new
+  cap; it takes effect as slots free and new roles are wanted.
+- **New checks run on the next delivery.** A delivery made before the check existed is not
+  rechecked; the next one is.
+- **New timings** — the rework cap, the stall and nudge limits, the task budget — apply from the
+  next tick.
 
 ## Changing the requirement midway
 
@@ -900,6 +954,8 @@ delete the studio's directory under `studios/` yourself.
 | `studio delete <s>` | Finishes if needed, closes the studio's terminals, prunes safely, records `studio.deleted`, and moves the ledger under `archive/<s>-<stamp>`. | Archived to `archive/`, gone from `studios/`. |
 | `studio list --archived` | Lists what is under `archive/`: name, stamp, repo and last requirement title. | Read-only. |
 | `studio restore <archived-name> [--name <new>]` | Copies an archived ledger back under `studios/` as a finished studio; `--name` renames it. Refuses a name already taken; `--dry-run` shows the plan. | The copy is live again; the archive copy stays. |
+| `studio cast show [--json]` | Prints the cast the studio plays now as a cast file (the fixed roles as their newest recast has them); `--json` is the same settings structured. | Read-only. |
+| `studio cast set --file <f> [--dry-run]` | Validates a cast file with `studio new --dry-run`'s runnable rules and, unless `--dry-run`, records it. A fixed role whose identity moved is recast in the same apply. | `studio.cast` (plus a `role.recast` per moved role) appended; the earlier events keep what they recorded. |
 
 `studio restore` recreates no work areas: the studio comes back `finished` and `reopen` works from
 there. `prune` stays what it was — it never touches the ledger.

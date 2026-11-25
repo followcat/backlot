@@ -259,6 +259,9 @@ backlot hollywood propose abandon --studio acme-shop --task t1 --why "wrong appr
 backlot hollywood propose priority --studio acme-shop --task t1 --level high --why "blocks t2" --as hollywood
 backlot hollywood propose close --studio acme-shop --person actor-t1-c1 --why "task done" --as hollywood
 backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "director's runner keeps returning a quota error" --as hollywood
+backlot hollywood propose recast --studio acme-shop --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effort medium --why "the actor's runner keeps timing out" --as hollywood
+backlot hollywood propose restart --studio acme-shop --person director --why "stuck at a prompt" --as hollywood
+backlot hollywood propose cast --studio acme-shop --file drafts/acme-shop/cast.toml --why "cheaper actors for the second pass" --as hollywood
 backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "person asked to switch agent" --as hollywood
 backlot card list
 backlot card apply c1
@@ -285,17 +288,33 @@ action and its record repeats nothing. Cards execute whether or not `[hollywood]
 the config gates the agent, never the gate.
 
 Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`,
-`recast`, `setup`. Nothing else — in particular, no card answers a permission prompt; those stay yours,
-answered in the studio.
+`recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a permission
+prompt; those stay yours, answered in the studio.
 
-A `recast` card swaps the agent that plays a fixed role: `producer`, `director` or `writer`. Its
-text reads `recast director → cmd/deepseek-v4.1-flash` (`<runner>/<model>[/<effort>]`), and
-`card show` prints the old and the new identity. Applied, the stage closes the old terminal
-(`role.closed`, reason `recast` — a deliberate stop, never a loss) and starts a fresh conversation
-under the new identity. It never resumes the old session id: that conversation belongs to the
-runner that left. The ledger and the messages already queued for the role stay; the new terminal
-takes over the role's work. A recast while the old role has an open permission prompt still closes
-it. Only you may recast, and only while the studio is not finished.
+A `recast` card swaps the agent that plays a fixed role — `producer`, `director` or `writer` —
+or an actor, by its key `actor-<task>-c<n>`. Its text reads `recast director → cmd/deepseek-v4.1-flash`
+(`<runner>/<model>[/<effort>]`), and `card show` prints the old and the new identity. Applied, the
+stage closes the old terminal (`role.closed`, reason `recast` — a deliberate stop, never a loss)
+and starts a fresh conversation under the new identity. It never resumes the old session id: that
+conversation belongs to the runner that left. The ledger and the messages already queued for the
+role stay; an actor keeps its key and its work area, and the task's deliveries, rework rounds and
+budget are untouched. A recast while the old role has an open permission prompt still closes it.
+Only you may recast, and only while the studio is not finished.
+
+A `restart` card reloads a live or stuck person in place — the same command `backlot restart` runs.
+It bases on `person_restartable`: the person is live or lost, never closed (reopen is that) and the
+studio is not finished. Applied, the stage stops the terminal (`role.closed`, reason `restarted`)
+and launches it again under the same identity, resuming the recorded session or `--fresh` starting
+a new one. The restart's `role.restart` carries the card's `card c<n>:` reason, so a restart between
+the append and `card.done` repeats nothing.
+
+A `cast` card changes the studio's cast after it started — the settings change from
+[`backlot studio cast set`](guide.md#changing-a-studio-after-it-starts). `--file` names a cast
+draft, read with `studio new`'s parser and checked with the same runnable rules. It bases on
+`cast_seq`: the seq of the `studio.cast` event it edits (`0` when the cast has never changed), so a
+change in between makes it stale. `card show` prints the dry-run diff the file would make. Applied,
+the stage records the recasts and one `studio.cast` `by: user`, idempotent like the other cards
+(the newest `studio.cast` carries the card's `c<n>` marker).
 
 A `setup` card changes Hollywood's own identity (`Hollywood: <old> → <new>`) against a
 `hollywood_identity` base. `propose setup` validates the runner, model and effort rule up front

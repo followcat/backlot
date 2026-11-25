@@ -171,10 +171,13 @@ pub(crate) fn recast(
     let reason_copy = reason.clone();
 
     let event = store::append(&dir, |state, _| {
-        let current = state
-            .fixed_identity(&person)
-            .cloned()
-            .ok_or_else(|| Fail::refused(format!("no fixed role '{person}' recorded")))?;
+        let current = backlot_model::recast::current_identity(state, &person)
+            .map_err(|e| Fail::refused(e.to_string()))?
+            .ok_or_else(|| {
+                Fail::refused(format!(
+                    "'{person}' is not a fixed role or an actor of this studio"
+                ))
+            })?;
         let actor = ActorIdentity {
             runner,
             runner_version: None,
@@ -297,6 +300,57 @@ pub(crate) fn reopen(
         studio: caller.studio.clone(),
         person,
         seq: event.seq,
+    })
+}
+
+/// `studio cast set --file <toml> [--dry-run] [--json]`: validate the
+/// file as the studio's cast, print the diff, and — unless `--dry-run`
+/// — record the recasts and the `studio.cast`. The user's alone.
+pub(crate) fn cast_set(
+    base: &Path,
+    env: &Env,
+    caller: &Caller,
+    file: &Path,
+    dry_run: bool,
+    json: bool,
+) -> Result<crate::studio_cast::CastSetOutput, Fail> {
+    if caller.role != "user" {
+        return Err(Fail::refused(format!(
+            "role '{}' cannot do this; the user can",
+            caller.role
+        )));
+    }
+    let dir = store::studio_dir(base, &caller.studio);
+    require_studio_dir(&dir, &caller.studio)?;
+    let next = crate::studio_cast::read(file)?;
+    let state = store::load_state(&dir).map_err(crate::hwood::store_fail)?;
+    crate::studio_cast::check(base, env, &state, &next)?;
+    let old = backlot_model::cast::CastSettings::of(&state)
+        .ok_or_else(|| Fail::refused(format!("no studio '{}'", caller.studio)))?;
+    let diff = backlot_model::cast::diff(&old, &next);
+    if diff.is_empty() {
+        return Err(Fail::refused(
+            backlot_model::Refusal::CastUnchanged.to_string(),
+        ));
+    }
+    if dry_run {
+        return Ok(crate::studio_cast::CastSetOutput {
+            studio: caller.studio.clone(),
+            dry_run,
+            json,
+            seq: None,
+            diff,
+            recasts: Vec::new(),
+        });
+    }
+    let set = crate::studio_cast::record(&dir, base, env, caller, &next, None)?;
+    Ok(crate::studio_cast::CastSetOutput {
+        studio: caller.studio.clone(),
+        dry_run,
+        json,
+        seq: Some(set.seq),
+        diff: set.diff,
+        recasts: set.recasts,
     })
 }
 

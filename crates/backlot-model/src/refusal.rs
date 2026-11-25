@@ -165,6 +165,9 @@ pub enum Refusal {
     /// `role.recast` names a person that is not one of the three
     /// fixed roles — an actor is recast through `cast`.
     NotFixedRole(String),
+    /// `role.recast` names an actor key the task no longer carries —
+    /// only its newest cast's key is the person.
+    NotCurrentActor(String),
     /// `role.recast` names a runner with no adapter.
     RunnerNotSupported(String),
     /// `role.recast` sets an effort on a runner that carries none
@@ -191,6 +194,14 @@ pub enum Refusal {
     },
     /// A `role.recast` whose new identity equals the current one.
     RecastUnchanged(String),
+    /// A `studio.cast` whose settings say what the studio already
+    /// plays.
+    CastUnchanged,
+    /// A `studio.cast` setting a runner's limit to zero — a cap seats
+    /// nobody; a real number or an absent runner limits it.
+    CastBadLimit {
+        runner: String,
+    },
     /// A `role.progress` text that is empty, too long, or holds control characters.
     BadProgress(String),
     /// An invalid `outward.requested` or `outward.completed` payload.
@@ -378,7 +389,11 @@ impl fmt::Display for Refusal {
             }
             Refusal::NotFixedRole(role) => write!(
                 f,
-                "'{role}' is not a fixed role; an actor is recast with 'backlot cast --task <task> --actor <name>'"
+                "'{role}' is not a fixed role or an actor of this studio; a new actor is cast with 'backlot cast --task <task> --actor <name>'"
+            ),
+            Refusal::NotCurrentActor(role) => write!(
+                f,
+                "'{role}' is not the task's current actor; recast the key its newest cast minted"
             ),
             Refusal::RunnerNotSupported(runner) => write!(
                 f,
@@ -408,6 +423,15 @@ impl fmt::Display for Refusal {
             ),
             Refusal::RecastUnchanged(role) => {
                 write!(f, "'{role}' already runs that identity")
+            }
+            Refusal::CastUnchanged => {
+                write!(
+                    f,
+                    "nothing changes: the file says what the studio already plays"
+                )
+            }
+            Refusal::CastBadLimit { runner } => {
+                write!(f, "limits.{runner} must be at least 1")
             }
             Refusal::BadProgress(msg) | Refusal::InvalidOutward(msg) => f.write_str(msg),
         }
