@@ -330,7 +330,10 @@ Whether the stage is running comes from the terminal inventory (`backlot-stage` 
 liveness signal costs no document writes.
 
 An optional `hollywood` object rides in the same document: the overseer's role state, runner and model, its newest
-headline and its open cards. It appears only while `[hollywood]` is configured. Independently of `[hollywood]`, each
+headline and its open cards. It appears only while `[hollywood]` is configured. Its `exchange` lines carry an optional
+`kind` — `tell` for a `message.sent` to Hollywood, `report` for a `hollywood.reported` headline, and (additive on
+`backlot/1`) `card` for a `card.proposed` Hollywood wrote itself — so the band can draw a proposal as a reply and the
+Reader can open it as a card. Independently of `[hollywood]`, each
 `StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
 and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike.
 
