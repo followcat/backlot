@@ -4,12 +4,11 @@
 use std::path::Path;
 
 use backlot_model::EventBy;
-use backlot_model::hollywood::{self, HRefusal, HollywoodKind, HollywoodState, NewHollywoodEvent};
+use backlot_model::hollywood::{HRefusal, HollywoodKind, HollywoodState, NewHollywoodEvent};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
-use crate::hrender;
-use crate::hwood::{base_of, by_for, role, store_fail, studio_state};
+use crate::hwood::{base_of, by_for, role, store_fail};
 use crate::store::{self, HPending, StoreError};
 
 pub(crate) fn hstore_fail(e: StoreError<Fail, HRefusal>) -> Fail {
@@ -97,46 +96,9 @@ fn card_gate(env: &Env) -> Result<(), Fail> {
 pub(crate) fn card_apply(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
     card_gate(env)?;
     let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
-    let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
-    let card = hstate
-        .cards
-        .get(&id)
-        .ok_or_else(|| Fail::refused(format!("no card 'c{id}'")))?;
-    let stale = match &card.action {
-        hollywood::CardAction::Setup { .. } => {
-            let current = crate::config::hollywood(&env.vars)
-                .map_err(Fail::refused)?
-                .map(|c| crate::hstage::identity(&c));
-            hollywood::stale_hollywood(&card.base, current.as_ref())
-        }
-        _ => {
-            let sstate = studio_state(&base, card.action.studio())?;
-            hollywood::stale(&card.action, &card.base, sstate.as_ref())
-        }
-    };
     let by = by_for(common, env);
-    let kind = match &stale {
-        Some(r) => HollywoodKind::CardStale {
-            card: id,
-            reason: r.clone(),
-        },
-        None => HollywoodKind::CardApplied { card: id },
-    };
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, kind),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(match stale {
-        Some(r) => format!("{} — {r}", hrender::hconfirm(&event)),
-        None => format!(
-            "{} — carrying the action out is the stage's job (H3)",
-            hrender::hconfirm(&event)
-        ),
-    })
+    let res = crate::verbs_hwood::card_apply(&base, env, by, id)?;
+    Ok(res.summary)
 }
 
 pub(crate) fn card_cancel(
@@ -147,16 +109,8 @@ pub(crate) fn card_cancel(
 ) -> Result<String, Fail> {
     card_gate(env)?;
     let base = base_of(common, env)?;
-    let hdir = store::hollywood_dir(&base);
     let _ = role(common, env);
     let by = by_for(common, env);
-    let reason = reason.to_string();
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, HollywoodKind::CardCancelled { card: id, reason }),
-            files: Vec::new(),
-        })
-    })
-    .map_err(store_fail)?;
-    Ok(hrender::hconfirm(&event))
+    let res = crate::verbs_hwood::card_cancel(&base, by, id, reason)?;
+    Ok(crate::verbs_hwood::format_card_cancel(&res))
 }

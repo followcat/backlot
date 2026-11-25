@@ -37,7 +37,7 @@ pub(crate) fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
 
 /// `priority`, `reopen` and `close` are person-facing commands: the
 /// user or the director records them; a working role cannot.
-fn person_gate(caller: &Caller) -> Result<(), Fail> {
+pub(crate) fn person_gate(caller: &Caller) -> Result<(), Fail> {
     match caller.role.as_str() {
         "user" | "director" => Ok(()),
         other => Err(Fail::refused(format!(

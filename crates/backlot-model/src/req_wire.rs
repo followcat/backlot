@@ -1,0 +1,313 @@
+//! Core-document request/result and catalog wire types (B1a).
+//!
+//! Additive-only (`apiVersion 1`): structs never reject unknown fields, and
+//! individual queue entries parse lazily so an unknown action tag yields a
+//! per-request error ack without wedging sibling requests.
+
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
+
+use crate::event::Priority;
+pub use crate::req_catalog::*;
+pub use crate::req_results::*;
+
+pub const REQ_DOC_NAME: &str = "plugin.backlot.req";
+pub const RES_DOC_NAME: &str = "plugin.backlot.res";
+
+pub const REQ_SCHEMA: &str = "backlot-req/1";
+pub const RES_SCHEMA: &str = "backlot-res/1";
+
+pub const MAX_REQ_QUEUE: usize = 32;
+pub const MAX_RES_ACKS: usize = 64;
+pub const MAX_RESULT_BYTES: usize = 65_536;
+pub const MAX_DOC_BYTES: usize = 1_048_576;
+
+pub const REQ_TTL_MS: u64 = 60_000;
+pub const REQ_FUTURE_SKEW_MS: u64 = 60_000;
+pub const DEDUPE_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// Match herdr-core's document name rule: `^[a-z0-9_][a-z0-9_.-]{0,31}$`.
+pub fn is_valid_doc_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    if bytes.is_empty() || bytes.len() > 32 {
+        return false;
+    }
+    let first = bytes[0];
+    if !matches!(first, b'a'..=b'z' | b'0'..=b'9' | b'_') {
+        return false;
+    }
+    bytes[1..]
+        .iter()
+        .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b'-'))
+}
+
+/// Validate a request timestamp against the stage clock (`60s` expiry window,
+/// `60s` future skew allowance).
+pub fn validate_timestamp(req_ts_ms: u64, now_ms: u64) -> Result<(), &'static str> {
+    if req_ts_ms < now_ms && now_ms - req_ts_ms > REQ_TTL_MS {
+        return Err("request expired");
+    }
+    if req_ts_ms > now_ms && req_ts_ms - now_ms > REQ_FUTURE_SKEW_MS {
+        return Err("request timestamp too far in the future");
+    }
+    Ok(())
+}
+
+/// Document written by clients to request person actions (`plugin.backlot.req`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReqDoc {
+    pub schema: String,
+    #[serde(default)]
+    pub queue: Vec<Value>,
+}
+
+impl Default for ReqDoc {
+    fn default() -> Self {
+        ReqDoc {
+            schema: REQ_SCHEMA.into(),
+            queue: Vec::new(),
+        }
+    }
+}
+
+/// Single queued request item in `plugin.backlot.req`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReqEnvelope {
+    pub req_id: String,
+    pub ts_ms: u64,
+    pub action: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_token: Option<String>,
+}
+
+impl ReqEnvelope {
+    pub fn new(
+        req_id: impl Into<String>,
+        ts_ms: u64,
+        action: &ReqAction,
+        confirm_token: Option<String>,
+    ) -> Result<Self, serde_json::Error> {
+        Ok(ReqEnvelope {
+            req_id: req_id.into(),
+            ts_ms,
+            action: serde_json::to_value(action)?,
+            confirm_token,
+        })
+    }
+
+    pub fn parse_action(&self) -> Result<ReqAction, String> {
+        parse_action_value(&self.action)
+    }
+}
+
+/// Parse an individual `action` JSON value into [`ReqAction`], returning clear
+/// refusal errors for explicit forbidden actions (`approve`, dialogs, outward
+/// commands) and unknown tags instead of panicking or failing sibling entries.
+pub fn parse_action_value(value: &Value) -> Result<ReqAction, String> {
+    let tag = value
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing action kind".to_string())?;
+    match tag {
+        "approve" | "permission" | "dialog" | "answer" | "prompt" | "prompt-answer"
+        | "role-approval" => {
+            return Err(
+                "prompts and dialogs must be answered in the agent terminal, not via request doc"
+                    .into(),
+            );
+        }
+        "exec" | "shell" | "run" | "terminal" | "terminal-send" | "outward" => {
+            return Err(format!(
+                "refused action '{tag}': outward/shell actions are not allowed"
+            ));
+        }
+        _ => {}
+    }
+    serde_json::from_value::<ReqAction>(value.clone())
+        .map_err(|e| format!("unsupported or malformed action '{tag}': {e}"))
+}
+
+fn de_card_id<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum CardId {
+        Num(u64),
+        Str(String),
+    }
+    match CardId::deserialize(deserializer)? {
+        CardId::Num(n) => Ok(n),
+        CardId::Str(s) => s
+            .strip_prefix('c')
+            .unwrap_or(&s)
+            .parse::<u64>()
+            .map_err(|_| serde::de::Error::custom(format!("bad card id '{s}'"))),
+    }
+}
+
+/// Typed B1a person actions accepted over `plugin.backlot.req`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum ReqAction {
+    Tell {
+        studio: String,
+        role: String,
+        text: String,
+    },
+    TellHollywood {
+        text: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        answers: Vec<u64>,
+    },
+    CardApply {
+        #[serde(deserialize_with = "de_card_id")]
+        id: u64,
+    },
+    CardCancel {
+        #[serde(deserialize_with = "de_card_id")]
+        id: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    CardShow {
+        #[serde(deserialize_with = "de_card_id")]
+        id: u64,
+    },
+    AttentionClear {
+        studio: String,
+        #[serde(alias = "seq")]
+        target: u64,
+    },
+    Recast {
+        studio: String,
+        #[serde(alias = "role")]
+        person: String,
+        runner: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        permission_profile: Option<String>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    Restart {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        studio: Option<String>,
+        #[serde(alias = "role")]
+        person: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        fresh: bool,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    Close {
+        studio: String,
+        #[serde(alias = "role")]
+        person: String,
+    },
+    Reopen {
+        studio: String,
+        #[serde(alias = "role")]
+        person: String,
+    },
+    TaskPriority {
+        studio: String,
+        task: String,
+        level: Priority,
+    },
+    TaskPause {
+        studio: String,
+        task: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    TaskResume {
+        studio: String,
+        task: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    TaskAbandon {
+        studio: String,
+        task: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    HollywoodSetup {
+        runner: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default_cast: Option<String>,
+    },
+}
+
+/// Ack document written solely by the stage (`plugin.backlot.res`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResDoc {
+    pub schema: String,
+    #[serde(default)]
+    pub acks: Vec<ResAck>,
+}
+
+impl Default for ResDoc {
+    fn default() -> Self {
+        ResDoc {
+            schema: RES_SCHEMA.into(),
+            acks: Vec::new(),
+        }
+    }
+}
+
+/// Single ack item in `plugin.backlot.res`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResAck {
+    pub req_id: String,
+    pub ts_ms: u64,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl ResAck {
+    /// Build a success ack, enforcing [`MAX_RESULT_BYTES`] on the serialized JSON
+    /// payload and degrading cleanly to an error ack if exceeded.
+    pub fn ok_value(req_id: impl Into<String>, ts_ms: u64, result: Value) -> Self {
+        let req_id = req_id.into();
+        let bytes = serde_json::to_vec(&result)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+        if bytes > MAX_RESULT_BYTES {
+            return ResAck::err(
+                req_id,
+                ts_ms,
+                format!("result exceeds {MAX_RESULT_BYTES} byte limit ({bytes} bytes)"),
+            );
+        }
+        ResAck {
+            req_id,
+            ts_ms,
+            ok: true,
+            result: Some(result),
+            error: None,
+        }
+    }
+
+    pub fn err(req_id: impl Into<String>, ts_ms: u64, error: impl Into<String>) -> Self {
+        ResAck {
+            req_id: req_id.into(),
+            ts_ms,
+            ok: false,
+            result: None,
+            error: Some(error.into()),
+        }
+    }
+}

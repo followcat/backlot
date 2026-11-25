@@ -163,6 +163,7 @@ impl App {
             self.panel.focused = true;
             self.panel.selected = Some(crate::panel::Target::Studio(key));
             self.panel.selected_row = None;
+            self.panel_reveal_selected();
             return;
         }
         if contains(hits.tab_scroll_left, point) {

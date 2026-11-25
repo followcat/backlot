@@ -18,6 +18,7 @@ pub(crate) mod remote;
 mod row_lines;
 mod rows;
 mod rows_fit;
+mod rows_fold;
 mod update;
 mod working_line;
 
@@ -74,9 +75,12 @@ pub(crate) struct Panel {
     /// The `Space` drawer's owner row — a `Person` or `Task` target;
     /// the three drawer lines draw under it (S2 §3).
     pub drawer: Option<Target>,
-    /// Studios whose `✓ <n> accepted` fold is open — the accepted
+    /// Studios whose `✓ <n> done` fold is open — the accepted
     /// task rows show instead of the fold line.
     pub accepted_folds: std::collections::BTreeSet<crate::studio::StudioKey>,
+    /// Studios whose `□ <n> closed` fold is open — the closed
+    /// role rows show under the fold line.
+    pub closed_folds: std::collections::BTreeSet<crate::studio::StudioKey>,
     /// `f` on a ready-to-finish studio armed the inline
     /// `finish <id>? [y/n]` confirm — `y` runs `studio finish`, `n`
     /// or `Esc` stands down (S2 §2's `[f]` hint made real).
@@ -134,6 +138,7 @@ impl Panel {
             selected_row: None,
             drawer: None,
             accepted_folds: Default::default(),
+            closed_folds: Default::default(),
             finish_confirm: None,
             drafts: std::collections::HashMap::new(),
             histories: std::collections::HashMap::new(),
@@ -154,9 +159,15 @@ impl Panel {
     }
 
     /// Whether `key`'s accepted fold is open — the accepted task
-    /// rows draw instead of the `✓ <n> accepted` line.
+    /// rows draw instead of the `✓ <n> done` line.
     pub(crate) fn accepted_open(&self, key: &crate::studio::StudioKey) -> bool {
         self.accepted_folds.contains(key)
+    }
+
+    /// Whether `key`'s closed fold is open — the closed role rows
+    /// draw under the `□ <n> closed` line.
+    pub(crate) fn closed_open(&self, key: &crate::studio::StudioKey) -> bool {
+        self.closed_folds.contains(key)
     }
 
     /// The studio's parked `›` draft — `None` while it never typed.

@@ -202,6 +202,7 @@ fn guide_cast_file_parses_through_studio_new() {
         role: "user".into(),
         task: None,
         session: None,
+        via: None,
     };
     let env = crate::cli::Env {
         vars: Default::default(),

@@ -9,6 +9,7 @@ use backlot_model::summary::{RoleSummary, StudioExchange, TaskSummary};
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
 use super::rows_fit::*;
+use super::rows_fold::{BlockState, block_states};
 use super::{Panel, PanelMode};
 use crate::studio::StudioKey;
 
@@ -32,8 +33,10 @@ pub(crate) enum Target {
     Person(StudioKey, String),
     /// `(studio, task)` — a task row with no live actor row.
     Task(StudioKey, String),
-    /// The `✓ <n> accepted` fold line — Space/Enter opens it.
+    /// The `✓ <n> done · <ids>` fold line — Space/Enter opens it.
     Fold(StudioKey),
+    /// The `□ <n> closed · <names>` fold line — Space/Enter opens it.
+    ClosedFold(StudioKey),
     /// A `stage stopped` row — the bare machine line or a block's
     /// owed-step `◌ … · s start`; Enter/click is the `s` (U6c).
     /// `None` names this core.
@@ -65,6 +68,7 @@ impl Target {
             | Target::Person(key, _)
             | Target::Task(key, _)
             | Target::Fold(key)
+            | Target::ClosedFold(key)
             | Target::Talk(key, _)
             | Target::Input(key)
             | Target::ReopenProducer(key) => Some(key),
@@ -189,8 +193,13 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         task: &'a TaskSummary,
     },
-    /// `✓ <n> accepted` — the fold line when many tasks are done.
+    /// `✓ <n> done · <ids>` — the fold line when 2+ tasks are done.
     AcceptedFold {
+        studio: StudioRef<'a>,
+        open: bool,
+    },
+    /// `□ <n> closed · <names>` — the fold line when closed roles exist.
+    ClosedFold {
         studio: StudioRef<'a>,
         open: bool,
     },
@@ -282,6 +291,7 @@ impl Row<'_> {
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
+            Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
             Row::Input { studio } => Target::Input(studio.key()),
             Row::ReopenProducer { studio } => Target::ReopenProducer(studio.key()),
@@ -406,14 +416,23 @@ fn block_rows<'a>(
             }
         }
     }
-    if folds >= 6 {
+    if folds >= 2 {
         out.push(Row::AcceptedFold {
             studio,
             open: accepted_open,
         });
     }
-    for role in closed_roles(studio.studio) {
-        emit_person(out, role);
+    if closed_roles(studio.studio).next().is_some() {
+        let closed_open = panel.closed_open(&studio.key());
+        out.push(Row::ClosedFold {
+            studio,
+            open: closed_open,
+        });
+        if closed_open {
+            for role in closed_roles(studio.studio) {
+                emit_person(out, role);
+            }
+        }
     }
     if talk_limit > 0 {
         let ex = &studio.studio.exchange;
@@ -432,6 +451,22 @@ fn block_rows<'a>(
         out.push(Row::ReopenProducer { studio });
     } else {
         out.push(Row::Input { studio });
+    }
+    out.push(Row::BlockBottom(studio));
+}
+
+/// An unselected studio's folded block: header, one `Person` row per
+/// live role (no detail or drawer lines), and bottom border.
+fn folded_block_rows<'a>(
+    out: &mut Vec<Row<'a>>,
+    studio: StudioRef<'a>,
+    stage: bool,
+    reachable: bool,
+) {
+    let health = health_of(studio.studio, stage, reachable);
+    out.push(Row::BlockTop { studio, health });
+    for role in live_roles(studio.studio) {
+        out.push(Row::Person { studio, role });
     }
     out.push(Row::BlockBottom(studio));
 }
@@ -539,10 +574,10 @@ pub(crate) fn rows<'a>(
                     || studio.studio.next.is_some()
                     || studio.studio.ready_to_finish
             };
-            let open = expanded_set(&studios, panel, current, body_height, &owed);
+            let states = block_states(&studios, panel, current, body_height, &owed);
             let budgets = talk_budgets(
                 &studios,
-                &open,
+                &states,
                 panel,
                 current,
                 body_height,
@@ -551,13 +586,15 @@ pub(crate) fn rows<'a>(
             );
             for studio in studios {
                 let key = studio.key();
-                if open.contains(&key) {
-                    let stage = stage_running(studio.machine);
-                    let reach = reachable(studio.machine);
-                    let talk_limit = budgets.get(&key).copied().unwrap_or(0);
-                    block_rows(&mut out, studio, panel, stage, reach, talk_limit);
-                } else {
-                    out.push(Row::Stacked(studio));
+                let stage = stage_running(studio.machine);
+                let reach = reachable(studio.machine);
+                match states.get(&key).copied().unwrap_or(BlockState::Stacked) {
+                    BlockState::Full => {
+                        let talk_limit = budgets.get(&key).copied().unwrap_or(0);
+                        block_rows(&mut out, studio, panel, stage, reach, talk_limit);
+                    }
+                    BlockState::Folded => folded_block_rows(&mut out, studio, stage, reach),
+                    BlockState::Stacked => out.push(Row::Stacked(studio)),
                 }
             }
             // H4: with no `[hollywood]` the expanded panel's last row

@@ -294,6 +294,7 @@ async fn a_closed_persons_enter_notices_instead_of_reopening() {
     }));
     app.area = (120, 24);
     open_panel(&mut app);
+    app.panel.closed_folds.insert("acme-shop".into());
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
     key(&mut app, hc_vt::Key::Enter);
     assert!(
@@ -475,6 +476,7 @@ async fn a_closed_person_reopens_on_o() {
     }));
     app.area = (120, 24);
     open_panel(&mut app);
+    app.panel.closed_folds.insert("acme-shop".into());
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
     key(&mut app, hc_vt::Key::Char('o'));
     assert_eq!(
@@ -496,6 +498,7 @@ async fn a_non_resumable_person_says_why_instead_of_reopening() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
+    app.panel.closed_folds.insert("acme-shop".into());
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-eve".into()));
     key(&mut app, hc_vt::Key::Enter);
     assert!(app.notice.is_some(), "the refusal notices");

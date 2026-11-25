@@ -105,11 +105,11 @@ async fn up_down_and_esc_preserve_panel_editing_invariant_across_talk_rows() {
     );
     assert!(!app.panel_editing());
 
-    // `Up` above the oldest Talk row lands on the last closed person (`actor-eve`).
+    // `Up` above the oldest Talk row lands on `ClosedFold` (above closed seats).
     key(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(
         app.panel.selected,
-        Some(Target::Person("acme-shop".into(), "actor-eve".into()))
+        Some(Target::ClosedFold("acme-shop".into()))
     );
     assert!(!app.panel_editing());
 
@@ -224,14 +224,14 @@ async fn remote_studio_talk_click_and_menu_route_report_show_to_remote_machine()
     app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
     let calls = attach_view_runner(&mut app, "Remote producer full message body\n");
 
-    app.area = (120, 32);
-    open_panel(&mut app);
-    draw_to(&mut app, 120, 32);
-
     let remote_key = crate::studio::StudioKey {
         machine: Some("host-b".into()),
         id: "beta-tools".into(),
     };
+    app.area = (120, 32);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Studio(remote_key.clone()));
+    draw_to(&mut app, 120, 32);
     let (rect, target) = app
         .panel_hits
         .rows

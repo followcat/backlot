@@ -60,6 +60,7 @@ async fn a_closed_persons_click_notices_instead_of_reopening() {
     }));
     app.area = (120, 24);
     open_panel(&mut app);
+    app.panel.closed_folds.insert("acme-shop".into());
     draw_to(&mut app, 120, 24);
     let dave = app
         .panel_hits

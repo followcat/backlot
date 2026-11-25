@@ -7,6 +7,7 @@ mod draw;
 mod exchange;
 mod focus_lot;
 mod focus_lot_hints;
+mod fold;
 mod input;
 mod keys;
 mod menus;

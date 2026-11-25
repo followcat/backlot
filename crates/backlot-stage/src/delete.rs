@@ -68,6 +68,7 @@ pub(crate) fn run(
     let by = EventBy {
         role,
         session: env.get("HC_TERMINAL_ID").map(String::from),
+        via: None,
     };
     link::runtime()?.block_on(run_local(env, common, &id, by, dry_run, force, json))
 }

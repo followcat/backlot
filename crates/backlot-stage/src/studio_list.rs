@@ -361,3 +361,20 @@ pub fn run(env: &Env, common: &Common, json: bool, archived: bool) -> Result<Str
     }
     Ok(table(&listing.studios).trim_end().to_string())
 }
+
+/// Archived studios stored under one base directory (`backlot-cat.archived`).
+pub(crate) fn archived_for_base(dir: &Path) -> Vec<backlot_model::req_wire::ArchivedCatalogEntry> {
+    let mut rows = Vec::new();
+    scan_archived(dir, None, None, &mut rows);
+    rows.sort_by(|a, b| b.last_ms.cmp(&a.last_ms).then_with(|| a.name.cmp(&b.name)));
+    rows.into_iter()
+        .map(|r| backlot_model::req_wire::ArchivedCatalogEntry {
+            studio: r.studio.unwrap_or_default(),
+            name: r.name,
+            stamp: r.stamp,
+            repo: r.repo,
+            requirement: r.requirement,
+            last_ms: Some(r.last_ms),
+        })
+        .collect()
+}

@@ -46,6 +46,7 @@ use crate::workareas;
 const TICK: Duration = Duration::from_secs(1);
 
 /// The live terminal view the loop works on.
+#[derive(Default)]
 pub(crate) struct Inventory {
     /// Every live named terminal; per-studio views come from labels.
     pub(crate) terms: Vec<reconcile::LiveTerminal>,
@@ -1024,6 +1025,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         .await
         .ok();
     let mut throttle = doc::Throttle::default();
+    let mut catalog = crate::catalog_doc::Publisher::new(link.core_id.clone(), env);
+    let mut doc_consumer = crate::doc_req::Consumer::load(&stage.base, crate::live::now_ms());
+    let mut last_req_poll_ms = 0u64;
+    let mut req_wake = true;
     let mut live = live_terminals(&link.client, true).await?;
     // The facts last written to `live.json`, so a tick writes only on a
     // change or the heartbeat (`live::due`) — never every second, which
@@ -1031,35 +1036,27 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     let mut live_written: Option<crate::live::Live> = None;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
-        stage.tick(&live).await?;
-        // The summary regenerates each tick; the throttle writes it
-        // only on change, at most once per gap. The same facts land in
-        // `live.json` beside the ledgers, on a change and a heartbeat: a
-        // role terminal carries `BACKLOT_STATE_DIR` and never connects
-        // to the core, so its `backlot status` reads them from there,
-        // and a reader drops a file older than `STALE_MS`.
-        let summary = stage.summary_view(&live.doing);
-        let now_ms = crate::live::now_ms();
-        let live_facts = crate::live::from_summary(&summary, now_ms);
-        if crate::live::due(&live_facts, live_written.as_ref(), now_ms) == crate::live::Write::Now {
-            match crate::live::write(&stage.base, &live_facts) {
-                Ok(()) => live_written = Some(live_facts),
-                Err(e) => stage.log_once("live", &format!("live facts: {e}")),
-            }
-        }
-        throttle.note(summary);
-        // A non-core publish failure leaves the summary to the next
-        // tick, logged once; a dead wire exits.
-        match doc::publish(&link.client, &mut throttle, now_ms).await {
-            Ok(true) => crate::stagelog::stage_log!("summary written"),
-            Ok(false) => {}
-            Err(e @ Fail::Core(_)) => return Err(e),
-            Err(e) => stage.log_once("core", e.message()),
-        }
+        step_daemon(
+            &mut stage,
+            &live,
+            &mut throttle,
+            &mut catalog,
+            &mut doc_consumer,
+            &mut live_written,
+            &mut req_wake,
+            &mut last_req_poll_ms,
+        )
+        .await?;
         live = match sub.as_mut() {
             Some(sub) => match tokio::time::timeout(TICK, sub.recv()).await {
-                // A terminal event or the cadence: refetch the view.
-                Ok(Ok(_)) | Err(_) => refresh_inventory(&link.client, &mut stage, live).await?,
+                // A terminal or request-doc event, or the cadence: refetch the view.
+                Ok(Ok(notif)) => {
+                    if crate::doc_req::is_req_wake_event(&notif) {
+                        req_wake = true;
+                    }
+                    refresh_inventory(&link.client, &mut stage, live).await?
+                }
+                Err(_) => refresh_inventory(&link.client, &mut stage, live).await?,
                 Ok(Err(e)) => {
                     return Err(Fail::core(format!("lost the core event stream: {e}")));
                 }
@@ -1070,4 +1067,76 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
             }
         };
     }
+}
+
+/// One full daemon cycle: drain `plugin.backlot.req` if woken or 60 s elapsed,
+/// tick studio/Hollywood state machines, publish `backlot` and `backlot-cat`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn step_daemon(
+    stage: &mut Stage,
+    live: &Inventory,
+    throttle: &mut doc::Throttle,
+    catalog: &mut crate::catalog_doc::Publisher,
+    doc_consumer: &mut crate::doc_req::Consumer,
+    live_written: &mut Option<crate::live::Live>,
+    req_wake: &mut bool,
+    last_req_poll_ms: &mut u64,
+) -> Result<bool, Fail> {
+    let now_ms = crate::live::now_ms();
+    let should_poll = *req_wake
+        || *last_req_poll_ms == 0
+        || now_ms.saturating_sub(*last_req_poll_ms) >= crate::doc_req::POLL_INTERVAL_MS;
+    let drained = if should_poll {
+        *req_wake = false;
+        *last_req_poll_ms = now_ms;
+        match doc_consumer.process(stage, now_ms).await {
+            Ok(d) => d,
+            Err(e @ Fail::Core(_)) => return Err(e),
+            Err(e) => {
+                stage.log_once("doc_req", e.message());
+                false
+            }
+        }
+    } else {
+        false
+    };
+    if drained {
+        throttle.force_next();
+    }
+
+    stage.tick(live).await?;
+    // The summary regenerates each tick; the throttle writes it
+    // only on change, at most once per gap. The same facts land in
+    // `live.json` beside the ledgers, on a change and a heartbeat: a
+    // role terminal carries `BACKLOT_STATE_DIR` and never connects
+    // to the core, so its `backlot status` reads them from there,
+    // and a reader drops a file older than `STALE_MS`.
+    let summary = stage.summary_view(&live.doing);
+    let now_ms = crate::live::now_ms();
+    let live_facts = crate::live::from_summary(&summary, now_ms);
+    if crate::live::due(&live_facts, live_written.as_ref(), now_ms) == crate::live::Write::Now {
+        match crate::live::write(&stage.base, &live_facts) {
+            Ok(()) => *live_written = Some(live_facts),
+            Err(e) => stage.log_once("live", &format!("live facts: {e}")),
+        }
+    }
+    throttle.note(summary);
+    // A non-core publish failure leaves the summary to the next
+    // tick, logged once; a dead wire exits.
+    match doc::publish(&stage.client, throttle, now_ms).await {
+        Ok(true) => crate::stagelog::stage_log!("summary written"),
+        Ok(false) => {}
+        Err(e @ Fail::Core(_)) => return Err(e),
+        Err(e) => stage.log_once("core", e.message()),
+    }
+    match catalog
+        .publish_if_changed(&stage.client, stage, now_ms)
+        .await
+    {
+        Ok(true) => crate::stagelog::stage_log!("catalog written"),
+        Ok(false) => {}
+        Err(e @ Fail::Core(_)) => return Err(e),
+        Err(e) => stage.log_once("catalog", e.message()),
+    }
+    Ok(drained)
 }

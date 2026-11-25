@@ -145,13 +145,25 @@ pub struct Caller {
     pub role: String,
     pub task: Option<String>,
     pub session: Option<String>,
+    pub via: Option<String>,
 }
 
 impl Caller {
+    pub fn doc_user(studio: impl Into<String>) -> Self {
+        Caller {
+            studio: studio.into(),
+            role: "user".into(),
+            task: None,
+            session: None,
+            via: Some("doc".into()),
+        }
+    }
+
     pub fn by(&self) -> EventBy {
         EventBy {
             role: self.role.clone(),
             session: self.session.clone(),
+            via: self.via.clone(),
         }
     }
 }
@@ -204,6 +216,7 @@ fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
         role,
         task,
         session: env.get("HC_TERMINAL_ID").map(String::from),
+        via: None,
     })
 }
 
@@ -370,6 +383,7 @@ pub(crate) fn exec_event(
                 .unwrap_or_else(|| "user".to_string()),
             task: None,
             session: env.get("HC_TERMINAL_ID").map(String::from),
+            via: None,
         },
         Cmd::Progress { source } => {
             check_identity(&common, env)?;
@@ -393,6 +407,7 @@ pub(crate) fn exec_event(
                 let by = backlot_model::EventBy {
                     role,
                     session: env.get("HC_TERMINAL_ID").map(String::from),
+                    via: None,
                 };
                 let hdir = store::hollywood_dir(base);
                 let event = store::append_hollywood(&hdir, |_, _| {
@@ -425,6 +440,7 @@ pub(crate) fn exec_event(
                 role,
                 task,
                 session: env.get("HC_TERMINAL_ID").map(String::from),
+                via: None,
             }
         }
         _ => caller(&common, env, needs_task)?,
@@ -495,31 +511,99 @@ pub(crate) fn exec_event(
         } => Some(file.clone()),
         _ => None,
     };
-    let built = commands::build(&caller, cmd, env, base)?;
-    let recast_note = std::cell::Cell::new(None);
-    let event = store::append(&dir, |state, seq| {
-        let pending = built(state, seq)?;
-        if let backlot_model::EventKind::RoleRecast { role, .. } = &pending.event.kind {
-            recast_note.set(backlot_model::recast::unstarted_note(state, role));
+    if let Some(res) = match cmd {
+        Cmd::Tell { role, source } if h_mirror.is_none() => {
+            let file = match source {
+                crate::args::TextSource::File(p) => p,
+                _ => return Err(Fail::refused("internal: unresolved message source")),
+            };
+            Some(crate::verbs::format_tell(&crate::verbs::tell_file(
+                base, env, &caller, role, file,
+            )?))
         }
-        Ok(pending)
-    })?;
-    let mut out = render::confirm(&event);
-    if let Some(note) = recast_note.get() {
-        out.push_str(&format!(" — {note}"));
+        Cmd::AttentionClear { target } => Some(crate::verbs::format_attention_clear(
+            &crate::verbs::attention_clear(base, &caller, target, true)?,
+        )),
+        Cmd::Recast {
+            person,
+            runner,
+            model,
+            effort,
+            permission_profile,
+            reason,
+        } => {
+            let (res, note) = crate::verbs::recast(
+                base,
+                env,
+                &caller,
+                person,
+                runner,
+                model,
+                effort,
+                permission_profile,
+                reason,
+            )?;
+            Some(crate::verbs::format_recast(&res, note))
+        }
+        Cmd::Restart {
+            person,
+            fresh,
+            reason,
+        } => Some(crate::verbs::format_restart(&crate::verbs::restart_role(
+            base, env, &caller, person, fresh, reason,
+        )?)),
+        Cmd::Close { person } => Some(crate::verbs::format_close(&crate::verbs::close(
+            base, env, &caller, person,
+        )?)),
+        Cmd::Reopen { person } => Some(crate::verbs::format_reopen(&crate::verbs::reopen(
+            base, env, &caller, person,
+        )?)),
+        Cmd::Priority { level } => Some(crate::verbs::format_task_priority(
+            &crate::verbs::task_priority(base, env, &caller, level)?,
+        )),
+        Cmd::TaskState { change, reason }
+            if matches!(
+                change,
+                backlot_model::event::TaskStateChange::Paused
+                    | backlot_model::event::TaskStateChange::Resumed
+                    | backlot_model::event::TaskStateChange::Abandoned
+            ) =>
+        {
+            Some(crate::verbs::format_task_state(&crate::verbs::task_state(
+                base, env, &caller, change, reason,
+            )?))
+        }
+        other => {
+            let built = commands::build(&caller, other, env, base)?;
+            let recast_note = std::cell::Cell::new(None);
+            let event = store::append(&dir, |state, seq| {
+                let pending = built(state, seq)?;
+                if let backlot_model::EventKind::RoleRecast { role, .. } = &pending.event.kind {
+                    recast_note.set(backlot_model::recast::unstarted_note(state, role));
+                }
+                Ok(pending)
+            })?;
+            let mut out = render::confirm(&event);
+            if let Some(note) = recast_note.get() {
+                out.push_str(&format!(" — {note}"));
+            }
+            if let Some(file) = ask {
+                let ask = commands::ask_cmd(caller.by(), file)?;
+                let queued = store::append(&dir, |state, seq| ask(state, seq))?;
+                out.push_str(&format!("\n{}", render::confirm(&queued)));
+            }
+            if let Some(file) = h_mirror {
+                out.push_str(&format!(
+                    "\n{}",
+                    crate::hwood::mirror_tell(base, &caller.by(), &caller.studio, &file)?
+                ));
+            }
+            return Ok(out);
+        }
+    } {
+        return Ok(res);
     }
-    if let Some(file) = ask {
-        let ask = commands::ask_cmd(caller.by(), file)?;
-        let queued = store::append(&dir, |state, seq| ask(state, seq))?;
-        out.push_str(&format!("\n{}", render::confirm(&queued)));
-    }
-    if let Some(file) = h_mirror {
-        out.push_str(&format!(
-            "\n{}",
-            crate::hwood::mirror_tell(base, &caller.by(), &caller.studio, &file)?
-        ));
-    }
-    Ok(out)
+    unreachable!("matched arms always return")
 }
 
 /// Entry point for `main`: `None` unless argv[1] is a studio command.

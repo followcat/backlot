@@ -91,8 +91,8 @@ titles and spacers are skipped. While it is focused it owns these keys:
 |---|---|
 | `j`/`k`, arrows | Move the selection |
 | `PageUp`/`PageDown` | Scroll |
-| `Enter` | Focus a live person's terminal / make a studio current (a closed person reopens a resumable or fixed seat through the action tracker) |
-| `Space` | Open or close the drawer under a person or task; fold a studio block |
+| `Enter` | Focus a live person's terminal / make a studio current / toggle a `✓ … done` or `□ … closed` fold row (`o` owns closed-seat reopening) |
+| `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold a studio block |
 | `o` | Reopen a closed resumable person |
 | `v` | Open the Task & Delivery Sheet |
 | `p` | Peek the terminal |

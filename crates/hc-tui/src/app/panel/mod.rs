@@ -9,6 +9,7 @@ mod input;
 mod keys;
 mod layout;
 mod mouse;
+mod reveal;
 mod select;
 pub(crate) mod sheet;
 mod sheet_nav;

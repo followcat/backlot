@@ -98,6 +98,10 @@ async fn s_on_a_studio_row_starts_its_machines_stage() {
     app.area = (160, 24);
     drop_terminal(&mut app, "host-b/t9");
     open_panel(&mut app);
+    app.panel.selected = Some(Target::Studio(StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    }));
     select_stage_row(&mut app, Some("host-b"));
     key(&mut app, hc_vt::Key::Char('s'));
     assert_eq!(stage_start_pending(&app), Some(Some("host-b".into())));
@@ -112,6 +116,10 @@ async fn enter_on_the_stage_row_starts_it() {
     app.area = (160, 24);
     drop_terminal(&mut app, "host-b/t9");
     open_panel(&mut app);
+    app.panel.selected = Some(Target::Studio(StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    }));
     select_stage_row(&mut app, Some("host-b"));
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(stage_start_pending(&app), Some(Some("host-b".into())));

@@ -10,6 +10,7 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 use super::Panel;
 use super::data::StudioRef;
 use super::rows::*;
+use super::rows_fold::{BlockState, accepted_fold_ids, folded_block_height, selected_studio};
 use crate::studio::StudioKey;
 use crate::studio::glyphs::Person;
 
@@ -85,7 +86,7 @@ pub(crate) fn live_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
     out
 }
 
-/// The studio's closed roles — under the task rows (S2 §2).
+/// The studio's closed roles — under the closed fold line (S2 §2).
 pub(super) fn closed_roles(studio: &StudioSummary) -> impl Iterator<Item = &RoleSummary> {
     studio.roles.iter().filter(|r| r.state == "closed")
 }
@@ -100,23 +101,13 @@ pub(super) fn represented(studio: &StudioSummary, task: &TaskSummary) -> bool {
 
 /// The dock's task rows: tasks with no live actor row, minus the
 /// terminal states that never draw (`abandoned`, `taken_over`) and,
-/// while the accepted fold is shut, `accepted`/`partially_accepted`.
+/// while the done fold is shut, `accepted`/`partially_accepted`.
 /// Ledger order is the summary's order.
 pub(super) fn task_rows(
     studio: &StudioSummary,
     accepted_open: bool,
 ) -> impl Iterator<Item = &TaskSummary> {
-    let accepted = studio
-        .tasks
-        .iter()
-        .filter(|t| {
-            matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        })
-        .count();
-    let fold = accepted >= 6 && !accepted_open;
+    let fold = fold_count(studio) >= 2 && !accepted_open;
     studio.tasks.iter().filter(move |t| {
         if matches!(t.status, TaskStatus::Abandoned | TaskStatus::TakenOver)
             || represented(studio, t)
@@ -138,17 +129,7 @@ pub(super) fn task_rows(
 /// The number of accepted tasks behind the fold — the `✓ <n>`
 /// line's count; `0` means no fold line at all.
 pub(super) fn fold_count(studio: &StudioSummary) -> usize {
-    studio
-        .tasks
-        .iter()
-        .filter(|t| {
-            matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        })
-        .filter(|t| !represented(studio, t))
-        .count()
+    accepted_fold_ids(studio).len()
 }
 
 /// A person's line count: itself plus its cue/failed line and an
@@ -168,8 +149,6 @@ pub(super) fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &P
 
 /// The task section's line count: task rows plus the fold line and
 /// any open drawer under a task row.
-/// The task section's line count: task rows plus the fold line and
-/// any open drawer under a task row.
 pub(super) fn tasks_height(studio: StudioRef<'_>, panel: &Panel, accepted_open: bool) -> usize {
     let mut height = task_rows(studio.studio, accepted_open)
         .map(|t| {
@@ -181,77 +160,55 @@ pub(super) fn tasks_height(studio: StudioRef<'_>, panel: &Panel, accepted_open: 
             ) * 3
         })
         .sum::<usize>();
-    height += usize::from(fold_count(studio.studio) >= 6);
+    height += usize::from(fold_count(studio.studio) >= 2);
     height
 }
 
-/// An expanded block's height: top + bottom borders, the `›` input
-/// line, the owed-step line when present, the armed finish confirm,
-/// each person's lines, the task section and the closed section.
+/// The closed section's line count: the `□ <n> closed` fold row when
+/// any closed role exists, plus each closed role when open.
+pub(super) fn closed_height(studio: StudioRef<'_>, panel: &Panel, closed_open: bool) -> usize {
+    if closed_roles(studio.studio).next().is_none() {
+        return 0;
+    }
+    let mut height = 1;
+    if closed_open {
+        for role in closed_roles(studio.studio) {
+            height += person_height(studio, role, panel);
+        }
+    }
+    height
+}
+
+/// An expanded block's height without talk rows: top + bottom
+/// borders, `›` / reopen line, owed/report/confirm/next/usage lines,
+/// live people, task section, and closed section.
 pub(super) fn block_height(
     studio: StudioRef<'_>,
     panel: &Panel,
     owed: bool,
     accepted_open: bool,
+    closed_open: bool,
 ) -> usize {
     let mut height = 3
         + usize::from(owed)
         + usize::from(super::data::report_pending(studio.studio))
-        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
+        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()))
+        + usize::from(super::data::next_step(studio.studio).is_some())
+        + usize::from(studio.studio.usage.is_some());
     for role in live_roles(studio.studio) {
         height += person_height(studio, role, panel);
     }
     height += tasks_height(studio, panel, accepted_open);
-    for role in closed_roles(studio.studio) {
-        height += person_height(studio, role, panel);
-    }
+    height += closed_height(studio, panel, closed_open);
     height
 }
 
-/// Which studios draw an expanded block: all of them while every
-/// expanded block fits the body; past that, the current studio and any
-/// block `Space` opened by hand — `collapsed_blocks` wins either way.
-pub(super) fn expanded_set(
-    studios: &[StudioRef<'_>],
-    panel: &Panel,
-    current: Option<&StudioKey>,
-    body_height: u16,
-    ctx: &dyn Fn(StudioRef<'_>) -> bool,
-) -> std::collections::BTreeSet<StudioKey> {
-    let fits = body_height == 0
-        || studios
-            .iter()
-            .map(|studio| {
-                block_height(
-                    *studio,
-                    panel,
-                    ctx(*studio),
-                    panel.accepted_open(&studio.key()),
-                )
-            })
-            .sum::<usize>()
-            <= body_height as usize;
-    studios
-        .iter()
-        .filter_map(|studio| {
-            let key = studio.key();
-            let open = if panel.expanded_blocks.contains(&key) {
-                true
-            } else if panel.collapsed_blocks.contains(&key) {
-                false
-            } else {
-                fits || current == Some(&key)
-            };
-            open.then_some(key)
-        })
-        .collect()
-}
-
-/// How many newest `exchange` lines each open block may render under
-/// `body_height` without starving roles, tasks or the `›` input line.
+/// How many newest `exchange` lines the selected full block may render
+/// under `body_height` without starving roles, tasks, folded blocks,
+/// or the `›` input line.
 pub(super) fn talk_budgets(
     studios: &[StudioRef<'_>],
-    open: &std::collections::BTreeSet<StudioKey>,
+    states: &std::collections::BTreeMap<StudioKey, BlockState>,
     panel: &Panel,
     current: Option<&StudioKey>,
     body_height: u16,
@@ -259,76 +216,52 @@ pub(super) fn talk_budgets(
     ctx: &dyn Fn(StudioRef<'_>) -> bool,
 ) -> std::collections::BTreeMap<StudioKey, usize> {
     let mut budgets = std::collections::BTreeMap::new();
-    let open_studios: Vec<StudioRef<'_>> = studios
-        .iter()
-        .copied()
-        .filter(|s| open.contains(&s.key()) && !s.studio.exchange.is_empty())
-        .collect();
-    if open_studios.is_empty() {
+    let Some(sel_key) = selected_studio(studios, panel, current) else {
         return budgets;
-    }
+    };
+    let Some(target) = studios.iter().copied().find(|s| {
+        s.key() == sel_key
+            && states.get(&sel_key) == Some(&BlockState::Full)
+            && !s.studio.exchange.is_empty()
+    }) else {
+        return budgets;
+    };
     if body_height == 0 {
-        for s in open_studios {
-            budgets.insert(s.key(), s.studio.exchange.len());
-        }
+        budgets.insert(sel_key, target.studio.exchange.len());
         return budgets;
     }
     let used = header_rows
         + usize::from(panel.hollywood_hint)
+        + usize::from(panel.update.is_some())
         + studios
             .iter()
             .map(|studio| {
                 let key = studio.key();
-                if open.contains(&key) {
-                    block_height(*studio, panel, ctx(*studio), panel.accepted_open(&key))
-                        + usize::from(studio.studio.usage.is_some())
-                } else {
-                    1
+                match states.get(&key).copied().unwrap_or(BlockState::Stacked) {
+                    BlockState::Full => block_height(
+                        *studio,
+                        panel,
+                        ctx(*studio),
+                        panel.accepted_open(&key),
+                        panel.closed_open(&key),
+                    ),
+                    BlockState::Folded => folded_block_height(studio.studio),
+                    BlockState::Stacked => 1,
                 }
             })
             .sum::<usize>();
     let avail = body_height as usize;
     if used > avail {
-        // When the non-chat rows already exceed a normal-height dock,
-        // the body scrolls anyway: keep at most the newest 2 turns at
-        // the bottom above `›`, and 0 on cramped heights (`<= 10`).
+        // When non-chat rows exceed a normal-height dock, keep at most
+        // the newest 2 turns on the selected studio (`0` at `<= 10`).
         if avail > 10 {
-            for s in open_studios {
-                budgets.insert(s.key(), s.studio.exchange.len().min(2));
-            }
+            budgets.insert(sel_key, target.studio.exchange.len().min(2));
         }
         return budgets;
     }
-    let mut slack = avail - used;
-    if slack == 0 {
-        return budgets;
-    }
-    // Distribute slack round-robin across open studios (`current`
-    // first so the active studio wins odd spare lines).
-    let mut ordered = Vec::with_capacity(open_studios.len());
-    if let Some(cur) = current {
-        ordered.extend(open_studios.iter().copied().filter(|s| &s.key() == cur));
-        ordered.extend(open_studios.iter().copied().filter(|s| &s.key() != cur));
-    } else {
-        ordered.extend(open_studios);
-    }
-    while slack > 0 {
-        let mut progressed = false;
-        for s in &ordered {
-            if slack == 0 {
-                break;
-            }
-            let key = s.key();
-            let cur = budgets.get(&key).copied().unwrap_or(0);
-            if cur < s.studio.exchange.len() {
-                budgets.insert(key, cur + 1);
-                slack -= 1;
-                progressed = true;
-            }
-        }
-        if !progressed {
-            break;
-        }
+    let slack = avail - used;
+    if slack > 0 {
+        budgets.insert(sel_key, slack.min(target.studio.exchange.len()));
     }
     budgets
 }
