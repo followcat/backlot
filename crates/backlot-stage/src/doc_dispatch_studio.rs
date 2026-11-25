@@ -28,6 +28,7 @@ pub(crate) fn handles(action: &ReqAction) -> bool {
             | ReqAction::StudioRestore { .. }
             | ReqAction::Repos { .. }
             | ReqAction::Runners
+            | ReqAction::Version
     )
 }
 
@@ -87,6 +88,7 @@ pub(crate) async fn dispatch(
             to_json(repos::scan(env, Some(&stage.base), from.as_deref(), all)?)
         }
         ReqAction::Runners => to_json(crate::runners::detect_report::rows(env)),
+        ReqAction::Version => to_json(format!("backlot {}", env!("CARGO_PKG_VERSION"))),
         _ => unreachable!("handles() gates the studio actions"),
     }
 }

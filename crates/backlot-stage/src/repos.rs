@@ -28,14 +28,16 @@ pub(crate) struct Entry {
     name: String,
     path: String,
     kind: String,
+    #[serde(default)]
     in_use_studio: Option<String>,
     /// The checked-out branch — `null` on a plain directory or a
     /// detached/unknown HEAD.
+    #[serde(default)]
     branch: Option<String>,
     /// A `dir` entry's direct-child repositories, by name — the
     /// dialog reads it as the workspace's member list (D4); absent
     /// on repository entries and on plain directories.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     members: Vec<String>,
 }
 

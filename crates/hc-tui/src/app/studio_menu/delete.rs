@@ -24,7 +24,7 @@ impl App {
         let tx = self.dialog_fetch_tx.clone();
         let run = self.ns_runner();
         let machine = key.machine.clone();
-        let argv = vec![
+        let mut argv = vec![
             "studio".into(),
             "delete".into(),
             key.id.clone(),
@@ -33,6 +33,11 @@ impl App {
             "--as".into(),
             "user".into(),
         ];
+        // A server's dry run answers `{ text, confirm_token }`; the
+        // confirm then sends that exact token.
+        if self.server_mode() && key.machine.is_none() {
+            argv.push(crate::server_action::PLAN_FLAG.into());
+        }
         tokio::spawn(async move {
             let _ = tx.send((epoch, run(machine, argv, None).await)).await;
         });
@@ -52,30 +57,38 @@ impl App {
             _ => return,
         };
         match result {
-            Ok(stdout) => match parse_delete_report(&stdout) {
-                Some(report) => {
-                    d.loading = false;
-                    d.body = format_delete_confirm(&report);
-                    if let crate::studio_dialog::ConfirmFor::DeleteStudio { kept, .. } = &mut d.for_
-                    {
-                        *kept = report.kept;
+            Ok(stdout) => {
+                let (stdout, token) = crate::server_action::split_plan_reply(&stdout);
+                match parse_delete_report(&stdout) {
+                    Some(report) => {
+                        d.loading = false;
+                        d.body = format_delete_confirm(&report);
+                        if let crate::studio_dialog::ConfirmFor::DeleteStudio {
+                            kept,
+                            token: slot,
+                            ..
+                        } = &mut d.for_
+                        {
+                            *kept = report.kept;
+                            *slot = token;
+                        }
+                    }
+                    None => {
+                        self.studio_dialog = None;
+                        self.action_toast = Some(ActionToast {
+                            title: fail_title_for(
+                                key.machine.as_deref(),
+                                &format!("inspect {}", key.id),
+                            ),
+                            body: "invalid dry-run response from backlot studio delete".into(),
+                            fail: true,
+                            command: None,
+                            start_stage: None,
+                            deadline: now + FAIL_HOLD,
+                        });
                     }
                 }
-                None => {
-                    self.studio_dialog = None;
-                    self.action_toast = Some(ActionToast {
-                        title: fail_title_for(
-                            key.machine.as_deref(),
-                            &format!("inspect {}", key.id),
-                        ),
-                        body: "invalid dry-run response from backlot studio delete".into(),
-                        fail: true,
-                        command: None,
-                        start_stage: None,
-                        deadline: now + FAIL_HOLD,
-                    });
-                }
-            },
+            }
             Err(err) => {
                 self.studio_dialog = None;
                 self.action_toast = Some(ActionToast {

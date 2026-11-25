@@ -77,8 +77,15 @@ pub(super) fn render_confirm(
     // Wrap the body at the inner width so nothing clips (A8.x rule:
     // no silent clipping).
     let inner = width.saturating_sub(4).max(8) as usize;
+    // A refused confirm (a stale server plan) is part of the card, not
+    // a toast: the line and the re-review offer read where the person
+    // is looking.
+    let body = match &d.error {
+        Some(error) => format!("{}\n\n{error}\n\nr review again", d.body),
+        None => d.body.clone(),
+    };
     let mut lines = Vec::new();
-    for para in d.body.split('\n') {
+    for para in body.split('\n') {
         let mut line = String::new();
         for word in para.split_whitespace() {
             let word_w = usize::from(display_width(word));

@@ -145,6 +145,9 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
             let (res, _) = verbs_hwood::hollywood_setup(env, &cfg)?;
             to_json(res)
         }
+        ReqAction::Version => {
+            unreachable!("the version probe is dispatched by doc_dispatch_studio")
+        }
         other => unreachable!("studio actions are dispatched by doc_dispatch_studio: {other:?}"),
     }
 }

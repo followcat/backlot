@@ -127,6 +127,7 @@ mod remote_doc_exec;
 mod remote_doc_map;
 
 pub(crate) use remote_doc_exec::execute_client_with;
+pub use remote_doc_exec::{execute_client_confirmed, execute_plan};
 
 /// Convert a CLI `Cmd` into a [`MappedCmd`] without touching network I/O.
 pub fn map_cmd(
@@ -139,7 +140,7 @@ pub fn map_cmd(
 }
 
 /// Whether the command's output is its `--json` document.
-fn wants_json(cmd: &Cmd) -> bool {
+pub fn wants_json(cmd: &Cmd) -> bool {
     match cmd {
         Cmd::StudioPrune { json, .. }
         | Cmd::StudioDelete { json, .. }

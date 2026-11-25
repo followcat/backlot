@@ -20,14 +20,18 @@ impl App {
             ),
             body: "Inspecting the studio's work areas…".to_owned(),
             loading: true,
-            for_: ConfirmFor::Prune { key: key.clone() },
+            error: None,
+            for_: ConfirmFor::Prune {
+                key: key.clone(),
+                token: None,
+            },
         }));
         self.studio_dialog_gen += 1;
         let epoch = self.studio_dialog_gen;
         let tx = self.dialog_fetch_tx.clone();
         let run = self.ns_runner();
         let machine = key.machine.clone();
-        let argv = vec![
+        let mut argv = vec![
             "studio".into(),
             "prune".into(),
             key.id.clone(),
@@ -35,6 +39,9 @@ impl App {
             "--as".into(),
             "user".into(),
         ];
+        if self.server_mode() && key.machine.is_none() {
+            argv.push(crate::server_action::PLAN_FLAG.into());
+        }
         tokio::spawn(async move {
             let _ = tx.send((epoch, run(machine, argv, None).await)).await;
         });
@@ -48,22 +55,26 @@ impl App {
             return;
         };
         let key = match &d.for_ {
-            ConfirmFor::Prune { key } => key.clone(),
+            ConfirmFor::Prune { key, .. } => key.clone(),
             _ => return,
         };
         match result {
             Ok(stdout) => {
                 d.loading = false;
+                let (stdout, token) = crate::server_action::split_plan_reply(&stdout);
                 let plan = stdout.trim();
                 d.body = if plan.is_empty() {
                     "nothing to prune — no worktrees or branches are left".to_owned()
                 } else {
                     format!("{plan}\n\nThe ledger, reports and messages stay.")
                 };
+                if let ConfirmFor::Prune { token: slot, .. } = &mut d.for_ {
+                    *slot = token;
+                }
             }
             Err(err) => {
                 self.studio_dialog = None;
-                let action = crate::studio_cmds::prune(&key);
+                let action = crate::studio_cmds::prune(&key, None);
                 let title = match &action.machine {
                     Some(machine) => format!("{machine} failed: {}", action.name),
                     None => format!("failed: {}", action.name),

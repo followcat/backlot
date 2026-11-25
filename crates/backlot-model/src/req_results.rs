@@ -196,6 +196,13 @@ pub struct StudioFinishResult {
     pub reason: String,
 }
 
+/// A destructive commit that arrived without the dry run's token.
+pub const ERR_NEEDS_REVIEW: &str = "confirm this from a dry run first";
+
+/// A destructive commit whose fresh dry run differs from the reviewed
+/// report.
+pub const ERR_STALE_PLAN: &str = "the studio changed since you reviewed it; run it again";
+
 /// A destructive verb's dry run: the report the person reviewed and
 /// the token the commit must echo (`sha256` of the report's canonical
 /// JSON).

@@ -2,6 +2,7 @@
 //! (design §2.3): a dry run returns `sha256` of its report's canonical
 //! JSON, and the commit must echo that exact token.
 
+use backlot_model::req_results::{ERR_NEEDS_REVIEW, ERR_STALE_PLAN};
 use serde::Serialize;
 
 use crate::cli::Fail;
@@ -18,12 +19,10 @@ pub(crate) fn token<T: Serialize>(report: &T) -> Result<String, Fail> {
 /// means the studio moved underneath what they saw.
 pub(crate) fn verify<T: Serialize>(report: &T, given: Option<&str>) -> Result<(), Fail> {
     let Some(given) = given else {
-        return Err(Fail::refused("confirm this from a dry run first"));
+        return Err(Fail::refused(ERR_NEEDS_REVIEW));
     };
     if given != token(report)? {
-        return Err(Fail::refused(
-            "the studio changed since you reviewed it; run it again",
-        ));
+        return Err(Fail::refused(ERR_STALE_PLAN));
     }
     Ok(())
 }

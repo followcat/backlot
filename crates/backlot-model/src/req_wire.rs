@@ -306,6 +306,8 @@ pub enum ReqAction {
     },
     /// The New Studio dialog's runner probe, answered from the hub.
     Runners,
+    /// The dialog's `--version` probe, answered from the hub.
+    Version,
 }
 
 /// Ack document written solely by the stage (`plugin.backlot.res`).

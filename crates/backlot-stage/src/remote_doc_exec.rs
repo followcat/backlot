@@ -24,6 +24,28 @@ pub(crate) async fn execute_client_with(
     timeout: Duration,
     json: bool,
 ) -> Result<String, Fail> {
+    execute_client_confirmed(client, endpoint, action, timeout, json, None).await
+}
+
+/// The same with a token a dialog already reviewed: a destructive
+/// commit carrying it is sent as-is, so a stale plan is refused
+/// instead of silently re-reviewed. `None` keeps the one-invocation
+/// dry-run-then-commit flow.
+pub async fn execute_client_confirmed(
+    client: &Client,
+    endpoint: Option<&Endpoint>,
+    action: &ReqAction,
+    timeout: Duration,
+    json: bool,
+    token: Option<String>,
+) -> Result<String, Fail> {
+    if let Some(token) = token
+        && review_request(action).is_some()
+    {
+        let ack =
+            crate::doc_client::send_request(client, endpoint, action, Some(token), timeout).await?;
+        return format_ack_json(action, ack, json);
+    }
     if let Some(dry) = review_request(action) {
         let ack = crate::doc_client::send_request(client, endpoint, &dry, None, timeout).await?;
         if !ack.ok {
@@ -36,6 +58,28 @@ pub(crate) async fn execute_client_with(
     }
     let ack = crate::doc_client::send_request(client, endpoint, action, None, timeout).await?;
     format_ack_json(action, ack, json)
+}
+
+/// A dry run's two answers: the text/JSON the local command prints and
+/// the confirm token its commit must echo. The dialogs show the text
+/// and keep the token.
+pub async fn execute_plan(
+    client: &Client,
+    endpoint: Option<&Endpoint>,
+    action: &ReqAction,
+    timeout: Duration,
+    json: bool,
+) -> Result<(String, String), Fail> {
+    let ack = crate::doc_client::send_request(client, endpoint, action, None, timeout).await?;
+    if !ack.ok {
+        let Err(e) = format_ack_json(action, ack, json) else {
+            unreachable!("a refused ack always formats to an error")
+        };
+        return Err(e);
+    }
+    let token = plan_token(&ack)?;
+    let text = format_ack_json(action, ack, json)?;
+    Ok((text, token))
 }
 
 /// A commit that must be reviewed: its own dry run, carried out in the

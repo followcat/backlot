@@ -128,6 +128,7 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
                 crate::runners::detect_report::format_rows(&rows, &crate::cli::Env::default())
             }
         }
+        ReqAction::Version => parse_res::<String>(&ack)?,
     };
     Ok(out)
 }
