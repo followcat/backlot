@@ -298,3 +298,53 @@ fn config_client_does_not_hijack_agent_pinned_state_dir() {
     .unwrap();
     assert!(out.contains("message.queued"), "{out}");
 }
+
+#[test]
+fn remote_card_apply_and_cancel_travel_over_the_doc_queue() {
+    let dir = TestDir::new("blrem-card-queue");
+    let (rt, env, base, core, stage, mut consumer, _s, recast_card_seq, _n) =
+        seeded_fake_core(&dir);
+    let setup_card_seq = recast_card_seq + 1;
+
+    let mut run_cli = |line: &str| -> String {
+        let (common, cmd) = args::parse(&words(line)).unwrap();
+        let action = match map_cmd(&common, &cmd, &env, None).unwrap() {
+            MappedCmd::Action(a) => a,
+            MappedCmd::NeedsStudio(mk) => mk("acme-shop".into()),
+            MappedCmd::Unsupported => panic!("unexpected unsupported for {line}"),
+        };
+        rt.block_on(async {
+            let client = core.client().await;
+            let ep = core.endpoint();
+            let fut = tokio::spawn(async move {
+                execute_client(&client, Some(&ep), &action, Duration::from_secs(2)).await
+            });
+            loop {
+                if fut.is_finished() {
+                    break fut.await.unwrap().unwrap();
+                }
+                let _ = consumer
+                    .process(&stage, crate::live::now_ms())
+                    .await
+                    .unwrap();
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+    };
+
+    let apply_out = run_cli(&format!("card apply c{recast_card_seq}"));
+    assert!(apply_out.contains("card.applied"), "{apply_out}");
+    let cancel_out = run_cli(&format!("card cancel c{setup_card_seq} --reason hold"));
+    assert!(cancel_out.contains("card.cancelled"), "{cancel_out}");
+
+    assert!(core.doc_writes(REQ_DOC_NAME) >= 2);
+    let (hevents, _) = store::load_hevents(&store::hollywood_dir(&base)).unwrap();
+    assert!(hevents.iter().any(|e| matches!(
+        e.kind,
+        backlot_model::hollywood::HollywoodKind::CardApplied { card } if card == recast_card_seq
+    )));
+    assert!(hevents.iter().any(|e| matches!(
+        e.kind,
+        backlot_model::hollywood::HollywoodKind::CardCancelled { card, .. } if card == setup_card_seq
+    )));
+}

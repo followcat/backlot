@@ -347,3 +347,71 @@ async fn app_action_tracker_runs_via_doc_queue_and_watcher_follows_docs() {
     assert!(toast.fail);
     assert_eq!(toast.body, "not available through the server yet");
 }
+
+fn last_queued_action(store: &Mutex<MemDocs>) -> ReqAction {
+    let st = store.lock().unwrap();
+    let (_, val) = st.docs.get(REQ_DOC_NAME).expect("req doc written").clone();
+    let doc: ReqDoc = serde_json::from_value(val).unwrap();
+    let env: ReqEnvelope = serde_json::from_value(doc.queue.last().unwrap().clone()).unwrap();
+    serde_json::from_value(env.action).unwrap()
+}
+
+#[tokio::test]
+async fn server_mode_card_apply_and_cancel_send_requests_over_the_doc_queue() {
+    use backlot_model::req_results::{CardApplyResult, CardCancelResult};
+
+    let store = Arc::new(Mutex::new(MemDocs::default()));
+    let (rpc, _) = spawn_doc_core_with(store.clone(), None);
+    let mut app = empty_online_app();
+    app.set_server_target(Some(backlot_stage::server_cfg::ServerTarget {
+        host: "host-a".into(),
+        session: "backlot".into(),
+    }));
+    app.server_ack_timeout = Duration::from_secs(1);
+    app.set_operations(rpc);
+    assert!(app.server_mode());
+
+    store.lock().unwrap().auto_ack = Some(ResAck::ok_value(
+        "pending",
+        200,
+        serde_json::to_value(CardApplyResult {
+            id: "c3".into(),
+            seq: 3,
+            outcome_seq: 7,
+            stale: None,
+            summary: "event 7: card.applied c3 — carrying the action out is the stage's job (H3)"
+                .into(),
+        })
+        .unwrap(),
+    ));
+    app.run_action(studio_cmds::card_apply("c3"));
+    let reply = app.action_rx.recv().await.unwrap();
+    app.on_action_reply(reply);
+    let toast = app.action_toast.as_ref().unwrap();
+    assert!(!toast.fail, "{}", toast.body);
+    assert!(matches!(
+        last_queued_action(&store),
+        ReqAction::CardApply { id } if id == 3
+    ));
+
+    store.lock().unwrap().auto_ack = Some(ResAck::ok_value(
+        "pending",
+        300,
+        serde_json::to_value(CardCancelResult {
+            id: "c4".into(),
+            seq: 4,
+            outcome_seq: 8,
+            reason: "hold".into(),
+        })
+        .unwrap(),
+    ));
+    app.run_action(studio_cmds::card_cancel("c4", Some("hold")));
+    let reply = app.action_rx.recv().await.unwrap();
+    app.on_action_reply(reply);
+    let toast = app.action_toast.as_ref().unwrap();
+    assert!(!toast.fail, "{}", toast.body);
+    assert!(matches!(
+        last_queued_action(&store),
+        ReqAction::CardCancel { id, reason } if id == 4 && reason == "hold"
+    ));
+}
