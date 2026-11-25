@@ -13,6 +13,10 @@ use crate::summary::{Work, cap, default_true, is_true, steady};
 pub const HEADLINE_CHARS: usize = 200;
 /// At most this many open cards reach the document.
 pub const MAX_OPEN_CARDS: usize = 10;
+/// Maximum open outward cards per studio in `StudioSummary`.
+pub const MAX_OUTWARD_CARDS: usize = 10;
+/// Maximum commit preview lines per outward card in `StudioSummary`.
+pub const MAX_OUTWARD_COMMITS: usize = 5;
 /// At most this many exchange lines reach the document — the
 /// conversation the expanded layer draws above its input (D21).
 pub const MAX_EXCHANGE: usize = 8;
@@ -127,6 +131,68 @@ pub struct CardSummary {
     /// Proposal timestamp in milliseconds, omitted when `0`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ts_ms: Option<u64>,
+}
+
+/// One open outward card projected onto [`crate::summary::StudioSummary`]
+/// so the Lot Call Sheet, Studio dock, remote hosts, and `wherdr` see it
+/// with or without `[hollywood]` (push-perms spec §2.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutwardCardSummary {
+    pub id: String,
+    pub role: String,
+    pub command: String,
+    pub rule: String,
+    pub why: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub remote_url: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub commits: Vec<String>,
+    #[serde(default, skip_serializing_if = "crate::summary::is_zero")]
+    pub commits_total: u32,
+}
+
+/// Project open outward cards for `studio` from `HollywoodState`.
+pub fn studio_outward_cards(state: &HollywoodState, studio: &str) -> Vec<OutwardCardSummary> {
+    state
+        .open_cards()
+        .filter_map(|c| {
+            let crate::hollywood::CardAction::Outward {
+                studio: card_studio,
+                role,
+                argv,
+                repo,
+                remote_url,
+                rule,
+                commits,
+                commits_total,
+                ..
+            } = &c.action
+            else {
+                return None;
+            };
+            if card_studio != studio {
+                return None;
+            }
+            Some(OutwardCardSummary {
+                id: format!("c{}", c.seq),
+                role: cap(role),
+                command: cap_headline(&argv.join(" ")),
+                rule: cap(rule),
+                why: cap_headline(&c.why),
+                repo: cap_headline(repo),
+                remote_url: cap_headline(remote_url),
+                commits: commits
+                    .iter()
+                    .take(MAX_OUTWARD_COMMITS)
+                    .map(|l| cap(l))
+                    .collect(),
+                commits_total: *commits_total,
+            })
+        })
+        .take(MAX_OUTWARD_CARDS)
+        .collect()
 }
 
 /// The optional `hollywood` object: `state` is the stage's read of

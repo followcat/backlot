@@ -24,7 +24,7 @@ pub(crate) enum ReasonFor {
     /// `studio finish [--reason <r>]` — optional.
     Finish { key: StudioKey },
     /// `card cancel <id> [--reason <r>]` — optional.
-    CardCancel { id: String },
+    CardCancel { machine: Option<String>, id: String },
 }
 
 /// A confirmed command (§2.2).

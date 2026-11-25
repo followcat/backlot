@@ -82,19 +82,14 @@ pub(crate) fn mark_answers(
 }
 
 /// `card apply|cancel` is the user's (D17a): a shell carrying
-/// `BACKLOT_ROLE` is a role's terminal, refused before the ledger
-/// is even read.
-fn card_gate(env: &Env) -> Result<(), Fail> {
-    if env.get("BACKLOT_ROLE").is_some() {
-        return Err(Fail::refused(
-            "a card is applied or cancelled by the user — BACKLOT_ROLE is set",
-        ));
-    }
-    Ok(())
+/// `BACKLOT_ROLE` or descending from a role terminal is refused before
+/// the ledger is even read.
+fn card_gate(common: &Common, env: &Env) -> Result<(), Fail> {
+    crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::CardMutate, common, env)
 }
 
 pub(crate) fn card_apply(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
-    card_gate(env)?;
+    card_gate(common, env)?;
     let base = base_of(common, env)?;
     let by = by_for(common, env);
     let res = crate::verbs_hwood::card_apply(&base, env, by, id)?;
@@ -107,7 +102,7 @@ pub(crate) fn card_cancel(
     id: u64,
     reason: &str,
 ) -> Result<String, Fail> {
-    card_gate(env)?;
+    card_gate(common, env)?;
     let base = base_of(common, env)?;
     let _ = role(common, env);
     let by = by_for(common, env);

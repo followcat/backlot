@@ -23,7 +23,8 @@ pub use crate::summary_build::{is_ask_answered, open_ask, role_name};
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
     CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
-    hollywood_section, hollywood_section_with_activity, hollywood_section_with_work,
+    MAX_OUTWARD_CARDS, MAX_OUTWARD_COMMITS, OutwardCardSummary, hollywood_section,
+    hollywood_section_with_activity, hollywood_section_with_work, studio_outward_cards,
 };
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,
@@ -117,6 +118,9 @@ pub struct StudioSummary {
     /// this studio's outbox behind the send gate.
     #[serde(default, skip_serializing_if = "is_false")]
     pub pending_tell: bool,
+    /// Open outward push/PR cards for this studio (capped at [`MAX_OUTWARD_CARDS`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outward_cards: Vec<OutwardCardSummary>,
 }
 
 /// One task's dock projection — the row the panel draws even when no
@@ -395,8 +399,18 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-fn is_zero(n: &u32) -> bool {
+pub(crate) fn is_zero(n: &u32) -> bool {
     *n == 0
+}
+
+/// Attach open outward cards from `HollywoodState` onto `Summary` (runs with or without `[hollywood]`).
+pub fn attach_outward_cards(
+    summary: &mut Summary,
+    hstate: &crate::hollywood_state::HollywoodState,
+) {
+    for studio in &mut summary.studios {
+        studio.outward_cards = studio_outward_cards(hstate, &studio.id);
+    }
 }
 
 /// Build the document body from every studio's reduced state.
@@ -495,6 +509,7 @@ pub fn summary_with_running(
                     roles: Vec::new(),
                     exchange: Vec::new(),
                     pending_tell: false,
+                    outward_cards: Vec::new(),
                 });
             }
             continue;
@@ -617,6 +632,7 @@ pub fn summary_with_running(
                 .messages
                 .iter()
                 .any(|m| m.from == "user" && m.to != "user" && !m.delivered && !m.dropped),
+            outward_cards: Vec::new(),
         };
         if done {
             finished_studios.push(entry);

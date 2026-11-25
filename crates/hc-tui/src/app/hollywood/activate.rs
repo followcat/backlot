@@ -81,7 +81,10 @@ impl App {
                     self.hollywood_stage_start(machine);
                 }
             }
-            Some(Target::Card(id)) => self.hollywood_card_show(&id),
+            Some(Target::Card(id)) => self.hollywood_card_show_on(None, &id),
+            Some(Target::OutwardCard(key, id)) => {
+                self.hollywood_card_show_on(key.machine, &id);
+            }
             Some(Target::Ready(key)) => {
                 self.focus_studio(&key);
                 self.hollywood_leave();

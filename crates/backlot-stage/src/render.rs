@@ -697,6 +697,8 @@ pub fn confirm(event: &backlot_model::Event) -> String {
             format!(" {role}{}", if *fresh { " (fresh session)" } else { "" })
         }
         EventKind::RoleProgress { role, .. } => format!(" {role}"),
+        EventKind::OutwardRequested { role, command, .. } => format!(" {role} → {command}"),
+        EventKind::OutwardCompleted { card, outcome, .. } => format!(" c{card} {outcome:?}"),
         EventKind::AskAnswered { role, target } => format!(" {role} #{target}"),
         EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskReviewed {

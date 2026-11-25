@@ -30,9 +30,11 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
                 .map(|c| crate::hstage::identity(&c));
             hollywood::stale_hollywood(&card.base, current.as_ref())
         }
-        _ => studio_state(base, card.action.studio())
-            .ok()
-            .and_then(|s| hollywood::stale(&card.action, &card.base, s.as_ref())),
+        _ => studio_state(base, card.action.studio()).ok().and_then(|s| {
+            hollywood::stale(&card.action, &card.base, s.as_ref()).or_else(|| {
+                crate::hcard_outward::outward_stale(&card.action, &card.base, s.as_ref())
+            })
+        }),
     };
 
     let identity_change = match (&card.action, &card.base) {
@@ -263,5 +265,6 @@ pub(crate) fn format_card_show(res: &CardShowResult) -> String {
             effort.as_deref(),
         ));
     }
+    crate::hcard_outward::append_outward_preview(&mut out, &res.action);
     out
 }

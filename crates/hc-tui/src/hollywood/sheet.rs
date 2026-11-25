@@ -7,7 +7,9 @@
 //! flag (D9) is what puts its prompt here — the director's own
 //! prompts never enter the sheet.
 
-use backlot_model::summary::{CardSummary, RoleSummary, StudioSummary};
+use std::collections::BTreeSet;
+
+use backlot_model::summary::{CardSummary, OutwardCardSummary, RoleSummary, StudioSummary};
 use hc_proto::watch::View;
 
 use crate::panel::data::{MachineSummary, stage_running};
@@ -52,6 +54,13 @@ pub(crate) fn conn_of(view: &View, machine: Option<&str>) -> Conn {
 /// The status closure over `view` — every row asks it per machine.
 pub(crate) fn status_of(view: &View) -> impl Fn(Option<&str>) -> (Conn, bool) + '_ {
     move |machine| (conn_of(view, machine), stage_running(view, machine))
+}
+
+/// One open outward push/PR card projected onto a studio (push-perms §2.2).
+pub(crate) struct OutwardItem<'a> {
+    pub machine: Option<&'a str>,
+    pub studio: &'a StudioSummary,
+    pub card: &'a OutwardCardSummary,
 }
 
 /// A user-owned permission prompt (D9): `attention_user` only.
@@ -103,6 +112,7 @@ pub(crate) enum Wait<'a> {
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
+    Outward(OutwardItem<'a>),
     Ready(ReadyItem<'a>),
 }
 
@@ -144,6 +154,13 @@ impl Wait<'_> {
                 super::Target::Stage(item.machine.map(str::to_string), item.offline)
             }
             Wait::Card(card) => super::Target::Card(card.id.clone()),
+            Wait::Outward(item) => super::Target::OutwardCard(
+                StudioKey {
+                    machine: item.machine.map(str::to_string),
+                    id: item.studio.id.clone(),
+                },
+                item.card.id.clone(),
+            ),
             Wait::Ready(item) => super::Target::Ready(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -161,6 +178,7 @@ impl Wait<'_> {
             | Wait::Role(_)
             | Wait::Hollywood(_)
             | Wait::Card(_)
+            | Wait::Outward(_)
             | Wait::NoRequirement(_) => true,
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
             Wait::Stage(_) => false,
@@ -249,12 +267,38 @@ pub(crate) fn waiting_items<'a>(
             }));
         }
     }
-    // The cards stay this core's — they act on this core's stage
-    // (the same read `band_rows` always made).
+    // Local outward cards on `StudioSummary` take the richer `Wait::Outward`
+    // row (and carry machine ownership on remote hosts), so dedupe them
+    // locally against `HollywoodSummary.cards`.
+    let local_outward: BTreeSet<&str> = super::rows::local_summary(machines)
+        .map(|s| {
+            s.studios
+                .iter()
+                .flat_map(|st| st.outward_cards.iter().map(|c| c.id.as_str()))
+                .collect()
+        })
+        .unwrap_or_default();
     if let Some(summary) = super::rows::local_summary(machines)
         && let Some(hollywood) = summary.hollywood.as_ref()
     {
-        out.extend(hollywood.cards.iter().map(Wait::Card));
+        out.extend(
+            hollywood
+                .cards
+                .iter()
+                .filter(|c| !local_outward.contains(c.id.as_str()))
+                .map(Wait::Card),
+        );
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
+            for card in &studio.outward_cards {
+                out.push(Wait::Outward(OutwardItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                    card,
+                }));
+            }
+        }
     }
     for m in machines {
         for studio in &m.summary.studios {

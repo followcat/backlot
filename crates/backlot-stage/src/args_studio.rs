@@ -760,3 +760,83 @@ pub(crate) fn repos(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), F
     }
     Ok((std::mem::take(common), Cmd::Repos { json, from, all }))
 }
+
+/// `ask --file <f>` or `ask --run [--why <text>] (-- <prog> <args...> | "<cmd>")`.
+pub(crate) fn ask(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut file = None;
+    let mut run = false;
+    let mut why = None;
+    let mut raw_cmd = None;
+    let mut run_argv = Vec::new();
+    while let Some(arg) = it.next() {
+        if arg == "--" {
+            if !run {
+                return Err(usage(
+                    "unexpected `--` (pass --run for outward commands)",
+                    U_ASK,
+                ));
+            }
+            while let Some(a) = it.next() {
+                run_argv.push(a);
+            }
+            break;
+        }
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_ASK)));
+        }
+        if common_flag(it, common, &arg, U_ASK)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--file" => file = Some(PathBuf::from(it.value("--file", U_ASK)?)),
+            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
+            "--run" => run = true,
+            "--why" => why = Some(it.value("--why", U_ASK)?),
+            _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
+            _ if run && raw_cmd.is_none() && !arg.starts_with('-') => raw_cmd = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_ASK)),
+        }
+    }
+    if file.is_some() && run {
+        return Err(usage("pick one of --file or --run", U_ASK));
+    }
+    if !run {
+        let file = file.ok_or_else(|| usage("missing --file", U_ASK))?;
+        return Ok((std::mem::take(common), Cmd::Ask { file }));
+    }
+    if let Some(ref w) = why
+        && w.trim().is_empty()
+    {
+        return Err(usage("--why must not be empty", U_ASK));
+    }
+    let argv = if !run_argv.is_empty() {
+        if raw_cmd.is_some() {
+            return Err(usage(
+                "pick either `-- <prog> ...` or a command string, not both",
+                U_ASK,
+            ));
+        }
+        run_argv
+    } else if let Some(cmd_str) = raw_cmd {
+        let parsed = crate::guard_shell_lex::split_shell_segments_checked(&cmd_str)
+            .map_err(|r| Fail::refused(format!("invalid outward command: {r}")))?;
+        if !parsed.nested.is_empty() || parsed.segments.len() != 1 {
+            return Err(Fail::refused("ask --run expects a single simple command"));
+        }
+        parsed.segments.into_iter().next().unwrap_or_default()
+    } else {
+        return Err(usage("missing command after --run", U_ASK));
+    };
+    if argv.is_empty() {
+        return Err(usage("missing command after --run", U_ASK));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::AskRun {
+            argv,
+            why,
+            cwd: None,
+            command: None,
+        },
+    ))
+}

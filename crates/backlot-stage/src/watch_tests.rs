@@ -46,6 +46,7 @@ fn studio(repo: &str) -> StudioState {
             checks: Vec::new(),
             task_budget_s: None,
             limits: Default::default(),
+            push: Default::default(),
         }),
         ..StudioState::default()
     }

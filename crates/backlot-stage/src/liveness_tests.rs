@@ -130,6 +130,7 @@ fn setup_studio(dir: &std::path::Path, limit_s: u32) {
             checks: Vec::new(),
             task_budget_s: None,
             limits: Default::default(),
+            push: Default::default(),
         },
         EventKind::ReqVersion {
             version: 1,

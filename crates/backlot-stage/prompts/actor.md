@@ -42,3 +42,11 @@ Cannot proceed? Say why and stop guessing:
 
 A `[backlot]` message can bring the review back with changes
 requested: fix what it names, then deliver again the same way.
+
+## Outward pushes and PRs
+
+- Feature-branch pushes to a recorded remote run directly. Protected
+  branches, tags, other remotes, or `gh pr create` require a user
+  card: stop and ask explicitly with
+  `backlot ask --run --why <reason> -- <command>`, then wait for the
+  `outward` notice. Push the branch before asking to open a PR.

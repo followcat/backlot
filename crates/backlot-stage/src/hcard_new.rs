@@ -192,6 +192,7 @@ fn studio_created_kind(
 ) -> Result<EventKind, String> {
     let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)
         .map_err(|e| e.message().to_string())?;
+    let push = commands::build_push_policy(&cast.push, repo, &binding.members, binding.no_git);
     Ok(EventKind::StudioCreated {
         title: title.to_string(),
         repo: repo.to_string(),
@@ -220,6 +221,7 @@ fn studio_created_kind(
         checks,
         task_budget_s: cast.task_budget_s,
         limits: cast.limits.clone(),
+        push,
     })
 }
 

@@ -158,7 +158,7 @@ fn draw_wait(
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
         Wait::Stage(_) => palette.peach,
-        Wait::Card(_) => palette.accent,
+        Wait::Card(_) | Wait::Outward(_) => palette.accent,
         Wait::Ready(_) => palette.teal,
     };
     let mut x = rect.x;
@@ -329,6 +329,33 @@ fn draw_detail(
             palette.subtext0,
         ),
         Wait::Card(card) => (format!("why: {}", card.why), palette.subtext0),
+        Wait::Outward(item) => {
+            let commits = if item.card.commits_total > 0 {
+                format!(
+                    " · {} commit{}",
+                    item.card.commits_total,
+                    if item.card.commits_total == 1 {
+                        ""
+                    } else {
+                        "s"
+                    }
+                )
+            } else {
+                String::new()
+            };
+            let remote = if item.card.remote_url.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", item.card.remote_url)
+            };
+            (
+                format!(
+                    "{}{} · why: {}{}",
+                    item.card.rule, commits, item.card.why, remote
+                ),
+                palette.subtext0,
+            )
+        }
         // R3-3: the wrap report has not landed — a dim line under the
         // READY row says so, like the dock's `· report pending`.
         Wait::Ready(item) if crate::panel::data::report_pending(item.studio) => {
