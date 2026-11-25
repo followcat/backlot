@@ -5,7 +5,9 @@
 //! profile is one of the two — and the studio's `[limits]` must still
 //! seat its fixed roles after the change.
 
-use crate::event::ActorIdentity;
+use std::collections::BTreeMap;
+
+use crate::event::{ActorIdentity, Candidate};
 use crate::refusal::Refusal;
 use crate::state::StudioState;
 
@@ -57,7 +59,7 @@ pub fn identity_text(actor: &ActorIdentity) -> String {
 
 /// The cast file's effort rule, as `studio new` applies it — the
 /// runner's caps decide.
-fn check_effort(actor: &ActorIdentity) -> Result<(), Refusal> {
+pub fn check_effort(actor: &ActorIdentity) -> Result<(), Refusal> {
     use crate::caps::{self, EffortProblem};
     match caps::check_effort(&actor.runner, actor.effort.as_deref()) {
         Ok(()) => Ok(()),
@@ -90,10 +92,43 @@ pub fn check_model(actor: &ActorIdentity) -> Result<(), Refusal> {
     }
 }
 
-/// After the recast, every capped runner still seats the fixed roles.
+/// After the change, every capped runner still seats the fixed roles.
 /// The producer and the director stay live for the whole run; a cap at
 /// their count while the writer or a candidate shares the runner
-/// leaves that person nowhere to sit.
+/// leaves that person nowhere to sit. Shared by `role.recast` and a
+/// `studio.cast` — one rule, one wording.
+pub fn seats(
+    producer: &ActorIdentity,
+    director: &ActorIdentity,
+    writer: &ActorIdentity,
+    candidates: &[Candidate],
+    limits: &BTreeMap<String, u32>,
+) -> Result<(), Refusal> {
+    for (runner, cap) in limits {
+        let fixed = [producer, director]
+            .into_iter()
+            .filter(|a| a.runner == *runner)
+            .count() as u32;
+        if *cap < fixed {
+            return Err(Refusal::LimitsUnseated {
+                runner: runner.clone(),
+                cap: *cap,
+            });
+        }
+        let someone_waits =
+            writer.runner == *runner || candidates.iter().any(|c| c.runner == *runner);
+        if *cap == fixed && someone_waits {
+            return Err(Refusal::LimitsUnseated {
+                runner: runner.clone(),
+                cap: *cap,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The seat check a fixed role's recast runs: the studio's own cast,
+/// with `role` playing `actor`.
 fn check_limits(state: &StudioState, role: &str, actor: &ActorIdentity) -> Result<(), Refusal> {
     let Some(cfg) = &state.studio else {
         return Ok(());
@@ -112,48 +147,65 @@ fn check_limits(state: &StudioState, role: &str, actor: &ActorIdentity) -> Resul
     ) else {
         return Ok(());
     };
-    for (runner, cap) in &cfg.limits {
-        let fixed = [producer, director]
-            .into_iter()
-            .filter(|a| a.runner == *runner)
-            .count() as u32;
-        if *cap < fixed {
-            return Err(Refusal::LimitsUnseated {
-                runner: runner.clone(),
-                cap: *cap,
-            });
-        }
-        let someone_waits =
-            writer.runner == *runner || cfg.candidates.iter().any(|c| c.runner == *runner);
-        if *cap == fixed && someone_waits {
-            return Err(Refusal::LimitsUnseated {
-                runner: runner.clone(),
-                cap: *cap,
-            });
-        }
+    seats(producer, director, writer, &cfg.candidates, &cfg.limits)
+}
+
+/// The person a recast names: one of the three fixed roles, or an
+/// actor key `actor-<task>-c<n>`. `person` is the *current* key — the
+/// one an actor's newest cast mints — and the event uses it as-is, so
+/// a recast keeps the key (and terminal name) and only the identity
+/// moves.
+pub fn is_fixed(role: &str) -> bool {
+    FIXED_ROLES.contains(&role)
+}
+
+/// The identity a recast of `person` would replace, or `None` for a key
+/// that names no person. A fixed role answers its newest identity; an
+/// actor key answers its cast's identity — but only for the key the
+/// task's newest cast minted, so a stale `c<n>` cannot recast a person
+/// the task no longer has.
+pub fn current_identity(
+    state: &StudioState,
+    person: &str,
+) -> Result<Option<ActorIdentity>, Refusal> {
+    if state.studio.is_none() {
+        return Err(Refusal::NoStudio);
     }
-    Ok(())
+    if is_fixed(person) {
+        return state
+            .fixed_identity(person)
+            .cloned()
+            .map(Some)
+            .ok_or_else(|| Refusal::NoRole(person.to_string()));
+    }
+    let Some(task) = crate::state::actor_task(person) else {
+        return Ok(None);
+    };
+    let Some(t) = state.tasks.get(task) else {
+        return Err(Refusal::NoRole(person.to_string()));
+    };
+    let n = t.casts.len();
+    if n == 0 || person != format!("actor-{task}-c{n}") {
+        return Err(Refusal::NotCurrentActor(person.to_string()));
+    }
+    Ok(Some(
+        t.cast.as_ref().map(|c| c.actor.clone()).expect("n > 0"),
+    ))
 }
 
 /// The whole recast rule, over the state it lands on. Runs at the
 /// append boundary and from both the CLI and a card's proposal, so one
 /// refusal reads the same wherever it comes from.
 pub fn check(state: &StudioState, role: &str, actor: &ActorIdentity) -> Result<(), Refusal> {
-    if !FIXED_ROLES.contains(&role) {
-        return Err(Refusal::NotFixedRole(role.to_string()));
-    }
-    if state.studio.is_none() {
-        return Err(Refusal::NoStudio);
-    }
+    let current = match current_identity(state, role)? {
+        Some(current) => current,
+        None => return Err(Refusal::NotFixedRole(role.to_string())),
+    };
     if state.finished.is_some() {
         return Err(Refusal::AlreadyFinished);
     }
-    match state.fixed_identity(role) {
-        Some(current) if same_identity(current, actor) => {
-            return Err(Refusal::RecastUnchanged(role.to_string()));
-        }
-        None => return Err(Refusal::NoRole(role.to_string())),
-        Some(_) => {}
+    if same_identity(&current, actor) {
+        return Err(Refusal::RecastUnchanged(role.to_string()));
     }
     if !supported_runner(&actor.runner) {
         return Err(Refusal::RunnerNotSupported(actor.runner.clone()));
@@ -165,5 +217,8 @@ pub fn check(state: &StudioState, role: &str, actor: &ActorIdentity) -> Result<(
     }
     check_effort(actor)?;
     check_model(actor)?;
-    check_limits(state, role, actor)
+    if is_fixed(role) {
+        check_limits(state, role, actor)?;
+    }
+    Ok(())
 }

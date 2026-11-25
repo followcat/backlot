@@ -56,6 +56,42 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        // A cast change after creation: the studio exists and is not
+        // finished, and the cast file's runnable rules hold — the
+        // effort, cline-model and profile rules and caps that still
+        // seat the fixed roles. "Nothing changes" is the command's and
+        // a card's proposal's to say (the settings event lands after
+        // the recasts it carries, so the effective cast already holds
+        // the moved identities by then).
+        EventKind::StudioCast {
+            roles,
+            candidates,
+            rework_cap,
+            stall_limit_s,
+            nudge_after_s,
+            escalate_after_s,
+            check_env,
+            checks,
+            task_budget_s,
+            limits,
+            push,
+            ..
+        } => crate::cast::check_runnable(
+            state,
+            &crate::cast::CastSettings {
+                roles: roles.as_ref().clone(),
+                candidates: candidates.clone(),
+                rework_cap: *rework_cap,
+                stall_limit_s: *stall_limit_s,
+                nudge_after_s: *nudge_after_s,
+                escalate_after_s: *escalate_after_s,
+                check_env: check_env.clone(),
+                checks: checks.clone(),
+                task_budget_s: *task_budget_s,
+                limits: limits.clone(),
+                push: push.clone(),
+            },
+        ),
         EventKind::RoleStarted { .. }
         | EventKind::RoleLost { .. }
         | EventKind::RoleResumed { .. }

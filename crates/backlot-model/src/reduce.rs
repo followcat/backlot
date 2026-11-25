@@ -74,6 +74,57 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             });
             state.targets.insert(seq, SeqTarget::Studio);
         }
+        // A cast change after creation: every cast setting moves; the
+        // binding (`repo`, `members`, `no_git`, `mode`) and the recorded
+        // remote URLs are facts and stay. Earlier events keep what they
+        // recorded; the stage reads the newest settings from here on.
+        //
+        // A fixed role whose identity moved is also recorded as a
+        // `role.recast` in the same apply, appended just before this
+        // event — that is what makes the stage swap a live terminal.
+        // Both read the same identity, so the roles here and
+        // `fixed_identity` agree.
+        EventKind::StudioCast {
+            roles,
+            candidates,
+            rework_cap,
+            stall_limit_s,
+            nudge_after_s,
+            escalate_after_s,
+            check_env,
+            checks,
+            task_budget_s,
+            limits,
+            push,
+            card,
+        } => {
+            if let Some(cfg) = state.studio.as_mut() {
+                cfg.roles = roles.as_ref().clone();
+                cfg.candidates = candidates.clone();
+                cfg.rework_cap = *rework_cap;
+                cfg.stall_limit_s = *stall_limit_s;
+                cfg.nudge_after_s = *nudge_after_s;
+                cfg.escalate_after_s = *escalate_after_s;
+                cfg.check_env = check_env.clone();
+                cfg.checks = checks.clone();
+                cfg.task_budget_s = *task_budget_s;
+                cfg.limits = limits.clone();
+                // The knobs come from the event; the recorded remote
+                // URLs are facts from the bound repository and stay.
+                let remotes = cfg.push.remotes.clone();
+                cfg.push = push.clone();
+                cfg.push.remotes = remotes;
+                // The cap and the declared checks change what the
+                // tasks' reduced statuses and reviews answer — the
+                // same recompute a `correction` of the cap runs.
+                for task in state.tasks.values_mut() {
+                    reduce_task(task, *rework_cap);
+                }
+            }
+            state.cast_seq = Some(seq);
+            state.cast_card = card.clone();
+            state.targets.insert(seq, SeqTarget::Studio);
+        }
         EventKind::RoleStarted {
             role,
             terminal,
@@ -188,6 +239,18 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             reason,
             card,
         } => {
+            // An actor key keeps its key and terminal name; only the
+            // identity moves, on the task's newest cast — what
+            // `wanted_roles` launches and `deliver` attributes to. The
+            // task's deliveries, budget clock and rework rounds stay,
+            // and no new cast record mints a new key.
+            if let Some(task) = actor_task(role)
+                && let Some(t) = state.tasks.get_mut(task)
+                && let Some(cast) = t.casts.last_mut()
+            {
+                cast.actor = actor.clone();
+                t.cast = t.casts.last().cloned();
+            }
             state.recasts.push(RecastRecord {
                 role: role.clone(),
                 actor: actor.clone(),
@@ -226,6 +289,12 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 seq,
                 fresh: *fresh,
                 reason: reason.clone(),
+            });
+            state.restarts.push(RestartRecord {
+                role: role.clone(),
+                reason: reason.clone(),
+                seq,
+                ts_ms: ts,
             });
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
             bump_stage_touch(state, role, seq);

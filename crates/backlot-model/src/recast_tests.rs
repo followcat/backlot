@@ -98,13 +98,20 @@ fn a_role_terminal_cannot_recast() {
     );
 }
 
-/// The person must be one of the three fixed roles; an actor is
-/// recast through `cast`.
+/// An actor key names a person once the task is cast — its newest
+/// cast's key. A key that mints no cast yet is not a person.
 #[test]
-fn an_actor_key_is_not_a_fixed_role() {
+fn an_actor_key_becomes_a_person_once_cast() {
+    // No cast on t1: the key names nobody.
     let state = replay(&base_events());
     let err = recast::check(&state, "actor-t1-c1", &cmd("d")).unwrap_err();
-    assert_eq!(err, Refusal::NotFixedRole("actor-t1-c1".into()));
+    assert_eq!(err, Refusal::NotCurrentActor("actor-t1-c1".into()));
+    // A cast of t1 makes `actor-t1-c1` the person to recast.
+    let state = state_with(
+        &base_events(),
+        vec![("director", cast("t1", "actor-a", "a"))],
+    );
+    assert!(recast::check(&state, "actor-t1-c1", &cmd("d")).is_ok());
 }
 
 /// A finished studio takes no recast.
