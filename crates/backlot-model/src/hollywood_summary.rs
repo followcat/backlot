@@ -100,7 +100,9 @@ pub struct Exchange {
     /// The recipient (`hollywood`, `user`, …).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
-    /// Turn kind (`"tell"` for `message.sent`, `"report"` for `hollywood.reported`).
+    /// Turn kind: `"tell"` for `message.sent`, `"report"` for
+    /// `hollywood.reported`, and `"card"` for a `card.proposed`
+    /// Hollywood wrote itself (additive on `backlot/1`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
     /// Reserved for schema parity with studio exchange entries; omitted on wire.
@@ -269,31 +271,12 @@ pub fn hollywood_section_with_activity(
         cards: state
             .open_cards()
             .take(MAX_OPEN_CARDS)
-            .map(|c| {
-                let action = match (&c.action, &c.base) {
-                    (
-                        crate::hollywood::CardAction::Setup {
-                            runner,
-                            model,
-                            effort,
-                            ..
-                        },
-                        crate::hollywood::CardBase::HollywoodIdentity { actor },
-                    ) => crate::hollywood::format_setup_transition(
-                        actor.as_ref(),
-                        runner,
-                        model,
-                        effort.as_deref(),
-                    ),
-                    _ => c.action.label(),
-                };
-                CardSummary {
-                    id: format!("c{}", c.seq),
-                    studio: cap(c.action.studio()),
-                    action: cap(&action),
-                    why: cap(&c.why),
-                    ts_ms: (c.ts_ms > 0).then_some(c.ts_ms),
-                }
+            .map(|c| CardSummary {
+                id: format!("c{}", c.seq),
+                studio: cap(c.action.studio()),
+                action: cap(&card_action_label(c)),
+                why: cap(&c.why),
+                ts_ms: (c.ts_ms > 0).then_some(c.ts_ms),
             })
             .collect(),
         exchange: exchange(state),
@@ -304,9 +287,44 @@ fn cap_headline(s: &str) -> String {
     s.chars().take(HEADLINE_CHARS).collect()
 }
 
+/// A card's one-line action as the summary shows it: a `Setup` card
+/// names the identity transition, every other card its own label.
+fn card_action_label(c: &crate::hollywood::Card) -> String {
+    match (&c.action, &c.base) {
+        (
+            crate::hollywood::CardAction::Setup {
+                runner,
+                model,
+                effort,
+                ..
+            },
+            crate::hollywood::CardBase::HollywoodIdentity { actor },
+        ) => crate::hollywood::format_setup_transition(
+            actor.as_ref(),
+            runner,
+            model,
+            effort.as_deref(),
+        ),
+        _ => c.action.label(),
+    }
+}
+
+/// A `card.proposed` line's text — the same words the Call Sheet's
+/// CARD row uses (`proposed card c3 · acme-shop · pause t1`).
+fn card_line(c: &crate::hollywood::Card) -> String {
+    format!(
+        "proposed card c{} · {} · {}",
+        c.seq,
+        c.action.studio(),
+        card_action_label(c)
+    )
+}
+
 /// The conversation lines: each `message.sent` `to` Hollywood that
-/// carries text and each `reported` headline, merged on their seq
-/// and cut to the newest [`MAX_EXCHANGE`].
+/// carries text, each `reported` headline, and each `card.proposed`
+/// Hollywood wrote itself, merged on their seq and cut to the newest
+/// [`MAX_EXCHANGE`]. A card the stage proposed (an `Outward` card) is
+/// not Hollywood's word and never enters the talk.
 fn exchange(state: &HollywoodState) -> Vec<Exchange> {
     let mut lines: Vec<Exchange> = state
         .messages
@@ -334,6 +352,22 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
             text: cap_headline(&r.headline),
             has_body: r.body.is_some(),
         }))
+        .chain(
+            state
+                .cards
+                .values()
+                .filter(|c| c.by == crate::hollywood::HOLLYWOOD)
+                .map(|c| Exchange {
+                    seq: c.seq,
+                    who: "hollywood".into(),
+                    to: Some("user".into()),
+                    kind: Some("card".into()),
+                    task: None,
+                    ts_ms: (c.ts_ms > 0).then_some(c.ts_ms),
+                    text: cap_headline(&card_line(c)),
+                    has_body: false,
+                }),
+        )
         .collect();
     lines.sort_by_key(|e| e.seq);
     lines.split_off(lines.len().saturating_sub(MAX_EXCHANGE))
