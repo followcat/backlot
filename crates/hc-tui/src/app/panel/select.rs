@@ -3,7 +3,6 @@
 //! collapse/fold answers for the selected block, role or fold.
 
 use super::App;
-use crate::chrome::scroll;
 use crate::panel::{self, Target};
 
 impl App {
@@ -52,7 +51,7 @@ impl App {
     /// The body height the dock draws into — derived from `self.area`
     /// when undrawn so an opening jump (`Alt+L`) computes block
     /// stacking and scroll for the frame about to render.
-    fn panel_body_height(&self) -> u16 {
+    pub(super) fn panel_body_height(&self) -> u16 {
         let height = if self.panel_beside(self.area.0) {
             self.area.1
         } else {
@@ -63,97 +62,149 @@ impl App {
         height.saturating_sub(1 + u16::from(height >= 8))
     }
 
-    /// The first actionable row's target — `j`/`k` never park on a
-    /// `None` row, so the cursor starts on something real.
+    /// The first actionable row's target — preferring the current
+    /// studio's header so opening the dock does not fold the active
+    /// studio away.
     pub(super) fn panel_select_first(&mut self) {
         let targets = self.panel_targets();
         self.panel.editing = false;
-        if let Some(index) = targets.iter().position(|t| *t != Target::None) {
+        let index = self
+            .studio
+            .current
+            .as_ref()
+            .and_then(|cur| targets.iter().position(|t| t.studio() == Some(cur)))
+            .or_else(|| targets.iter().position(|t| *t != Target::None));
+        if let Some(index) = index {
             self.panel.selected = Some(targets[index].clone());
             self.panel.selected_row = Some(index);
+            self.panel_reveal_selected();
         }
     }
 
     /// The last actionable row's target (`Alt+L`): stay resting (never
     /// arm Compose), jump across multi-row targets to their head row,
-    /// and scroll so the selected row is visible.
+    /// unfold the last studio if needed, and scroll so it stays visible.
     pub(super) fn panel_select_last(&mut self) {
         let machines = self.panel_summaries();
         let body_height = self.panel_body_height();
-        let rows = panel::rows(
-            &machines,
-            |m| self.machine_stage_running(m),
-            |m| self.machine_reachable(m),
-            &self.panel,
-            self.panel_mode_at(self.area.0),
-            self.studio.current.as_ref(),
-            body_height,
-        );
-        let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
+        let mut rows = self.panel_rows_at(&machines, body_height);
         self.panel.editing = false;
         self.panel.finish_confirm = None;
         self.panel.reset_history_nav();
-        let Some(mut index) = targets.iter().rposition(|t| *t != Target::None) else {
+        let last_row = |rows: &[panel::Row<'_>]| -> Option<(usize, Target)> {
+            let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
+            let mut idx = targets.iter().rposition(|t| *t != Target::None)?;
+            while idx > 0 && targets[idx - 1] == targets[idx] {
+                idx -= 1;
+            }
+            Some((idx, targets[idx].clone()))
+        };
+        let Some((mut index, target)) = last_row(&rows) else {
             self.panel.selected = None;
             self.panel.selected_row = None;
             return;
         };
-        while index > 0 && targets[index - 1] == targets[index] {
-            index -= 1;
+        let prev_studio = self
+            .panel
+            .selected
+            .as_ref()
+            .and_then(|t| t.studio().cloned());
+        self.panel.selected = Some(target.clone());
+        if target.studio() != prev_studio.as_ref() {
+            rows = self.panel_rows_at(&machines, body_height);
+            if let Some((new_idx, new_target)) = last_row(&rows) {
+                index = new_idx;
+                self.panel.selected = Some(new_target);
+            }
         }
-        self.panel.selected = Some(targets[index].clone());
         self.panel.selected_row = Some(index);
-        let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
-        let reveal = if body_height >= 2
-            && matches!(rows.get(index + 1), Some(panel::Row::BlockBottom(_)))
-        {
-            index
-        } else {
-            index.saturating_sub(1)
-        };
-        self.panel.scroll = scroll::list_scroll_start_to_reveal(
-            &heights,
-            &[],
-            body_height.max(1),
-            self.panel.scroll,
-            reveal,
-        );
+        self.reveal_panel_line(&rows, index);
     }
 
     /// j/k/arrows and paging: move the selection by `delta` rows and
-    /// keep it visible. A block's frame rows share one `Studio`
-    /// target — a move always lands on a different target, so the
-    /// selection visibly steps. Moving clears an armed reopen.
+    /// keep it visible. Crossing into a folded studio unfolds it (and
+    /// folds the studio left) while keeping the same target visible.
     pub(super) fn panel_move(&mut self, delta: isize) {
         let machines = self.panel_summaries();
-        let rows = panel::rows(
-            &machines,
-            |m| self.machine_stage_running(m),
-            |m| self.machine_reachable(m),
-            &self.panel,
-            self.panel_mode_at(self.area.0),
-            self.studio.current.as_ref(),
-            self.panel_hits.body.height,
-        );
+        let body_h = self.panel_hits.body.height;
+        let mut rows = self.panel_rows_at(&machines, body_h);
         if rows.len() <= 1 {
             return;
         }
-        let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
+        let mut targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
         let mut index = self.panel_selected_index(&targets);
-        for _ in 0..delta.unsigned_abs() {
-            // Skip `None` rows — titles, dividers, block bottoms and
-            // spacers are never a cursor stop (A2.2).
-            let next = if delta > 0 {
-                (index + 1..targets.len())
-                    .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
-            } else {
-                (0..index)
-                    .rev()
-                    .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
-            };
-            match next {
-                Some(next) => index = next,
-                None => break,
+        if delta == isize::MIN {
+            if let Some(first) = targets.iter().position(|t| *t != Target::None) {
+                index = first;
+                let next_target = targets[index].clone();
+                let prev = self
+                    .panel
+                    .selected
+                    .as_ref()
+                    .and_then(|t| t.studio().cloned());
+                self.panel.selected = Some(next_target.clone());
+                if next_target.studio() != prev.as_ref() {
+                    rows = self.panel_rows_at(&machines, body_h);
+                    targets = rows.iter().map(|r| r.target()).collect();
+                    index = targets
+                        .iter()
+                        .position(|t| *t == next_target)
+                        .unwrap_or(index);
+                }
+            }
+        } else if delta == isize::MAX {
+            if let Some(last) = targets.iter().rposition(|t| *t != Target::None) {
+                let target = targets[last].clone();
+                let prev = self
+                    .panel
+                    .selected
+                    .as_ref()
+                    .and_then(|t| t.studio().cloned());
+                self.panel.selected = Some(target.clone());
+                if target.studio() != prev.as_ref() {
+                    rows = self.panel_rows_at(&machines, body_h);
+                    targets = rows.iter().map(|r| r.target()).collect();
+                }
+                index = targets
+                    .iter()
+                    .rposition(|t| *t != Target::None)
+                    .unwrap_or(last);
+            }
+        } else {
+            for _ in 0..delta.unsigned_abs() {
+                // Skip `None` rows — titles, dividers, block bottoms and
+                // spacers are never a cursor stop (A2.2).
+                let next = if delta > 0 {
+                    (index + 1..targets.len())
+                        .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
+                } else {
+                    (0..index)
+                        .rev()
+                        .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
+                };
+                let Some(next) = next else {
+                    break;
+                };
+                let prev_studio = targets[index].studio().cloned();
+                let next_target = targets[next].clone();
+                let crossed = next_target.studio().cloned() != prev_studio;
+                self.panel.selected = Some(next_target.clone());
+                if crossed {
+                    rows = self.panel_rows_at(&machines, body_h);
+                    targets = rows.iter().map(|r| r.target()).collect();
+                    index = targets
+                        .iter()
+                        .position(|t| *t == next_target)
+                        .or_else(|| match &next_target {
+                            Target::Block(key) => targets
+                                .iter()
+                                .position(|t| *t == Target::Studio(key.clone())),
+                            _ => None,
+                        })
+                        .unwrap_or(next.min(targets.len().saturating_sub(1)));
+                } else {
+                    index = next;
+                }
             }
         }
         // A person's extra lines share its target — the cursor lands
@@ -168,15 +219,7 @@ impl App {
         // draft kept so `j`/`k`/`m`/`Esc` act on the dock at once.
         self.panel.editing = false;
         // Keep the selection inside the scrolled body (title is fixed).
-        let body_height = self.panel_hits.body.height.max(1);
-        let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
-        self.panel.scroll = scroll::list_scroll_start_to_reveal(
-            &heights,
-            &[],
-            body_height,
-            self.panel.scroll,
-            index.saturating_sub(1),
-        );
+        self.scroll_to_panel_row(&rows, index);
     }
 
     /// Direct scroll (wheel/drag): write `scroll`, then clamp the
@@ -243,6 +286,13 @@ impl App {
                 if !self.panel.accepted_folds.remove(&studio) {
                     self.panel.accepted_folds.insert(studio);
                 }
+                self.panel_reveal_selected();
+            }
+            Some(Target::ClosedFold(studio)) => {
+                if !self.panel.closed_folds.remove(&studio) {
+                    self.panel.closed_folds.insert(studio);
+                }
+                self.panel_reveal_selected();
             }
             // The collapsed strip has no blocks — Space on a strip
             // row opens the dock like Enter does.
@@ -252,43 +302,6 @@ impl App {
                 self.panel_block_toggle(id);
             }
             _ => {}
-        }
-    }
-
-    /// Fold or unfold one studio block by hand — `expanded_set`
-    /// resolves the shape; this writes the opposite manual override.
-    pub(super) fn panel_block_toggle(&mut self, studio: crate::studio::StudioKey) {
-        let machines = self.panel_summaries();
-        let rows = panel::rows(
-            &machines,
-            |m| self.machine_stage_running(m),
-            |m| self.machine_reachable(m),
-            &self.panel,
-            self.panel_mode_at(self.area.0),
-            self.studio.current.as_ref(),
-            self.panel_hits.body.height,
-        );
-        let open = rows
-            .iter()
-            .any(|r| matches!(r, panel::Row::BlockTop { studio: s, .. } if s.key() == studio));
-        if open {
-            self.panel.expanded_blocks.remove(&studio);
-            self.panel.collapsed_blocks.insert(studio.clone());
-            // The block's identity changes with its shape — ride the
-            // `╶` line so the next Space toggles it back open.
-            self.panel.selected = Some(Target::Block(studio.clone()));
-            self.panel.selected_row = self
-                .panel_targets()
-                .iter()
-                .position(|t| matches!(t, Target::Block(s) if *s == studio));
-        } else {
-            self.panel.collapsed_blocks.remove(&studio);
-            self.panel.expanded_blocks.insert(studio.clone());
-            self.panel.selected = Some(Target::Studio(studio.clone()));
-            self.panel.selected_row = self
-                .panel_targets()
-                .iter()
-                .position(|t| *t == Target::Studio(studio.clone()));
         }
     }
 }
