@@ -61,6 +61,34 @@ fn shim_allow_and_refuse_cases() {
         ("hc", "machine add host-b"),
         ("hc", "server stop"),
         ("hc", "--json server stop"),
+        ("hc", "send t1 hello"),
+        ("hc", "run --bg 'backlot card apply c1'"),
+        ("hc", "exec t1 -- ls"),
+        ("hc", "keys t1 ctrl-c"),
+        ("hc", "connect --session backlot"),
+        ("hc", "--on t1 send hi"),
+        ("hc", "--session backlot exec t1 -- ls"),
+        (
+            "socat",
+            "- UNIX-CONNECT:/run/user/1000/herdr-core/backlot/backlot.sock",
+        ),
+        (
+            "socat",
+            "STDIO UNIX-CONNECT:/home/alice/.local/state/herdr-core/backlot.sock",
+        ),
+        ("nc", "-U /run/user/1000/herdr-core/backlot/backlot.sock"),
+        ("ncat", "-U $HC_SOCKET"),
+        ("nc", "-U /tmp/queue-plugin.backlot.req.sock"),
+        (
+            "systemd-run",
+            "--user --quiet sh -c 'backlot card apply c1'",
+        ),
+        ("tmux", "new -d sh -c 'backlot card apply c1'"),
+        ("tmux", "new-session -d -- sh -c 'backlot card apply c1'"),
+        ("tmux", "-L backlot-test new -d sleep 60"),
+        ("backlot", "server stop"),
+        ("backlot", "--session backlot server run"),
+        ("backlot", "server adopt --stop-stages"),
         ("scp", "a.txt host-a:/tmp/a.txt"),
         ("scp", "host-a:/tmp/a.txt ."),
         ("rsync", "-avz src/ host-a:/dst/"),
@@ -101,7 +129,21 @@ fn shim_allow_and_refuse_cases() {
         ("hc", "status"),
         ("hc", "list"),
         ("hc", "server status"),
-        ("hc", "send t1 hello"),
+        ("hc", "ls"),
+        ("hc", "get backlot"),
+        ("hc", "read backlot"),
+        ("hc", "wait t1"),
+        ("hc", "events"),
+        ("hc", "templates"),
+        ("hc", "schema"),
+        ("hc", "file read a.txt"),
+        ("socat", "-u /dev/null /tmp/plain.sock"),
+        ("nc", "-l 9999"),
+        ("socat", "TCP:host-a:80"),
+        ("tmux", "ls"),
+        ("screen", "-ls"),
+        ("backlot", "status"),
+        ("backlot", "server status"),
         ("rsync", "-av ./src ./dst"),
         ("rsync", "-av ./a:b /tmp/c:d"),
         ("ssh", "host-a"),
@@ -354,7 +396,21 @@ fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
     );
     prepare_role(&role_dir, exe_dir.to_str().unwrap()).unwrap();
 
-    for cmd in ["git", "gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"] {
+    for cmd in [
+        "git",
+        "gh",
+        "hc",
+        "scp",
+        "rsync",
+        "ssh",
+        "npm",
+        "cargo",
+        "socat",
+        "nc",
+        "ncat",
+        "systemd-run",
+        "tmux",
+    ] {
         assert!(
             executable(&role_dir.join("bin").join(cmd)),
             "missing shim for {cmd}"
@@ -502,4 +558,57 @@ fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
         String::from_utf8_lossy(&push_user.stderr)
     );
     assert!(!git(&bare, &["rev-list", "--all"]).is_empty());
+}
+
+/// The shim layer refuses each role escape with one line naming the
+/// command and that it is the person's.
+#[test]
+fn shim_refuses_role_escapes_in_one_line() {
+    let dir = TestDir::new("backlot-guard-escapes");
+    let mut vars = BTreeMap::new();
+    vars.insert("PATH".into(), "/usr/bin:/bin".into());
+    let env = Env { vars };
+    for (argv, needle) in [
+        (
+            vec!["hc", "--", "run", "--bg", "backlot card apply c1"],
+            "hc run --bg backlot card apply c1 is the person's to run",
+        ),
+        (
+            vec![
+                "hc", "--", "exec", "t1", "--", "backlot", "card", "apply", "c1",
+            ],
+            "hc exec t1 -- backlot card apply c1 is the person's to run",
+        ),
+        (
+            vec![
+                "nc",
+                "--",
+                "-U",
+                "/run/user/1000/herdr-core/backlot/backlot.sock",
+            ],
+            "nc -U /run/user/1000/herdr-core/backlot/backlot.sock is the person's to run",
+        ),
+        (
+            vec!["socat", "--", "-", "UNIX-CONNECT:/tmp/hc.sock"],
+            "socat - UNIX-CONNECT:/tmp/hc.sock is the person's to run",
+        ),
+        (
+            vec!["systemd-run", "--", "--user", "true"],
+            "systemd-run --user true is the person's to run",
+        ),
+        (
+            vec!["tmux", "--", "new", "-d", "x"],
+            "tmux new -d x is the person's to run",
+        ),
+        (
+            vec!["backlot", "--", "server", "stop"],
+            "backlot server stop is the person's to run",
+        ),
+    ] {
+        let args: Vec<String> = argv.iter().map(|s| (*s).to_string()).collect();
+        let (code, msg) = run_in(&args, &env, &dir, false);
+        assert_eq!(code, ExitCode::from(126), "{argv:?}: {msg:?}");
+        let msg = msg.expect("a refusal line");
+        assert!(msg.contains(needle), "{argv:?} -> {msg}");
+    }
 }

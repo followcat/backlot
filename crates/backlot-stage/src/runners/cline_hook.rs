@@ -161,11 +161,14 @@ args_leak() {
     return 1
 }
 
-# Hole 3: refuse BACKLOT_*, env -i / --ignore-environment, card apply|cancel,
-# perms revoke, and unauthorised backlot approve.
+# Hole 3: refuse BACKLOT_*, raw socket/queue writes, detach tricks,
+# env -i / --ignore-environment, card apply|cancel, perms revoke,
+# server control and unauthorised backlot approve.
 hole3_blocked() {
     case "$1" in
         *BACKLOT_*) return 0 ;;
+        *plugin.backlot.*|*doc.set*|*herdr-core*|*HC_SOCKET*|*HC_TERMINAL_SOCKET*) return 0 ;;
+        *systemd-run*|*"tmux new -d"*|*"tmux new-session -d"*) return 0 ;;
     esac
     words=$(printf '%s' "$1" | tr '\t' ' ' | tr -d '"' | tr -d "'")
     old_ifs=$IFS
@@ -242,6 +245,7 @@ hole3_blocked() {
     done
     case "$sub1:$sub2" in
         card:apply|card:cancel|perms:revoke) return 0 ;;
+        server:run|server:start|server:stop|server:adopt|server:service) return 0 ;;
         approve:*)
             case "$role" in
                 producer|director) ;;

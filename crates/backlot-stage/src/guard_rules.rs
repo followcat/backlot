@@ -208,6 +208,11 @@ fn classify_non_git(name: &str, args: &[String]) -> GuardVerdict {
     let hit = match name {
         "gh" => classify_gh(args),
         "hc" => is_hc_refused(args).then_some(("hc control", false)),
+        "socat" | "nc" | "ncat" => (names_server_socket(args) || talks_to_a_unix_socket(args))
+            .then_some(("server socket", false)),
+        "systemd-run" => Some(("detaching from the role's tree", false)),
+        "tmux" => is_tmux_detached(args).then_some(("detaching from the role's tree", false)),
+        "backlot" => is_backlot_server(args).then_some(("server control", false)),
         "scp" => Some(("remote transport", false)),
         "rsync" => is_rsync_refused(args).then_some(("remote transport", false)),
         "ssh" => is_ssh_refused(args).then_some(("remote transport", false)),
@@ -261,16 +266,84 @@ pub(crate) fn refused_command_line(line: &str) -> Option<String> {
 }
 
 fn is_hc_refused(args: &[String]) -> bool {
-    const VALUE_FLAGS: &[&str] = &["--session", "-s", "--socket"];
+    const VALUE_FLAGS: &[&str] = &["--session", "-s", "--socket", "--on"];
     let Some((idx, sub)) = next_positional(args, VALUE_FLAGS) else {
         return false;
     };
     match sub {
-        "update" | "machine" => true,
+        "update" | "machine" | "run" | "exec" | "send" | "keys" | "connect" => true,
         "server" => next_positional(&args[idx + 1..], VALUE_FLAGS)
             .is_some_and(|(_, action)| action == "stop"),
         _ => false,
     }
+}
+
+/// Words naming the person's queue or the core socket directory: a role
+/// that writes them is reaching for the server's own documents.
+const SERVER_TOKENS: &[&str] = &[
+    "plugin.backlot.",
+    "doc.set",
+    "herdr-core",
+    "HC_SOCKET",
+    "HC_TERMINAL_SOCKET",
+];
+
+/// The first word naming a server token, if any.
+pub(crate) fn server_token_in(words: &[String]) -> Option<&str> {
+    words
+        .iter()
+        .map(String::as_str)
+        .find(|w| SERVER_TOKENS.iter().any(|t| w.contains(t)))
+}
+
+fn names_server_socket(args: &[String]) -> bool {
+    server_token_in(args).is_some()
+}
+
+/// `nc`/`ncat` `-U` and socat's `UNIX-*` addresses reach a local socket
+/// whatever its path: the core's own socket is one command away.
+fn talks_to_a_unix_socket(args: &[String]) -> bool {
+    args.iter().any(|a| {
+        a == "--unixsock"
+            || (a.starts_with('-') && !a.starts_with("--") && a[1..].contains('U'))
+            || a == "UNIX"
+            || a.starts_with("UNIX-")
+    })
+}
+
+/// `tmux new -d` / `tmux new-session -d` detach from the role's tree.
+fn is_tmux_detached(args: &[String]) -> bool {
+    const VALUE_FLAGS: &[&str] = &["-L", "-S", "-f", "-c", "-T"];
+    let Some((idx, sub)) = next_positional(args, VALUE_FLAGS) else {
+        return false;
+    };
+    if !matches!(sub, "new" | "new-session") {
+        return false;
+    }
+    args[idx + 1..].iter().any(|a| {
+        a == "--detached" || (a.starts_with('-') && !a.starts_with("--") && a[1..].contains('d'))
+    })
+}
+
+/// `backlot server run|start|stop|adopt|service` is the person's.
+fn is_backlot_server(args: &[String]) -> bool {
+    const VALUE_FLAGS: &[&str] = &[
+        "--session",
+        "-s",
+        "--socket",
+        "--studio",
+        "--as",
+        "--core",
+        "--remote",
+    ];
+    let Some((idx, sub)) = next_positional(args, VALUE_FLAGS) else {
+        return false;
+    };
+    if sub != "server" {
+        return false;
+    }
+    next_positional(&args[idx + 1..], VALUE_FLAGS)
+        .is_some_and(|(_, action)| matches!(action, "run" | "start" | "stop" | "adopt" | "service"))
 }
 
 fn has_host_colon(arg: &str) -> bool {

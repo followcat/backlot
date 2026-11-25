@@ -281,6 +281,16 @@ fn eval_segment(
             }
         }
         _ => {
+            if base != "hc" && crate::guard_rules::server_token_in(&seg[i..]).is_some() {
+                return GuardMatch {
+                    verdict: GuardVerdict::Refuse {
+                        command: cap_command(&seg[i..].join(" ")),
+                        rule: "server socket or queue write".into(),
+                    },
+                    argv: seg[i..].to_vec(),
+                    cwd: eff_cwd.clone(),
+                };
+            }
             let ctx = GitContext {
                 policy,
                 cwd: eff_cwd,

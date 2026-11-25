@@ -366,3 +366,72 @@ fn agy_pre_tool_use_blocks_self_approval_backlot_env_and_mutations() {
     );
     assert_eq!(run_role("actor-t1-c1", "backlot card list"), "allow");
 }
+
+/// The command-line layer refuses the role's ways around the seatbelt:
+/// `hc` control, queue/socket scripts, detach tricks and server control.
+/// Reads stay allowed, and the person's own agy outside a role env is
+/// untouched.
+#[test]
+fn agy_pre_tool_use_refuses_role_escapes_and_keeps_reads() {
+    let (s, env_base) = scratch();
+    let cast = fixture(&s, "cast.toml", CAST_TOML);
+    ok(
+        &env_base,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let sig = s.files.join("signals.jsonl");
+    let args = vec![
+        "--runner".into(),
+        "agy".into(),
+        "--file".into(),
+        sig.to_string_lossy().into_owned(),
+    ];
+    let mut env = Env {
+        vars: env_base.vars.clone(),
+    };
+    env.vars.insert("BACKLOT_ROLE".into(), "producer".into());
+
+    let decision = |env: &Env, cmd: &str| -> String {
+        let payload = serde_json::json!({
+            "conversationId": "conv-guard",
+            "hookEventName": "PreToolUse",
+            "toolCall": { "name": "run_command", "args": { "CommandLine": cmd } }
+        })
+        .to_string();
+        let out = run_agy(&args, env, &s.files, &payload);
+        serde_json::from_str::<serde_json::Value>(out.trim()).unwrap()["decision"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    for bad in [
+        "hc run --bg 'backlot card apply c1'",
+        "hc exec t1 -- backlot card apply c1",
+        "hc send t1 hi",
+        "hc keys t1 ctrl-c",
+        "hc connect --session backlot",
+        "python3 -c 'open(\"plugin.backlot.req\", \"w\").write(\"doc.set\")'",
+        "nc -U /run/user/1000/herdr-core/backlot/backlot.sock",
+        "systemd-run --user sh -c 'backlot card apply c1'",
+        "tmux new -d sh -c 'backlot card apply c1'",
+        "backlot server stop",
+    ] {
+        assert_eq!(decision(&env, bad), "deny", "must deny `{bad}`");
+    }
+
+    for good in [
+        "hc ls",
+        "hc get backlot",
+        "hc file read a.txt",
+        "git status",
+    ] {
+        assert_eq!(decision(&env, good), "allow", "must allow `{good}`");
+    }
+
+    // The person's own agy in the same work area never sees the guard.
+    assert_eq!(
+        decision(&Env::default(), "hc run --bg 'backlot card apply c1'"),
+        "allow"
+    );
+}

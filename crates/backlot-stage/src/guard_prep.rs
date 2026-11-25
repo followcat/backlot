@@ -65,7 +65,21 @@ pub(crate) fn hollywood_role_dir(state_dir: &str) -> PathBuf {
 }
 
 /// Commands wrapped by per-role PATH shims in `<role>/bin`.
-const SHIM_NAMES: &[&str] = &["git", "gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"];
+const SHIM_NAMES: &[&str] = &[
+    "git",
+    "gh",
+    "hc",
+    "scp",
+    "rsync",
+    "ssh",
+    "npm",
+    "cargo",
+    "socat",
+    "nc",
+    "ncat",
+    "systemd-run",
+    "tmux",
+];
 
 /// Standard client-side git hooks wrapped for pass-through when a
 /// role's `GIT_CONFIG_*` sets `core.hooksPath` to `<role>/git-hooks`.

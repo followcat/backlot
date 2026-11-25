@@ -86,6 +86,9 @@ mod permission;
 mod permit;
 mod proc_guard;
 #[cfg(test)]
+#[cfg(target_os = "linux")]
+mod proc_guard_detach_tests;
+#[cfg(test)]
 mod proc_guard_tests;
 mod prompts;
 mod prune;
