@@ -10,6 +10,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Core-document request queue, acks, and catalog (`plugin.backlot.req`, `plugin.backlot.res`, `backlot-cat`).** Added additive `EventBy.via` (`"doc"` for document-driven person actions), typed request/result/catalog schemas in `backlot-model`, shared typed person-verb handlers in `backlot-stage`, CAS client helper (`doc_client`), and stage consumer/publisher wiring with immediate `doc`-event wake plus startup/60s poll, 60s request expiry/future-skew checks, 24h persistent dedupe (`processed-reqs.jsonl`), strict size caps (32 queue / 64 acks / 64 KiB result), and hard refusals for `approve`/prompt/outward/non-person inputs and interactive prompt clearing (`docs/studio/requests.md`).
+
 ## 0.4.3 — 2026-11-25
 
 Hollywood can change its own agent with one card. When you ask it to switch to another runner or model, it proposes a `setup` card showing the old and new identity; applying it rewrites `[hollywood]` (keeping `start`) and restarts Hollywood once, and the new Hollywood greets you with what changed instead of re-researching. The Call Sheet title row's `m` menu also offers "Change Hollywood's agent…" directly.
