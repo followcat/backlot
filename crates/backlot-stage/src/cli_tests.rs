@@ -886,3 +886,22 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
     let err = refused(&env, "report show --studio acme-shop --file checks/big.log");
     assert!(err.contains("limit"), "{err}");
 }
+
+/// `backlot server …` is the person's: a role terminal is refused
+/// before the server or its lock is touched.
+#[test]
+fn server_control_is_refused_from_a_role_terminal() {
+    let (_scratch, mut env) = scratch();
+    env.vars.insert("BACKLOT_ROLE".into(), "producer".into());
+    for verb in ["stop", "start", "adopt", "service --print"] {
+        let m = refused(&env, &format!("server {verb}"));
+        assert!(m.contains("the person"), "server {verb}: {m}");
+    }
+    // The person's own shell (no role pin) is not stopped by this gate.
+    env.vars.remove("BACKLOT_ROLE");
+    match run(&["server".into(), "service".into(), "--print".into()], &env) {
+        Ok(out) => assert!(out.contains("systemd") || !out.is_empty(), "{out}"),
+        Err(Fail::Refused(m)) => assert!(!m.contains("the person"), "{m}"),
+        Err(other) => panic!("unexpected: {other:?}"),
+    }
+}

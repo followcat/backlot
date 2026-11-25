@@ -281,7 +281,9 @@ impl App {
         };
         match &hit.act {
             StudioRowAct::StartStage => {
-                self.run_action(crate::studio_cmds::stage_start(machine));
+                if self.can_start_stage(machine.as_deref()) {
+                    self.run_action(crate::studio_cmds::stage_start(machine));
+                }
             }
             StudioRowAct::ToggleFinished => self.toggle_finished_group(machine),
             StudioRowAct::OpenArchived => self.open_archived(machine),

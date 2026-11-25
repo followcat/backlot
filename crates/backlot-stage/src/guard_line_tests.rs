@@ -79,3 +79,96 @@ fn refuses_chained_piped_multiline_and_nested_shells() {
         GuardVerdict::Refuse { .. }
     ));
 }
+
+/// The command-line layer (agy and Cline hooks): role terminals cannot
+/// reach the person's queue, core socket, server or a detached process.
+#[test]
+fn refuses_hc_control_socket_scripts_detach_tricks_and_server_control() {
+    for line in [
+        "hc run --bg 'backlot card apply c1'",
+        "hc exec t1 -- ls",
+        "hc send t1 hello",
+        "hc keys t1 ctrl-c",
+        "hc connect --session backlot",
+        "hc --on t1 send hi",
+        "python3 -c 'import socket; socket.socket(1, 1).connect(\"plugin.backlot.req\")'",
+        "node -e 'fs.writeFileSync(\"plugin.backlot.req\", \"doc.set\")'",
+        "python3 -c 'import os; print(os.environ[\"HC_SOCKET\"])'",
+        "socat - UNIX-CONNECT:/run/user/1000/herdr-core/backlot/backlot.sock",
+        "nc -U /home/alice/.local/state/herdr-core/backlot/backlot.sock",
+        "ncat -U /tmp/hc.sock",
+        "systemd-run --user --quiet sh -c 'backlot card apply c1'",
+        "tmux new -d sh -c 'backlot card apply c1'",
+        "tmux -L s new-session -d -- sh -c 'backlot card apply c1'",
+        "backlot server stop",
+        "backlot --session backlot server run",
+        "backlot server adopt --stop-stages",
+    ] {
+        assert!(refused_command_line(line).is_some(), "must refuse `{line}`");
+    }
+
+    let heredoc = "python3 - <<'EOF'\nimport socket\ns = socket.socket(socket.AF_UNIX)\ns.connect('/run/user/1000/herdr-core/backlot/backlot.sock')\nEOF";
+    assert!(
+        refused_command_line(heredoc).is_some(),
+        "heredoc into an interpreter"
+    );
+    assert!(
+        refused_command_line("bash -c 'python3 -c \"print(1)\"; nc -U /tmp/plugin.backlot.req'")
+            .is_some()
+    );
+
+    for line in [
+        "hc ls",
+        "hc get backlot",
+        "hc read backlot",
+        "hc wait t1",
+        "hc events",
+        "hc templates",
+        "hc schema",
+        "hc file read a.txt",
+        "tmux ls",
+        "screen -ls",
+        "screen -dm sleep 30",
+        "setsid -f sleep 30",
+        "nohup sleep 30 &",
+        "git status",
+        "cargo test",
+    ] {
+        assert_eq!(refused_command_line(line), None, "must allow `{line}`");
+    }
+}
+
+/// The token rule lives only in interpreter code: ordinary commands whose
+/// words happen to be the queue's name, the socket dir or a variable name
+/// are everyday studio work and stay allowed.
+#[test]
+fn plain_command_words_that_name_the_server_are_allowed() {
+    for line in [
+        "cd /home/user/herdr-core && git status",
+        "cargo test -p herdr-core",
+        "grep -rn doc.set crates/",
+        "rg \"plugin.backlot.req\" docs/",
+        "rg HC_SOCKET server/",
+        "HC_SOCKET=/tmp/scratch.sock npm run dev",
+        "rg HC_TERMINAL_SOCKET crates/",
+        "cat plugin.backlot.req.md",
+        "git commit -m \"doc.set: keep the queue names\"",
+        "python3 manage.py migrate",
+        "node scripts/build.js",
+    ] {
+        assert_eq!(refused_command_line(line), None, "must allow `{line}`");
+    }
+
+    // The same tokens inside interpreter code still refuse.
+    for line in [
+        "perl -e 'open F, \">plugin.backlot.req\"'",
+        "ruby -e 'File.write(\"plugin.backlot.req\", \"doc.set\")'",
+        "python3 -c 'import os; print(os.environ[\"HC_TERMINAL_SOCKET\"])'",
+        "node -e 'const s = process.env.HC_SOCKET; require(\"fs\").readFileSync(s)'",
+        "python3 - <<< 'import socket; socket.socket().connect(\"/run/user/1000/herdr-core/backlot.sock\")'",
+        "lua -e 'local p = os.getenv(\"HC_SOCKET\")'",
+        "python3 -c \"import os; print(os.path.join(os.environ['XDG_RUNTIME_DIR'], 'herdr-core', 'backlot.sock'))\"",
+    ] {
+        assert!(refused_command_line(line).is_some(), "must refuse `{line}`");
+    }
+}

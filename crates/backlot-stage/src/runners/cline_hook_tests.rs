@@ -386,3 +386,77 @@ fn cline_hook_blocks_self_approval_backlot_env_and_mutations() {
     );
     assert!(!cancel, "director approve actor-t1-c1 failed: {msg}");
 }
+
+/// The hook's own escape rules run before the role's allowed list: a
+/// command ruled in (a declared check, or any `backlot` call) still
+/// cannot name the queue/socket, detach, or control the server.
+fn run_with_allowed(dir: &Path, allowed: &[&str], cmd: &str) -> bool {
+    let signals = dir.join("escape-signals.jsonl");
+    let hook = dir.join("PreToolUse-escape.sh");
+    let allowed: Vec<String> = allowed.iter().map(|s| (*s).to_string()).collect();
+    fs::write(
+        &hook,
+        script(&Spec {
+            worktree: WORKTREE,
+            signals: &signals,
+            allowed: &allowed,
+            role: "actor-t1-c1",
+        }),
+    )
+    .unwrap();
+    let mut child = Command::new("sh")
+        .arg(&hook)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(commands_of(&[cmd]).as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
+    v["cancel"].as_bool().unwrap()
+}
+
+#[test]
+fn a_role_escape_is_cancelled_even_when_its_command_is_ruled_in() {
+    let dir = tmp("escape");
+    let allowed = [
+        "backlot",
+        "tmux new -d",
+        "tmux new-session -d",
+        "systemd-run",
+        "python3 -c",
+        "node -e",
+        "rg doc.set",
+        "cargo test -p herdr-core",
+        "git commit -m",
+        "sleep 5",
+    ];
+    for cmd in [
+        "tmux new -d sh -c 'backlot card apply c1'",
+        "tmux new-session -d -- sleep 60",
+        "systemd-run --user --quiet sleep 60",
+        "backlot server stop",
+        "backlot --session backlot server run",
+        "python3 -c 'open(\"plugin.backlot.req\", \"w\").write(\"doc.set\")'",
+        "node -e 'require(\"fs\").readFileSync(process.env.HC_SOCKET)'",
+    ] {
+        assert!(run_with_allowed(&dir, &allowed, cmd), "must cancel `{cmd}`");
+    }
+    // Plain command words naming the queue or the socket dir stay allowed.
+    for cmd in [
+        "sleep 5",
+        "backlot status",
+        "backlot tell producer --text plugin.backlot.req",
+        "rg doc.set crates/",
+        "cargo test -p herdr-core",
+        "git commit -m \"doc.set: keep the queue names\"",
+    ] {
+        assert!(!run_with_allowed(&dir, &allowed, cmd), "must allow `{cmd}`");
+    }
+}

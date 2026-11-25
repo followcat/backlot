@@ -219,7 +219,9 @@ impl App {
                 // a live studio with no space still becomes current.
                 if !self.machine_stage_running(machine.as_deref()) {
                     self.tree_focus_leave();
-                    self.run_action(crate::studio_cmds::stage_start(machine));
+                    if self.can_start_stage(machine.as_deref()) {
+                        self.run_action(crate::studio_cmds::stage_start(machine));
+                    }
                 } else {
                     let key = StudioKey { machine, id };
                     self.tree_focus_leave();

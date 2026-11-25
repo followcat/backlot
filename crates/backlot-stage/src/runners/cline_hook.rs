@@ -161,11 +161,15 @@ args_leak() {
     return 1
 }
 
-# Hole 3: refuse BACKLOT_*, env -i / --ignore-environment, card apply|cancel,
-# perms revoke, and unauthorised backlot approve.
+# Hole 3: refuse BACKLOT_*, interpreter code that writes the queue or
+# reaches the core socket, detach tricks, env -i / --ignore-environment,
+# card apply|cancel, perms revoke, server control and unauthorised
+# backlot approve.
 hole3_blocked() {
+    h3=$1
     case "$1" in
         *BACKLOT_*) return 0 ;;
+        *systemd-run*|*"tmux new -d"*|*"tmux new-session -d"*) return 0 ;;
     esac
     words=$(printf '%s' "$1" | tr '\t' ' ' | tr -d '"' | tr -d "'")
     old_ifs=$IFS
@@ -207,6 +211,29 @@ hole3_blocked() {
             prog=$base
         fi
     done
+    # Only interpreter code names the queue or the socket: `grep doc.set`
+    # and `cargo test -p herdr-core` are ordinary studio work.
+    case "$prog" in
+        python|python3|node|perl|ruby|deno|bun|php|lua)
+            case "$h3" in
+                *plugin.backlot.req*|*doc.set*) return 0 ;;
+            esac
+            case "$h3" in
+                *herdr-core*)
+                    case "$h3" in
+                        *.sock*|*/run/user/*|*XDG_RUNTIME_DIR*) return 0 ;;
+                    esac
+                    ;;
+            esac
+            case "$h3" in
+                *HC_SOCKET*|*HC_TERMINAL_SOCKET*)
+                    case "$h3" in
+                        *os.environ*|*process.env*|*getenv*|*'$HC_'*|*'ENV['*) return 0 ;;
+                    esac
+                    ;;
+            esac
+            ;;
+    esac
     [ "$prog" = backlot ] || return 1
     sub1=
     sub2=
@@ -242,6 +269,7 @@ hole3_blocked() {
     done
     case "$sub1:$sub2" in
         card:apply|card:cancel|perms:revoke) return 0 ;;
+        server:run|server:start|server:stop|server:adopt|server:service) return 0 ;;
         approve:*)
             case "$role" in
                 producer|director) ;;

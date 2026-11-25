@@ -100,6 +100,7 @@ fn cast_view<'a>(
         studio_focused: false,
         hint: false,
         stopped: false,
+        server_stopped: false,
     }
 }
 

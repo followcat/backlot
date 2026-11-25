@@ -10,11 +10,28 @@ use crate::cli::{Env, Fail, base, check_identity, check_stage_caller, exec_event
 /// `run` with stdin already read — the tests' seam: `None` reads the
 /// real stream, and only when a `--stdin` command asks for it (G2).
 pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Result<String, Fail> {
-    let (common, mut cmd) = parse(args)?;
+    let local_host = crate::server_cfg::system_hostname();
+    let user = crate::server_cfg::env_user(&env.vars);
+    run_stdin_with_host(args, env, stdin, local_host.as_deref(), user.as_deref())
+}
+
+pub(crate) fn run_stdin_with_host(
+    args: &[String],
+    env: &Env,
+    stdin: Option<&str>,
+    local_hostname: Option<&str>,
+    current_user: Option<&str>,
+) -> Result<String, Fail> {
+    let (mut common, mut cmd) = parse(args)?;
     if let Cmd::Help(u) = cmd {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
     check_identity(&common, env)?;
+    if let Some(res) =
+        crate::remote_doc_cli::route(&mut common, &cmd, env, stdin, local_hostname, current_user)
+    {
+        return res;
+    }
     if matches!(cmd, Cmd::StudioNew { .. }) && common.remote.is_some() {
         return Err(Fail::refused(
             "remote studio placement is Phase 2; create studios on the server host",
@@ -96,6 +113,11 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             return crate::service::run(&common, env, write);
         }
         Cmd::Server(scmd) => {
+            crate::proc_guard::check_cli_gate(
+                crate::proc_guard::CliVerb::ServerControl,
+                &common,
+                env,
+            )?;
             check_stage_caller(&common, env)?;
             return match scmd {
                 crate::args::ServerCmd::Run => crate::server_mode::run(&common, env),

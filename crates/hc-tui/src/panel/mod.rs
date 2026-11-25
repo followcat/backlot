@@ -117,6 +117,9 @@ pub(crate) struct Panel {
     /// stages — s to start`. Set by `sync_studio`, `None` once any
     /// document lists a studio.
     pub(crate) stopped: Option<StoppedLedger>,
+    /// One-line start command when `backlot-cat` is present while the server
+    /// terminal is gone.
+    pub(crate) server_stopped_cmd: Option<String>,
 }
 
 #[cfg(test)]
@@ -150,6 +153,7 @@ impl Panel {
             hollywood_hint: false,
             update: None,
             stopped: None,
+            server_stopped_cmd: None,
         }
     }
 

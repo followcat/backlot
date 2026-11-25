@@ -197,7 +197,9 @@ impl App {
             }
             None => return,
         };
-        if self.machine_stage_running(machine.as_deref()) {
+        if !self.can_start_stage(machine.as_deref())
+            || self.machine_stage_running(machine.as_deref())
+        {
             return;
         }
         self.run_action(studio_cmds::stage_start(machine));

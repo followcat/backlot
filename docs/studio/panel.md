@@ -390,6 +390,10 @@ next_role = "alt+down"
 focus_lot = "alt+l"
 call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
 prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
+
+[client]
+# server = "host-a"             # default server target (--server and BACKLOT_SERVER override it)
+# session = "backlot"           # default session when `server` omits `/<session>`
 ```
 
 A missing file means defaults. A malformed file means defaults plus one notice carrying only
@@ -412,7 +416,10 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   a 16-column overlay under that — and the pane geometry keeps the closed shape beneath it.
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
   foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
-  terminal the panel shows `stage stopped` and keeps the last document.
+  or `backlot-server` terminal the panel keeps the last document and shows `stage stopped`; when
+  `backlot-cat` is also present (server mode), it shows the read-only start command
+  (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`)
+  instead of starting anything itself.
 - The left machines tree is not only spaces: under each machine it also draws the studios its
   ledger lists when the document cannot speak for them (`stage down`, dim, Enter starts the
   stage), the machine's folded `finished (n)` group, and one `unreachable` line for a machine

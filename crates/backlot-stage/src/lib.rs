@@ -86,6 +86,9 @@ mod permission;
 mod permit;
 mod proc_guard;
 #[cfg(test)]
+#[cfg(target_os = "linux")]
+mod proc_guard_detach_tests;
+#[cfg(test)]
 mod proc_guard_tests;
 mod prompts;
 mod prune;
@@ -175,6 +178,8 @@ mod digest_tests;
 mod discover_tests;
 #[cfg(test)]
 mod doc_req_cap_tests;
+#[cfg(test)]
+mod doc_req_card_tests;
 #[cfg(test)]
 mod doc_req_fake_core;
 #[cfg(test)]
@@ -336,6 +341,13 @@ mod wizard_paths_tests;
 mod wizard_tests;
 #[cfg(test)]
 mod workareas_tests;
+
+pub mod remote_doc_cli;
+#[cfg(test)]
+mod remote_doc_cli_tests;
+pub mod server_cfg;
+#[cfg(test)]
+mod server_cfg_tests;
 
 pub use cli::{Env, Fail, maybe_run};
 pub use commands::validate_cast_file;

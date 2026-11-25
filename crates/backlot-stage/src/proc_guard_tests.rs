@@ -212,3 +212,41 @@ fn cli_ancestor_tree_blocks_unsetting_backlot_role_and_bad_approvals() {
         .is_ok()
     );
 }
+
+#[test]
+fn server_control_is_refused_from_a_role_terminal_and_allowed_for_the_person() {
+    let reader = |pid: u32| -> Option<(u32, Vec<(String, String)>)> {
+        match pid {
+            300 => Some((200, vec![])), // simulated `env -u BACKLOT_ROLE` child
+            200 => Some((
+                100,
+                vec![
+                    ("BACKLOT_STUDIO".into(), "acme-shop".into()),
+                    ("BACKLOT_ROLE".into(), "producer".into()),
+                    ("BACKLOT_TERMINAL".into(), "bl-acme-shop-producer".into()),
+                ],
+            )),
+            100 => Some((1, vec![("HOME".into(), "/home/user".into())])),
+            _ => None,
+        }
+    };
+    let clean_env = Env::default();
+    let common = Common::default();
+
+    // A role ancestor blocks `backlot server …` even with BACKLOT_ROLE unset.
+    let err =
+        check_cli_gate_with(CliVerb::ServerControl, &common, &clean_env, &reader, 300).unwrap_err();
+    assert!(err.message().contains("role terminal ancestor"), "{err:?}");
+
+    // BACKLOT_ROLE alone is enough.
+    let mut role_env = Env::default();
+    role_env
+        .vars
+        .insert("BACKLOT_ROLE".into(), "producer".into());
+    let err =
+        check_cli_gate_with(CliVerb::ServerControl, &common, &role_env, &reader, 100).unwrap_err();
+    assert!(err.message().contains("BACKLOT_ROLE is set"), "{err:?}");
+
+    // The person's own shell (no role env, no role ancestry) is unaffected.
+    assert!(check_cli_gate_with(CliVerb::ServerControl, &common, &clean_env, &reader, 100).is_ok());
+}
