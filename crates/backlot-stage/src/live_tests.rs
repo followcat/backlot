@@ -41,6 +41,7 @@ fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSumm
         stage_answer_ms: None,
         can_answer_prompt: true,
         restarted_ms: None,
+        idle_since_ms: None,
     }
 }
 
@@ -146,6 +147,7 @@ fn only_classified_rows_become_facts() {
             work: None,
             doing: Some("writing tests".into()),
             running: None,
+            idle_since_ms: None,
         }]
     );
 }

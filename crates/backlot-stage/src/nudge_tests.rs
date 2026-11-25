@@ -642,7 +642,7 @@ fn a_nudge_and_a_notice_share_a_source_seq() {
         ),
     );
     let wanted = BTreeSet::new();
-    let moves = nudge::plan(&state, &wanted, |_| Some(0), 10_000_000);
+    let moves = nudge::plan(&state, &wanted, |_| Some(0), |_| None, 10_000_000);
     assert!(
         matches!(moves.as_slice(), [Move::Nudge { step }] if step.key == 5),
         "{moves:?}"
@@ -702,8 +702,207 @@ fn the_users_step_is_never_pushed() {
     ]);
     let state = replay(&events);
     let wanted = BTreeSet::new();
-    let moves = nudge::plan(&state, &wanted, |_| Some(0), 10_000_000);
+    let moves = nudge::plan(&state, &wanted, |_| Some(0), |_| None, 10_000_000);
     assert!(moves.is_empty(), "{moves:?}");
+}
+
+/// A running `t1` under `actor-t1-c1` — the actor owes `deliver t1`,
+/// keyed on the cast at seq 4. `role_started` at seq 5 (live, no
+/// terminal) floors the step's age at 5 000.
+fn running_delivery() -> (backlot_model::state::StudioState, u64) {
+    let mut events = base_events();
+    events.extend([
+        ev(4, "director", cast("t1", "actor-a", "a")),
+        ev(5, "stage", role_started("actor-t1-c1", "bl-acme-shop-t1")),
+    ]);
+    (replay(&events), 4)
+}
+
+/// Queue a `nudge` for step `key` to `to` at the next seq, returning
+/// that seq — the delivery target.
+fn queue_nudge(
+    state: &mut backlot_model::state::StudioState,
+    to: &str,
+    key: u64,
+    file: &str,
+) -> u64 {
+    let seq = state.last_seq + 1;
+    apply(
+        state,
+        &ev(
+            seq,
+            "stage",
+            EventKind::MessageQueued {
+                to: to.into(),
+                file: Some(file.into()),
+                purpose: Some("nudge".into()),
+                source_seq: Some(key),
+            },
+        ),
+    );
+    seq
+}
+
+/// The actor's first nudge names the task and says keep working until
+/// `deliver`; a `role.progress` reply alone does not postpone the
+/// second nudge, which lands once the idle stretch passes
+/// `nudge_after_s` again. The `owed` escalation still ignores a bare
+/// progress write.
+#[test]
+fn a_progress_only_reply_earns_the_second_nudge_and_no_delay() {
+    let (mut state, key) = running_delivery();
+    let wanted: BTreeSet<String> = BTreeSet::from(["actor-t1-c1".to_string()]);
+
+    // The first nudge lands once the idle limit passes (idle from
+    // 5 000, the role's start).
+    assert!(
+        nudge::plan(&state, &wanted, |_| Some(5_000), |_| None, 184_999).is_empty(),
+        "inside the limit"
+    );
+    let moves = nudge::plan(&state, &wanted, |_| Some(5_000), |_| None, 185_000);
+    let Move::Nudge { step } = &moves[0] else {
+        panic!("{moves:?}")
+    };
+    assert_eq!(step.key, key);
+    let body = nudge::nudge_body(&state, step);
+    assert!(body.contains("t1"), "{body}");
+    assert!(body.contains("backlot deliver --task t1"), "{body}");
+    assert!(body.contains("Keep working"), "{body}");
+    assert!(body.contains("backlot progress"), "{body}");
+    assert!(body.contains("backlot tell director --file"), "{body}");
+
+    // The nudge is delivered, then the actor answers with one progress
+    // line and sits idle again from 8 000.
+    let nudge = queue_nudge(&mut state, "actor-t1-c1", key, "messages/4-nudge.md");
+    apply(
+        &mut state,
+        &ev(7, "stage", EventKind::MessageDelivered { target: nudge }),
+    );
+    apply(
+        &mut state,
+        &ev(
+            8,
+            "actor-t1-c1",
+            EventKind::RoleProgress {
+                role: "actor-t1-c1".into(),
+                task: Some("t1".into()),
+                text: "checking the branch".into(),
+            },
+        ),
+    );
+    // No second nudge while the fresh idle stretch is under the limit.
+    assert!(
+        nudge::plan(&state, &wanted, |_| Some(8_000), |_| None, 187_999).is_empty(),
+        "inside the second limit"
+    );
+    // Past it: the firmer second nudge for the same step.
+    let moves = nudge::plan(&state, &wanted, |_| Some(8_000), |_| None, 188_000);
+    let Move::NudgeAgain { step } = &moves[0] else {
+        panic!("{moves:?}")
+    };
+    assert_eq!(step.key, key);
+    let body = nudge::nudge_body_second(&state, step);
+    assert!(body.contains("do not end the turn"), "{body}");
+    assert!(!body.contains("<role>"), "names who to tell: {body}");
+
+    // Deliver the second nudge. Never a third: the idle stretch is
+    // long past, and nothing but progress landed.
+    let second = queue_nudge(&mut state, "actor-t1-c1", key, "messages/9-again.md");
+    apply(
+        &mut state,
+        &ev(10, "stage", EventKind::MessageDelivered { target: second }),
+    );
+    assert!(
+        !nudge::plan(&state, &wanted, |_| Some(8_000), |_| None, 5_000_000)
+            .iter()
+            .any(|m| matches!(m, Move::NudgeAgain { .. })),
+        "no third nudge"
+    );
+    // And a progress write alone never postponed `owed`: a full
+    // escalation window past the last delivery still escalates.
+    let raised = nudge::plan(&state, &wanted, |_| Some(8_000), |_| None, 600_000 + 10_000);
+    assert!(
+        raised.iter().any(|m| matches!(m, Move::Raise { .. })),
+        "{raised:?}"
+    );
+}
+
+/// A real ledger write — any non-progress event — or a work-area move
+/// since the first delivery counts: no second nudge, and `owed` waits
+/// its window from that activity.
+#[test]
+fn a_commit_or_a_work_area_move_is_activity() {
+    let key = 4;
+    let wanted: BTreeSet<String> = BTreeSet::from(["actor-t1-c1".to_string()]);
+    // A tell to the director: the actor's own ledger write, not
+    // progress, that leaves the deliver step owed.
+    let tell = || EventKind::MessageQueued {
+        to: "director".into(),
+        file: Some("messages/7-ask.md".into()),
+        purpose: None,
+        source_seq: None,
+    };
+
+    for activity in ["ledger", "work-area"] {
+        let (mut state, _) = running_delivery();
+        let nudge = queue_nudge(&mut state, "actor-t1-c1", key, "messages/4-nudge.md");
+        apply(
+            &mut state,
+            &ev(7, "stage", EventKind::MessageDelivered { target: nudge }),
+        );
+        if activity == "ledger" {
+            apply(&mut state, &ev(8, "actor-t1-c1", tell()));
+        }
+        let moved =
+            |role: &str| (activity == "work-area" && role == "actor-t1-c1").then_some(7_500);
+        // Idle a long stretch: no second nudge, because work landed.
+        let moves = nudge::plan(&state, &wanted, |_| Some(8_000), moved, 900_000);
+        assert!(
+            !moves.iter().any(|m| matches!(m, Move::NudgeAgain { .. })),
+            "{activity}: {moves:?}"
+        );
+        // And a full escalation window past the first delivery finds
+        // the actor active, so no raise: for the ledger write the clock
+        // runs from it, for the work-area move from the probe.
+        let moves = nudge::plan(&state, &wanted, |_| Some(8_000), moved, 607_000);
+        assert!(
+            !moves.iter().any(|m| matches!(m, Move::Raise { .. })),
+            "{activity}: {moves:?}"
+        );
+    }
+}
+
+/// Every other step keeps one nudge ever — a delivered producer
+/// nudge never earns a second, whatever the idle stretch.
+#[test]
+fn a_non_actor_step_still_gets_one_nudge() {
+    let mut events = base_events();
+    events.push(ev(3, "producer", plan_request()));
+    events.extend([
+        ev(4, "writer", publish(PlanKind::Plan, 4)),
+        ev(5, "writer", publish(PlanKind::Acceptance, 5)),
+    ]);
+    let mut state = replay(&events);
+    let wanted: BTreeSet<String> = BTreeSet::from(["producer".to_string()]);
+    // The dispatch step, keyed on the closing publish at seq 5.
+    let moves = nudge::plan(&state, &wanted, |_| Some(5_000), |_| None, 200_000);
+    assert!(
+        moves.iter().any(
+            |m| matches!(m, Move::Nudge { step } if step.owner == "producer" && step.key == 5)
+        ),
+        "{moves:?}"
+    );
+    let nudge = queue_nudge(&mut state, "producer", 5, "messages/5-nudge.md");
+    apply(
+        &mut state,
+        &ev(7, "stage", EventKind::MessageDelivered { target: nudge }),
+    );
+    assert!(
+        !nudge::plan(&state, &wanted, |_| Some(6_000), |_| None, 10_000_000)
+            .iter()
+            .any(|m| matches!(m, Move::NudgeAgain { .. })),
+        "one nudge ever for a non-actor step"
+    );
 }
 
 #[path = "nudge_stale_tests.rs"]

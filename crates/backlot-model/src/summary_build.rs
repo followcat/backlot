@@ -133,6 +133,7 @@ fn standby_role_summary(state: &StudioState, role: &str) -> Option<RoleSummary> 
         stage_answer_ms: None,
         can_answer_prompt: crate::caps::can_answer_prompt(&actor.runner),
         restarted_ms: None,
+        idle_since_ms: None,
     })
 }
 
@@ -459,5 +460,8 @@ pub(crate) fn role_summary(
         stage_answer_ms: r.stage_answer_ms,
         can_answer_prompt: actor.is_none_or(|a| crate::caps::can_answer_prompt(&a.runner)),
         restarted_ms: r.restarted_ms,
+        // The stage overlays the live idle stretch on the dock view; a
+        // pure summary leaves it out.
+        idle_since_ms: None,
     })
 }

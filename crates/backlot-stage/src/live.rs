@@ -46,6 +46,10 @@ pub struct LiveRole {
     /// Deepest descendant command line and since when, published while `Working`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub running: Option<RoleRunning>,
+    /// When a live, waiting role's current idle stretch began — the
+    /// nudge pass's clock, so `backlot status` can read `idle <n>m`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_since_ms: Option<u64>,
 }
 
 /// Every role's live facts, plus the wall clock they were read at.
@@ -69,7 +73,11 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
     let mut roles = Vec::new();
     for studio in &summary.studios {
         for role in &studio.roles {
-            if role.work.is_none() && role.doing.is_none() && role.running.is_none() {
+            if role.work.is_none()
+                && role.doing.is_none()
+                && role.running.is_none()
+                && role.idle_since_ms.is_none()
+            {
                 continue;
             }
             roles.push(LiveRole {
@@ -78,6 +86,7 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
                 work: role.work,
                 doing: role.doing.clone(),
                 running: role.running.clone(),
+                idle_since_ms: role.idle_since_ms,
             });
         }
     }
@@ -90,6 +99,7 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
             work: h.work,
             doing: h.doing.clone(),
             running: None,
+            idle_since_ms: None,
         });
     }
     Live { updated_ms, roles }
@@ -155,6 +165,17 @@ pub fn work_map(live: &Live) -> BTreeMap<(String, String), Work> {
         .collect()
 }
 
+/// `(studio, role)` → the idle stretch's start, for live waiting roles.
+pub fn idle_map(live: &Live) -> BTreeMap<(String, String), u64> {
+    live.roles
+        .iter()
+        .filter_map(|r| {
+            r.idle_since_ms
+                .map(|t| ((r.studio.clone(), r.role.clone()), t))
+        })
+        .collect()
+}
+
 /// `(studio, role)` → deepest descendant command while `Working`.
 pub fn running_map(live: &Live) -> BTreeMap<(String, String), RoleRunning> {
     live.roles
@@ -176,6 +197,9 @@ pub struct LiveView {
     pub work: BTreeMap<(String, String), Work>,
     /// The deepest descendant command per `(studio, role)` while `Working`.
     pub running_cmds: BTreeMap<(String, String), RoleRunning>,
+    /// The idle-stretch start per `(studio, role)` while the role waits
+    /// at its prompt — the nudge pass's clock, for `idle <n>m`.
+    pub idle: BTreeMap<(String, String), u64>,
     /// A fresh file exists — the stage is running.
     pub running: bool,
 }
@@ -187,10 +211,19 @@ impl LiveView {
             Some(live) => LiveView {
                 work: work_map(&live),
                 running_cmds: running_map(&live),
+                idle: idle_map(&live),
                 running: true,
             },
             None => LiveView::default(),
         }
+    }
+
+    /// `(studio, role)` → the idle stretch's start, when the role is
+    /// waiting at its prompt under a live stage.
+    pub fn idle_since(&self, studio: &str, role: &str) -> Option<u64> {
+        self.idle
+            .get(&(studio.to_string(), role.to_string()))
+            .copied()
     }
 }
 

@@ -821,6 +821,16 @@ impl Stage {
                         .to_string_lossy()
                         .into_owned(),
                 );
+                // The dock reads `idle <n>m` from the same stretch the
+                // nudge pass keeps — only while the role is live and
+                // waiting at its prompt.
+                if role.state == "live" && role.work == Some(Work::Waiting) {
+                    role.idle_since_ms = self
+                        .idle_since
+                        .borrow()
+                        .get(&(studio.id.clone(), role.role.clone()))
+                        .copied();
+                }
             }
         }
         // The optional `hollywood` object — absent unless `[hollywood]`

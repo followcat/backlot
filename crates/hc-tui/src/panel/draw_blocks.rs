@@ -278,6 +278,7 @@ pub(super) fn draw_person(
     role: &RoleSummary,
     frame: Style,
     spin: usize,
+    now_ms: u64,
     palette: &Palette,
 ) {
     draw_inner(buf, rect, frame);
@@ -294,9 +295,9 @@ pub(super) fn draw_person(
     // `name · task ↑` left — the state word keeps the right edge,
     // with the dim runner tag before it and the short model before
     // that only in cells the whole name leaves spare (L4).
-    let state = mark.word();
+    let state = mark.role_word(role, now_ms);
     let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
-    let state_width = display_width(state) as u16 + u16::from(badge) * 2;
+    let state_width = display_width(&state) as u16 + u16::from(badge) * 2;
     let flag = role.priority.and_then(PriorityMark::of);
     let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
     let mut name = role.name.clone();
@@ -369,8 +370,8 @@ pub(super) fn draw_person(
         )
     } else {
         (
-            state.to_string(),
-            rect.x + rect.width.saturating_sub(1 + display_width(state) as u16),
+            state.clone(),
+            rect.x + rect.width.saturating_sub(1 + display_width(&state) as u16),
         )
     };
     put_text(

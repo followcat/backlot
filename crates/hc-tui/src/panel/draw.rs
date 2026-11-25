@@ -396,6 +396,7 @@ pub(crate) fn render(
                     role,
                     frame_of(&studio.key()),
                     panel.spin,
+                    now_ms,
                     palette,
                 );
             }
