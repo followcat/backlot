@@ -10,6 +10,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **`Alt+L` (`[keys] focus_lot`) focuses the lot on its last selectable row.** Pressing `Alt+L` opens/expands the right-hand lot dock (`lot · N`) if hidden or collapsed, focuses it, and scrolls the selection to its last selectable row (e.g. `› tell producer · / actions`) without entering Compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressing `Alt+L` while the lot is already focused jumps to the last row again without toggling the dock closed. Configurable via `[keys] focus_lot` (empty string unbinds), falls through to the focused program under `--plain`, yields to floats, modals, the Call Sheet, and running compose, and appears in the lot header, `?` help, launcher, and docs (`docs/keys.md`, `docs/studio/hollywood.md`, `docs/studio/panel.md`).
+
 ### Fixed
 
 - **Stale "needs you" rows clear by themselves.** An `owed` escalation clears (`role active again`) once its role writes to the ledger again, for example while the person talks it through, and raises again only after the role sits idle a whole `escalate_after_s` with the step still owed, counted from its last ledger write. An `outward action` refusal clears (`role moved on`) once the stage delivers the role new work. Before, both stayed "needs you" until the step was done or someone cleared them by hand.
