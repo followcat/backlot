@@ -228,9 +228,35 @@ fn an_actor_recast_keeps_the_key_and_worktree_and_starts_fresh() {
     let state = replay(&events);
     // The task's identity moved; the key and its terminal name do not.
     assert_eq!(state.tasks["t1"].cast.as_ref().unwrap().actor, new);
-    // The reconcile tick closes the old terminal on purpose and starts
-    // it fresh under the same key. With the terminal gone the start
-    // carries the new identity and no resume.
+    // The reconcile tick closes the live terminal on purpose with reason
+    // `recast` — never a loss — and starts it fresh under the same key.
+    let actions = crate::reconcile::reconcile(
+        STUDIO,
+        &state,
+        &BTreeMap::from([("bl-acme-shop-t1".to_string(), "t7".to_string())]),
+        0,
+    );
+    let stop = actions
+        .iter()
+        .find_map(|a| match a {
+            crate::reconcile::Action::Stop {
+                role,
+                close,
+                reason,
+                ..
+            } if role == "actor-t1-c1" => Some((*close, reason.as_str())),
+            _ => None,
+        })
+        .expect("a recast closes the live terminal");
+    assert_eq!(stop, (true, "recast"));
+    assert!(
+        !actions
+            .iter()
+            .any(|a| matches!(a, crate::reconcile::Action::Start(s) if s.role == "actor-t1-c1")),
+        "the start follows the close on the next tick: {actions:?}"
+    );
+    // With the terminal gone the start carries the new identity and no
+    // resume — a fresh conversation.
     let after_close = {
         let mut e = events.clone();
         e.push(ev(
