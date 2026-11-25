@@ -12,6 +12,7 @@ use super::App;
 
 mod keys;
 mod lifecycle;
+mod restore;
 
 impl App {
     /// `Tell <name>…` — `Tell alice · acme-shop · host-b`.

@@ -87,6 +87,17 @@ Two lifecycle rows join that list (W4b). A finished studio also offers **`Free w
 runs the real prune. `Finish studio…` on a studio with no requirement and no tasks asks
 `Nothing was built yet (no requirement, no tasks). Finish anyway?` and passes `--force`.
 
+When the TUI is connected to a server (`--server`, `BACKLOT_SERVER`, `[client]`), every studio
+management action goes over `plugin.backlot.req`/`res` instead of a local process. The New Studio
+dialog's version, `repos` and `runners` probes answer from the hub (the folder browser walks the
+**hub's** folders), and its dry run and create travel the queue with `--cast -` on stdin and the
+build brief as content — no temp file is written on the client. The delete, prune and restore
+dialogs keep their dry-run plan, but the plan now carries a `confirm_token`; the confirm sends
+that exact token, and if the studio changed underneath it the server's refusal
+(`the studio changed since you reviewed it; run it again`) is drawn in the dialog, where `r` (or
+Enter) reviews the plan again. A server create does not chain a separate `stage start`: the
+server is the stage.
+
 A live person's menu (`m` on a person) carries **`Restart <name>`**, and a fixed seat — producer,
 director, writer — adds **`Recast…`** and drops `Close`, which the command refuses on it. Restart
 opens a two-choice confirm (`Resume its session` when the runner keeps a resumable session,

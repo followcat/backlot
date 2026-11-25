@@ -963,9 +963,17 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
   Role terminals cannot use `hc run|exec|send|keys|connect`, interpreter code (`python -c`, `node -e`, a
   heredoc) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, or detach tricks such as
   `systemd-run` and `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
-  overeager agent, not isolation. Verbs not yet covered on the queue
-  (`studio new`, `finish`, `prune`, `delete`, `restore`) refuse with
-  `not available through the server yet`.
+  overeager agent, not isolation.
+- **Studio operations over the same queue:** `studio new`, `finish`, `prune`, `delete`, `restore`, and the New
+  Studio dialog's `repos` / `runners` probes are requests too. `--cast`, `--cast -`, `--ask` and `--ask-file`
+  are read on the client and travel as content; the hub parses the cast, canonicalizes `--repo` against its own
+  filesystem and runs the same code the local CLI runs. `studio delete` and `studio prune` (and `studio restore
+  --name`, because it renames) are reviewed: a `--dry-run` returns `{ report, confirm_token }`, where the token is
+  `sha256` of the report's canonical JSON. The CLI's single invocation sends the dry run, then the commit with that
+  token; a commit without a token refuses with
+  `confirm this from a dry run first`, and one whose fresh dry run differs refuses with
+  `the studio changed since you reviewed it; run it again`. `studio new --interactive` runs where its terminal is
+  and is not a server verb, and `--remote` on `studio new` still refuses: placement is Phase 2.
 - **On the hub itself:** when the resolved server host matches the local machine (`host-a`), CLI
   verbs keep writing the local ledger directly (pointing at the resolved session) so they keep
   working even while the server restarts; the TUI connects to the local server session directly.

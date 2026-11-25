@@ -168,6 +168,7 @@ pub(crate) fn run_stdin_with_host(
             all_finished,
             dry_run,
             force,
+            json,
         } => {
             // A positional studio wins; otherwise the pinned
             // `BACKLOT_STUDIO`/`--studio` names it. `--all-finished`
@@ -187,7 +188,7 @@ pub(crate) fn run_stdin_with_host(
                 )?,
                 None => base,
             };
-            return crate::prune::run(&base, named, all_finished, dry_run, force);
+            return crate::prune::run(&base, named, all_finished, dry_run, force, json);
         }
         // `studio delete` closes terminals, prunes worktrees/branches,
         // records `studio.deleted` and archives the ledger.
@@ -237,9 +238,17 @@ pub(crate) fn run_stdin_with_host(
             archived,
             new_name,
             dry_run,
+            json,
         } => {
             check_stage_caller(&common, env)?;
-            return crate::restore::run(env, &common, &archived, new_name.as_deref(), dry_run);
+            return crate::restore::run(
+                env,
+                &common,
+                &archived,
+                new_name.as_deref(),
+                dry_run,
+                json,
+            );
         }
         _ => {}
     }

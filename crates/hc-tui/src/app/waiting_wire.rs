@@ -14,36 +14,8 @@ use std::time::Duration;
 /// hold the cycle open.
 pub(super) const OP: Duration = Duration::from_secs(5);
 
-/// Standard-alphabet base64 decode — `ExecResult.stdout` arrives
-/// base64; kept local for the same reason `base64_encode` is.
-fn base64_decode(text: &str) -> Option<Vec<u8>> {
-    fn value(byte: u8) -> Option<u32> {
-        match byte {
-            b'A'..=b'Z' => Some(u32::from(byte - b'A')),
-            b'a'..=b'z' => Some(u32::from(byte - b'a' + 26)),
-            b'0'..=b'9' => Some(u32::from(byte - b'0' + 52)),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-    let bytes: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
-    for chunk in bytes.chunks(4) {
-        let pad = chunk.iter().filter(|b| **b == b'=').count();
-        let data_len = chunk.len() - pad;
-        // Two symbols make a byte; padding only ever ends the stream.
-        if data_len < 2 || pad > 2 || (pad > 0 && chunk.len() != 4) {
-            return None;
-        }
-        let n: u32 = chunk[..data_len]
-            .iter()
-            .try_fold(0u32, |acc, b| value(*b).map(|v| (acc << 6) | v))?;
-        let shifted = n << (6 * (4 - data_len));
-        out.extend(shifted.to_be_bytes()[1..data_len].iter());
-    }
-    Some(out)
-}
+// `ExecResult.stdout` arrives base64; the shared client-side decoder.
+use crate::selection::base64_decode;
 
 /// `ExecResult.stdout` as text, `None` on any failure.
 pub(super) async fn exec_stdout(

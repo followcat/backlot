@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
@@ -23,27 +23,30 @@ use crate::store;
 use crate::workareas;
 
 /// One listed child directory.
-#[derive(Debug, Serialize)]
-struct Entry {
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Entry {
     name: String,
     path: String,
-    kind: &'static str,
+    kind: String,
+    #[serde(default)]
     in_use_studio: Option<String>,
     /// The checked-out branch — `null` on a plain directory or a
     /// detached/unknown HEAD.
+    #[serde(default)]
     branch: Option<String>,
     /// A `dir` entry's direct-child repositories, by name — the
     /// dialog reads it as the workspace's member list (D4); absent
     /// on repository entries and on plain directories.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     members: Vec<String>,
 }
 
-/// The `--json` document.
-#[derive(Debug, Serialize)]
-struct Listing {
-    cwd: String,
-    entries: Vec<Entry>,
+/// The `--json` document — the typed result a remote `repos` ack
+/// carries.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Listing {
+    pub cwd: String,
+    pub entries: Vec<Entry>,
 }
 
 /// The `~` prefix's expansion — `$HOME`, or `None` when unset.
@@ -129,16 +132,16 @@ fn branch(dir: &str) -> Option<String> {
 /// Canonical repo path → the studio using it, best-effort: a state
 /// base that cannot resolve (no override, no reachable core) or a
 /// studio whose log does not read simply contributes nothing.
-fn in_use(env: &Env, common: &Common) -> std::collections::BTreeMap<PathBuf, String> {
+fn in_use(base: Option<&Path>) -> std::collections::BTreeMap<PathBuf, String> {
     let mut map = std::collections::BTreeMap::new();
-    let Ok(base) = crate::cli::base(env, common) else {
+    let Some(base) = base else {
         return map;
     };
-    let Ok(names) = store::studios(&base) else {
+    let Ok(names) = store::studios(base) else {
         return map;
     };
     for name in names {
-        let dir = store::studio_dir(&base, &name);
+        let dir = store::studio_dir(base, &name);
         let Ok(state) = store::load_state(&dir) else {
             continue;
         };
@@ -159,9 +162,14 @@ fn in_use(env: &Env, common: &Common) -> std::collections::BTreeMap<PathBuf, Str
 /// `git_empty`), workspaces over member repositories next, plain
 /// directories last, each group by name. Dot-directories are skipped
 /// unless `all` asks for them.
-fn list(env: &Env, common: &Common, from: Option<&str>, all: bool) -> Result<Listing, Fail> {
+pub(crate) fn scan(
+    env: &Env,
+    base: Option<&Path>,
+    from: Option<&str>,
+    all: bool,
+) -> Result<Listing, Fail> {
     let (dir, _anchor) = resolve_from(env, from)?;
-    let in_use = in_use(env, common);
+    let in_use = in_use(base);
     let rd = std::fs::read_dir(&dir)
         .map_err(|e| Fail::refused(format!("--from '{}': {e}", dir.display())))?;
     let mut entries = Vec::new();
@@ -200,7 +208,7 @@ fn list(env: &Env, common: &Common, from: Option<&str>, all: bool) -> Result<Lis
             Entry {
                 name,
                 path: canonical.to_string_lossy().into_owned(),
-                kind,
+                kind: kind.to_string(),
                 in_use_studio: in_use.get(&canonical).cloned(),
                 branch,
                 members,
@@ -223,9 +231,16 @@ pub fn run(
     from: Option<&str>,
     all: bool,
 ) -> Result<String, Fail> {
-    let listing = list(env, common, from, all)?;
+    let base = crate::cli::base(env, common).ok();
+    let listing = scan(env, base.as_deref(), from, all)?;
+    format_listing(&listing, json)
+}
+
+/// JSON for the dialog, a readable table without `--json` — the same
+/// rows either way. Shared by the CLI and the remote ack's printer.
+pub(crate) fn format_listing(listing: &Listing, json: bool) -> Result<String, Fail> {
     if json {
-        return serde_json::to_string_pretty(&listing)
+        return serde_json::to_string_pretty(listing)
             .map_err(|e| Fail::refused(format!("repos: {e}")));
     }
     let mut out = listing.cwd.clone();

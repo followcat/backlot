@@ -15,6 +15,7 @@ use super::App;
 mod activate;
 mod delete;
 mod prune;
+mod stale;
 
 impl App {
     /// Right-click on the sidebar's studio surfaces — the studio

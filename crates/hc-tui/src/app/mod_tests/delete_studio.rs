@@ -65,6 +65,7 @@ async fn delete_failure_never_shows_deleted_toast_and_keeps_studio() {
     app.run_action(crate::studio_cmds::delete_studio(
         &StudioKey::local("acme-shop"),
         false,
+        None,
     ));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
@@ -102,6 +103,7 @@ async fn delete_unarchived_ok_never_claims_deleted() {
     app.run_action(crate::studio_cmds::delete_studio(
         &StudioKey::local("acme-shop"),
         false,
+        None,
     ));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
@@ -134,6 +136,7 @@ async fn delete_success_evicts_studio_from_sidebar_dock_call_sheet_and_advances_
     app.run_action(crate::studio_cmds::delete_studio(
         &StudioKey::local("acme-shop"),
         false,
+        None,
     ));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
@@ -173,6 +176,7 @@ async fn delete_success_evicts_studio_from_sidebar_dock_call_sheet_and_advances_
         app.run_action(crate::studio_cmds::delete_studio(
             &StudioKey::local(id),
             false,
+            None,
         ));
         let reply = app.action_rx.recv().await.unwrap();
         app.on_action_reply(reply);
@@ -300,6 +304,7 @@ async fn delete_studio_keyboard_flow_and_force_second_confirm() {
     app.run_action(crate::studio_cmds::delete_studio(
         &StudioKey::local("acme-shop"),
         false,
+        None,
     ));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);

@@ -384,7 +384,9 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             // that does not exist yet binds nothing today, as
             // before: the stage's `not a git repository` attention
             // names it at the first role start.
-            let repo = repo.expect("non-interactive parses require --repo");
+            let repo = crate::args_studio::canonical_repo(
+                &repo.expect("non-interactive parses require --repo"),
+            );
             let binding = match std::path::Path::new(&repo).is_dir() {
                 true => crate::paths::check(&repo, init, no_git)?,
                 false => crate::paths::Binding::default(),

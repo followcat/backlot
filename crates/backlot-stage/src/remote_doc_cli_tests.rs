@@ -221,12 +221,11 @@ fn non_b1a_verbs_refuse_with_not_available_when_server_named_remotely() {
     };
 
     for line in [
-        "studio new --title Shop --repo /home/user/acme-shop --cast /tmp/cast.toml",
-        "studio new --interactive",
-        "studio finish --studio acme-shop --reason done",
-        "studio prune acme-shop",
-        "studio delete acme-shop",
-        "studio restore acme-shop-1",
+        "approve --person producer --decision allow",
+        "task takeover --task t1 --reason mine",
+        "req revise --file /home/user/req.md --summary s",
+        "plan publish --kind plan --file /home/user/plan.md",
+        "deliver --task t1 --commits a..b --report /home/user/report.md",
     ] {
         let mut owned = words("--server host-a/backlot");
         owned.extend(words(line));

@@ -163,7 +163,7 @@ async fn server_action_sends_b1a_and_formats_ok_busy_expired_missing_and_unsuppo
     let key = StudioKey::local("acme-shop");
 
     let err = run_it(
-        studio_cmds::finish(&key, Some("done")),
+        studio_cmds::revise(&key, "summary", "body".into()),
         Duration::from_secs(1),
     )
     .await
@@ -340,7 +340,7 @@ async fn app_action_tracker_runs_via_doc_queue_and_watcher_follows_docs() {
     assert!(toast.fail);
     assert!(toast.body.contains("timed out"), "{}", toast.body);
 
-    app.run_action(studio_cmds::finish(&key, Some("done")));
+    app.run_action(studio_cmds::revise(&key, "summary", "body".into()));
     let reply = app.action_rx.recv().await.unwrap();
     app.on_action_reply(reply);
     let toast = app.action_toast.as_ref().unwrap();

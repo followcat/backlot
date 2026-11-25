@@ -62,6 +62,8 @@ mod reveal_focus;
 mod review_regressions;
 mod server_client;
 mod server_doc_fake;
+mod server_studio_ops;
+mod server_studio_stale;
 mod settings_studio;
 mod shared_rpc;
 mod sidebar_edge;
