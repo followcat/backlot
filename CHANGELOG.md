@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.6 — 2026-11-26
+
+Use backlot from another machine: one server runs the studios and every other machine is a client. From a client you can start, finish, prune, delete and restore studios, browse the server's folders in the New Studio dialog, and approve cards, with every destructive step confirmed against the dry run you reviewed. Refused outward commands no longer count as waiting on you, a tell wakes a closed writer or director, an actor idling at its prompt keeps being pushed until it delivers, only you finish a studio, and Devin's SWE-2.1 models are in the cast picker.
+
 ### Added
 
 - **Devin's SWE-2.1 models are in the cast picker** (`swe-2-1-max` … `swe-2-1-medium` and their Ultrafast
