@@ -450,12 +450,24 @@ pub(crate) fn tell_hollywood(text: &str) -> Action {
 /// `hollywood show <seq>` — full report body or message text, opened
 /// in the read-only `CardView`.
 pub(crate) fn hollywood_show(seq: u64) -> Action {
+    hollywood_exchange(seq, false)
+}
+
+/// One Hollywood exchange entry in the read-only `CardView`: a report
+/// or message reads `hollywood show <seq>`, a card line `card show
+/// c<seq>`. Both keep the same `hollywood #{seq}` name and mark so the
+/// Reader's sibling stepping walks the whole conversation.
+pub(crate) fn hollywood_exchange(seq: u64, card: bool) -> Action {
     Action {
         label: format!("reading #{seq}"),
         done: format!("read #{seq}"),
         name: format!("hollywood #{seq}"),
         mark: mark::hollywood_entry(seq),
-        argv: plain_argv(&["hollywood".into(), "show".into(), seq.to_string()]),
+        argv: if card {
+            plain_argv(&["card".into(), "show".into(), format!("c{seq}")])
+        } else {
+            plain_argv(&["hollywood".into(), "show".into(), seq.to_string()])
+        },
         machine: None,
         stdin: None,
         view: true,
