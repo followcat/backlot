@@ -205,6 +205,15 @@ impl App {
             .label(&crate::config::format_prefix_combos(&self.live.prefix))
     }
 
+    /// The `alt+l`-style `focus_lot` label, or `"unset"` when unbound.
+    fn focus_lot_label(&self) -> String {
+        self.panel_config
+            .keys
+            .focus_lot
+            .map(crate::config::format_key_combo)
+            .unwrap_or_else(|| "unset".to_owned())
+    }
+
     /// U6c's `machines` group — a row only where the machine has a
     /// valid action: `Upgrade backlot to v<latest>` behind, `Install
     /// backlot` missing, `Restart the stage` while its stage runs.
@@ -385,6 +394,22 @@ impl App {
                 hint: dock.clone(),
                 glyph: "",
                 launch: Launch::Surface(Surface::Dock),
+            },
+            HelpRow {
+                label: format!(
+                    "Focus lot (last row){}",
+                    crate::keybind_help::studio_key_shadow(
+                        &self.live.keybinds,
+                        self.panel_config.keys.focus_lot,
+                    )
+                ),
+                hint: self.focus_lot_label(),
+                glyph: "",
+                launch: self
+                    .panel_config
+                    .keys
+                    .focus_lot
+                    .map_or(Launch::Close, |_| Launch::Surface(Surface::FocusLot)),
             },
             HelpRow {
                 label: "Context menu for focused role / studio".to_owned(),

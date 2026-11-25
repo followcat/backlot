@@ -164,12 +164,9 @@ pub(super) fn render_overlays_and_cursor(
             cast_entries,
             Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
-            app.hollywood_key.map(|key| {
-                format!(
-                    "{} sheet",
-                    key.label(&crate::config::format_prefix_combos(&app.live.prefix))
-                )
-            }),
+            app.hollywood_key
+                .filter(|key| key.direct.is_some() || key.chord.is_some())
+                .map(|key| key.label(&crate::config::format_prefix_combos(&app.live.prefix))),
             !app.panel_beside(area.width),
             app.pane.input_refused(),
             active_surface,
