@@ -234,8 +234,10 @@ and never raises nudges or attentions if unused; `RoleState.progress` keeps the 
 ts_ms }` and `RoleSummary` exposes it alongside live descendant `running` (`{ cmd, since_ms }`,
 published only while `work == working`); `doing` (`Option<String>`) stays unchanged for older clients.
 
-`studio.finished` — producer or user only — is refused while any task is not terminal, naming the
-open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
+`studio.finished` — the person's alone — is refused while any task is not terminal, naming the
+open tasks; a role that runs `studio finish` is refused with `finishing the studio is the person's
+call; say in your report that it is ready, and they finish it from the lot`, and nothing is
+recorded. From then on `desired` holds only explicitly reopened people, so producer and director
 close the usual way and keep their sessions. `role.reopen` still works after finish. A studio with
 no requirement and no tasks is refused too (`nothing was built yet (no requirement, no tasks) — add
 --force to finish anyway`) unless the command passed `--force` — the guard is the CLI's, so an
