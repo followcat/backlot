@@ -2,7 +2,26 @@
 
 use std::fmt::Write as _;
 
-use crate::prune::Step;
+use crate::cli::Fail;
+use crate::prune::{PruneReport, Step};
+
+/// The whole report: pretty JSON for `--json`, else one block per
+/// studio (`no finished studios to prune` when there are none).
+pub(crate) fn format_report(report: &PruneReport, json: bool) -> Result<String, Fail> {
+    if json {
+        return serde_json::to_string_pretty(report)
+            .map_err(|e| Fail::refused(format!("studio prune: {e}")));
+    }
+    if report.studios.is_empty() {
+        return Ok("no finished studios to prune\n".into());
+    }
+    Ok(report
+        .studios
+        .iter()
+        .map(|s| render(&s.studio, s.finished, &s.steps, s.dry_run))
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
 
 /// One studio's block: the header (a dry run says so), then every
 /// step in the order it ran, or `nothing to prune`.

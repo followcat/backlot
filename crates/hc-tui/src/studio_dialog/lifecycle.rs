@@ -326,6 +326,8 @@ pub(crate) struct RestoreDialog {
     pub(crate) body: String,
     pub(crate) loading: bool,
     pub(crate) error: Option<String>,
+    /// The reviewed plan's confirm token on a server; `None` locally.
+    pub(crate) confirm_token: Option<String>,
 }
 
 impl RestoreDialog {
@@ -339,6 +341,7 @@ impl RestoreDialog {
             body: String::new(),
             loading: false,
             error: None,
+            confirm_token: None,
         }
     }
 
@@ -381,6 +384,7 @@ impl RestoreDialog {
         self.name = TextEditor::new(&self.default_name(), false);
         self.error = None;
         self.body.clear();
+        self.confirm_token = None;
         self.step = RestoreStep::Name;
     }
 }

@@ -18,35 +18,36 @@ use crate::cli::{Env, Fail};
 
 /// Every runner's row: status, version, path, "needs PATH".
 pub fn report(env: &Env) -> Result<String, Fail> {
-    let scope = detect::scope(env);
+    Ok(format_rows(&rows(env), env))
+}
+
+/// The readable table from a detection document — the `fake` row the
+/// JSON carries is left out, as `backlot runners` has always done.
+pub(crate) fn format_rows(rows: &[RunnerCatalogEntry], env: &Env) -> String {
     let home = env.get("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
-    let mut rows = Vec::with_capacity(RUNNERS.len());
-    for runner in RUNNERS {
-        rows.push(match detect::find(runner, &scope) {
-            Some(f) => {
-                let needs = if f.needs_path() { "yes" } else { "no" }.to_string();
-                [
-                    (*runner).to_string(),
-                    if f.version.is_some() {
-                        "found"
-                    } else {
-                        "not working"
-                    }
-                    .to_string(),
-                    f.version.unwrap_or_else(|| "-".to_string()),
-                    detect::tilde(home.as_deref(), &f.path),
-                    needs,
-                ]
-            }
-            None => [
-                (*runner).to_string(),
-                "missing".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-            ],
-        });
-    }
+    let shown: Vec<[String; 5]> = rows
+        .iter()
+        .filter(|r| r.runner != "fake")
+        .map(|r| {
+            [
+                r.runner.clone(),
+                r.status.clone(),
+                r.version.clone().unwrap_or_else(|| "-".to_string()),
+                r.path
+                    .as_deref()
+                    .map(|p| detect::tilde(home.as_deref(), std::path::Path::new(p)))
+                    .unwrap_or_else(|| "-".to_string()),
+                if r.status == "missing" {
+                    "-".to_string()
+                } else if r.needs_path {
+                    "yes".to_string()
+                } else {
+                    "no".to_string()
+                },
+            ]
+        })
+        .collect();
+    let rows = shown;
     let header = ["runner", "status", "version", "path", "needs PATH"];
     let mut width = [0usize; 5];
     for (i, h) in header.iter().enumerate() {
@@ -71,7 +72,7 @@ pub fn report(env: &Env) -> Result<String, Fail> {
     for row in &rows {
         line(row);
     }
-    Ok(out.trim_end().to_string())
+    out.trim_end().to_string()
 }
 
 /// The runner's effort values from its caps, empty where the argv

@@ -250,12 +250,18 @@ pub(crate) fn cast_order(studio: &StudioSummary) -> Vec<&RoleSummary> {
         .collect()
 }
 
-/// A studio's `!<n>` count: roles carrying an attention plus open outward cards.
+/// A studio's `!<n>` count: roles carrying an attention that the person
+/// must act on plus open outward cards. An `info` attention (an
+/// `outward action` refusal the role moved past) never counts.
 pub(crate) fn attention_count(studio: &StudioSummary) -> usize {
     studio
         .roles
         .iter()
-        .filter(|role| role.attention.is_some())
+        .filter(|role| {
+            role.attention.is_some()
+                && crate::studio::glyphs::Person::attention_class(role)
+                    != Some(backlot_model::attention::AttentionClass::Info)
+        })
         .count()
         + studio.outward_cards.len()
 }

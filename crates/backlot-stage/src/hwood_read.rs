@@ -345,9 +345,9 @@ fn dry_run(
     ask: Option<&crate::args::TextSource>,
 ) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
-    crate::draft::check(base, &name, repo, cast_file, env, flags.0, flags.1)?;
-    let mut out =
-        format!("dry run: studio '{name}' ('{title}', repo {repo}) is valid — nothing recorded");
+    let repo = crate::args_studio::canonical_repo(repo);
+    crate::draft::check(base, &name, &repo, cast_file, env, flags.0, flags.1)?;
+    let mut first_message = None;
     if let Some(ask) = ask {
         // The dry run precedes `materialize`, so `--ask`'s text is
         // still inline here; `--ask-file` names a file.
@@ -360,15 +360,19 @@ fn dry_run(
         if body.trim().is_empty() {
             return Err(Fail::refused("the ask is empty"));
         }
-        let line = body
-            .lines()
-            .find(|l| !l.trim().is_empty())
-            .unwrap_or_default()
-            .trim();
-        let line: String = line.chars().take(60).collect();
-        out.push_str(&format!("\nfirst message to the producer: {line}"));
+        first_message = Some(crate::studio_fmt::first_message_line(&body));
     }
-    Ok(out)
+    Ok(crate::studio_fmt::studio_new(
+        &backlot_model::req_results::StudioNewResult {
+            studio: name,
+            title: title.to_string(),
+            repo,
+            dry_run: true,
+            seq: None,
+            ask_seq: None,
+            first_message,
+        },
+    ))
 }
 
 /// `card list` — every card Hollywood has proposed, open first.

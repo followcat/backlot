@@ -233,7 +233,7 @@ async fn handle_payload<W: AsyncWriteExt + Unpin>(
         "terminal.list" => json!({
             "jsonrpc": "2.0",
             "id": req["id"],
-            "result": { "terminals": [] }
+            "result": { "terminals": [], "hidden_finished": 0 }
         }),
         "events.subscribe" => {
             *sub_rx = Some(tx.subscribe());

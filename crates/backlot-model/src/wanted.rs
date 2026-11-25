@@ -48,6 +48,33 @@ fn writer_wanted(state: &StudioState) -> bool {
         .is_some_and(|m| m.purpose.as_deref() == Some("plan"))
 }
 
+/// A plain `tell` to `role` that still waits on it. The newest
+/// purpose-free, source-free message addressed to the role keeps it
+/// wanted while undelivered, and after delivery until the role writes
+/// to the ledger again — it answered, or its turn's step-boundary
+/// `progress` (the role prompts ask for one at each boundary). Keying
+/// the release on the delivery time, never the queue time, keeps a
+/// write the role made before the message reached it from closing the
+/// role first.
+fn tell_holds(state: &StudioState, role: &str) -> bool {
+    let Some(m) = state
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.to == role && m.purpose.is_none() && m.source_seq.is_none() && !m.dropped)
+    else {
+        return false;
+    };
+    if !m.delivered {
+        return true;
+    }
+    let delivered_ms = m.delivered_ms.unwrap_or(m.ts_ms);
+    !state
+        .last_by_role
+        .get(role)
+        .is_some_and(|last| last.ts_ms > delivered_ms)
+}
+
 /// The roles the ledger wants live, in slot order. A finished
 /// studio wants nobody on its own — the held pass still re-launches
 /// a person an explicit `role.reopen` held, and the restart pass a
@@ -95,6 +122,31 @@ pub fn wanted_roles(state: &StudioState) -> Vec<Wanted> {
                     actor: cast.actor.clone(),
                 });
             }
+        }
+    }
+    // A plain `tell` wakes a closed fixed role the same way a plan
+    // request does: while a message still waits on the writer or the
+    // director, the role is wanted so the stage starts it again and
+    // delivers the message. An actor is never woken this way — its
+    // task is done or abandoned, and the tell is refused at append
+    // time (see `validate`). A finished studio wakes nobody.
+    if state.finished.is_none() {
+        for (role, fallback) in [
+            ("writer", &cfg.roles.writer),
+            ("director", &cfg.roles.director),
+        ] {
+            if out.iter().any(|w| w.role == role) || !tell_holds(state, role) {
+                continue;
+            }
+            let actor = state
+                .fixed_identity(role)
+                .cloned()
+                .unwrap_or_else(|| fallback.clone());
+            out.push(Wanted {
+                role: role.into(),
+                task: None,
+                actor,
+            });
         }
     }
     // A held person joins the wanted set — the panel's explicit

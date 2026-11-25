@@ -445,6 +445,63 @@ fn ask_answered_is_the_stages_and_requires_an_open_ask() {
     );
 }
 
+/// A plain `tell` to a fixed role is fine, and so is one to an actor
+/// whose task is still open; one to an actor whose task is finished or
+/// abandoned is refused — the actor is not woken for a closed task.
+#[test]
+fn a_tell_to_an_actor_of_a_closed_task_is_refused() {
+    let tell = |to: &str| EventKind::MessageQueued {
+        to: to.into(),
+        file: Some("messages/x.md".into()),
+        purpose: None,
+        source_seq: None,
+    };
+
+    // Running task: a tell to its actor is fine.
+    let running = running_state();
+    assert_eq!(
+        validate(&running, &new_ev("producer", tell("actor-t1-c1"))),
+        Ok(())
+    );
+
+    // Abandoned task: the tell is refused, naming the task and state.
+    let mut base = base_events();
+    base.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    base.push(ev(
+        5,
+        "director",
+        task_state("t1", TaskStateChange::Abandoned, "dropped"),
+    ));
+    let state = replay(&base);
+    assert_eq!(
+        validate(&state, &new_ev("producer", tell("actor-t1-c1"))),
+        Err(Refusal::TellToClosedActor {
+            role: "actor-t1-c1".into(),
+            task: "t1".into(),
+            status: TaskStatus::Abandoned,
+        })
+    );
+
+    // A nudge (purpose-bearing) is not a plain tell and never wakes a
+    // closed actor — but it is not the user's tell path either, so it
+    // still validates even for a closed task.
+    assert_eq!(
+        validate(
+            &state,
+            &new_ev(
+                "stage",
+                EventKind::MessageQueued {
+                    to: "actor-t1-c1".into(),
+                    file: Some("messages/x-nudge.md".into()),
+                    purpose: Some("nudge".into()),
+                    source_seq: Some(9),
+                }
+            )
+        ),
+        Ok(())
+    );
+}
+
 #[test]
 fn correction_needs_a_known_target_and_field() {
     let state = running_state();

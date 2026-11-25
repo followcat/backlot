@@ -284,11 +284,12 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
             role: "actor-t1-c1".into(),
             reason: OUTWARD_ACTION.into(),
             detail: "gh pr merge 42".into(),
-            needs_user: true,
+            needs_user: false,
         }
     );
 
-    // Verify summary projects `outward action` as NeedsYou user attention.
+    // Verify summary keeps `outward action` on the role's record as
+    // `Info` and does not count it in the person's waiting tally.
     let state = store::load_state(&sdir).unwrap();
     let doc = summary(
         &[(String::from("acme-shop"), state)],
@@ -298,14 +299,14 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         &BTreeMap::new(),
         0,
     );
-    assert_eq!(doc.studios[0].waiting, 1);
+    assert_eq!(doc.studios[0].waiting, 0);
     let actor_row = doc.studios[0]
         .roles
         .iter()
         .find(|r| r.role == "actor-t1-c1")
         .unwrap();
     assert_eq!(actor_row.attention.as_deref(), Some(OUTWARD_ACTION));
-    assert_eq!(actor_row.attention_class, Some(AttentionClass::NeedsYou));
+    assert_eq!(actor_row.attention_class, Some(AttentionClass::Info));
     assert!(!actor_row.attention_user);
     assert_eq!(
         actor_row.attention_detail.as_deref(),
@@ -377,6 +378,101 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         hmsg.unwrap()
             .contains("refused by backlot: scp a host-a:/tmp/")
     );
+}
+
+/// The refusal is informational: `outward action` is `Info`, so the
+/// studio's needs-you count stays 0 and the role's row carries it
+/// without a "needs you" state. A permission prompt outside the work
+/// area stays the user's — the two classes are distinct.
+#[test]
+fn a_refusal_is_info_and_permission_prompts_stay_the_users() {
+    let (scratch, mut env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let sdir = store::studio_dir(&scratch.dir, "acme-shop");
+    let started = |role: &str| {
+        store::append(&sdir, |_, _| {
+            Ok::<_, std::convert::Infallible>(store::Pending {
+                event: backlot_model::NewEvent::new(
+                    backlot_model::EventBy::role("stage"),
+                    EventKind::RoleStarted {
+                        role: role.into(),
+                        terminal: Some("bl-acme-shop-writer".into()),
+                        actor: None,
+                        session_id: None,
+                        reason: None,
+                    },
+                ),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    };
+    started("writer");
+    env.vars.insert("BACKLOT_ROLE".into(), "writer".into());
+
+    let work = Path::new("/home/user/acme-shop");
+    let argv: Vec<String> = ["gh", "--", "pr", "merge", "42"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let (code, _) = run_in(&argv, &env, work, false);
+    assert_eq!(code, ExitCode::from(126));
+
+    // A permission prompt the stage will not answer is the user's;
+    // the refusal beside it is not.
+    store::append(&sdir, |_, _| {
+        Ok::<_, std::convert::Infallible>(store::Pending {
+            event: backlot_model::NewEvent::new(
+                backlot_model::EventBy::role("stage"),
+                EventKind::AttentionRaised {
+                    role: "writer".into(),
+                    reason: backlot_model::event::PERMISSION_PROMPT.into(),
+                    detail: "bash: rm -rf build; needs the user".into(),
+                    needs_user: true,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+
+    let state = store::load_state(&sdir).unwrap();
+    // Both raises stand: the refusal is `Info`, the prompt `NeedsYou`.
+    assert_eq!(
+        AttentionClass::of(OUTWARD_ACTION, false),
+        AttentionClass::Info
+    );
+    assert_eq!(
+        AttentionClass::of(backlot_model::event::PERMISSION_PROMPT, true),
+        AttentionClass::NeedsYou
+    );
+    let doc = summary(
+        &[(String::from("acme-shop"), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        0,
+    );
+    // Only the permission prompt counts toward the person's tally.
+    assert_eq!(doc.studios[0].waiting, 1);
+    let writer = doc.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "writer")
+        .unwrap();
+    // The row shows the prompt that waits on the person, not the
+    // informational refusal beside it.
+    assert_eq!(
+        writer.attention.as_deref(),
+        Some("permission prompt — needs the user")
+    );
+    assert_eq!(writer.attention_class, Some(AttentionClass::NeedsYou));
+    assert!(writer.attention_user);
 }
 
 #[test]

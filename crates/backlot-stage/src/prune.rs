@@ -25,18 +25,7 @@ use crate::prune_paths::{shown, under};
 use crate::store;
 use crate::workareas::{GitRun, err_line, real_git};
 
-/// One thing prune did — or, in a dry run, would do.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Step {
-    RemovedWorktree(String),
-    PrunedWorktree(String),
-    KeptWorktree(String, String),
-    DeletedBranch(String),
-    KeptBranch(String, String),
-    /// A recorded member repository git could not look at — kept
-    /// while the other members still run.
-    KeptRepo(String, String),
-}
+pub(crate) use crate::prune_report::{PruneReport, PruneStudioReport, Step};
 
 /// The parsed `worktree list --porcelain` rows: path and branch.
 fn parse_worktrees(list: &str) -> Vec<(String, Option<String>)> {
@@ -293,17 +282,33 @@ pub(crate) fn run(
     all_finished: bool,
     dry_run: bool,
     force: bool,
+    json: bool,
 ) -> Result<String, Fail> {
+    let report = report(base, studio, all_finished, dry_run, force)?;
+    crate::prune_render::format_report(&report, json)
+}
+
+/// The plan/outcome as a struct, shared by the CLI and the request
+/// queue.
+pub(crate) fn report(
+    base: &Path,
+    studio: Option<String>,
+    all_finished: bool,
+    dry_run: bool,
+    force: bool,
+) -> Result<PruneReport, Fail> {
     let names = match (&studio, all_finished) {
         (Some(name), false) => vec![crate::cli::check_studio_name(name)?],
         (None, true) => store::studios(base).map_err(|e| Fail::refused(e.to_string()))?,
         _ => return Err(Fail::usage("give a studio or --all-finished, not both")),
     };
     if names.is_empty() {
-        return Ok("no finished studios to prune\n".into());
+        return Ok(PruneReport {
+            studios: Vec::new(),
+        });
     }
     let mut git = real_git;
-    let mut blocks = Vec::new();
+    let mut studios = Vec::new();
     for name in names {
         let dir = store::studio_dir(base, &name);
         if !dir.join("events.jsonl").is_file() {
@@ -361,10 +366,12 @@ pub(crate) fn run(
                 Err(e) => steps.push(Step::KeptRepo(member_leaf(&repo), e.message().to_string())),
             }
         }
-        blocks.push(crate::prune_render::render(&name, true, &steps, dry_run));
+        studios.push(PruneStudioReport {
+            studio: name,
+            finished: true,
+            dry_run,
+            steps,
+        });
     }
-    if blocks.is_empty() {
-        return Ok("no finished studios to prune\n".into());
-    }
-    Ok(blocks.join("\n"))
+    Ok(PruneReport { studios })
 }

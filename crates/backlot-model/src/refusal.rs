@@ -95,6 +95,13 @@ pub enum Refusal {
         status: TaskStatus,
     },
     NoRole(String),
+    /// A plain `tell` to an actor key whose task is terminal — the
+    /// actor is not woken for a finished or abandoned task.
+    TellToClosedActor {
+        role: String,
+        task: String,
+        status: TaskStatus,
+    },
     RoleNotClosed {
         role: String,
         state: &'static str,
@@ -296,6 +303,10 @@ impl fmt::Display for Refusal {
                 write!(f, "task '{task}' is {status:?}; cannot record '{state}'")
             }
             Refusal::NoRole(r) => write!(f, "no role '{r}' recorded"),
+            Refusal::TellToClosedActor { role, task, status } => write!(
+                f,
+                "actor '{role}' works task '{task}', which is {status:?} — a finished task takes no tell"
+            ),
             Refusal::RoleNotClosed { role, state } => {
                 write!(
                     f,

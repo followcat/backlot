@@ -126,10 +126,23 @@ impl Consumer {
                 ResAck::err(&envelope.req_id, now_ms, msg)
             } else {
                 match envelope.parse_action() {
-                    Ok(action) => match dispatch_action(&stage.base, &env, action) {
-                        Ok(result) => ResAck::ok_value(&envelope.req_id, now_ms, result),
-                        Err(e) => ResAck::err(&envelope.req_id, now_ms, e.message()),
-                    },
+                    Ok(action) => {
+                        let outcome = if crate::doc_dispatch_studio::handles(&action) {
+                            crate::doc_dispatch_studio::dispatch(
+                                stage,
+                                &env,
+                                action,
+                                envelope.confirm_token.clone(),
+                            )
+                            .await
+                        } else {
+                            dispatch_action(&stage.base, &env, action)
+                        };
+                        match outcome {
+                            Ok(result) => ResAck::ok_value(&envelope.req_id, now_ms, result),
+                            Err(e) => ResAck::err(&envelope.req_id, now_ms, e.message()),
+                        }
+                    }
                     Err(msg) => ResAck::err(&envelope.req_id, now_ms, msg),
                 }
             };

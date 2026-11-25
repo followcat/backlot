@@ -63,8 +63,33 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         | EventKind::ReportSent { .. }
         | EventKind::AttentionRaised { .. }
         | EventKind::RoleRefused { .. }
-        | EventKind::MessageQueued { .. }
         | EventKind::OutwardCompleted { .. } => {
+            require_studio(state)?;
+            Ok(())
+        }
+        // A plain `tell` wakes a closed fixed role (the wanted set
+        // reads it), but an actor whose task is already terminal is
+        // never woken: the message would sit undelivered forever.
+        EventKind::MessageQueued {
+            to,
+            purpose: None,
+            source_seq: None,
+            ..
+        } => {
+            require_studio(state)?;
+            if let Some(task_id) = actor_task(to)
+                && let Some(t) = state.tasks.get(task_id)
+                && t.status.is_terminal()
+            {
+                return Err(Refusal::TellToClosedActor {
+                    role: to.clone(),
+                    task: task_id.to_string(),
+                    status: t.status,
+                });
+            }
+            Ok(())
+        }
+        EventKind::MessageQueued { .. } => {
             require_studio(state)?;
             Ok(())
         }

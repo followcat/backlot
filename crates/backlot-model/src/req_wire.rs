@@ -7,7 +7,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::event::Priority;
+use crate::event::{Priority, StudioMode};
 pub use crate::req_catalog::*;
 pub use crate::req_results::*;
 
@@ -246,6 +246,68 @@ pub enum ReqAction {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default_cast: Option<String>,
     },
+    /// `studio new`: the cast and the first message travel as content,
+    /// never as client paths — the hub validates and canonicalizes
+    /// `repo` against its own filesystem.
+    StudioNew {
+        id: String,
+        title: String,
+        repo: String,
+        cast: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<StudioMode>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        init: bool,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        no_git: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ask: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        dry_run: bool,
+    },
+    StudioFinish {
+        studio: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        force: bool,
+    },
+    StudioPrune {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        studio: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        all_finished: bool,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        dry_run: bool,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        force: bool,
+    },
+    StudioDelete {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        studio: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        dry_run: bool,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        force: bool,
+    },
+    StudioRestore {
+        archived: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        dry_run: bool,
+    },
+    /// The New Studio dialog's directory probe, answered from the hub.
+    Repos {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        all: bool,
+    },
+    /// The New Studio dialog's runner probe, answered from the hub.
+    Runners,
+    /// The dialog's `--version` probe, answered from the hub.
+    Version,
 }
 
 /// Ack document written solely by the stage (`plugin.backlot.res`).
