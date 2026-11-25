@@ -12,6 +12,8 @@ A version suffix is never a capability check: `hello.result.features` and field 
 
 - **Built and tested against:** official `hc` 0.1.22 plus `hc ls --table` (`7cb4de47164f1d65db84dfab294166994f143a15`), the pin
   in [integration](integration.md), and the fork `0.1.21-followcat.1`.
+- hc-tui base: v0.1.20 (`ac529d9516c79839b2ee83bce80066f3bbf7850c`). backlot merges each hc-tui release; run
+  [`tools/hc-tui-behind.sh`](../tools/hc-tui-behind.sh) to see how many hc-tui commits and releases backlot is behind.
 - **Older official cores:** supported. Anything from 0.1.18 on works; a member or method a core does not know is
   simply absent and its feature stays off. Two examples: `events.subscribe`'s `docs` (0.1.21) is ignored by older
   cores, and `terminal.list`'s `machines` (always present from 0.1.21, omitted when empty before) reads the same
