@@ -113,6 +113,20 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
         None
     };
 
+    let cast_diff = if let CardAction::Cast { studio, cast } = &card.action {
+        let path = crate::hcard_new::resolve_draft(&hdir, cast);
+        match crate::studio_cast::read(&path) {
+            Ok(next) => match crate::hwood::studio_state(base, studio) {
+                Ok(Some(s)) => backlot_model::cast::CastSettings::of(&s)
+                    .map(|old| backlot_model::cast::diff(&old, &next)),
+                _ => None,
+            },
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     Ok(CardShowResult {
         id: format!("c{}", card.seq),
         seq: card.seq,
@@ -127,6 +141,7 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
         stale,
         identity_change,
         studio_new,
+        cast_diff,
     })
 }
 
@@ -266,5 +281,13 @@ pub(crate) fn format_card_show(res: &CardShowResult) -> String {
         ));
     }
     crate::hcard_outward::append_outward_preview(&mut out, &res.action);
+    // A `cast` card shows the dry-run diff its file would make, the same
+    // text `studio cast set --dry-run` prints.
+    if let Some(diff) = &res.cast_diff {
+        out.push_str("\ncast change:");
+        for line in diff.lines() {
+            let _ = write!(out, "\n  {line}");
+        }
+    }
     out
 }

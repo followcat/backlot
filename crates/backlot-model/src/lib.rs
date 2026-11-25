@@ -16,6 +16,9 @@
 pub mod attention;
 pub mod budget;
 pub mod caps;
+pub mod cast;
+mod cast_diff;
+mod cast_file;
 pub mod casting;
 pub mod correct;
 pub mod event;
@@ -61,6 +64,8 @@ pub mod migrate;
 mod budget_tests;
 #[cfg(test)]
 mod cap_tests;
+#[cfg(test)]
+mod cast_tests;
 #[cfg(test)]
 mod casting_tests;
 #[cfg(test)]

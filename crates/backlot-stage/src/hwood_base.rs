@@ -43,9 +43,11 @@ pub(crate) fn resolve_action(
             actor,
         } => {
             let s = require_studio(base, studio)?;
-            let current = s.fixed_identity(person).ok_or_else(|| {
-                Fail::refused(format!("no fixed role '{person}' in studio '{studio}'"))
-            })?;
+            let current = backlot_model::recast::current_identity(&s, person)
+                .map_err(|e| Fail::refused(e.to_string()))?
+                .ok_or_else(|| {
+                    Fail::refused(format!("no person '{person}' in studio '{studio}'"))
+                })?;
             let mut actor = actor.clone();
             if actor.permission_profile.trim().is_empty() {
                 actor.permission_profile = current.permission_profile.clone();
@@ -184,6 +186,36 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
                 .map_err(Fail::refused)?
                 .map(|c| crate::hstage::identity(&c));
             Ok(CardBase::HollywoodIdentity { actor: current })
+        }
+        CardAction::Restart { studio, person, .. } => {
+            let s = require_studio(base, studio)?;
+            if s.finished.is_some() {
+                return Err(Fail::refused(format!("studio '{studio}' is finished")));
+            }
+            match s.roles.get(person) {
+                None => Err(Fail::refused(format!(
+                    "no role '{person}' in studio '{studio}'"
+                ))),
+                Some(r) if r.lifecycle() == RoleLifecycle::Closed => Err(Fail::refused(format!(
+                    "role '{person}' in '{studio}' is closed — reopen it instead"
+                ))),
+                Some(_) => Ok(CardBase::PersonRestartable),
+            }
+        }
+        // A cast card base is the seq of the settings event it edits;
+        // the file is validated up front so a card born stale never
+        // exists.
+        CardAction::Cast { studio, cast } => {
+            let s = require_studio(base, studio)?;
+            if s.finished.is_some() {
+                return Err(Fail::refused(format!("studio '{studio}' is finished")));
+            }
+            let path = crate::hcard_new::resolve_draft(&crate::store::hollywood_dir(base), cast);
+            let next = crate::studio_cast::read(&path)?;
+            crate::studio_cast::check(base, env, &s, &next)?;
+            Ok(CardBase::CastSeq {
+                was: s.cast_seq.unwrap_or(0),
+            })
         }
         CardAction::Outward { .. } => Err(Fail::refused("outward cards are proposed by the stage")),
     }

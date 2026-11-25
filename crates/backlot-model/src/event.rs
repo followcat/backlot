@@ -373,6 +373,42 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
     },
+    /// `studio.cast`: the studio's cast changed after creation — the
+    /// person's own `studio cast set`, or a card the stage carries out
+    /// as the user. It carries the full new settings; the reducer uses
+    /// the newest `studio.cast` (or `studio.created`) from then on and
+    /// earlier events keep what they recorded. The binding — `repo`,
+    /// `members`, `no_git`, `mode` — is not cast and never travels
+    /// here; `push.remotes` are facts recorded at creation and are
+    /// kept.
+    #[serde(rename = "studio.cast")]
+    StudioCast {
+        roles: Box<RoleConfigs>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        candidates: Vec<Candidate>,
+        #[serde(default = "default_rework_cap")]
+        rework_cap: u32,
+        #[serde(default = "default_stall_limit_s")]
+        stall_limit_s: u32,
+        #[serde(default = "default_nudge_after_s")]
+        nudge_after_s: u32,
+        #[serde(default = "default_escalate_after_s")]
+        escalate_after_s: u32,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        check_env: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        checks: Vec<CheckDecl>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task_budget_s: Option<u32>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        limits: BTreeMap<String, u32>,
+        #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
+        push: PushPolicy,
+        /// The `c<n>` marker when a card carried the change out — the
+        /// idempotence key on a restart, like `role.recast`'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<String>,
+    },
     #[serde(rename = "role.started")]
     RoleStarted {
         role: String,
@@ -743,6 +779,7 @@ impl EventKind {
     pub fn name(&self) -> &'static str {
         match self {
             EventKind::StudioCreated { .. } => "studio.created",
+            EventKind::StudioCast { .. } => "studio.cast",
             EventKind::RoleStarted { .. } => "role.started",
             EventKind::RoleLost { .. } => "role.lost",
             EventKind::RoleResumed { .. } => "role.resumed",

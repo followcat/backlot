@@ -10,9 +10,14 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **A studio's cast is a starting point, not a gate.** `backlot studio cast set --file <cast.toml>` changes a studio's roles, candidates, `[limits]`, checks and timings after it started — the cast file given to `studio new` now only initializes it; `backlot studio cast show [--json]` prints the effective cast as a cast file, and `--dry-run` shows the diff. Only what keeps the studio runnable is checked (a supported, installed runner, the effort and cline-model rules, a positive limit, caps that still seat the fixed roles). A fixed role whose identity moves is recast in the same apply. Live actors keep running, new limits apply to the next start, new checks run on the next delivery. `backlot recast` now also takes an actor key (`actor-<task>-c<n>`): the key, terminal and worktree stay, the conversation is new, and the task's deliveries and budget are untouched. Hollywood can propose these as cards: `recast` on an actor, the new `restart` and `cast` (`docs/studio/guide.md`, `docs/studio/hollywood.md`, `docs/studio/design.md`, `docs/studio/ledger.md`).
+
 ### Changed
 
 - **The Hollywood band's talk shows a reply you can see, read in full, and the conversation that matters.** A card Hollywood proposes now draws as its own line under the person's line (`✦ proposed card c3 · acme-shop · pause t1`) and ends the live row like a report, so a recast that came back as cards reads as an answer where the person spoke; a card the stage proposed never joins the talk. An idle Hollywood whose newest `user ›` line still has nothing after it says `○ hollywood is idle and has not answered · open ↵` instead of going silent. The newest Hollywood line wraps to at most four rows at the band's width (two on a narrow/mobile band) with the Reader's CJK-aware wrap, so a long report's end — `choose 1`, `only you can publish: …` — is never cut; every other line stays one row. When the band is short the wrap gives its extra rows back before any waiting row is dropped. The talk keeps only the newest turn and the one before it, folding older lines into `… <n> earlier · ↵ read`, and the saved rows go to the waiting list (`docs/studio/hollywood.md`, `docs/studio/guide.md`, `docs/studio/design.md`).
+- **The cast file no longer locks a studio, and an actor can be recast.** `backlot recast` accepts an actor key alongside the three fixed roles, and `backlot studio cast set` changes the cast after creation; what used to be refused as "not a fixed role" now names the task's current actor when the key is stale. The cast file given to `studio new` is the initial settings, not the only ones (`docs/studio/guide.md`).
 
 ## 0.4.6 — 2026-11-26
 

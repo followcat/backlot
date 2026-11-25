@@ -49,6 +49,7 @@ mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
 mod hcard;
+mod hcard_cast;
 mod hcard_new;
 mod hcard_outward;
 mod hcard_outward_env;
@@ -121,6 +122,7 @@ mod stagelog;
 mod stale;
 mod stall;
 pub mod store;
+mod studio_cast;
 mod studio_fmt;
 mod studio_list;
 mod supervise;
@@ -146,6 +148,10 @@ mod ask_answer_tests;
 mod ask_tests;
 #[cfg(test)]
 mod budget_cmd_tests;
+#[cfg(test)]
+mod cast_card_tests;
+#[cfg(test)]
+mod cast_effect_tests;
 #[cfg(test)]
 mod checkrun_tests;
 #[cfg(test)]
@@ -330,6 +336,8 @@ mod stale_tests;
 mod stall_tests;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod studio_cast_tests;
 #[cfg(test)]
 mod trust_tests;
 

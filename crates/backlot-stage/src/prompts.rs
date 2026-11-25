@@ -217,6 +217,8 @@ pub fn prepare(
     let mut text = render(template(start.kind), &fields);
     // A role whose previous agent ran a different identity is taking
     // the role over: it must read the state it inherits before acting.
+    // An actor's identity moved if its task's newest cast was rewritten
+    // by a `role.recast` of the actor key.
     let recast = state.recasts.iter().any(|r| r.role == start.role)
         && state
             .roles

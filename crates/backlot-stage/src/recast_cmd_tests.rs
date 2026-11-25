@@ -13,6 +13,15 @@ fn studio(scratch: &Scratch, env: &Env) {
     );
 }
 
+/// Requirement v1, so a task may be created.
+fn requirement(scratch: &Scratch, env: &Env) {
+    let req = fixture(scratch, "req.md", "# req\n");
+    ok(
+        env,
+        &format!("req revise --file {req} --summary s --as producer"),
+    );
+}
+
 /// The user's recast lands `by: user`, keeps the current permission
 /// profile, and carries the new identity.
 #[test]
@@ -87,6 +96,69 @@ fn the_effort_refusal_reads_in_plain_words() {
     );
 }
 
+/// The user's recast of an actor key: a new identity on the task's
+/// newest cast, the same key and terminal name, `by: user`.
+#[test]
+fn an_actor_recast_records_the_new_identity_on_the_cast() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    // t1 needs a cast before its actor has a key to recast.
+    requirement(&scratch, &env);
+    let acc = fixture(&scratch, "acc.md", "# acc\n");
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+    ok(&env, "cast --task t1 --actor actor-a --as director");
+    ok(
+        &env,
+        "recast --person actor-t1-c1 --runner fake --model new-model --effort high \
+         --reason quota",
+    );
+    let json = ok(&env, "status --json");
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let cast = &v["tasks"]["t1"]["cast"];
+    assert_eq!(cast["actor"]["model"], "new-model", "{v}");
+    assert_eq!(cast["candidate"], "actor-a", "the key and candidate stay");
+    // One recast record, for the actor key, by the user.
+    let recasts = v["recasts"].as_array().unwrap();
+    assert_eq!(recasts.len(), 1, "{v}");
+    assert_eq!(recasts[0]["role"], "actor-t1-c1");
+    let events = crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop"))
+        .unwrap()
+        .0;
+    assert_eq!(events.last().unwrap().by.role, "user");
+    assert_eq!(events.last().unwrap().kind.name(), "role.recast");
+}
+
+/// A key the task no longer has is refused — recast the newest cast's.
+#[test]
+fn a_stale_actor_key_refuses() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    requirement(&scratch, &env);
+    let acc = fixture(&scratch, "acc.md", "# acc\n");
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+    ok(&env, "cast --task t1 --actor actor-a --as director");
+    ok(&env, "cast --task t1 --actor actor-b --as director");
+    let msg = refused(
+        &env,
+        "recast --person actor-t1-c1 --runner fake --model new-model --effort high",
+    );
+    assert!(msg.contains("not the task's current actor"), "{msg}");
+}
+
+/// The usage names the actor keys too.
+#[test]
+fn the_usage_names_actor_keys() {
+    let (_scratch, env) = scratch();
+    let help = ok(&env, "recast --help");
+    assert!(help.contains("actor-<task>-c<n>"), "{help}");
+}
+
 /// A Hollywood recast card reads `recast <role> → <runner>/<model>`
 /// and `card show` names both identities.
 #[test]
@@ -132,7 +204,7 @@ fn recast_help_and_usage() {
     let (_scratch, env) = scratch();
     let help = ok(&env, "recast --help");
     assert!(
-        help.contains("backlot recast --person producer|director|writer"),
+        help.contains("backlot recast --person producer|director|writer | actor-<task>-c<n>"),
         "{help}"
     );
     assert!(help.contains("--runner <r>"), "{help}");

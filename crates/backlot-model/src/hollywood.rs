@@ -273,7 +273,8 @@ pub enum CardAction {
     /// Abandon a task that is not terminal.
     Abandon { studio: String, task: String },
     /// Recast a fixed role onto a new identity (`role.recast`): close
-    /// the old terminal and start a fresh conversation.
+    /// the old terminal and start a fresh conversation. An actor key
+    /// (`actor-<task>-c<n>`) does the same for the actor on its task.
     Recast {
         studio: String,
         person: String,
@@ -281,6 +282,19 @@ pub enum CardAction {
         /// profile from the role's current one when none is given.
         actor: ActorIdentity,
     },
+    /// Reload a live or stuck person in place (`role.restart`): stop the
+    /// terminal and launch it again under the same identity, resuming
+    /// the recorded session unless `fresh`.
+    Restart {
+        studio: String,
+        person: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        fresh: bool,
+    },
+    /// Change the studio's cast after it started (`studio.cast`), plus a
+    /// `role.recast` for every fixed role the file moves. `cast` points
+    /// at a cast file, like a `studio-new` draft.
+    Cast { studio: String, cast: String },
     /// Change Hollywood's own actor (`[hollywood]` in config plus a
     /// fresh restart so the new agent takes over).
     Setup {
@@ -321,6 +335,8 @@ impl CardAction {
             | CardAction::Resume { studio, .. }
             | CardAction::Abandon { studio, .. }
             | CardAction::Recast { studio, .. }
+            | CardAction::Restart { studio, .. }
+            | CardAction::Cast { studio, .. }
             | CardAction::Outward { studio, .. } => studio,
             CardAction::Setup { .. } => "hollywood",
         }
@@ -341,6 +357,16 @@ impl CardAction {
             CardAction::Recast { person, actor, .. } => {
                 format!("recast {person} → {}", crate::recast::identity_text(actor))
             }
+            CardAction::Restart { person, fresh, .. } => {
+                format!("restart {person}{}", if *fresh { " (fresh)" } else { "" })
+            }
+            CardAction::Cast { studio, cast } => format!(
+                "cast {studio} ← {}",
+                std::path::Path::new(cast)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| cast.clone())
+            ),
             CardAction::Setup { .. } => {
                 let actor = self.setup_actor().expect("Setup yields actor");
                 format!("setup hollywood → {}", crate::recast::identity_text(&actor))
@@ -419,6 +445,13 @@ pub enum CardBase {
     /// The fixed role played this identity — a recast that lands on
     /// another one, or a finished studio, is stale.
     RoleIdentity { actor: ActorIdentity },
+    /// The person was live or lost — a `restart` that lands on a closed
+    /// person (reopen is that) or a finished studio is stale.
+    PersonRestartable,
+    /// The studio's newest `studio.cast` was this seq (`0` = never
+    /// changed) — a `cast` card whose settings event has moved since is
+    /// stale.
+    CastSeq { was: u64 },
     /// Hollywood's configured identity at proposal time (`None` when
     /// `[hollywood]` was not yet set).
     HollywoodIdentity { actor: Option<ActorIdentity> },
@@ -523,13 +556,55 @@ pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>)
             if s.finished.is_some() {
                 return Some(format!("studio '{name}' is finished"));
             }
-            match s.fixed_identity(person) {
-                None => Some(format!("no role '{person}'")),
-                Some(current) if crate::recast::same_identity(current, actor) => None,
-                Some(current) => Some(format!(
+            // A fixed role or an actor key both answer their current
+            // identity through the recast rule.
+            match crate::recast::current_identity(s, person) {
+                Err(_) => Some(format!("no person '{person}'")),
+                Ok(None) => Some(format!("no person '{person}'")),
+                Ok(Some(current)) if crate::recast::same_identity(&current, actor) => None,
+                Ok(Some(current)) => Some(format!(
                     "'{person}' is {} now",
-                    crate::recast::identity_text(current)
+                    crate::recast::identity_text(&current)
                 )),
+            }
+        }
+        CardBase::PersonRestartable => {
+            let CardAction::Restart { person, .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            if s.finished.is_some() {
+                return Some(format!("studio '{name}' is finished"));
+            }
+            match s.roles.get(person) {
+                None => Some(format!("no role '{person}'")),
+                Some(r) if r.lifecycle() == RoleLifecycle::Closed => {
+                    Some(format!("'{person}' is closed — reopen brings it back"))
+                }
+                Some(_) => None,
+            }
+        }
+        CardBase::CastSeq { was } => {
+            let CardAction::Cast { .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            if s.finished.is_some() {
+                return Some(format!("studio '{name}' is finished"));
+            }
+            let now = s.cast_seq.unwrap_or(0);
+            if now == *was {
+                None
+            } else if *was == 0 {
+                Some("the studio's cast changed since this card was proposed".into())
+            } else {
+                Some(format!(
+                    "the cast changed again since this card was proposed (now event {now})"
+                ))
             }
         }
     }
