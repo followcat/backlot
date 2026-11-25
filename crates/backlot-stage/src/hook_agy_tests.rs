@@ -425,6 +425,9 @@ fn agy_pre_tool_use_refuses_role_escapes_and_keeps_reads() {
         "hc get backlot",
         "hc file read a.txt",
         "git status",
+        "rg \"plugin.backlot.req\" docs/",
+        "cargo test -p herdr-core",
+        "git commit -m \"doc.set: keep the queue names\"",
     ] {
         assert_eq!(decision(&env, good), "allow", "must allow `{good}`");
     }

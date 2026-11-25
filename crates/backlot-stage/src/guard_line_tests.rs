@@ -137,3 +137,38 @@ fn refuses_hc_control_socket_scripts_detach_tricks_and_server_control() {
         assert_eq!(refused_command_line(line), None, "must allow `{line}`");
     }
 }
+
+/// The token rule lives only in interpreter code: ordinary commands whose
+/// words happen to be the queue's name, the socket dir or a variable name
+/// are everyday studio work and stay allowed.
+#[test]
+fn plain_command_words_that_name_the_server_are_allowed() {
+    for line in [
+        "cd /home/user/herdr-core && git status",
+        "cargo test -p herdr-core",
+        "grep -rn doc.set crates/",
+        "rg \"plugin.backlot.req\" docs/",
+        "rg HC_SOCKET server/",
+        "HC_SOCKET=/tmp/scratch.sock npm run dev",
+        "rg HC_TERMINAL_SOCKET crates/",
+        "cat plugin.backlot.req.md",
+        "git commit -m \"doc.set: keep the queue names\"",
+        "python3 manage.py migrate",
+        "node scripts/build.js",
+    ] {
+        assert_eq!(refused_command_line(line), None, "must allow `{line}`");
+    }
+
+    // The same tokens inside interpreter code still refuse.
+    for line in [
+        "perl -e 'open F, \">plugin.backlot.req\"'",
+        "ruby -e 'File.write(\"plugin.backlot.req\", \"doc.set\")'",
+        "python3 -c 'import os; print(os.environ[\"HC_TERMINAL_SOCKET\"])'",
+        "node -e 'const s = process.env.HC_SOCKET; require(\"fs\").readFileSync(s)'",
+        "python3 - <<< 'import socket; socket.socket().connect(\"/run/user/1000/herdr-core/backlot.sock\")'",
+        "lua -e 'local p = os.getenv(\"HC_SOCKET\")'",
+        "python3 -c \"import os; print(os.path.join(os.environ['XDG_RUNTIME_DIR'], 'herdr-core', 'backlot.sock'))\"",
+    ] {
+        assert!(refused_command_line(line).is_some(), "must refuse `{line}`");
+    }
+}

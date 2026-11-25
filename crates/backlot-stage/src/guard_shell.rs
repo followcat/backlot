@@ -109,6 +109,7 @@ fn classify_line_depth(
         }
     }
 
+    let mut heredoc: Option<String> = None;
     for seg in &parsed.segments {
         if seg.iter().any(|t| t.contains("BACKLOT_")) {
             return GuardMatch {
@@ -119,6 +120,23 @@ fn classify_line_depth(
                 argv: seg.clone(),
                 cwd: eff_cwd,
             };
+        }
+        if let Some(delimiter) = heredoc.as_deref() {
+            if seg.len() == 1 && seg[0] == delimiter {
+                heredoc = None;
+                continue;
+            }
+            if interpreter_code_names_server(&seg.join(" ")) {
+                return GuardMatch {
+                    verdict: GuardVerdict::Refuse {
+                        command: cap_command(&seg.join(" ")),
+                        rule: "server socket or queue write".into(),
+                    },
+                    argv: seg.clone(),
+                    cwd: eff_cwd,
+                };
+            }
+            continue;
         }
         if role_dir.is_some() || env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
             let role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
@@ -132,6 +150,19 @@ fn classify_line_depth(
                     cwd: eff_cwd,
                 };
             }
+        }
+        if let Some((delimiter, code)) = interpreter_code(seg) {
+            if interpreter_code_names_server(&code) {
+                return GuardMatch {
+                    verdict: GuardVerdict::Refuse {
+                        command: cap_command(&seg.join(" ")),
+                        rule: "server socket or queue write".into(),
+                    },
+                    argv: seg.clone(),
+                    cwd: eff_cwd,
+                };
+            }
+            heredoc = delimiter;
         }
         let m = eval_segment(
             seg,
@@ -281,16 +312,6 @@ fn eval_segment(
             }
         }
         _ => {
-            if base != "hc" && crate::guard_rules::server_token_in(&seg[i..]).is_some() {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg[i..].join(" ")),
-                        rule: "server socket or queue write".into(),
-                    },
-                    argv: seg[i..].to_vec(),
-                    cwd: eff_cwd.clone(),
-                };
-            }
             let ctx = GitContext {
                 policy,
                 cwd: eff_cwd,
@@ -358,4 +379,109 @@ fn is_env_assign(tok: &str) -> bool {
     };
     (first.is_ascii_alphabetic() || first == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Programs whose inline code or stdin can reach the server's socket.
+const INTERPRETERS: &[&str] = &[
+    "python", "python3", "node", "perl", "ruby", "deno", "bun", "php", "lua",
+];
+
+/// The index of a segment's program, past env assignments and the
+/// `env`/`command`/`exec`/`nohup`/`time` wrappers `eval_segment` unwraps.
+fn program_index(seg: &[String]) -> Option<usize> {
+    let mut i = 0;
+    while i < seg.len() {
+        let tok = seg[i].as_str();
+        if is_env_assign(tok) {
+            i += 1;
+            continue;
+        }
+        let base = tok.rsplit('/').next().unwrap_or(tok);
+        if base == "env" {
+            i += 1;
+            while i < seg.len() {
+                let flag = seg[i].as_str();
+                if flag == "--" {
+                    i += 1;
+                    break;
+                }
+                if matches!(flag, "-u" | "-C" | "-S" | "--unset" | "--chdir") {
+                    i += 2;
+                } else if flag.starts_with('-') {
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            continue;
+        }
+        if matches!(base, "command" | "exec" | "nohup" | "time") {
+            i += 1;
+            continue;
+        }
+        return Some(i);
+    }
+    None
+}
+
+/// The code an interpreter segment runs: `Some((heredoc delimiter, code))`
+/// for `-c`/`-e`/`--eval` inline code, a here-string, or a heredoc whose
+/// body follows in later segments.
+fn interpreter_code(seg: &[String]) -> Option<(Option<String>, String)> {
+    let idx = program_index(seg)?;
+    let base = seg[idx].rsplit('/').next().unwrap_or(&seg[idx]);
+    if !INTERPRETERS.contains(&base) {
+        return None;
+    }
+    let args = &seg[idx + 1..];
+    for (i, a) in args.iter().enumerate() {
+        if a == "--eval"
+            || a == "-c"
+            || a == "-e"
+            || (a.starts_with('-')
+                && !a.starts_with("--")
+                && (a[1..].contains('c') || a[1..].contains('e')))
+        {
+            return Some((None, args[i + 1..].join(" ")));
+        }
+        if let Some(code) = a.strip_prefix("<<<") {
+            return Some(if code.is_empty() {
+                (None, args[i + 1..].join(" "))
+            } else {
+                (None, code.to_owned())
+            });
+        }
+        if let Some(rest) = a.strip_prefix("<<") {
+            let delimiter = if rest.is_empty() {
+                args.get(i + 1).map(String::as_str).unwrap_or("")
+            } else {
+                rest
+            };
+            return Some((
+                Some(delimiter.trim_start_matches('-').to_owned()),
+                String::new(),
+            ));
+        }
+    }
+    Some((None, String::new()))
+}
+
+/// Interpreter code that writes the person's queue or reaches the core
+/// socket. Plain command words (`grep doc.set`, `git commit -m "doc.set: …"`)
+/// never reach this check.
+fn interpreter_code_names_server(code: &str) -> bool {
+    if code.contains("plugin.backlot.req") || code.contains("doc.set") {
+        return true;
+    }
+    let socket_dir = code.contains("herdr-core")
+        && (code.contains(".sock")
+            || code.contains("/run/user/")
+            || code.contains("XDG_RUNTIME_DIR"));
+    let socket_var = ["HC_SOCKET", "HC_TERMINAL_SOCKET"].iter().any(|var| {
+        code.contains(var)
+            && ["os.environ", "process.env", "$HC_", "ENV[", "getenv"]
+                .iter()
+                .any(|read| code.contains(read))
+    });
+    socket_dir || socket_var
 }

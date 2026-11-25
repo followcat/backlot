@@ -430,6 +430,11 @@ fn a_role_escape_is_cancelled_even_when_its_command_is_ruled_in() {
         "tmux new -d",
         "tmux new-session -d",
         "systemd-run",
+        "python3 -c",
+        "node -e",
+        "rg doc.set",
+        "cargo test -p herdr-core",
+        "git commit -m",
         "sleep 5",
     ];
     for cmd in [
@@ -438,11 +443,20 @@ fn a_role_escape_is_cancelled_even_when_its_command_is_ruled_in() {
         "systemd-run --user --quiet sleep 60",
         "backlot server stop",
         "backlot --session backlot server run",
-        "backlot tell producer --text plugin.backlot.req",
-        "backlot ask --why 'doc.set'",
+        "python3 -c 'open(\"plugin.backlot.req\", \"w\").write(\"doc.set\")'",
+        "node -e 'require(\"fs\").readFileSync(process.env.HC_SOCKET)'",
     ] {
         assert!(run_with_allowed(&dir, &allowed, cmd), "must cancel `{cmd}`");
     }
-    assert!(!run_with_allowed(&dir, &allowed, "sleep 5"));
-    assert!(!run_with_allowed(&dir, &allowed, "backlot status"));
+    // Plain command words naming the queue or the socket dir stay allowed.
+    for cmd in [
+        "sleep 5",
+        "backlot status",
+        "backlot tell producer --text plugin.backlot.req",
+        "rg doc.set crates/",
+        "cargo test -p herdr-core",
+        "git commit -m \"doc.set: keep the queue names\"",
+    ] {
+        assert!(!run_with_allowed(&dir, &allowed, cmd), "must allow `{cmd}`");
+    }
 }

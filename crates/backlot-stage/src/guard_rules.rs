@@ -278,9 +278,9 @@ fn is_hc_refused(args: &[String]) -> bool {
     }
 }
 
-/// Words naming the person's queue or the core socket directory: a role
-/// that writes them is reaching for the server's own documents.
-const SERVER_TOKENS: &[&str] = &[
+/// Words that name the person's queue or core socket: the shimmed socket
+/// tools are refused on any of them.
+const SOCKET_WORD_TOKENS: &[&str] = &[
     "plugin.backlot.",
     "doc.set",
     "herdr-core",
@@ -288,16 +288,9 @@ const SERVER_TOKENS: &[&str] = &[
     "HC_TERMINAL_SOCKET",
 ];
 
-/// The first word naming a server token, if any.
-pub(crate) fn server_token_in(words: &[String]) -> Option<&str> {
-    words
-        .iter()
-        .map(String::as_str)
-        .find(|w| SERVER_TOKENS.iter().any(|t| w.contains(t)))
-}
-
 fn names_server_socket(args: &[String]) -> bool {
-    server_token_in(args).is_some()
+    args.iter()
+        .any(|w| SOCKET_WORD_TOKENS.iter().any(|t| w.contains(t)))
 }
 
 /// `nc`/`ncat` `-U` and socat's `UNIX-*` addresses reach a local socket
