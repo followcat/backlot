@@ -34,8 +34,9 @@ pub(crate) enum Move {
     Nudge { step: Step },
     /// Raise one `owed` attention on the still-idle owner.
     Raise { role: String, detail: String },
-    /// Clear an open `owed` attention that no longer stands.
-    Clear { seq: u64 },
+    /// Clear an open attention that no longer stands, with the
+    /// `attention.cleared` reason.
+    Clear { seq: u64, reason: &'static str },
 }
 
 /// An undelivered message or report aimed at the role — the idle
@@ -55,6 +56,39 @@ fn nudge_for(state: &StudioState, key: u64) -> Option<&backlot_model::state::Mes
         .messages
         .iter()
         .find(|m| m.source_seq == Some(key) && m.purpose.as_deref() == Some("nudge"))
+}
+
+/// `attention.cleared` reason: the owed step's owner wrote to the
+/// ledger after the escalation.
+pub(crate) const ROLE_ACTIVE: &str = "role active again";
+/// `attention.cleared` reason: the refused role has since been handed
+/// new work.
+pub(crate) const ROLE_MOVED_ON: &str = "role moved on";
+
+/// Did `role` write any ledger event after `seq`?
+fn acted_since(state: &StudioState, role: &str, seq: u64) -> bool {
+    state
+        .last_by_role
+        .get(role)
+        .is_some_and(|last| last.seq > seq)
+}
+
+/// When `role` last wrote to the ledger; zero when it never did.
+fn last_act_ms(state: &StudioState, role: &str) -> u64 {
+    state.last_by_role.get(role).map_or(0, |last| last.ts_ms)
+}
+
+/// Was a message or report delivered to `role` after `ts_ms`?
+fn delivered_since(state: &StudioState, role: &str, ts_ms: u64) -> bool {
+    let after = |d: Option<u64>| d.is_some_and(|d| d > ts_ms);
+    state
+        .messages
+        .iter()
+        .any(|m| m.to == role && m.delivered && after(m.delivered_ms))
+        || state
+            .reports
+            .iter()
+            .any(|r| r.to == role && r.delivered && after(r.delivered_ms))
 }
 
 /// The body the nudge file carries: what is owed, the command that
@@ -88,11 +122,14 @@ pub fn plan(
             continue;
         }
         match nudge_for(state, s.key) {
-            // The nudge landed `escalate_after_s` ago and nothing
-            // answered — still owed, still idle: the user's step now.
+            // The nudge landed `escalate_after_s` ago, and the owner
+            // has written nothing to the ledger for as long — still
+            // owed, still idle: the user's step now. Both clocks come
+            // from the ledger, so a stage restart never postpones it.
             Some(m) if m.delivered => {
                 let delivered = m.delivered_ms.unwrap_or(m.ts_ms);
-                if now_ms.saturating_sub(delivered) >= escalate_ms
+                let quiet_since = delivered.max(last_act_ms(state, &s.owner));
+                if now_ms.saturating_sub(quiet_since) >= escalate_ms
                     && idle(&s.owner).is_some()
                     && !state
                         .open_attention()
@@ -123,12 +160,41 @@ pub fn plan(
     // An `owed` attention stands only while its role is wanted and
     // some owed step still carries a delivered nudge — the step it
     // escalated. A newer step, not yet nudged, does not hold it up.
+    // An owner that wrote to the ledger after the raise is working
+    // again: the attention clears unless the owner has since sat idle
+    // a whole escalation window, when it stands as the re-escalation.
     for a in state.open_attention().filter(|a| a.reason == reasons::OWED) {
         let nudged = steps
             .iter()
             .any(|s| s.owner == a.role && nudge_for(state, s.key).is_some_and(|m| m.delivered));
         if !wanted.contains(&a.role) || !nudged {
-            out.push(Move::Clear { seq: a.seq });
+            out.push(Move::Clear {
+                seq: a.seq,
+                reason: "done",
+            });
+        } else if acted_since(state, &a.role, a.seq)
+            && (idle(&a.role).is_none()
+                || now_ms.saturating_sub(last_act_ms(state, &a.role)) < escalate_ms)
+        {
+            out.push(Move::Clear {
+                seq: a.seq,
+                reason: ROLE_ACTIVE,
+            });
+        }
+    }
+    // An `outward action` refusal tells the person what the role was
+    // denied; the role was told to ask if it still needs it. Once the
+    // stage has delivered the role new work — deliveries only reach
+    // an idle role, so the refused turn is over — the notice is stale.
+    for a in state
+        .open_attention()
+        .filter(|a| a.reason == backlot_model::event::OUTWARD_ACTION)
+    {
+        if delivered_since(state, &a.role, a.ts_ms) {
+            out.push(Move::Clear {
+                seq: a.seq,
+                reason: ROLE_MOVED_ON,
+            });
         }
     }
     out
@@ -203,12 +269,12 @@ impl Stage {
                     )?;
                     crate::stagelog::stage_log!("{role} still owes a step — escalated");
                 }
-                Move::Clear { seq } => {
+                Move::Clear { seq, reason } => {
                     record(
                         dir,
                         EventKind::AttentionCleared {
                             target: seq,
-                            reason: Some("done".into()),
+                            reason: Some(reason.into()),
                         },
                     )?;
                 }
