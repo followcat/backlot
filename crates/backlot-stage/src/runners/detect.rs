@@ -312,6 +312,37 @@ fn clean(line: &str) -> String {
     out.trim().to_string()
 }
 
+/// Run `spawn` a few times while it fails `ETXTBSY`: a script just
+/// written — such as a test's `--version` stub — can still be held
+/// open for writing by a child forked from another thread, and
+/// `exec` refuses it until that descriptor closes. Five tries, 10 ms
+/// apart, the same window `guard` uses; any other error comes
+/// straight back.
+pub(crate) fn spawn_retrying<T>(
+    mut spawn: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    for attempt in 0..5 {
+        match spawn() {
+            Ok(v) => return Ok(v),
+            Err(e) if text_busy(&e) && attempt < 4 => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    unreachable!()
+}
+
+#[cfg(unix)]
+fn text_busy(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(libc::ETXTBSY)
+}
+
+#[cfg(not(unix))]
+fn text_busy(_: &std::io::Error) -> bool {
+    false
+}
+
 /// `argv` with stdin closed and both pipes drained by reader
 /// threads — a chatty child never wedges on a full pipe; the child
 /// is killed at `timeout` and `None` answered, as on a failed
@@ -327,7 +358,7 @@ pub fn run_timed(argv: &[String], path: Option<&str>, timeout: Duration) -> Opti
     if let Some(path) = path {
         command.env("PATH", path);
     }
-    let mut child = command.spawn().ok()?;
+    let mut child = spawn_retrying(|| command.spawn()).ok()?;
     fn drain(mut r: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
         std::thread::spawn(move || {
             let mut b = Vec::new();

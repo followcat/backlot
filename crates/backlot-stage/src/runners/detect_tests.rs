@@ -106,6 +106,33 @@ fn the_login_shell_path_is_the_second_place() {
     assert!(found.needs_path());
 }
 
+/// A spawn refused `ETXTBSY` is retried until the writer closes, and
+/// any other spawn error comes straight back — the bounded retry
+/// `run_timed` gives a script some forked child still holds open.
+#[cfg(unix)]
+#[test]
+fn a_text_busy_spawn_is_retried() {
+    let mut attempts = 0;
+    let out = detect::spawn_retrying(|| {
+        attempts += 1;
+        if attempts < 3 {
+            Err(std::io::Error::from_raw_os_error(libc::ETXTBSY))
+        } else {
+            Ok(42_u32)
+        }
+    });
+    assert_eq!(out.unwrap(), 42);
+    assert_eq!(attempts, 3);
+
+    let mut attempts = 0;
+    let denied = detect::spawn_retrying(|| {
+        attempts += 1;
+        Err::<u32, _>(std::io::Error::from_raw_os_error(libc::EACCES))
+    });
+    assert_eq!(denied.unwrap_err().raw_os_error(), Some(libc::EACCES));
+    assert_eq!(attempts, 1);
+}
+
 /// Under `~/.nvm/versions/node/*/bin` the newest version's binary
 /// wins, and `Source::Known` is "needs PATH" too.
 #[test]
