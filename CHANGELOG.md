@@ -17,6 +17,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **An actor that stops at its prompt keeps getting pushed until it delivers.** When the owed step is an actor's delivery on a running task, the nudge now names the task and says keep working until `backlot deliver`, do not end the turn with a progress line, and send a block to the reviewer with `backlot tell <reviewer> --file <file>`. If the actor answers only with a `backlot progress` line and goes idle again, a second, firmer nudge follows once the idle stretch passes `nudge_after_s` (every other step still gets one nudge ever). For that step only, a bare `role.progress` no longer counts as activity for the `owed` escalation or the `role active again` clear — any other ledger write, a commit or a work-area change still does. `backlot status` and the TUI role row show `idle <n>m` for a live role that has sat at its prompt longer than 60 s instead of plain `waiting` (`docs/studio/design.md`, `docs/studio/guide.md`, `docs/studio/panel.md`).
 - **The selected studio stands out with an accent border, title chip, and bold strip/stacked label.** Whether or not the lot owns the keys, the selected studio (cursor studio, else `▸` current studio, else first studio) draws all frame edges (`╭ ─ ╮ │ ╰ ╯`) in `accent` with a bold high-contrast `accent` title chip (` ▸ <studio> `) in its top border, while unselected blocks stay muted in `surface1`; collapsed strip and stacked rows also highlight the selected studio's label in bold `accent`.
 
 ## 0.4.5 — 2026-11-25

@@ -284,6 +284,16 @@ attention. A step the user owes is shown, never pushed. A nudge shares `source_s
 notices without either suppressing the other: the dedup set counts only purpose-free messages, and the writer's
 wanted clock follows `plan`/`dispatch` purposes alone.
 
+**An actor's delivery step gets a directive nudge and a second one** (an actor otherwise reads the nudge, writes one
+`backlot progress` line and ends the turn, so the plain rule waits a whole escalation window). When the owed step is
+an actor's delivery on a running task, the first nudge body names the task, says keep working until
+`backlot deliver`, says not to end the turn with a progress line, and sends a block to the task's reviewer with
+`backlot tell <reviewer> --file <file>`. If the actor is idle again after that nudge was delivered and, since the
+delivery, the only ledger writes are `role.progress` (no deliver, no commit, the work area unchanged per the liveness
+probe), a second, firmer nudge joins the outbox once the idle stretch passes `nudge_after_s` again. Every other step
+keeps one nudge ever. For this step only, the `owed` clock and the `ROLE_ACTIVE` clear ignore a bare `role.progress`:
+any other ledger write, a commit, or a work-area change still counts as activity.
+
 `backlot status` prints one `next:` line per owed step — label, owner and age. The summary document carries the first
 as an optional capped `next` field (`"label — owner"`, deliberately free of clock text so `same_as` stays stable), and
 the panel draws it as one line under the studio like the `error` line.

@@ -274,7 +274,8 @@ A person shows exactly one state, in this priority:
 3. `stuck · <plain reason>` — a `stuck` attention (`!` peach).
 4. `working · <doing>` — the watch pass reads the screen working.
 5. `waiting` — anything else that is live and not doing work; a held role reads its
-   `waiting for a <runner> slot` detail.
+   `waiting for a <runner> slot` detail, and a role that has sat at its prompt past 60 s reads
+   `idle <n>m` (`backlot status` shows the same word).
 6. `ready` — live, idle and nothing assigned (`◦`).
 7. `standby` — a cast fixed role that has not started yet (no activity glyph, dimmed, ignored
    by counts; `writer` shows `starts when the director plans`, `producer` and `director` show

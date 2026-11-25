@@ -402,7 +402,11 @@ role that owes it and how long it has been owed (`next: dispatch — producer, o
 the owner means the step is yours (for example `finish` once every task is terminal and reported).
 While a step sits with an idle owner the stage nudges it once after `nudge_after_s` and raises an
 `owed` attention `escalate_after_s` after the nudge was delivered — so a `next:` line that survives
-for minutes is a real hold-up, not a refresh artifact. The panel shows the first owed step as the
+for minutes is a real hold-up, not a refresh artifact. An actor's `deliver` on a running task is the
+one step that gets a second, firmer nudge: when the actor answers the first nudge with only a
+`backlot progress` line and goes back to its prompt, the stage nudges again after another
+`nudge_after_s`, and a bare progress write does not delay the `owed` attention (any other ledger
+write, a commit or a work-area change still does). The panel shows the first owed step as the
 `→` line under the studio. When any delivery reported usage, a `usage:` line under the limits
 sums the studio's tokens and cost (nothing shows while every counter is zero).
 
@@ -447,7 +451,7 @@ drawer under a person or task, or folds a studio block on its header. The marks:
 | Mark | Meaning |
 |---|---|
 | spinning glyph | `working` — the role's screen shows its runner's working marker |
-| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting). A wanted role a `[limits]` cap holds back shows the same mark; the cast's second line says `waiting for a <runner> slot` |
+| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting); a role that has sat at its prompt longer than 60 s reads `idle <n>m` instead. A wanted role a `[limits]` cap holds back shows the same mark; the cast's second line says `waiting for a <runner> slot` |
 | `×` | `blocked` — the role's screen shows a permission prompt |
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
