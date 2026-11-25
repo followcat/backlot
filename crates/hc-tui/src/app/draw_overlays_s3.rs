@@ -124,7 +124,6 @@ pub(super) fn draw_reader(
             scroll: sv.scroll,
             meta: sv.meta.clone(),
             tell: sv.tell.clone(),
-            action_notice: None,
         };
         (true, &owned_sheet_view, None)
     } else {
