@@ -10,8 +10,6 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use backlot_model::summary::Exchange;
-
 use super::draw::{CHIP_GAP, HollywoodRender};
 use super::items::{
     chip_text, chips_of, default_chip_index, live_head, target_label, ultra_head, wait_head,
@@ -22,7 +20,6 @@ use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
-use crate::hollywood::reader_wrap::wrap_plain;
 
 /// The space the band keeps at each side.
 pub(crate) const MARGIN: u16 = 2;
@@ -109,8 +106,10 @@ pub(crate) fn draw_row(
                 base.fg(palette.overlay1),
             );
         }
-        Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
-        Row::Fold { count, .. } => draw_fold(buf, rect, *count, selected, palette),
+        Row::Talk(line) => {
+            super::talk::draw_talk(buf, rect, line, selected, palette);
+        }
+        Row::Fold { count, .. } => super::talk::draw_fold(buf, rect, *count, selected, palette),
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
         Row::Input => draw_input(
             buf,
@@ -385,105 +384,6 @@ fn draw_detail(
         width,
         &truncate_end(&text, width as usize),
         Style::default().fg(colour).bg(bg),
-    );
-}
-
-/// The left margin plus a `who › ` prefix's width — the room a talk
-/// line's text has at band width `width`.
-pub(crate) fn talk_text_width(width: u16, who: &str) -> usize {
-    let left = if who == "hollywood" {
-        1
-    } else {
-        who.chars().count() as u16 + 2
-    };
-    width.saturating_sub(MARGIN + left + 1) as usize
-}
-
-/// One exchange line: `✦ <text>` for Hollywood's half (its reported
-/// headline, the accent the headline row already carries), the
-/// sender's `who ›` for every other line — dimmer, the dialog's
-/// other side. A line drawn taller than one row (the newest Hollywood
-/// line's wrap) prints its text across those rows, all but the last
-/// cut to the width, the last ellipsized.
-fn draw_talk(
-    buf: &mut Buffer,
-    rect: Rect,
-    line: &Exchange,
-    selected: bool,
-    palette: &Palette,
-    hits: &mut HollywoodRender,
-) {
-    let _ = hits;
-    let base = if selected {
-        Style::default().bg(palette.active_row_bg)
-    } else {
-        Style::default().bg(palette.surface_dim)
-    };
-    buf.set_style(rect, base);
-    let (marker, who_style, text_style) = if line.who == "hollywood" {
-        (
-            "✦".to_string(),
-            base.fg(palette.accent),
-            base.fg(palette.text),
-        )
-    } else {
-        (
-            format!("{} ›", line.who),
-            base.fg(palette.subtext0),
-            base.fg(palette.subtext0),
-        )
-    };
-    let x = rect.x + MARGIN;
-    let left = marker.chars().count() as u16;
-    // The marker sits on the first row only; a wrapped continuation
-    // keeps the text column.
-    put_text(buf, x, rect.y, left, &marker, who_style);
-    let width = rect.width.saturating_sub(MARGIN + left + 1);
-    let height = rect.height.max(1);
-    if height <= 1 {
-        put_text(
-            buf,
-            x + left + 1,
-            rect.y,
-            width,
-            &truncate_end(&line.text, width as usize),
-            text_style,
-        );
-        return;
-    }
-    for (i, row) in wrap_plain(&line.text, width as usize, height as usize)
-        .into_iter()
-        .enumerate()
-    {
-        put_text(
-            buf,
-            x + left + 1,
-            rect.y + i as u16,
-            width,
-            &row,
-            text_style,
-        );
-    }
-}
-
-/// `… <n> earlier · ↵ read` — the older lines folded into one dim
-/// row. Enter on it opens the newest folded entry.
-fn draw_fold(buf: &mut Buffer, rect: Rect, count: usize, selected: bool, palette: &Palette) {
-    let bg = if selected {
-        palette.active_row_bg
-    } else {
-        palette.surface_dim
-    };
-    buf.set_style(rect, Style::default().bg(bg));
-    let text = format!("… {count} earlier · ↵ read");
-    let width = rect.width.saturating_sub(MARGIN);
-    put_text(
-        buf,
-        rect.x + MARGIN,
-        rect.y,
-        width,
-        &truncate_end(&text, width as usize),
-        Style::default().fg(palette.overlay0).bg(bg),
     );
 }
 

@@ -13,7 +13,7 @@ use ratatui::layout::Rect;
 
 use super::rows::{self, Row, Target};
 use super::sheet::{Status, Wait};
-use super::{Confirm, Hollywood, LayerOpts, band, frames};
+use super::{Confirm, Hollywood, LayerOpts, frames, talk};
 use crate::panel::data::MachineSummary;
 
 /// The expanded band's height cap while floating: half the frame.
@@ -101,7 +101,7 @@ pub(crate) fn plan(
             _ => None,
         })
     }) {
-        let text_w = band::talk_text_width(frame.width, &line.who);
+        let text_w = talk::talk_text_width(frame.width, &line.who);
         let cap = if opts.mobile {
             WRAP_TALK_ROWS_MOBILE
         } else {
