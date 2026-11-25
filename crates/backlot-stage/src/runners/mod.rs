@@ -43,6 +43,22 @@ use std::path::PathBuf;
 
 use backlot_model::ActorIdentity;
 
+/// How far before a role's `started_ms` a session file's birth time
+/// may fall and still count. The kernel's file clock is coarse and
+/// can lag `SystemTime::now()` by a tick (1–10 ms), so a file written
+/// a few ms after the start record can carry an earlier birth time.
+/// 2 s covers that with room for a loaded machine, and stays far
+/// below the gap between two real launches — the `taken` set still
+/// keeps another role's id out.
+pub(crate) const BIRTH_SLACK_MS: u64 = 2_000;
+
+/// Whether a file timestamp `ms` is old enough to rule it out for a
+/// role that started at `started_ms` — anything more than
+/// [`BIRTH_SLACK_MS`] before the start.
+pub(crate) fn predates_start(ms: u64, started_ms: u64) -> bool {
+    ms.saturating_add(BIRTH_SLACK_MS) < started_ms
+}
+
 /// How to start one role's terminal program.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Launch {

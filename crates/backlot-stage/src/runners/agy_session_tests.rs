@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
+use super::BIRTH_SLACK_MS;
 use super::agy::session_at;
 use crate::test_support::TestDir;
 
@@ -188,8 +189,9 @@ fn session_at_ignores_a_mapped_id_that_is_claimed_or_too_old() {
     );
     drop(dir);
 
-    // Its db from before the role's start is not the role's either,
-    // whatever the map says; a db born after the start still is.
+    // Its db from more than the slack before the role's start is not
+    // the role's either, whatever the map says; a db born after the
+    // start still is.
     let old = "oooooooo-0000-0000-0000-000000000015";
     let (dir, conv) = tree(
         "sessions-map-old",
@@ -202,7 +204,7 @@ fn session_at_ignores_a_mapped_id_that_is_claimed_or_too_old() {
         "pppppppp-0000-0000-0000-000000000016",
         "blob file:///home/user/acme-shop/ blob",
     );
-    let started = file_time(&mapped) + 1;
+    let started = file_time(&mapped) + BIRTH_SLACK_MS + 1;
     assert_eq!(
         session_at(&conv, "/home/user/acme-shop", started, &BTreeSet::new()).as_deref(),
         Some("pppppppp-0000-0000-0000-000000000016")

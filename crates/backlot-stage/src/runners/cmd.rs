@@ -38,7 +38,7 @@ use backlot_model::event::CheckDecl;
 use backlot_model::state::actor_task;
 
 use super::splice::{splice_permissions, write600};
-use super::{Launch, LaunchCtx, PlanError, Prep, Session};
+use super::{Launch, LaunchCtx, PlanError, Prep, Session, predates_start};
 
 /// The attention reason a failed `prepare` raises.
 pub const CMD_PREP_FAILED: &str = "cmd prep failed";
@@ -277,7 +277,9 @@ fn file_time_ms(path: &Path) -> Option<u64> {
 
 /// The session id a live cmd role's launch minted: the newest
 /// `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/`
-/// created at or after the role's start whose first line —
+/// created at or after the role's start — or up to
+/// [`super::BIRTH_SLACK_MS`] before it, since a file's birth time
+/// can lag the start record — whose first line —
 /// `{"type":"session","id":..,"cwd":..}` — names the role's own
 /// cwd, and no other role already claims. `.checkpoints.jsonl`
 /// companions and a corrupt first line are skipped.
@@ -299,7 +301,7 @@ pub fn session_at(
         let Some(ms) = file_time_ms(&path) else {
             continue;
         };
-        if ms < started_ms {
+        if predates_start(ms, started_ms) {
             continue;
         }
         let Ok(file) = std::fs::File::open(&path) else {

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use backlot_model::event::CheckDecl;
 
 use super::cmd::{CmdPrep, allow_rules, mcp_denies, prepare, session_at, settings_content, slug};
-use super::{ActorIdentity, LaunchCtx, Prep, plan, session_in_argv};
+use super::{ActorIdentity, BIRTH_SLACK_MS, LaunchCtx, Prep, plan, session_in_argv};
 use crate::test_support::TestDir;
 
 fn tmp(tag: &str) -> TestDir {
@@ -396,6 +396,40 @@ fn session_at_skips_the_malformed() {
     assert_eq!(session_at(&projects, CWD, 1, &BTreeSet::new()), None);
     assert_eq!(
         session_at(&dir.join("gone"), CWD, 1, &BTreeSet::new()),
+        None
+    );
+}
+
+/// A file's birth time as `session_at` reads it — birth, or mtime
+/// where birth is unsupported.
+fn birth_ms(path: &Path) -> u64 {
+    let md = fs::metadata(path).unwrap();
+    let t = md.created().or_else(|_| md.modified()).unwrap();
+    t.duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// A transcript born in the same clock tick as the start record —
+/// just before `started_ms` — is still the role's: the kernel's file
+/// clock lags `SystemTime::now()` by up to a tick, so the birth can
+/// precede the start. One older than the slack is not. The start is
+/// derived from the file's own metadata, so the test never sleeps.
+#[test]
+fn session_at_allows_a_birth_in_the_start_tick() {
+    let dir = tmp("sessions-birth");
+    let projects = dir.join("projects");
+    let slug_dir = slug(CWD);
+    transcript(&projects, &slug_dir, U1, CWD);
+    let born = birth_ms(&projects.join(&slug_dir).join(format!("{U1}.jsonl")));
+    // Born 1 ms before the start: within the slack, still found.
+    assert_eq!(
+        session_at(&projects, CWD, born + 1, &BTreeSet::new()).as_deref(),
+        Some(U1)
+    );
+    // Born past the slack: too old for this role.
+    assert_eq!(
+        session_at(&projects, CWD, born + BIRTH_SLACK_MS + 1, &BTreeSet::new()),
         None
     );
 }

@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use backlot_model::ActorIdentity;
 
 use super::splice::{splice_member, splice_permissions, write600};
-use super::{Launch, LaunchCtx, PlanError, Prep, Session};
+use super::{Launch, LaunchCtx, PlanError, Prep, Session, predates_start};
 
 /// The attention reason a failed `prepare` raises.
 pub const AGY_PREP_FAILED: &str = "agy prep failed";
@@ -226,10 +226,10 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
 /// conversation map, the sibling of `conversations/` — assigns
 /// `cwd`, when that conversation is usable: the value is a plain
 /// stem (no separator, no `..`), its `<id>.db` exists, was born at
-/// or after `started_ms` (the same clock the scan reads) and no
-/// other role claims it. A missing, unreadable or malformed file is
-/// no answer, never an error; agy older than 1.5.14 keeps no map at
-/// all.
+/// or after `started_ms` (up to [`super::BIRTH_SLACK_MS`] before —
+/// the same clock the scan reads) and no other role claims it. A
+/// missing, unreadable or malformed file is no answer, never an
+/// error; agy older than 1.5.14 keeps no map at all.
 fn mapped_session(
     conversations: &Path,
     cwd: &str,
@@ -248,13 +248,14 @@ fn mapped_session(
         return None;
     }
     let db = conversations.join(format!("{id}.db"));
-    (file_time_ms(&db)? >= started_ms).then(|| id.clone())
+    (!predates_start(file_time_ms(&db)?, started_ms)).then(|| id.clone())
 }
 
 /// The session id a live agy role's launch minted: the id agy's
 /// own cwd → conversation map names for this cwd when its db is
 /// new enough, else the newest `<uuid>.db` under `conversations/`
-/// created at or after the role's start whose bytes name
+/// created at or after the role's start (up to
+/// [`super::BIRTH_SLACK_MS`] before it) whose bytes name
 /// `file://<cwd>` — percent-encoded or verbatim — and no other
 /// role already claims.
 pub fn session_at(
@@ -281,7 +282,7 @@ pub fn session_at(
         let Some(ms) = file_time_ms(&path) else {
             continue;
         };
-        if ms < started_ms {
+        if predates_start(ms, started_ms) {
             continue;
         }
         let Ok(bytes) = std::fs::read(&path) else {
