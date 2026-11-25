@@ -407,9 +407,13 @@ async fn a_stage_down_row_click_starts_the_stage() {
         .collect();
     app.view.inventory_mut().replace(2, terms);
     app.reconcile_published_view();
-    // Ctrl+B y opens the dock; the `stage stopped` row is a hit.
+    // Ctrl+B y opens the dock; selecting `beta-tools` unfolds its `stage stopped` row.
     key(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
     key(&mut app, hc_vt::Key::Char('y'), hc_vt::Mods::NONE);
+    app.panel.selected = Some(crate::panel::Target::Studio(crate::studio::StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    }));
     draw_to(&mut app, 120, 24);
     let (rect, target) = app
         .panel_hits

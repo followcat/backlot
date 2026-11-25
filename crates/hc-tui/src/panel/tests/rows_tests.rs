@@ -121,9 +121,16 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
             "actor-erin",
             "actor-bob",
             "actor-carol",
-            "actor-dave"
         ]
     );
+    assert!(
+        t.contains(&Target::ClosedFold("acme-shop".into())),
+        "closed seats fold behind ClosedFold by default: {t:?}"
+    );
+    let mut open_closed = panel(PanelMode::Expanded);
+    open_closed.closed_folds.insert("acme-shop".into());
+    let t_open = targets(Some(&summary), true, &open_closed, Some("acme-shop"), 100);
+    assert!(people(&t_open).iter().any(|r| r == "actor-dave"));
     // A person's extra line shares the Person target — attention.
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");

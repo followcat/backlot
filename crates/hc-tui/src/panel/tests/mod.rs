@@ -5,6 +5,8 @@ mod config_tests;
 mod data_tests;
 mod draw_tests;
 mod exchange_tests;
+mod fold_render_tests;
+mod fold_tests;
 mod remote_tests;
 mod rows_tests;
 mod standby_tests;

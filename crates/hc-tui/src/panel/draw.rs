@@ -18,7 +18,7 @@ use super::draw_blocks::{
     draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
-use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
+use super::draw_tasks::{draw_closed_fold, draw_drawer, draw_fold, draw_task};
 use super::rows::{Row, Target};
 use super::{Panel, PanelMode, rows};
 use crate::chrome::palette::Palette;
@@ -263,6 +263,7 @@ pub(crate) fn render(
                     | Row::Person { .. }
                     | Row::Task { .. }
                     | Row::AcceptedFold { .. }
+                    | Row::ClosedFold { .. }
                     | Row::Stacked(_)
                     | Row::Strip { .. }
                     | Row::Talk { .. }
@@ -278,6 +279,7 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::AcceptedFold { .. }
+                    | Row::ClosedFold { .. }
                     | Row::Talk { .. }
                     | Row::Input { .. }
                     | Row::ReopenProducer { .. }
@@ -404,6 +406,9 @@ pub(crate) fn render(
             Row::AcceptedFold { studio, open } => {
                 draw_fold(buf, rect, *studio, *open, frame_of(&studio.key()), palette);
             }
+            Row::ClosedFold { studio, open } => {
+                draw_closed_fold(buf, rect, *studio, *open, frame_of(&studio.key()), palette);
+            }
             Row::Drawer { studio, text, .. } => {
                 draw_drawer(buf, rect, text, frame_of(&studio.key()), palette);
             }
@@ -515,6 +520,7 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::AcceptedFold { .. }
+                    | Row::ClosedFold { .. }
                     | Row::Talk { .. }
                     | Row::Input { .. }
                     | Row::ReopenProducer { .. }
@@ -650,7 +656,9 @@ fn hint_tiers(
         Some(Target::Studio(_) | Target::Block(_) | Target::Strip(_)) => {
             s(&["⏎ focus  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
         }
-        Some(Target::Fold(_)) => s(&["⏎ open  i tell  m", "⏎ i m", "⏎ m"]),
+        Some(Target::Fold(_)) | Some(Target::ClosedFold(_)) => {
+            s(&["⏎ open  i tell  m", "⏎ i m", "⏎ m"])
+        }
         Some(Target::Stage(_)) => s(&["s start  m", "s m"]),
         Some(Target::Setup) => s(&["⏎ setup", "⏎"]),
         _ => s(&["↑↓ move  i tell  m menu  ? keys", "↑↓ i m ?", "m ?"]),
