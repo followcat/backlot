@@ -82,6 +82,7 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
         }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
         CardAction::Setup { .. } => false,
+        CardAction::Outward { .. } => s.has_outward_completion(card.seq),
     }
 }
 
@@ -322,6 +323,7 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
         }),
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
         CardAction::Setup { .. } => Err("setup is handled apart".into()),
+        CardAction::Outward { .. } => Err("outward execution pending slice 3".into()),
     }
 }
 

@@ -340,6 +340,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioMigrate { .. }
         | Cmd::StudioList { .. }
         | Cmd::StudioRestore { .. }
+        | Cmd::PermsRevoke { .. }
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }
@@ -489,6 +490,34 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         }
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
         Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
+        Cmd::AskRun {
+            argv,
+            why,
+            cwd,
+            command,
+        } => {
+            let role = caller.role.clone();
+            let task = caller.task.clone();
+            let cwd_s = cwd
+                .unwrap_or_else(|| PathBuf::from("."))
+                .to_string_lossy()
+                .into_owned();
+            let cmd_s = command.unwrap_or_else(|| argv.join(" "));
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::OutwardRequested {
+                        role,
+                        task,
+                        command: cmd_s,
+                        cwd: cwd_s,
+                        argv,
+                        why,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Tell { role, source } => message_cmd(by, source_file(&source)?, role, None),
         Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
@@ -900,4 +929,15 @@ pub(crate) fn read_progress_source(source: &crate::args::TextSource) -> Result<S
         return Err(Fail::refused("progress text must be nonempty"));
     }
     Ok(text)
+}
+
+/// Validate `backlot ask --run` against the studio's `PushPolicy` and role work area.
+pub(crate) fn validate_ask_run(
+    sdir: &Path,
+    state: &StudioState,
+    caller: &Caller,
+    env: &Env,
+    argv: &[String],
+) -> Result<(String, PathBuf), Fail> {
+    crate::hcard_outward::validate_ask_run(sdir, state, caller, env, argv)
 }

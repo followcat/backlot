@@ -120,6 +120,19 @@ fn classify_line_depth(
                 cwd: eff_cwd,
             };
         }
+        if role_dir.is_some() || env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
+            let role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
+            if let Some(rule) = crate::proc_guard::check_segment_self_approval(seg, role) {
+                return GuardMatch {
+                    verdict: GuardVerdict::Refuse {
+                        command: cap_command(&seg.join(" ")),
+                        rule,
+                    },
+                    argv: seg.clone(),
+                    cwd: eff_cwd,
+                };
+            }
+        }
         let m = eval_segment(
             seg,
             depth,

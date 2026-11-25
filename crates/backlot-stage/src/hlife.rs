@@ -89,6 +89,9 @@ impl Stage {
             Err(e) => self.hlog(&format!("sweep: {}", e.message())),
             Ok(()) => {}
         }
+        if let Err(e) = self.propose_outward(&hdir) {
+            self.hlog(&format!("outward: {}", e.message()));
+        }
         if let Err(e) = self.hcards(&hdir) {
             self.hlog(&format!("cards: {}", e.message()));
         }
@@ -491,6 +494,7 @@ pub(crate) fn hrole_env(
     let configured_path = runner_env.get("PATH").cloned();
     env.extend(runner_env);
     env.insert("BACKLOT_ROLE".into(), HOLLYWOOD.into());
+    env.insert("BACKLOT_TERMINAL".into(), HOLLYWOOD_TERMINAL.into());
     env.insert("BACKLOT_STATE_DIR".into(), state_dir.into());
     let role_dir = crate::guard::hollywood_role_dir(state_dir);
     crate::guard::apply_env(

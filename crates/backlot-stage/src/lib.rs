@@ -42,6 +42,8 @@ mod guard_shell;
 mod guard_shell_lex;
 mod hcard;
 mod hcard_new;
+mod hcard_outward;
+mod hcard_outward_git;
 mod hdeliver;
 mod hdeliver_fmt;
 mod hfinished;
@@ -74,6 +76,9 @@ mod paths;
 mod paths_tests;
 mod permission;
 mod permit;
+mod proc_guard;
+#[cfg(test)]
+mod proc_guard_tests;
 mod prompts;
 mod prune;
 mod prune_paths;
@@ -216,6 +221,8 @@ mod migrate_tests;
 mod notices_tests;
 #[cfg(test)]
 mod nudge_tests;
+#[cfg(test)]
+mod outward_card_tests;
 #[cfg(test)]
 mod permit_cmd_tests;
 #[cfg(test)]

@@ -777,6 +777,7 @@ impl Stage {
             &proc_running,
             0,
         );
+        summary::attach_outward_cards(&mut s, &self.hstate.borrow());
         // U6c: the stage's own version rides the document so clients
         // read each machine's backlot version without probing. The
         // build id joins it when the build provided one (S2).

@@ -525,6 +525,7 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
             effort.as_deref(),
         ));
     }
+    crate::hcard_outward::append_outward_preview(&mut out, card);
     Ok(out)
 }
 

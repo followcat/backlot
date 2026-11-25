@@ -284,3 +284,85 @@ fn agy_pre_tool_use_fails_open_on_internal_error_invalid_json_and_timeout() {
         "allow"
     );
 }
+
+#[test]
+fn agy_pre_tool_use_blocks_self_approval_backlot_env_and_mutations() {
+    let (s, env_base) = scratch();
+    let cast = fixture(&s, "cast.toml", CAST_TOML);
+    ok(
+        &env_base,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let sig = s.files.join("signals.jsonl");
+    let args = vec![
+        "--runner".into(),
+        "agy".into(),
+        "--file".into(),
+        sig.to_string_lossy().into_owned(),
+    ];
+    let run_role = |role: &str, cmd: &str| -> String {
+        let mut env = Env {
+            vars: env_base.vars.clone(),
+        };
+        env.vars.insert("BACKLOT_ROLE".into(), role.into());
+        let payload = serde_json::json!({
+            "conversationId": "conv-h3",
+            "hookEventName": "PreToolUse",
+            "toolCall": { "name": "run_command", "args": { "CommandLine": cmd } }
+        })
+        .to_string();
+        let out = run_agy(&args, &env, &s.files, &payload);
+        serde_json::from_str::<serde_json::Value>(out.trim()).unwrap()["decision"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+
+    for cmd in [
+        "echo $BACKLOT_ROLE",
+        "env -i backlot card apply c1",
+        "env --ignore-environment backlot card apply c1",
+        "backlot card apply c1",
+        "backlot card cancel c1",
+        "backlot --studio acme-shop card apply c1",
+        "backlot perms revoke r1",
+        "backlot approve --person actor-t1-c1 --decision allow",
+    ] {
+        assert_eq!(
+            run_role("actor-t1-c1", cmd),
+            "deny",
+            "actor-t1-c1 must deny `{cmd}`"
+        );
+    }
+
+    for role in ["writer", "hollywood"] {
+        assert_eq!(
+            run_role(
+                role,
+                "backlot approve --person actor-t1-c1 --decision allow"
+            ),
+            "deny",
+            "{role} must deny `backlot approve`"
+        );
+    }
+
+    for bad in [
+        "backlot approve --as user --person actor-t1-c1 --decision allow",
+        "backlot approve --person director --decision allow",
+        "backlot card apply c1",
+    ] {
+        assert_eq!(
+            run_role("director", bad),
+            "deny",
+            "director must deny `{bad}`"
+        );
+    }
+    assert_eq!(
+        run_role(
+            "director",
+            "backlot approve --person actor-t1-c1 --decision allow"
+        ),
+        "allow"
+    );
+    assert_eq!(run_role("actor-t1-c1", "backlot card list"), "allow");
+}

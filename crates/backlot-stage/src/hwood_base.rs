@@ -185,5 +185,6 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
                 .map(|c| crate::hstage::identity(&c));
             Ok(CardBase::HollywoodIdentity { actor: current })
         }
+        CardAction::Outward { .. } => Err(Fail::refused("outward cards are proposed by the stage")),
     }
 }

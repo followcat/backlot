@@ -85,6 +85,15 @@ pub enum Cmd {
     Ask {
         file: PathBuf,
     },
+    AskRun {
+        argv: Vec<String>,
+        why: Option<String>,
+        cwd: Option<PathBuf>,
+        command: Option<String>,
+    },
+    PermsRevoke {
+        id: String,
+    },
     Tell {
         role: String,
         source: TextSource,
@@ -463,7 +472,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             Cmd::Dispatch { file }
         }),
         "report" => args_studio::report(&mut common, &mut it),
-        "ask" => args_studio::one_file(&mut common, &mut it, U_ASK, |file| Cmd::Ask { file }),
+        "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
@@ -501,6 +510,23 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "records" => args_task::records(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
+        "perms" => match it.next().as_deref() {
+            Some("revoke") => {
+                let id = it
+                    .next()
+                    .ok_or_else(|| usage("missing <id>", "usage: backlot perms revoke <id>"))?;
+                Ok((common, Cmd::PermsRevoke { id }))
+            }
+            Some("-h" | "--help") => Ok((common, Cmd::Help("usage: backlot perms revoke <id>"))),
+            Some(s) => Err(usage(
+                format!("unknown perms subcommand '{s}'"),
+                "usage: backlot perms revoke <id>",
+            )),
+            None => Err(usage(
+                "missing perms subcommand",
+                "usage: backlot perms revoke <id>",
+            )),
+        },
         "stage" => {
             let Some(sub) = it.next() else {
                 return Err(usage("missing stage subcommand", U_STAGE));

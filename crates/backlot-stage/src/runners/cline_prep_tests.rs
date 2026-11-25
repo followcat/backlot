@@ -95,6 +95,7 @@ fn prep_in(dir: &Path) -> ClinePrep {
             worktree: dir.to_str().unwrap(),
             signals: &dir.join("role/cline-signals.jsonl"),
             allowed: &["backlot".to_string()],
+            role: "actor-t1-c1",
         }),
         mcp: dir.join("role/cline-mcp.json"),
         signals: dir.join("role/cline-signals.jsonl"),

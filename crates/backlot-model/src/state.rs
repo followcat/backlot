@@ -613,7 +613,48 @@ pub struct StudioState {
     /// skipped on serialization because `status --json` publishes `progress` once per role.
     #[serde(default, skip_serializing)]
     pub progress: BTreeMap<String, crate::progress::RoleProgress>,
+    /// Carded outward requests (`role.refused` with `disposition: Card`, or
+    /// `outward.requested`) recorded in seq order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outward_requests: Vec<OutwardRequestRecord>,
+    /// Completed/failed/denied/stale outward outcomes recorded by `stage`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outward_completions: Vec<OutwardCompletedRecord>,
     pub last_seq: u64,
+}
+
+/// One carded outward command request (`role.refused` with `Card` or `outward.requested`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutwardRequestRecord {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    pub command: String,
+    pub cwd: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argv: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+}
+
+/// One `outward.completed` record in the studio ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutwardCompletedRecord {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub card: u64,
+    pub source_seq: u64,
+    pub outcome: OutwardOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub output_tail: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_file: Option<String>,
 }
 
 impl StudioState {
@@ -647,6 +688,18 @@ impl StudioState {
 
     pub fn open_attention(&self) -> impl Iterator<Item = &Attention> {
         self.attention.iter().filter(|a| a.open)
+    }
+
+    pub fn has_outward_completion(&self, card: u64) -> bool {
+        self.outward_completions
+            .iter()
+            .any(|c| c.card != 0 && c.card == card)
+    }
+
+    pub fn has_outward_source_completed(&self, source_seq: u64) -> bool {
+        self.outward_completions
+            .iter()
+            .any(|c| c.source_seq == source_seq)
     }
 
     /// The identity a fixed role plays now: the newest `role.recast`
