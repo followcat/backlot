@@ -14,6 +14,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **Core-document request queue, acks, and catalog (`plugin.backlot.req`, `plugin.backlot.res`, `backlot-cat`).** Added additive `EventBy.via` (`"doc"` for document-driven person actions), typed request/result/catalog schemas in `backlot-model`, shared typed person-verb handlers in `backlot-stage`, CAS client helper (`doc_client`), and stage consumer/publisher wiring with immediate `doc`-event wake plus startup/60s poll, 60s request expiry/future-skew checks, 24h persistent dedupe (`processed-reqs.jsonl`), strict size caps (32 queue / 64 acks / 64 KiB result), and hard refusals for `approve`/prompt/outward/non-person inputs and interactive prompt clearing (`docs/studio/requests.md`).
 
+## 0.4.4 — 2026-11-25
+
+"Needs you" now means it: a studio row stops asking for you once the role it was about has moved on.
+
+### Fixed
+
+- **Plain `backlot` folders and git checkouts stay visible and reachable with `Ctrl+K` / `Ctrl+J`.** `is_backlot_stage_space` now matches only the internal `herdr.space = "backlot"` space (`space:7:backlot`) instead of every workspace whose label is `"backlot"`. Previously, any plain shell in a `backlot` directory or git checkout disappeared from the left `machines` tree and from `previous_workspace` / `next_workspace` cycling in studio mode.
+- **Stale "needs you" rows clear by themselves.** An `owed` escalation clears (`role active again`) once its role writes to the ledger again, for example while the person talks it through, and raises again only after the role sits idle a whole `escalate_after_s` with the step still owed, counted from its last ledger write. An `outward action` refusal clears (`role moved on`) once the stage delivers the role new work. Before, both stayed "needs you" until the step was done or someone cleared them by hand.
+
 ## 0.4.3 — 2026-11-25
 
 Hollywood can change its own agent with one card. When you ask it to switch to another runner or model, it proposes a `setup` card showing the old and new identity; applying it rewrites `[hollywood]` (keeping `start`) and restarts Hollywood once, and the new Hollywood greets you with what changed instead of re-researching. The Call Sheet title row's `m` menu also offers "Change Hollywood's agent…" directly.
