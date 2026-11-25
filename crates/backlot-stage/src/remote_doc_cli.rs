@@ -7,21 +7,20 @@ use std::time::Duration;
 
 use backlot_model::event::TaskStateChange;
 use backlot_model::hollywood::HOLLYWOOD;
-use backlot_model::req_results::{
-    AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult, CloseResult,
-    HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, TaskPriorityResult,
-    TaskStateResult, TellHollywoodResult, TellResult,
-};
-use backlot_model::req_wire::{ReqAction, ResAck};
+use backlot_model::req_wire::ReqAction;
 use backlot_model::summary::Summary;
 use hc_proto::client::Client;
 use hc_proto::doc::DocGetParams;
 use hc_proto::endpoint::{Endpoint, Sys};
-use serde::de::DeserializeOwned;
 
 use crate::args::{CardCmd, Cmd, Common, HollywoodCmd, TextSource};
 use crate::cli::{Env, Fail};
 use crate::server_cfg::{self, SERVER_ENV, ServerTarget};
+
+#[path = "remote_doc_fmt.rs"]
+mod remote_doc_fmt;
+
+pub use remote_doc_fmt::{format_ack, format_hollywood_setup};
 
 /// Exact user-facing refusal for commands not yet supported in B1a.
 pub const ERR_NOT_AVAILABLE: &str = "not available through the server yet";
@@ -249,72 +248,6 @@ fn map_task_state(
         }),
         TaskStateChange::TakenOver | TaskStateChange::Blocked => MappedCmd::Unsupported,
     })
-}
-
-fn parse_res<T: DeserializeOwned>(ack: &ResAck) -> Result<T, Fail> {
-    let val = ack
-        .result
-        .clone()
-        .ok_or_else(|| Fail::core("server ack omitted result payload"))?;
-    serde_json::from_value(val).map_err(|e| Fail::core(format!("malformed server result: {e}")))
-}
-
-/// Format `HollywoodSetupResult` in one user-facing line.
-pub fn format_hollywood_setup(r: &HollywoodSetupResult) -> String {
-    let note = if r.restarted {
-        " — hollywood restarted"
-    } else {
-        " — stage sees it on its next tick"
-    };
-    format!("[hollywood] {} ({} {}){note}", r.action, r.runner, r.model)
-}
-
-/// Format a positive (`ok == true`) or negative (`ok == false`) `ResAck`.
-pub fn format_ack(action: &ReqAction, ack: ResAck) -> Result<String, Fail> {
-    use crate::{verbs_card_show, verbs_fmt, verbs_hwood};
-    if !ack.ok {
-        let msg = ack
-            .error
-            .as_deref()
-            .and_then(|e| e.lines().find(|l| !l.trim().is_empty()))
-            .map(str::trim)
-            .unwrap_or("request refused");
-        return Err(Fail::refused(msg));
-    }
-    let out = match action {
-        ReqAction::Tell { .. } => verbs_fmt::format_tell(&parse_res::<TellResult>(&ack)?),
-        ReqAction::TellHollywood { .. } => {
-            verbs_hwood::format_tell_hollywood(&parse_res::<TellHollywoodResult>(&ack)?)
-        }
-        ReqAction::CardApply { .. } => parse_res::<CardApplyResult>(&ack)?.summary,
-        ReqAction::CardCancel { .. } => {
-            verbs_hwood::format_card_cancel(&parse_res::<CardCancelResult>(&ack)?)
-        }
-        ReqAction::CardShow { .. } => {
-            verbs_card_show::format_card_show(&parse_res::<CardShowResult>(&ack)?)
-        }
-        ReqAction::AttentionClear { .. } => {
-            verbs_fmt::format_attention_clear(&parse_res::<AttentionClearResult>(&ack)?)
-        }
-        ReqAction::Recast { .. } => {
-            verbs_fmt::format_recast(&parse_res::<RecastResult>(&ack)?, None)
-        }
-        ReqAction::Restart { .. } => verbs_fmt::format_restart(&parse_res::<RestartResult>(&ack)?),
-        ReqAction::Close { .. } => verbs_fmt::format_close(&parse_res::<CloseResult>(&ack)?),
-        ReqAction::Reopen { .. } => verbs_fmt::format_reopen(&parse_res::<ReopenResult>(&ack)?),
-        ReqAction::TaskPriority { .. } => {
-            verbs_fmt::format_task_priority(&parse_res::<TaskPriorityResult>(&ack)?)
-        }
-        ReqAction::TaskPause { .. }
-        | ReqAction::TaskResume { .. }
-        | ReqAction::TaskAbandon { .. } => {
-            verbs_fmt::format_task_state(&parse_res::<TaskStateResult>(&ack)?)
-        }
-        ReqAction::HollywoodSetup { .. } => {
-            format_hollywood_setup(&parse_res::<HollywoodSetupResult>(&ack)?)
-        }
-    };
-    Ok(out)
 }
 
 /// Send `action` on an already-connected `Client` and format the reply.
