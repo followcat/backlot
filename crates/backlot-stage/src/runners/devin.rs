@@ -65,13 +65,19 @@ pub fn prepare(p: &DevinPrep) -> Result<Option<PrepNote>, String> {
     Ok(None)
 }
 
-/// The models `devin --model` is offered: `adaptive`, the SWE-2
-/// families (the runner's own) and one `-high` variant per
+/// The models `devin --model` is offered: `adaptive`, the SWE-2.1
+/// and SWE-2 families (the runner's own) and one `-high` variant per
 /// third-party family — `devin models` prints over a thousand
 /// ids on the measured account, the depth baked into each one, so
 /// the catalog names the headliners and free text covers the rest.
 pub const MODELS: &[&str] = &[
     "adaptive",
+    "swe-2-1-max",
+    "swe-2-1-xhigh",
+    "swe-2-1-high",
+    "swe-2-1-medium",
+    "swe-2-1-max-lightning",
+    "swe-2-1-high-lightning",
     "swe-2-max",
     "swe-2-high",
     "swe-2-medium",
