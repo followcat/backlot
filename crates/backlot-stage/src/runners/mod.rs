@@ -16,7 +16,7 @@ pub mod cmd;
 mod codex;
 pub mod cursor;
 pub mod detect;
-mod detect_report;
+pub(crate) mod detect_report;
 pub mod devin;
 #[cfg(test)]
 mod devin_tests;

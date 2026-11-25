@@ -501,6 +501,7 @@ fn answers_flag_marks_user_tells_seen_and_rejects_bad_seqs() {
                 backlot_model::EventBy {
                     role: "stage".into(),
                     session: None,
+                    via: None,
                 },
                 HollywoodKind::MessageSent {
                     to: "hollywood".into(),

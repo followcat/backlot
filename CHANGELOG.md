@@ -13,6 +13,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Added
 
 - **`Alt+L` (`[keys] focus_lot`) focuses the lot on its last selectable row.** Pressing `Alt+L` opens/expands the right-hand lot dock (`lot · N`) if hidden or collapsed, focuses it, and scrolls the selection to its last selectable row (e.g. `› tell producer · / actions`) without entering Compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressing `Alt+L` while the lot is already focused jumps to the last row again without toggling the dock closed. Configurable via `[keys] focus_lot` (empty string unbinds), falls through to the focused program under `--plain`, yields to floats, modals, the Call Sheet, and running compose, and appears in the lot header, `?` help, launcher, and docs (`docs/keys.md`, `docs/studio/hollywood.md`, `docs/studio/panel.md`).
+- **Core-document request queue, acks, and catalog (`plugin.backlot.req`, `plugin.backlot.res`, `backlot-cat`).** Added additive `EventBy.via` (`"doc"` for document-driven person actions), typed request/result/catalog schemas in `backlot-model`, shared typed person-verb handlers in `backlot-stage`, CAS client helper (`doc_client`), and stage consumer/publisher wiring with immediate `doc`-event wake plus startup/60s poll, 60s request expiry/future-skew checks, 24h persistent dedupe (`processed-reqs.jsonl`), strict size caps (32 queue / 64 acks / 64 KiB result), and hard refusals for `approve`/prompt/outward/non-person inputs and interactive prompt clearing (`docs/studio/requests.md`).
 
 ### Changed
 
