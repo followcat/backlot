@@ -439,7 +439,10 @@ fn watch_params_for_server_adds_catalog_and_resolve_keeps_local_explicit_session
 
     let mut env = Env::default();
     env.insert("XDG_CONFIG_HOME".into(), dir.as_os_str().to_os_string());
-    env.insert("XDG_RUNTIME_DIR".into(), dir.as_os_str().to_os_string());
+    // A short runtime dir: macOS's temp dir is deep enough that the
+    // session's holder socket path would pass the 103-byte limit.
+    let run = TestDir::new_in(std::path::Path::new("/tmp"), "hsr");
+    env.insert("XDG_RUNTIME_DIR".into(), run.as_os_str().to_os_string());
     env.insert("HOME".into(), dir.as_os_str().to_os_string());
 
     let platform = hc_proto::endpoint::Sys;
