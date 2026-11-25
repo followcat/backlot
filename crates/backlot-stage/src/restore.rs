@@ -1,23 +1,45 @@
-//! `backlot studio restore <archived-name> [--as <new-name>] [--dry-run]`
+//! `backlot studio restore <archived-name> [--name <new-name>] [--dry-run]`
 //! (L7, M3): bring an archived studio back under `studios/`, finished,
 //! so its ledger, `reports/`, `messages/` and history read again and
 //! `reopen` works from there. Work areas are not recreated — the
 //! studio comes back as the finished thing it was archived as. A name
-//! already taken under `studios/` refuses; `--as` renames the copy.
+//! already taken under `studios/` refuses; `--name` renames the copy.
 
 use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
 use crate::store;
 
 /// What a restore did or (with `--dry-run`) would do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct RestoreReport {
+    pub archived: String,
+    pub name: String,
+    pub dest: String,
+    pub dry_run: bool,
+    /// The copy lands under a new name (`--name`).
+    pub renamed: bool,
+}
+
+impl RestoreReport {
+    /// A restore needs the person's confirmation only when it renames
+    /// the copy; replacing an existing studio is refused outright.
+    pub(crate) fn needs_confirm(&self) -> bool {
+        self.renamed
+    }
+}
+
+/// `backlot studio restore ...` — the user's verb, then the copy.
 pub(crate) fn run(
     env: &Env,
     common: &Common,
     archived: &str,
     new_name: Option<&str>,
     dry_run: bool,
+    json: bool,
 ) -> Result<String, Fail> {
     let role = common
         .role
@@ -30,29 +52,61 @@ pub(crate) fn run(
         )));
     }
     let base = crate::cli::base(env, common)?;
-    let src = find_archived(&base, archived)?;
+    let report = execute(&base, archived, new_name, dry_run)?;
+    format_report(&report, json)
+}
+
+/// The copy itself on an explicit base — shared by the CLI and the
+/// request queue.
+pub(crate) fn execute(
+    base: &Path,
+    archived: &str,
+    new_name: Option<&str>,
+    dry_run: bool,
+) -> Result<RestoreReport, Fail> {
+    let src = find_archived(base, archived)?;
     // The studio id the restored ledger records under: the archive's
-    // own `<id>` prefix, or the `--as` name.
+    // own `<id>` prefix, or the `--name` name.
     let (default_id, _) = split_archive(archived);
     let name = match new_name {
         Some(n) => crate::cli::check_studio_name(n)?,
         None => crate::cli::check_studio_name(&default_id)?,
     };
-    let dest = store::studio_dir(&base, &name);
+    let dest = store::studio_dir(base, &name);
     if dest.join("events.jsonl").is_file() || dest.exists() {
         return Err(Fail::refused(format!(
             "a studio named '{name}' already exists — pick another name with --name"
         )));
     }
+    let report = RestoreReport {
+        archived: archived.to_string(),
+        name,
+        dest: dest.to_string_lossy().into_owned(),
+        dry_run,
+        renamed: new_name.is_some(),
+    };
     if dry_run {
-        return Ok(format!(
-            "dry run: would restore {archived} as finished studio '{name}' at {} — nothing copied",
-            dest.display()
-        ));
+        return Ok(report);
     }
     copy_tree(&src, &dest)?;
+    Ok(report)
+}
+
+/// The human line or the `--json` document.
+pub(crate) fn format_report(r: &RestoreReport, json: bool) -> Result<String, Fail> {
+    if json {
+        return serde_json::to_string_pretty(r)
+            .map_err(|e| Fail::refused(format!("studio restore: {e}")));
+    }
+    if r.dry_run {
+        return Ok(format!(
+            "dry run: would restore {} as finished studio '{}' at {} — nothing copied",
+            r.archived, r.name, r.dest
+        ));
+    }
     Ok(format!(
-        "restored {archived} as finished studio '{name}' — reopen a person with 'backlot reopen --person <key>'"
+        "restored {} as finished studio '{}' — reopen a person with 'backlot reopen --person <key>'",
+        r.archived, r.name
     ))
 }
 

@@ -41,7 +41,10 @@ pub fn check(
             "a studio named '{name}' already exists"
         )));
     }
-    let binding = crate::paths::check(repo, init, no_git)?;
+    // The check runs where the repository lives; a remote draft never
+    // canonicalizes a hub path against the client.
+    let repo = crate::args_studio::canonical_repo(repo);
+    let binding = crate::paths::check(&repo, init, no_git)?;
     let cast = read_cast(cast_path)?;
     // The check declarations compile here too — a broken `run` would
     // be the stage's first attention otherwise. Declared checks need
