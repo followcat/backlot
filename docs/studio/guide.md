@@ -954,9 +954,9 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
   (up to 3 retries) and wait up to 5 s for its matching ack. Queue overflow or CAS contention prints
   `server busy`; requests past the server's 60 s window fail with `request expired`; missing replies
   time out with `timed out waiting for ack of '<req_id>' (no reply from server)`.
-  Role terminals cannot use `hc run|exec|send|keys|connect`, raw socket scripts naming
-  `plugin.backlot.`, `doc.set` or the core socket, or detach tricks such as `systemd-run` and
-  `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
+  Role terminals cannot use `hc run|exec|send|keys|connect`, interpreter code (`python -c`, `node -e`, a
+  heredoc) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, or detach tricks such as
+  `systemd-run` and `tmux new -d`, because roles run as the person's own user and this is a seatbelt against an
   overeager agent, not isolation. Verbs not yet covered on the queue
   (`studio new`, `finish`, `prune`, `delete`, `restore`) refuse with
   `not available through the server yet`.
