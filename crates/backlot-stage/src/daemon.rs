@@ -939,16 +939,44 @@ pub(crate) fn resolved_base(base: PathBuf) -> PathBuf {
 
 /// `stage run`: connect, then tick on every hc event and once a
 /// second on the ledger lengths.
+/// Start the stage daemon loop (used by `backlot stage run`).
 pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
+    run_impl(common, None, env, None, true).await
+}
+
+/// Start the daemon loop with an optional pre-resolved base directory and server
+/// lease guard (used by `backlot server run`).
+pub(crate) async fn run_with(
+    common: &Common,
+    base_override: PathBuf,
+    env: &Env,
+    lease: Option<&mut crate::server_lock::ServerLockGuard>,
+) -> Result<(), Fail> {
+    run_impl(common, Some(base_override), env, lease, false).await
+}
+
+async fn run_impl(
+    common: &Common,
+    base_override: Option<PathBuf>,
+    env: &Env,
+    mut lease: Option<&mut crate::server_lock::ServerLockGuard>,
+    check_stage_guard: bool,
+) -> Result<(), Fail> {
     let link = link::connect(
         env,
         common.session.as_deref().map(std::ffi::OsStr::new),
         common.remote.as_deref(),
     )
     .await?;
-    let base = resolved_base(match env.get("BACKLOT_STATE_DIR") {
-        Some(d) => PathBuf::from(d),
-        None => store::base_dir(&env.vars, &link.core_id),
+    if check_stage_guard && matches!(link.endpoint, hc_proto::endpoint::Endpoint::Local(_)) {
+        crate::server_lock::refuse_if_server_or_retired(&env.vars, Some(&link.core_id))?;
+    }
+    let base = resolved_base(match base_override {
+        Some(dir) => dir,
+        None => match env.get("BACKLOT_STATE_DIR") {
+            Some(d) => PathBuf::from(d),
+            None => crate::server_lock::effective_base(&env.vars, &link.core_id),
+        },
     });
     let exe_dir = std::env::current_exe()
         .ok()
@@ -1036,6 +1064,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     let mut live_written: Option<crate::live::Live> = None;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
+        if let Some(guard) = lease.as_deref_mut() {
+            guard.refresh_if_due();
+        }
         step_daemon(
             &mut stage,
             &live,

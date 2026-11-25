@@ -23,11 +23,17 @@ pub(crate) fn run(common: &Common, env: &Env, write: bool) -> Result<String, Fai
     if !write {
         return Ok(text);
     }
+    write_unit(env, &unit, &text)
+}
+
+/// Write a rendered systemd user unit under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`
+/// and return the install instructions. Never runs `systemctl`.
+pub(crate) fn write_unit(env: &Env, unit: &str, text: &str) -> Result<String, Fail> {
     let dir = config_dir(env)?.join("systemd/user");
     std::fs::create_dir_all(&dir)
         .map_err(|e| Fail::refused(format!("cannot create {}: {e}", dir.display())))?;
-    let path = dir.join(&unit);
-    std::fs::write(&path, &text)
+    let path = dir.join(unit);
+    std::fs::write(&path, text)
         .map_err(|e| Fail::refused(format!("cannot write {}: {e}", path.display())))?;
     Ok(format!(
         "wrote {}\nenable it with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now {unit}",
@@ -35,13 +41,8 @@ pub(crate) fn run(common: &Common, env: &Env, write: bool) -> Result<String, Fai
     ))
 }
 
-/// `backlot-stage.service`, or `backlot-stage-<session>.service`.
-/// A session name outside systemd's safe unit-name characters is
-/// rejected, never mangled into a different unit.
-fn unit_name(session: Option<&str>) -> Result<String, Fail> {
-    let Some(session) = session else {
-        return Ok(UNIT.to_string());
-    };
+/// Validate a `--session` value against systemd's safe unit-name alphabet.
+pub(crate) fn validate_session_name(session: &str) -> Result<(), Fail> {
     let safe = !session.is_empty()
         && session.len() <= 48
         && session
@@ -52,7 +53,51 @@ fn unit_name(session: Option<&str>) -> Result<String, Fail> {
             "bad --session '{session}': want [A-Za-z0-9_.-]{{1,48}}"
         )));
     }
+    Ok(())
+}
+
+/// `backlot-stage.service`, or `backlot-stage-<session>.service`.
+/// A session name outside systemd's safe unit-name characters is
+/// rejected, never mangled into a different unit.
+fn unit_name(session: Option<&str>) -> Result<String, Fail> {
+    let Some(session) = session else {
+        return Ok(UNIT.to_string());
+    };
+    validate_session_name(session)?;
     Ok(format!("backlot-stage-{session}.service"))
+}
+
+/// Shared systemd user unit renderer for both `stage service` and `server service`.
+pub(crate) fn render_unit(
+    description: &str,
+    state_dir: Option<&str>,
+    exec_start: &str,
+    restart: &str,
+    restart_sec: u32,
+) -> String {
+    let mut environment = Vec::new();
+    if let Some(dir) = state_dir {
+        environment.push(format!("Environment=\"BACKLOT_STATE_DIR={}\"", escape(dir)));
+    }
+    let env_block = if environment.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", environment.join("\n"))
+    };
+    format!(
+        "[Unit]\n\
+         Description={description}\n\
+         After=default.target\n\
+         \n\
+         [Service]\n\
+         Type=simple\n\
+         ExecStart={exec_start}\n\
+         Restart={restart}\n\
+         RestartSec={restart_sec}{env_block}\n\
+         \n\
+         [Install]\n\
+         WantedBy=default.target\n"
+    )
 }
 
 /// The unit's exact contents: a comment naming the install command,
@@ -107,7 +152,7 @@ pub(crate) fn render(
 
 /// One `ExecStart` word: quoted and escaped when it holds anything
 /// systemd's unquoted form does not take.
-fn quote(word: &str) -> String {
+pub(crate) fn quote(word: &str) -> String {
     let plain = !word.is_empty()
         && word
             .chars()

@@ -224,7 +224,7 @@ fn collect(env: &Env, common: &Common) -> Result<Listing, Fail> {
         let root = store::root_dir(&env.vars);
         if let Ok(entries) = std::fs::read_dir(&root) {
             for entry in entries.flatten() {
-                if !entry.path().is_dir() {
+                if !entry.path().is_dir() || crate::server_lock::is_pointer_dir(&entry.path()) {
                     continue;
                 }
                 let core = entry.file_name().to_string_lossy().into_owned();
@@ -264,7 +264,7 @@ fn collect_archived(env: &Env, common: &Common) -> Result<ArchivedListing, Fail>
         let root = store::root_dir(&env.vars);
         if let Ok(entries) = std::fs::read_dir(&root) {
             for entry in entries.flatten() {
-                if !entry.path().is_dir() {
+                if !entry.path().is_dir() || crate::server_lock::is_pointer_dir(&entry.path()) {
                     continue;
                 }
                 let core = entry.file_name().to_string_lossy().into_owned();
