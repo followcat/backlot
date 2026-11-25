@@ -65,6 +65,35 @@ async fn switch_workspace_stays_on_the_active_endpoint() {
     assert_eq!(app.projection.active_endpoint_id, ClientEndpointId::Local);
 }
 
+#[tokio::test]
+async fn agent_row_reveal_counts_space_headers_across_machines() {
+    // Headers open each machine's space: [one] t1, [two] host-a/t2,
+    // [three] host-b/t3 — host-b/t3 is the sixth rendered entry.
+    let mut app = app_multi(
+        vec![
+            spaced_agent("t1", "one"),
+            spaced_agent("host-a/t2", "two"),
+            spaced_agent("host-b/t3", "three"),
+        ],
+        vec![
+            machine("host-a", "unreachable"),
+            machine("host-b", "connected"),
+        ],
+    );
+    app.shell.agent_panel_sort = crate::config::AgentPanelSortConfig::Spaces;
+    app.shell.agent_panel_space_headers = true;
+    pending_attach(&mut app);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.hit_map.agent_max_scroll = 50;
+    app.hit_map.agents.clear();
+    app.hit_map.endpoint_agents.clear();
+
+    app.on_action(A::NextAgent, 80);
+    assert_eq!(app.focused.as_deref(), Some("host-b/t3"));
+    assert_eq!(app.shell_state.agent_scroll, 5);
+}
+
 fn ctrl_jk_user_config() -> crate::config::Config {
     toml::from_str(
         "[keys]\n\

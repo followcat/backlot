@@ -232,9 +232,7 @@ impl Subscription {
     /// subscription need not receive every `seq` — gaps are expected, not
     /// a resync signal (see [`crate::inventory::Inventory`]).
     pub fn filtered(&self) -> bool {
-        self.params.terminal.is_some()
-            || self.params.children_of.is_some()
-            || !self.params.labels.is_empty()
+        self.params.is_filtered()
     }
 
     /// An inventory seeded from this subscription's snapshot and filter.

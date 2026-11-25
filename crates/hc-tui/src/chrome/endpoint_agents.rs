@@ -70,41 +70,128 @@ pub(crate) fn render_expanded(
     if !super::agents::render_agent_panel_header(buffer, area, agent_view_label, config, hits) {
         return;
     }
-    let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let entries = panel_entries(endpoints, active_endpoint_id, agent_view_label, config);
     let reveal = std::mem::take(reveal_focused_agent);
     let target = reveal
-        .then(|| rows.iter().position(|row| row.agent.focused))
+        .then(|| {
+            entries
+                .iter()
+                .position(|entry| matches!(entry, PanelEntry::Agent(row) if row.agent.focused))
+        })
         .flatten();
     super::agents::render_agent_list(
         buffer,
         area,
-        &rows,
+        &entries,
         agent_view_label.map(|_| " no matching agents"),
         config,
         agent_scroll,
         hits,
         target,
-        |row| row.agent.rows.len(),
-        |buffer, rect, row, hits| {
-            super::agents::render_agent_row(buffer, rect, &row.agent, config);
-            if row.stale {
-                buffer.set_style(
-                    rect,
-                    Style::default()
-                        .fg(config.palette.overlay0)
-                        .add_modifier(Modifier::DIM),
-                );
+        PanelEntry::lines,
+        |buffer, rect, entry, hits| match entry {
+            PanelEntry::Space { label, gap } => {
+                super::agents::render_space_header(buffer, rect, label, *gap, config);
             }
-            hits.endpoint_agents
-                .push((rect, row.endpoint_id.clone(), row.agent.pane_id.clone()));
+            PanelEntry::Agent(row) => {
+                super::agents::render_agent_row(buffer, rect, &row.agent, config);
+                if row.stale {
+                    buffer.set_style(
+                        rect,
+                        Style::default()
+                            .fg(config.palette.overlay0)
+                            .add_modifier(Modifier::DIM),
+                    );
+                }
+                hits.endpoint_agents.push((
+                    rect,
+                    row.endpoint_id.clone(),
+                    row.agent.pane_id.clone(),
+                ));
+            }
         },
     );
+}
+
+/// The position `agent_scroll` takes to show one machine's agent: its
+/// index among the panel's rendered entries, space headers included.
+/// `None` when the panel does not render that agent.
+pub(crate) fn agent_entry_index(
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    agent_view_label: Option<&str>,
+    config: &super::ClientShellConfig,
+    endpoint_id: &ClientEndpointId,
+    pane_id: &str,
+) -> Option<usize> {
+    panel_entries(endpoints, active_endpoint_id, agent_view_label, config)
+        .iter()
+        .position(|entry| {
+            matches!(entry, PanelEntry::Agent(row)
+                if &row.endpoint_id == endpoint_id && row.agent.pane_id == pane_id)
+        })
+}
+
+/// One entry of the multi-machine agents panel: an agent, or (grouped by
+/// space) the name of the space whose agents follow.
+enum PanelEntry {
+    /// A space header; `gap` puts a blank line above every group but the first.
+    Space {
+        label: String,
+        gap: bool,
+    },
+    Agent(EndpointAgentRow),
+}
+
+impl PanelEntry {
+    fn lines(&self) -> usize {
+        match self {
+            PanelEntry::Space { gap, .. } => 1 + usize::from(*gap),
+            PanelEntry::Agent(row) => row.agent.rows.len(),
+        }
+    }
+}
+
+/// The panel's entries across machines. With `agent_panel_space_headers`
+/// on, sorted by space and not filtered to a view, a header with the
+/// space's name opens each run of one machine's space, as the Herdr app
+/// heads its grouped list: the machine is not named, and a space of the
+/// same name on another machine opens a group of its own.
+fn panel_entries(
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    agent_view_label: Option<&str>,
+    config: &super::ClientShellConfig,
+) -> Vec<PanelEntry> {
+    let grouped = config.agent_panel_space_headers
+        && config.agent_panel_sort == crate::config::AgentPanelSortConfig::Spaces
+        && agent_view_label.is_none();
+    let mut entries = Vec::new();
+    let mut current: Option<(ClientEndpointId, String)> = None;
+    for row in agent_rows(endpoints, active_endpoint_id, config) {
+        if grouped && let Some(label) = row.space_label.clone() {
+            let group = (row.endpoint_id.clone(), row.workspace_id.clone());
+            if current.as_ref() != Some(&group) {
+                entries.push(PanelEntry::Space {
+                    label,
+                    gap: current.is_some(),
+                });
+                current = Some(group);
+            }
+        }
+        entries.push(PanelEntry::Agent(row));
+    }
+    entries
 }
 
 struct EndpointAgentRow {
     endpoint_id: ClientEndpointId,
     machine_label: String,
     stale: bool,
+    workspace_id: String,
+    /// The label of the agent's space on its machine, when the machine's
+    /// snapshot lists that space.
+    space_label: Option<String>,
     agent: super::agents::AgentRow,
 }
 
@@ -145,8 +232,20 @@ fn agent_rows(
                 endpoint_id: row.endpoint.endpoint_id.clone(),
                 machine_label: row.endpoint.label.to_owned(),
                 stale: row.endpoint.stale(),
+                workspace_id: row.agent.workspace_id.clone(),
+                space_label: row
+                    .endpoint
+                    .snapshot
+                    .workspaces
+                    .iter()
+                    .find(|workspace| workspace.workspace_id == row.agent.workspace_id)
+                    .map(|workspace| workspace.label.clone()),
                 agent,
             })
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "endpoint_agents_tests.rs"]
+mod tests;

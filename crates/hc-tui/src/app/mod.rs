@@ -15,7 +15,7 @@ mod copy_keys;
 pub(crate) mod copy_mode;
 mod copy_move;
 mod copy_render;
-mod creation;
+pub(crate) mod creation;
 mod dialogs;
 mod draw;
 mod endpoint_navigation;
