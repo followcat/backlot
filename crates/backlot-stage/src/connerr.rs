@@ -148,14 +148,8 @@ impl Stage {
                     Step::Wait => {}
                     Step::Send => {
                         let sent = self
-                            .client
-                            .call(
-                                "terminal.send",
-                                Some(serde_json::json!({
-                                    "terminal": w.term.address,
-                                    "text": ratelimit::CONTINUE,
-                                })),
-                            )
+                            .driver
+                            .send(&self.client, &w.term.address, ratelimit::CONTINUE)
                             .await;
                         match sent {
                             Ok(_) => {

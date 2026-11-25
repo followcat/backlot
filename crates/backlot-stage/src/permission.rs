@@ -146,9 +146,8 @@ impl Stage {
             Gone,
         }
         let screen_blocked = runners::work_state(w.runner, text) == Work::Blocked;
-        let fresh = if let Ok(bound) =
-            std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", attn.seq)))
-        {
+        let bound_file = dir.join("attention").join(format!("{}.signal", attn.seq));
+        let fresh = if let Ok(bound) = self.driver.read_file(&bound_file) {
             let was: Option<signals::Signal> = serde_json::from_str(&bound).ok();
             match (was, request) {
                 (Some(w), Some(n)) if w.ts_ms == n.ts_ms && w.tool_input == n.tool_input => {
@@ -168,9 +167,8 @@ impl Stage {
                 }
             }
         } else {
-            let saved =
-                std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
-                    .unwrap_or_default();
+            let saved_file = dir.join("attention").join(format!("{}.txt", attn.seq));
+            let saved = self.driver.read_file(&saved_file).unwrap_or_default();
             match (
                 permit::prompt_block(w.runner, &saved),
                 permit::prompt_block(w.runner, text),
@@ -210,14 +208,8 @@ impl Stage {
             }
         }
         let sent = self
-            .client
-            .call(
-                "terminal.keys",
-                Some(serde_json::json!({
-                    "terminal": w.term.address,
-                    "keys": [key],
-                })),
-            )
+            .driver
+            .keys(&self.client, &w.term.address, &[key])
             .await;
         match sent {
             Ok(_) => {

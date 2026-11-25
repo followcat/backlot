@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use backlot_model::event::EventKind;
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
-use hc_proto::terminal::ReadParams;
 
 use crate::act::record;
 use crate::cli::Fail;
@@ -509,15 +508,7 @@ impl Stage {
         if !self.stage_cfg.get().answer_trust {
             return Ok(());
         }
-        let text = match self
-            .client
-            .terminal_read(ReadParams {
-                terminal: term.address.clone(),
-                lines: 0,
-                caller: None,
-            })
-            .await
-        {
+        let text = match self.driver.read(&self.client, &term.address).await {
             Ok(r) => r.text,
             // A refused read (the terminal raced away) is nothing.
             Err(CallError::Rpc(_)) => return Ok(()),
@@ -552,16 +543,7 @@ impl Stage {
         let Some(key) = key else {
             return Ok(());
         };
-        let sent = self
-            .client
-            .call(
-                "terminal.keys",
-                Some(serde_json::json!({
-                    "terminal": term.address,
-                    "keys": [key],
-                })),
-            )
-            .await;
+        let sent = self.driver.keys(&self.client, &term.address, &[key]).await;
         match sent {
             Ok(_) => {
                 self.taint_ask(studio, state, role);

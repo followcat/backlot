@@ -9,11 +9,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use backlot_model::EventBy;
-use backlot_model::hollywood::{HMessage, HollywoodKind, NewHollywoodEvent};
-use backlot_model::state::StudioState;
-use serde_json::json;
-
 use crate::cli::Fail;
 use crate::daemon::Stage;
 use crate::deliver::{Gate, InFlight, SEND_DEADLINE, gate_open, send_outcome};
@@ -25,6 +20,9 @@ use crate::hstage::hkey;
 use crate::reconcile::LiveTerminal;
 use crate::sendfail;
 use crate::store::{self, HPending, PendingFile};
+use backlot_model::EventBy;
+use backlot_model::hollywood::{HMessage, HollywoodKind, NewHollywoodEvent};
+use backlot_model::state::StudioState;
 
 /// The stage's errors on each studio — `broken` first, then the
 /// last failed pass.
@@ -229,16 +227,8 @@ impl Stage {
         self.hpassive_sending
             .borrow_mut()
             .insert(pair.clone(), passive.into_iter().map(|p| p.key).collect());
-        let client = self.client.clone();
-        let handle = tokio::spawn(async move {
-            client
-                .call_timeout(
-                    "terminal.send",
-                    Some(json!({ "terminal": address, "text": text })),
-                    SEND_DEADLINE,
-                )
-                .await
-        });
+        let send = self.driver.send_handle(&self.client);
+        let handle = tokio::spawn(async move { send(address, text, SEND_DEADLINE).await });
         self.sending
             .borrow_mut()
             .insert(pair, InFlight { seqs, handle });

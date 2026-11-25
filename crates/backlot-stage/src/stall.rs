@@ -149,7 +149,7 @@ impl crate::daemon::Stage {
         let open = open_stall(state, role);
         let (cleared_action, raise_snap) = {
             let mut map = self.liveness.borrow_mut();
-            let mut git = self.git.borrow_mut();
+            let mut git = self.git_runner();
             let ev = map
                 .entry(pair.clone())
                 .and_modify(|e| {

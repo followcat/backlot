@@ -153,9 +153,14 @@ pub(crate) struct Stage {
     /// How external commands run — `discover::real_exec` live, a fake
     /// in tests.
     pub(crate) exec: Box<discover::Exec>,
+    /// Every terminal, git and role-file call the stage makes — a
+    /// [`crate::driver::LocalDriver`] live, a recording or remote one to
+    /// come.
+    pub(crate) driver: Box<dyn crate::driver::MachineDriver>,
     /// How git runs for work areas — `workareas::real_git` live, a
-    /// fake in tests.
-    pub(crate) git: std::cell::RefCell<Box<workareas::GitRun<'static>>>,
+    /// fake in tests. Shared with `driver`, so a test's replacement is
+    /// what every routed git call uses.
+    pub(crate) git: crate::driver::SharedGit,
     /// How a stage check spawns — `checkrun::real_spawn` live, a
     /// fake in tests.
     pub(crate) spawn_check: Box<checkrun::Spawn>,
@@ -330,6 +335,12 @@ pub(crate) struct Stage {
 }
 
 impl Stage {
+    /// The git runner every routed git call drives — the same handle the
+    /// driver holds, so a test's replacement reaches both.
+    pub(crate) fn git_runner(&self) -> std::cell::RefMut<'_, Box<workareas::GitRun<'static>>> {
+        self.git.borrow_mut()
+    }
+
     /// `eprintln!` each distinct line once — a studio stuck in a
     /// failing pass reports its error without spamming every tick.
     fn log_once(&mut self, studio: &str, msg: &str) {
@@ -625,17 +636,7 @@ impl Stage {
             let Some(patch) = relabel::wanted_labels(name, state, term) else {
                 continue;
             };
-            match self
-                .client
-                .call(
-                    "terminal.label",
-                    Some(serde_json::json!({
-                        "terminal": term.address,
-                        "labels": patch,
-                    })),
-                )
-                .await
-            {
+            match self.driver.label(&self.client, &term.address, &patch).await {
                 Ok(_) => {}
                 // A timeout is transient — the terminal is asked again
                 // next tick; a dead wire stays fatal.
@@ -675,7 +676,7 @@ impl Stage {
             }
         };
         if let Some((run, out)) = done {
-            return checkwork::finish(&mut *self.git.borrow_mut(), dir, state, run, out);
+            return checkwork::finish(&mut *self.driver.git(), dir, state, run, out);
         }
         // One run per studio: a live run owns the slot — owed starts
         // only when the slot is empty, or the same check would be
@@ -686,13 +687,13 @@ impl Stage {
         // The first pass sweeps the run trees a dead stage left —
         // but the ones a still-owed delivery needs.
         if self.pruned.borrow_mut().insert(name.to_string()) {
-            checkwork::prune_run_trees(&mut *self.git.borrow_mut(), dir, state);
+            checkwork::prune_run_trees(&mut *self.driver.git(), dir, state);
         }
         if let Some(owed) = checks::owed(state) {
             // `start`'s borrow ends before the match — the fail
             // path takes `git` again for its own cleanup.
             let started = checkwork::start(
-                &mut *self.git.borrow_mut(),
+                &mut *self.driver.git(),
                 &*self.spawn_check,
                 state,
                 dir,
@@ -707,13 +708,9 @@ impl Stage {
                 // A check that cannot start is still recorded —
                 // failed — so the owed loop does not retry it
                 // forever and the reviewer's notice can land.
-                Err(e) => checkwork::fail_start(
-                    &mut *self.git.borrow_mut(),
-                    dir,
-                    state,
-                    &owed,
-                    e.message(),
-                )?,
+                Err(e) => {
+                    checkwork::fail_start(&mut *self.driver.git(), dir, state, &owed, e.message())?
+                }
             }
         }
         Ok(())
@@ -881,6 +878,7 @@ impl Stage {
     /// A stage for unit tests: the given client, every track empty.
     /// `sample_work`/`deliver` need no base or state dir.
     pub(crate) fn for_test(client: Client) -> Stage {
+        let git = crate::driver::shared_git();
         Stage {
             client,
             base: PathBuf::new(),
@@ -889,7 +887,8 @@ impl Stage {
             state_dir: String::new(),
             env_vars: BTreeMap::new(),
             exec: Box::new(discover::real_exec),
-            git: std::cell::RefCell::new(Box::new(workareas::real_git)),
+            driver: Box::new(crate::driver::LocalDriver::with_git(git.clone())),
+            git,
             spawn_check: Box::new(checkrun::real_spawn),
             checking: std::cell::RefCell::new(BTreeMap::new()),
             spawn_outward: Box::new(checkrun::real_spawn_argv),
@@ -1018,6 +1017,7 @@ async fn run_impl(
         Some(p) => format!("{}:{}", exe_dir.display(), p),
         None => exe_dir.to_string_lossy().into_owned(),
     };
+    let git = crate::driver::shared_git();
     let mut stage = Stage {
         client: link.client.clone(),
         base: base.clone(),
@@ -1026,7 +1026,8 @@ async fn run_impl(
         state_dir: base.to_string_lossy().into_owned(),
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),
-        git: std::cell::RefCell::new(Box::new(workareas::real_git)),
+        driver: Box::new(crate::driver::LocalDriver::with_git(git.clone())),
+        git,
         spawn_check: Box::new(checkrun::real_spawn),
         checking: std::cell::RefCell::new(BTreeMap::new()),
         spawn_outward: Box::new(checkrun::real_spawn_argv),

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use hc_proto::endpoint::Endpoint;
-use hc_proto::terminal::{ListParams, RunParams, Terminal, TerminalParams};
+use hc_proto::terminal::{ListParams, RunParams, Terminal};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
@@ -101,6 +101,7 @@ fn sh_quote(word: &str) -> String {
 
 /// Best-effort removal of finished local daemon tombstones matching `pred`.
 pub(crate) async fn reap_finished_matching(
+    driver: &dyn crate::driver::MachineDriver,
     client: &hc_proto::client::Client,
     terminals: &[Terminal],
     pred: impl Fn(&Terminal) -> bool,
@@ -109,35 +110,24 @@ pub(crate) async fn reap_finished_matching(
         .iter()
         .filter(|t| t.state == "finished" && pred(t))
     {
-        let _ = client
-            .terminal_rm(TerminalParams {
-                terminal: t.address.clone(),
-                caller: None,
-            })
-            .await;
+        let _ = driver.rm(client, &t.address).await;
     }
 }
 
 /// Kill one terminal cleanly, wait briefly for exit, and remove its tombstone.
 pub(crate) async fn stop_terminal(
+    driver: &dyn crate::driver::MachineDriver,
     client: &hc_proto::client::Client,
     terminal: &str,
 ) -> Result<(), Fail> {
-    client
-        .terminal_kill(TerminalParams {
-            terminal: terminal.to_string(),
-            caller: None,
-        })
+    driver
+        .kill(client, terminal)
         .await
         .map_err(|e| Fail::refused(format!("terminal.kill failed: {e}")))?;
     for _ in 0..10 {
-        let params = TerminalParams {
-            terminal: terminal.to_string(),
-            caller: None,
-        };
-        match client.terminal_get(params.clone()).await {
+        match driver.get(client, terminal).await {
             Ok(t) if t.state == "finished" => {
-                let _ = client.terminal_rm(params).await;
+                let _ = driver.rm(client, terminal).await;
                 break;
             }
             Ok(_) => tokio::time::sleep(Duration::from_millis(50)).await,
@@ -179,6 +169,7 @@ pub(crate) fn stop(common: &Common, env: &Env) -> Result<String, Fail> {
 
 async fn start_async(common: &Common, session: &str, env: &Env) -> Result<String, Fail> {
     let lnk = link::connect(env, Some(OsStr::new(session)), common.remote.as_deref()).await?;
+    let driver = crate::driver::LocalDriver::new();
     let list = lnk
         .client
         .terminal_list(ListParams {
@@ -188,7 +179,13 @@ async fn start_async(common: &Common, session: &str, env: &Env) -> Result<String
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
 
-    reap_finished_matching(&lnk.client, &list.terminals, is_local_server_terminal).await;
+    reap_finished_matching(
+        &driver,
+        &lnk.client,
+        &list.terminals,
+        is_local_server_terminal,
+    )
+    .await;
     if let Some(t) = list
         .terminals
         .iter()
@@ -218,6 +215,7 @@ async fn start_async(common: &Common, session: &str, env: &Env) -> Result<String
 
 async fn stop_async(common: &Common, session: &str, env: &Env) -> Result<String, Fail> {
     let lnk = link::connect(env, Some(OsStr::new(session)), common.remote.as_deref()).await?;
+    let driver = crate::driver::LocalDriver::new();
     let list = lnk
         .client
         .terminal_list(ListParams {
@@ -227,7 +225,13 @@ async fn stop_async(common: &Common, session: &str, env: &Env) -> Result<String,
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
 
-    reap_finished_matching(&lnk.client, &list.terminals, is_local_server_terminal).await;
+    reap_finished_matching(
+        &driver,
+        &lnk.client,
+        &list.terminals,
+        is_local_server_terminal,
+    )
+    .await;
     let target = list
         .terminals
         .iter()
@@ -235,7 +239,7 @@ async fn stop_async(common: &Common, session: &str, env: &Env) -> Result<String,
         .map(|t| t.address.clone());
     match target {
         Some(addr) => {
-            stop_terminal(&lnk.client, &addr).await?;
+            stop_terminal(&driver, &lnk.client, &addr).await?;
             Ok("server stopped".to_string())
         }
         None => Ok("server already stopped".to_string()),

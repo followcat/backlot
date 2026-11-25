@@ -10,7 +10,6 @@ use std::path::Path;
 use backlot_model::event::EventKind;
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
-use hc_proto::terminal::ReadParams;
 
 use crate::cli::Fail;
 use crate::daemon::Stage;
@@ -58,15 +57,7 @@ impl Stage {
             return Ok(());
         }
         self.work_looked.borrow_mut().insert(pair.clone(), now_ms);
-        let text = match self
-            .client
-            .terminal_read(ReadParams {
-                terminal: w.term.address.clone(),
-                lines: 0,
-                caller: None,
-            })
-            .await
-        {
+        let text = match self.driver.read(&self.client, &w.term.address).await {
             Ok(r) => r.text,
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::call(e)),

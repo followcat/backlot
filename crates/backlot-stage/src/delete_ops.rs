@@ -165,18 +165,16 @@ fn is_not_found(e: &CallError) -> bool {
     matches!(e, CallError::Rpc(_)) && e.is_kind(error_kind::NOT_FOUND)
 }
 
-pub(crate) async fn close_terminals(client: &Client, terms: &[Terminal]) -> Result<(), Fail> {
-    let can_rm = client
-        .explain_unavailable(hc_proto::method::TERMINAL_RM)
-        .is_none();
+pub(crate) async fn close_terminals(
+    driver: &dyn crate::driver::MachineDriver,
+    client: &Client,
+    terms: &[Terminal],
+) -> Result<(), Fail> {
+    let can_rm = driver.supports(client, hc_proto::method::TERMINAL_RM);
     for t in terms {
         let label = t.name.as_deref().unwrap_or(&t.address);
-        let params = TerminalParams {
-            terminal: t.address.clone(),
-            caller: None,
-        };
         if t.state == "live" {
-            if let Err(e) = client.terminal_kill(params.clone()).await
+            if let Err(e) = driver.kill(client, &t.address).await
                 && !is_not_found(&e)
             {
                 return Err(Fail::refused(format!(
@@ -185,7 +183,7 @@ pub(crate) async fn close_terminals(client: &Client, terms: &[Terminal]) -> Resu
             }
             let mut exited = false;
             for _ in 0..20 {
-                match client.terminal_get(params.clone()).await {
+                match driver.get(client, &t.address).await {
                     Ok(cur) if cur.state == "finished" => {
                         exited = true;
                         break;
@@ -209,7 +207,7 @@ pub(crate) async fn close_terminals(client: &Client, terms: &[Terminal]) -> Resu
             }
         }
         if can_rm
-            && let Err(e) = client.terminal_rm(params).await
+            && let Err(e) = driver.rm(client, &t.address).await
             && !is_not_found(&e)
         {
             return Err(Fail::refused(format!(

@@ -102,17 +102,6 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-fn write_exec(path: &Path, body: &str) -> std::io::Result<()> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, body)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
-    }
-    std::fs::rename(&tmp, path)
-}
-
 fn passthrough_hook_script(hook: &str) -> String {
     format!(
         "#!/bin/sh\n\
@@ -140,24 +129,34 @@ fn passthrough_hook_script(hook: &str) -> String {
 /// Write per-role shims (`<role_dir>/bin/*`) and git hooks
 /// (`<role_dir>/git-hooks/*`), rewritten before every launch/resume.
 pub(crate) fn prepare_role(role_dir: &Path, exe_dir: &str) -> std::io::Result<()> {
+    prepare_role_with(&crate::driver::LocalDriver::new(), role_dir, exe_dir)
+}
+
+/// [`prepare_role`] through a [`MachineDriver`], so each shim and hook
+/// lands on the machine the role runs on.
+pub(crate) fn prepare_role_with(
+    driver: &dyn crate::driver::MachineDriver,
+    role_dir: &Path,
+    exe_dir: &str,
+) -> std::io::Result<()> {
     let backlot_bin = Path::new(exe_dir).join("backlot");
     let quoted_bin = shell_quote(&backlot_bin.to_string_lossy());
 
     let bin_dir = role_dir.join("bin");
-    std::fs::create_dir_all(&bin_dir)?;
+    driver.create_dir_all(&bin_dir)?;
     for name in SHIM_NAMES {
         let body = format!("#!/bin/sh\n{SHIM_MARKER}\nexec {quoted_bin} guard {name} -- \"$@\"\n");
-        write_exec(&bin_dir.join(name), &body)?;
+        driver.write_executable(&bin_dir.join(name), &body)?;
     }
 
     let hooks_dir = role_dir.join("git-hooks");
-    std::fs::create_dir_all(&hooks_dir)?;
+    driver.create_dir_all(&hooks_dir)?;
     let pre_push =
         format!("#!/bin/sh\n{SHIM_MARKER}\nexec {quoted_bin} guard git-push -- \"$@\"\n");
-    write_exec(&hooks_dir.join("pre-push"), &pre_push)?;
+    driver.write_executable(&hooks_dir.join("pre-push"), &pre_push)?;
 
     for hook in GIT_PASSTHROUGH_HOOKS {
-        write_exec(&hooks_dir.join(hook), &passthrough_hook_script(hook))?;
+        driver.write_executable(&hooks_dir.join(hook), &passthrough_hook_script(hook))?;
     }
     Ok(())
 }
