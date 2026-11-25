@@ -188,6 +188,19 @@ impl Person {
         }
     }
 
+    /// The state word for a role — the plain [`Person::word`], except
+    /// a live role that has sat at its prompt past `IDLE_SHOWN_MS`
+    /// reads `idle <n>m` instead of `waiting`.
+    pub(crate) fn role_word(self, role: &RoleSummary, now_ms: u64) -> String {
+        if self == Person::Idle
+            && let Some(since) = role.idle_since_ms
+            && now_ms.saturating_sub(since) >= backlot_model::summary::IDLE_SHOWN_MS
+        {
+            return format!("idle {}", backlot_model::event::age_short(now_ms - since));
+        }
+        self.word().to_string()
+    }
+
     /// The short state word shown at a row's right edge.
     pub(crate) fn word(self) -> &'static str {
         match self {

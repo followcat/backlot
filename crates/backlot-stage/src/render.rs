@@ -84,6 +84,19 @@ pub(crate) fn working_parts(
     parts.join(" · ")
 }
 
+/// The waiting-role word: plain `waiting`, or `idle <n>m` once a live
+/// role has sat at its prompt past `IDLE_SHOWN_MS` — the same stretch
+/// the nudge pass reads. `idle_since` is `None` when the role is not
+/// idle.
+pub(crate) fn waiting_word(idle_since: Option<u64>, now_ms: u64) -> String {
+    match idle_since {
+        Some(since) if now_ms.saturating_sub(since) >= backlot_model::summary::IDLE_SHOWN_MS => {
+            format!("idle {}", age_short(now_ms.saturating_sub(since)))
+        }
+        _ => "waiting".to_string(),
+    }
+}
+
 /// The plain-words fact every reader of an attention gets: its class,
 /// when it was raised, and — for a screen snapshot — when the screen
 /// was taken with the stale warning. `backlot status` prints it and
@@ -277,7 +290,9 @@ pub fn status(
                     now_ms,
                 )
             ),
-            Some(Work::Waiting) => " · waiting".into(),
+            Some(Work::Waiting) => {
+                format!(" · {}", waiting_word(live.idle_since(name, role), now_ms))
+            }
             Some(Work::Blocked) => " · blocked".into(),
             None => String::new(),
         };
@@ -329,7 +344,7 @@ pub fn status(
                     now_ms,
                 )
             ),
-            Work::Waiting => " · waiting".into(),
+            Work::Waiting => format!(" · {}", waiting_word(live.idle_since(name, role), now_ms)),
             Work::Blocked => " · blocked".into(),
         };
         let who = state

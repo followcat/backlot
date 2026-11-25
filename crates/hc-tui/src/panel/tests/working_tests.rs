@@ -37,6 +37,7 @@ fn base_role(work: Work, since_ms: u64) -> RoleSummary {
         stage_answer_ms: None,
         can_answer_prompt: true,
         restarted_ms: None,
+        idle_since_ms: None,
     }
 }
 
@@ -218,6 +219,29 @@ fn panel_renders_working_detail_row_only_for_working_roles() {
         !idle_lines.iter().any(|l| l.contains("leftover note")),
         "{idle_lines:#?}"
     );
+}
+
+/// A live waiting role that has sat at its prompt past `IDLE_SHOWN_MS`
+/// shows `idle <n>m` in its dock row, not a plain `waiting`.
+#[test]
+fn a_role_at_its_prompt_reads_idle_minutes_in_the_dock() {
+    let now_ms = 90 * 60_000;
+    let mut role = base_role(Work::Waiting, now_ms - 30 * 60_000);
+    role.idle_since_ms = Some(now_ms - 4 * 60_000);
+    let lines = render_panel(studio_with(role, now_ms), 72);
+    let row = lines
+        .iter()
+        .find(|l| l.contains("actor-a"))
+        .expect("person row present");
+    assert!(row.contains("idle 4m"), "{row}");
+
+    // Under the floor it stays plain `waiting`, not `idle 0s`.
+    let mut fresh = base_role(Work::Waiting, now_ms - 30 * 60_000);
+    fresh.idle_since_ms = Some(now_ms - 30_000);
+    let lines = render_panel(studio_with(fresh, now_ms), 72);
+    let row = lines.iter().find(|l| l.contains("actor-a")).unwrap();
+    assert!(row.contains("waiting"), "{row}");
+    assert!(!row.contains("idle"), "{row}");
 }
 
 #[test]

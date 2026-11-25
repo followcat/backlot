@@ -20,6 +20,7 @@ fn running(work: BTreeMap<(String, String), Work>) -> LiveView {
     LiveView {
         work,
         running_cmds: BTreeMap::new(),
+        idle: BTreeMap::new(),
         running: true,
     }
 }
@@ -225,4 +226,48 @@ fn a_stopped_stage_says_live_state_unknown() {
     );
     assert!(!out.contains("· working"), "{out}");
     assert!(!out.contains("· waiting"), "{out}");
+}
+
+/// A live waiting role past `IDLE_SHOWN_MS` reads `idle <n>m`, not
+/// plain `waiting` — the same stretch the nudge pass reads.
+#[test]
+fn a_role_idle_at_its_prompt_reads_idle_minutes() {
+    let mut events = base_events();
+    events.push(ev(
+        9,
+        "stage",
+        EventKind::RoleStarted {
+            role: "producer".into(),
+            terminal: Some("bl-acme-shop-producer".into()),
+            actor: Some(ActorIdentity {
+                runner: "fake".into(),
+                runner_version: None,
+                model: "plain".into(),
+                effort: Some("high".into()),
+                permission_profile: "standard".into(),
+            }),
+            session_id: Some("s-1".into()),
+            reason: None,
+        },
+    ));
+    let state = replay(&events);
+    let idle = BTreeMap::from([(("acme-shop".to_string(), "producer".to_string()), 600_000)]);
+    let live = LiveView {
+        work: BTreeMap::from([(
+            ("acme-shop".to_string(), "producer".to_string()),
+            Work::Waiting,
+        )]),
+        running_cmds: BTreeMap::new(),
+        idle,
+        running: true,
+    };
+    // 90 s and 30 s into the stretch: `idle 1m`, then `idle 30s`… the
+    // 60 s floor means a 30 s stretch reads plain `waiting`.
+    let out = status("acme-shop", &state, &Default::default(), 690_000, &live);
+    let line = out.lines().find(|l| l.contains("producer")).unwrap();
+    assert!(line.contains("· idle 1m"), "{line}");
+    let out = status("acme-shop", &state, &Default::default(), 630_000, &live);
+    let line = out.lines().find(|l| l.contains("producer")).unwrap();
+    assert!(line.contains("· waiting"), "{line}");
+    assert!(!line.contains("· idle"), "{line}");
 }

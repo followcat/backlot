@@ -255,7 +255,17 @@ pub struct RoleSummary {
     /// `restarted`. Documents an older stage wrote have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restarted_ms: Option<u64>,
+    /// When this role's current idle stretch began — the same clock
+    /// the nudge pass reads. Set only for a live role sitting at its
+    /// prompt, so the dock can read `idle <n>m` instead of a plain
+    /// `waiting`. Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_since_ms: Option<u64>,
 }
+
+/// A live role idle at its prompt this long reads `idle <n>m` rather
+/// than `waiting` on `backlot status` and the dock.
+pub const IDLE_SHOWN_MS: u64 = 60_000;
 
 pub(crate) fn default_true() -> bool {
     true
@@ -562,6 +572,7 @@ pub fn summary_with_running(
                 stage_answer_ms: None,
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
                 restarted_ms: None,
+                idle_since_ms: None,
             });
         }
         let studio_snippets: BTreeMap<u64, String> = snippets
