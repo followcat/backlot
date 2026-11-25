@@ -123,6 +123,7 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 | `studio-restore` | `archived`, `name?`, `dry_run?` | `RestoreReport`, or `{ report, confirm_token }` on a dry run |
 | `repos` | `from?`, `all?` | `{ cwd, entries: [{ name, path, kind, in_use_studio, branch, members? }] }` |
 | `runners` | — | `RunnerCatalogEntry[]` (`runner`, `status`, `version`, `path`, `needs_path`, `models`, `efforts`) |
+| `version` | — | the hub binary's version line (a JSON string) |
 
 The cast and the first message are content, never client paths; the hub writes them to its own temporary files, canonicalizes `repo` against its own filesystem, and runs the same code the local command runs. A dry run's `confirm_token` is required on the matching commit; `studio-restore` requires it only when the dry run reports `renamed: true` (replacing an existing studio is refused outright). Card approvals `card-apply` and `card-cancel` travel over the same queue.
 
