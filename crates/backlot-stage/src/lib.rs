@@ -297,6 +297,10 @@ mod wizard_tests;
 #[cfg(test)]
 mod workareas_tests;
 
+pub mod server_cfg;
+#[cfg(test)]
+mod server_cfg_tests;
+
 pub use cli::{Env, Fail, maybe_run};
 pub use commands::validate_cast_file;
 pub use delete::DeleteReport;

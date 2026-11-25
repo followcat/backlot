@@ -23,6 +23,7 @@ pub struct Common {
     /// stage commands).
     pub session: Option<String>,
     pub remote: Option<String>,
+    pub server: Option<String>,
 }
 
 pub use crate::args_source::TextSource;
@@ -274,8 +275,7 @@ pub enum Cmd {
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
 
 /// Tail line of every command's usage text.
-pub const COMMON: &str =
-    "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t>";
+pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t> --server <host>[/<session>]";
 
 pub(crate) fn usage(msg: impl Into<String>, u: &'static str) -> Fail {
     Fail::usage(format!("{}\n{}\n{}", msg.into(), u, COMMON))
@@ -329,6 +329,7 @@ pub(crate) fn common_flag(
     flag!(task, "--task");
     flag!(session, "--session");
     flag!(remote, "--remote");
+    flag!(server, "--server");
     Ok(false)
 }
 
@@ -363,9 +364,16 @@ pub(crate) fn parse_set(v: &str, u: &'static str) -> Result<(String, String), Fa
 /// only these, so an unknown flag still reaches the command parser's
 /// own error.
 fn is_common_flag(arg: &str) -> bool {
-    ["--studio", "--as", "--task", "--session", "--remote"]
-        .iter()
-        .any(|flag| arg == *flag || eq(arg, flag).is_some())
+    [
+        "--studio",
+        "--as",
+        "--task",
+        "--session",
+        "--remote",
+        "--server",
+    ]
+    .iter()
+    .any(|flag| arg == *flag || eq(arg, flag).is_some())
 }
 
 /// Per-command arg loops: `--x v` and `--x=v`, common flags anywhere,
