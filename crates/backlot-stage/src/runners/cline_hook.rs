@@ -29,6 +29,8 @@ pub struct Spec<'a> {
     pub signals: &'a Path,
     /// The commands the role may run, bare (`backlot`, `git status`).
     pub allowed: &'a [String],
+    /// The role key running under this hook (`actor-t1-c1`, `director`, ...).
+    pub role: &'a str,
 }
 
 /// What the agent reads when a call is cancelled: the same words for
@@ -50,6 +52,7 @@ pub fn script(spec: &Spec<'_>) -> String {
         .replace("@@WORKTREE@@", &sh_quote(spec.worktree))
         .replace("@@SIGNALS@@", &sh_quote(&spec.signals.to_string_lossy()))
         .replace("@@ALLOWED@@", &sh_quote(&allowed))
+        .replace("@@ROLE@@", &sh_quote(spec.role))
         .replace("@@TOKENS@@", cline_hook_awk::PAYLOAD)
         .replace("@@SEGMENTS@@", cline_hook_awk::SEGMENTS)
         .replace("@@MESSAGE@@", &sh_quote(MESSAGE))
@@ -72,6 +75,7 @@ worktree=@@WORKTREE@@
 signals=@@SIGNALS@@
 message=@@MESSAGE@@
 allowed=@@ALLOWED@@
+role=@@ROLE@@
 cap=@@CAP@@
 
 json_str() {
@@ -157,6 +161,99 @@ args_leak() {
     return 1
 }
 
+# Hole 3: refuse BACKLOT_*, env -i / --ignore-environment, card apply|cancel,
+# perms revoke, and unauthorised backlot approve.
+hole3_blocked() {
+    case "$1" in
+        *BACKLOT_*) return 0 ;;
+    esac
+    words=$(printf '%s' "$1" | tr '\t' ' ' | tr -d '"' | tr -d "'")
+    old_ifs=$IFS
+    IFS=' '
+    set -- $words
+    IFS=$old_ifs
+    prog=
+    saw_env=0
+    expect_val=
+    for w in "$@"; do
+        case "$w" in
+            --ignore-environment) return 0 ;;
+        esac
+        if [ -n "$expect_val" ]; then
+            expect_val=
+            continue
+        fi
+        if [ -z "$prog" ]; then
+            case "$w" in
+                *=*) continue ;;
+            esac
+            base=${w##*/}
+            if [ "$base" = env ]; then
+                saw_env=1
+                continue
+            fi
+            if [ "$saw_env" = 1 ]; then
+                case "$w" in
+                    --unset=*) continue ;;
+                    -u|--unset|-C|-S) expect_val=1; continue ;;
+                    --*) ;;
+                    -*i*) return 0 ;;
+                esac
+                case "$w" in
+                    -*) continue ;;
+                esac
+            fi
+            saw_env=0
+            prog=$base
+        fi
+    done
+    [ "$prog" = backlot ] || return 1
+    sub1=
+    sub2=
+    saw_as=0
+    person=
+    expect=
+    in_bl=0
+    for w in "$@"; do
+        if [ "$in_bl" = 0 ]; then
+            [ "${w##*/}" = backlot ] && in_bl=1
+            continue
+        fi
+        if [ -n "$expect" ]; then
+            [ "$expect" = person ] && person=$w
+            expect=
+            continue
+        fi
+        case "$w" in
+            --as) saw_as=1; expect=val ;;
+            --as=*) saw_as=1 ;;
+            --person) expect=person ;;
+            --person=*) person=${w#*=} ;;
+            --studio|--task|--session|--remote|--decision|--reason) expect=val ;;
+            -*) ;;
+            *)
+                if [ -z "$sub1" ]; then
+                    sub1=$w
+                elif [ -z "$sub2" ]; then
+                    sub2=$w
+                fi
+                ;;
+        esac
+    done
+    case "$sub1:$sub2" in
+        card:apply|card:cancel|perms:revoke) return 0 ;;
+        approve:*)
+            case "$role" in
+                producer|director) ;;
+                *) return 0 ;;
+            esac
+            [ "$saw_as" = 0 ] || return 0
+            [ "$person" != "$role" ] || return 0
+            ;;
+    esac
+    return 1
+}
+
 input=$(cat 2>/dev/null)
 
 # The payload's strings, decoded: one `path<TAB>value` line each, where
@@ -225,6 +322,7 @@ if [ "$name" = run_commands ]; then
     IFS='
 '
     for one in $list; do
+        hole3_blocked "$one" && { bad=$one; continue; }
         segs=$(printf '%s' "$one" | awk '
 @@SEGMENTS@@
 ')
@@ -234,6 +332,7 @@ if [ "$name" = run_commands ]; then
         for seg in $segs; do
             seg=$(printf '%s' "$seg" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             [ -n "$seg" ] || continue
+            hole3_blocked "$seg" && { bad=$seg; continue; }
             rule_allowed "$seg" || { bad=$seg; continue; }
             args_leak "$seg" && bad=$seg
         done

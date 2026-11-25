@@ -49,6 +49,7 @@ const COMMANDS: &[&str] = &[
     "guard",
     "hollywood",
     "card",
+    "perms",
     "runners",
     "repos",
 ];
@@ -483,6 +484,15 @@ pub(crate) fn exec_event(
             return Err(Fail::refused(format!("task '{task}' has no cast")));
         }
         *commits = crate::range::check_range(&dir, &caller.studio, &task, &state, commits)?;
+    }
+    if let Cmd::AskRun {
+        argv, cwd, command, ..
+    } = &mut cmd
+    {
+        let state = load(&dir)?;
+        let (cmd_text, eff_cwd) = commands::validate_ask_run(&dir, &state, &caller, env, argv)?;
+        *cwd = Some(eff_cwd);
+        *command = Some(cmd_text);
     }
     // `cast` checks each accepted dependency's delivery already sits
     // on the integration branch — a cast before the merge would cut

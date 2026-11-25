@@ -2,7 +2,86 @@
 //! decides whether a shimmed binary call is an outward write and
 //! formats the single-line command text (capped at 200 chars).
 
+use std::path::PathBuf;
+
+use crate::guard_git::{GitContext, classify_git, classify_pre_push};
+
 const COMMAND_CAP: usize = 200;
+
+/// 3-way guard classification for outward commands (push-perms spec §2.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum GuardVerdict {
+    Allow,
+    Card { command: String, rule: String },
+    Refuse { command: String, rule: String },
+}
+
+/// Full guard classification match including normalized `argv` and `cwd`.
+#[derive(Debug, Clone)]
+pub(crate) struct GuardMatch {
+    pub verdict: GuardVerdict,
+    pub argv: Vec<String>,
+    pub cwd: PathBuf,
+}
+
+/// Classify `(name, args)` using `PushPolicy`, `cwd`, and `env`.
+#[cfg(test)]
+pub(crate) fn classify_command(
+    name: &str,
+    args: &[String],
+    policy: &backlot_model::event::PushPolicy,
+    cwd: &std::path::Path,
+    env: &crate::cli::Env,
+) -> GuardVerdict {
+    let info = crate::guard::load_studio_guard_info(env);
+    let ctx = GitContext {
+        policy,
+        cwd,
+        role_dir: info.role_dir.as_deref(),
+        work_area: info.work_area.as_deref(),
+        repo_root: info.repo_root.as_deref(),
+        members: &info.members,
+        env,
+    };
+    classify_with_context(name, args, "", &ctx).verdict
+}
+
+/// Classify `(name, args, stdin)` with full studio/role context.
+pub(crate) fn classify_with_context(
+    name: &str,
+    args: &[String],
+    stdin: &str,
+    ctx: &GitContext<'_>,
+) -> GuardMatch {
+    if name == "git" {
+        let (verdict, argv, eff_cwd) = classify_git(args, ctx);
+        return GuardMatch {
+            verdict,
+            argv,
+            cwd: eff_cwd,
+        };
+    }
+    if name == "git-push" {
+        let mut argv = Vec::with_capacity(args.len() + 2);
+        argv.push("git".into());
+        argv.push("push".into());
+        argv.extend(args.iter().cloned());
+        return GuardMatch {
+            verdict: classify_pre_push(args, stdin, ctx),
+            argv,
+            cwd: ctx.cwd.to_path_buf(),
+        };
+    }
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(name.to_string());
+    argv.extend(args.iter().cloned());
+    let verdict = classify_non_git(name, args);
+    GuardMatch {
+        verdict,
+        argv,
+        cwd: ctx.cwd.to_path_buf(),
+    }
+}
 
 /// Format `raw` on one line capped at [`COMMAND_CAP`] characters.
 pub(crate) fn cap_command(raw: &str) -> String {
@@ -102,18 +181,83 @@ fn gh_api_is_write(args: &[String]) -> bool {
     false
 }
 
-fn is_gh_refused(args: &[String]) -> bool {
+fn classify_gh(args: &[String]) -> Option<(&'static str, bool)> {
     const ROOT_VALUE_FLAGS: &[&str] = &["-R", "--repo", "--hostname"];
-    let Some((idx, sub)) = next_positional(args, ROOT_VALUE_FLAGS) else {
-        return false;
-    };
+    let (_, sub) = next_positional(args, ROOT_VALUE_FLAGS)?;
+    let idx = args.iter().position(|a| a == sub)?;
     match sub {
-        "pr" | "release" | "repo" | "issue" | "gist" | "secret" => true,
+        "pr" => {
+            let rest = &args[idx + 1..];
+            match next_positional(rest, ROOT_VALUE_FLAGS).map(|(_, a)| a) {
+                Some("create") => Some(("gh pr create", true)),
+                Some("view" | "list" | "status" | "diff" | "checks") => None,
+                None if rest.iter().any(|a| a == "--help" || a == "-h") => None,
+                _ => Some(("gh write", false)),
+            }
+        }
+        "release" | "repo" | "issue" | "gist" | "secret" => Some(("gh write", false)),
         "workflow" => next_positional(&args[idx + 1..], ROOT_VALUE_FLAGS)
-            .is_some_and(|(_, action)| action == "run"),
-        "api" => gh_api_is_write(&args[idx + 1..]),
-        _ => false,
+            .is_some_and(|(_, action)| action == "run")
+            .then_some(("gh write", false)),
+        "api" => gh_api_is_write(&args[idx + 1..]).then_some(("gh write", false)),
+        _ => None,
     }
+}
+
+fn classify_non_git(name: &str, args: &[String]) -> GuardVerdict {
+    let hit = match name {
+        "gh" => classify_gh(args),
+        "hc" => is_hc_refused(args).then_some(("hc control", false)),
+        "scp" => Some(("remote transport", false)),
+        "rsync" => is_rsync_refused(args).then_some(("remote transport", false)),
+        "ssh" => is_ssh_refused(args).then_some(("remote transport", false)),
+        "npm" => is_npm_refused(args).then_some(("publish", false)),
+        "cargo" => is_cargo_refused(args).then_some(("publish", false)),
+        _ => None,
+    };
+    let Some((rule, is_card)) = hit else {
+        return GuardVerdict::Allow;
+    };
+    let joined = std::iter::once(name)
+        .chain(args.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let command = cap_command(&joined);
+    if is_card {
+        GuardVerdict::Card {
+            command,
+            rule: rule.into(),
+        }
+    } else {
+        GuardVerdict::Refuse {
+            command,
+            rule: rule.into(),
+        }
+    }
+}
+
+/// Legacy refusal check for `refused_command` callers: returns `Some(cmd)` on
+/// both `Refuse` and `Card` for non-git commands.
+#[cfg(test)]
+pub(crate) fn refused_command(name: &str, args: &[String]) -> Option<String> {
+    if name == "git-push" {
+        let raw = match args.first().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            Some(remote) => format!("git push {remote}"),
+            None => "git push".into(),
+        };
+        return Some(cap_command(&raw));
+    }
+    match classify_non_git(name, args) {
+        GuardVerdict::Allow => None,
+        GuardVerdict::Card { command, .. } | GuardVerdict::Refuse { command, .. } => Some(command),
+    }
+}
+
+/// Inspect a shell command line (such as `agy`'s `run_command` `CommandLine`)
+/// and return the formatted refused command if any segment invokes one.
+#[cfg(test)]
+pub(crate) fn refused_command_line(line: &str) -> Option<String> {
+    crate::guard_shell::refused_command_line(line)
 }
 
 fn is_hc_refused(args: &[String]) -> bool {
@@ -247,40 +391,4 @@ fn is_cargo_refused(args: &[String]) -> bool {
         return a == "publish";
     }
     false
-}
-
-/// If `(name, args)` is an outward command this guard refuses, return
-/// its formatted command text (capped at 200 chars); otherwise `None`.
-pub(crate) fn refused_command(name: &str, args: &[String]) -> Option<String> {
-    if name == "git-push" {
-        let raw = match args.first().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-            Some(remote) => format!("git push {remote}"),
-            None => "git push".into(),
-        };
-        return Some(cap_command(&raw));
-    }
-    let refused = match name {
-        "gh" => is_gh_refused(args),
-        "hc" => is_hc_refused(args),
-        "scp" => true,
-        "rsync" => is_rsync_refused(args),
-        "ssh" => is_ssh_refused(args),
-        "npm" => is_npm_refused(args),
-        "cargo" => is_cargo_refused(args),
-        _ => false,
-    };
-    if !refused {
-        return None;
-    }
-    let joined = std::iter::once(name)
-        .chain(args.iter().map(String::as_str))
-        .collect::<Vec<_>>()
-        .join(" ");
-    Some(cap_command(&joined))
-}
-
-/// Inspect a shell command line (such as `agy`'s `run_command` `CommandLine`)
-/// and return the formatted refused command if any segment invokes one.
-pub(crate) fn refused_command_line(line: &str) -> Option<String> {
-    crate::guard_shell::refused_command_line(line)
 }

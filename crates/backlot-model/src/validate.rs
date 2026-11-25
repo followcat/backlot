@@ -63,8 +63,18 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         | EventKind::ReportSent { .. }
         | EventKind::AttentionRaised { .. }
         | EventKind::RoleRefused { .. }
-        | EventKind::MessageQueued { .. } => {
+        | EventKind::MessageQueued { .. }
+        | EventKind::OutwardCompleted { .. } => {
             require_studio(state)?;
+            Ok(())
+        }
+        EventKind::OutwardRequested { argv, .. } => {
+            require_studio(state)?;
+            if argv.is_empty() {
+                return Err(Refusal::InvalidOutward(
+                    "outward.requested requires a non-empty command".into(),
+                ));
+            }
             Ok(())
         }
         EventKind::RoleProgress { task, text, .. } => {

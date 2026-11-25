@@ -176,6 +176,17 @@ impl HollywoodState {
         self.cards.values().filter(|c| c.state == CardState::Open)
     }
 
+    /// True if any card (open or closed) already proposed an outward action for `(studio, source_seq)`.
+    pub fn has_outward_card(&self, studio: &str, source_seq: u64) -> bool {
+        self.cards.values().any(|c| {
+            matches!(
+                &c.action,
+                CardAction::Outward { studio: st, source_seq: s, .. }
+                if st == studio && *s == source_seq
+            )
+        })
+    }
+
     /// The newest headline, if any.
     pub fn last_headline(&self) -> Option<&str> {
         self.reports.last().map(|r| r.headline.as_str())

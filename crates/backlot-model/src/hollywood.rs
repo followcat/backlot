@@ -291,6 +291,22 @@ pub enum CardAction {
         #[serde(default)]
         permission_profile: Option<String>,
     },
+    /// Execute a person-approved outward git push or `gh pr create`
+    /// from the studio's validated work area (push-perms spec §2.2).
+    Outward {
+        studio: String,
+        role: String,
+        source_seq: u64,
+        argv: Vec<String>,
+        cwd: String,
+        repo: String,
+        remote_url: String,
+        rule: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        commits: Vec<String>,
+        #[serde(default)]
+        commits_total: u32,
+    },
 }
 
 impl CardAction {
@@ -304,7 +320,8 @@ impl CardAction {
             | CardAction::Pause { studio, .. }
             | CardAction::Resume { studio, .. }
             | CardAction::Abandon { studio, .. }
-            | CardAction::Recast { studio, .. } => studio,
+            | CardAction::Recast { studio, .. }
+            | CardAction::Outward { studio, .. } => studio,
             CardAction::Setup { .. } => "hollywood",
         }
     }
@@ -328,6 +345,7 @@ impl CardAction {
                 let actor = self.setup_actor().expect("Setup yields actor");
                 format!("setup hollywood → {}", crate::recast::identity_text(&actor))
             }
+            CardAction::Outward { argv, .. } => argv.join(" "),
         }
     }
 
@@ -404,6 +422,13 @@ pub enum CardBase {
     /// Hollywood's configured identity at proposal time (`None` when
     /// `[hollywood]` was not yet set).
     HollywoodIdentity { actor: Option<ActorIdentity> },
+    /// Expected git repository `HEAD` and remote ref state at proposal time.
+    GitHead {
+        repo: String,
+        head_oid: String,
+        remote_ref: String,
+        remote_oid: String,
+    },
 }
 
 // ── Staleness ──────────────────────────────────────────────────
@@ -414,6 +439,17 @@ pub enum CardBase {
 pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>) -> Option<String> {
     let name = action.studio();
     match base {
+        CardBase::GitHead { .. } => {
+            let CardAction::Outward { .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            s.finished
+                .is_some()
+                .then(|| format!("studio '{name}' is finished"))
+        }
         CardBase::HollywoodIdentity { .. } => match action {
             CardAction::Setup { .. } => None,
             _ => Some("base does not match the action".into()),

@@ -469,8 +469,8 @@ impl StudioMenu {
         }
     }
 
-    /// A Call Sheet card row's menu.
-    pub(crate) fn card(id: &str) -> StudioMenu {
+    /// A card row's menu on `machine` (`None` for local).
+    pub(crate) fn card_on(machine: Option<String>, id: &str, offline: bool) -> StudioMenu {
         StudioMenu {
             kind: MenuKind::Card,
             studio: None,
@@ -478,13 +478,13 @@ impl StudioMenu {
             task: None,
             card: Some(id.to_owned()),
             stage_down: false,
-            offline: false,
+            offline,
             finished: false,
             ready: false,
             empty: false,
             req_version: 0,
             req_file: None,
-            machine: None,
+            machine,
             backlot: None,
             latest: None,
             talk_file: None,
@@ -492,6 +492,11 @@ impl StudioMenu {
             finished_count: 0,
             finished_open: false,
         }
+    }
+
+    /// A Call Sheet card row's menu.
+    pub(crate) fn card(id: &str) -> StudioMenu {
+        Self::card_on(None, id, false)
     }
 
     /// The lot pill's menu (S5 §2.3): the whole lot's quick actions —

@@ -211,6 +211,7 @@ fn queued_message(dir: &Path) {
             checks: Vec::new(),
             task_budget_s: None,
             limits: Default::default(),
+            push: Default::default(),
         },
     );
     append(

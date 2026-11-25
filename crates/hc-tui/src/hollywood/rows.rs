@@ -44,6 +44,8 @@ pub(crate) enum Target {
     Stage(Option<String>, bool),
     /// An open card row — `a` applies, `x` cancels, `s`/Enter shows.
     Card(String),
+    /// An open outward push/PR card row with studio/machine ownership.
+    OutwardCard(StudioKey, String),
     /// A ready-to-finish studio — `f` finishes, Enter focuses it.
     Ready(StudioKey),
     /// The waiting row for Hollywood's own prompt / block — `y`/`d`

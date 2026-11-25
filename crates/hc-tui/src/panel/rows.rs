@@ -4,7 +4,7 @@
 //! stacked block's `╶ id …` line — so the scroll math stays in
 //! one-line steps.
 
-use backlot_model::summary::{RoleSummary, StudioExchange, TaskSummary};
+use backlot_model::summary::{OutwardCardSummary, RoleSummary, StudioExchange, TaskSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
@@ -33,6 +33,8 @@ pub(crate) enum Target {
     Person(StudioKey, String),
     /// `(studio, task)` — a task row with no live actor row.
     Task(StudioKey, String),
+    /// `(studio, card id)` — an open outward push/PR card row.
+    OutwardCard(StudioKey, String),
     /// The `✓ <n> done · <ids>` fold line — Space/Enter opens it.
     Fold(StudioKey),
     /// The `□ <n> closed · <names>` fold line — Space/Enter opens it.
@@ -67,6 +69,7 @@ impl Target {
             | Target::Strip(key)
             | Target::Person(key, _)
             | Target::Task(key, _)
+            | Target::OutwardCard(key, _)
             | Target::Fold(key)
             | Target::ClosedFold(key)
             | Target::Talk(key, _)
@@ -193,6 +196,11 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         task: &'a TaskSummary,
     },
+    /// An open outward push/PR card inside a studio block.
+    OutwardCard {
+        studio: StudioRef<'a>,
+        card: &'a OutwardCardSummary,
+    },
     /// `✓ <n> done · <ids>` — the fold line when 2+ tasks are done.
     AcceptedFold {
         studio: StudioRef<'a>,
@@ -290,6 +298,7 @@ impl Row<'_> {
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
+            Row::OutwardCard { studio, card } => Target::OutwardCard(studio.key(), card.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
@@ -404,6 +413,9 @@ fn block_rows<'a>(
     };
     for role in live_roles(studio.studio) {
         emit_person(out, role);
+    }
+    for card in &studio.studio.outward_cards {
+        out.push(Row::OutwardCard { studio, card });
     }
     let accepted_open = panel.accepted_open(&studio.key());
     let folds = fold_count(studio.studio);

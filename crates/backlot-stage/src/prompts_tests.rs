@@ -105,6 +105,7 @@ fn studio_config(checks: Vec<CheckDecl>) -> StudioConfig {
         checks,
         task_budget_s: None,
         limits: BTreeMap::new(),
+        push: Default::default(),
     }
 }
 

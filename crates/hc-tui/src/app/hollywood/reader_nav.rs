@@ -187,7 +187,7 @@ impl App {
                 }
                 let next_origin = ReaderOrigin::Card(next.id.clone());
                 self.set_reader_loading(next.id.clone(), next_origin);
-                self.run_action(studio_cmds::card_show(&next.id));
+                self.run_action(studio_cmds::card_show_on(None, &next.id));
             }
             ReaderOrigin::Records(_) | ReaderOrigin::SheetDeliveries(_, _) | ReaderOrigin::None => {
             }

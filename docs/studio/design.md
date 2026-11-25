@@ -320,7 +320,9 @@ Whether the stage is running comes from the terminal inventory (`backlot-stage` 
 liveness signal costs no document writes.
 
 An optional `hollywood` object rides in the same document: the overseer's role state, runner and model, its newest
-headline and its open cards. It appears only while `[hollywood]` is configured.
+headline and its open cards. It appears only while `[hollywood]` is configured. Independently of `[hollywood]`, each
+`StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
+and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike.
 
 ## Hollywood
 
@@ -344,7 +346,11 @@ Hollywood changes nothing directly: it proposes **cards**, the user applies or c
 applied card out exactly once — re-checking the card's base, recording the studio event `by: user` through the same
 validation the user's own command would hit, and recording `card.done`, `card.failed` or `card.stale` back in
 Hollywood's ledger. A `studio-new` card re-runs the `studio new --dry-run` checks, writes `studio.created` and queues
-the brief to the new producer. The config gates the agent terminal, never the card pass.
+the brief to the new producer. An `outward` card (proposed by the stage from a carded `role.refused` or explicit
+`backlot ask --run`) re-checks work-area containment, clean local git config, `GuardVerdict::Card` classification, and
+`GitHead` / remote branch staleness, then spawns asynchronously in a stripped person environment (`BACKLOT_*` and
+`GIT_CONFIG_*` removed, guard shims filtered off `PATH`) with output saved to `outward/c<n>.log`, a 120 s timeout, and
+an `"outward"` completion notice back to the requesting role. The config gates the agent terminal, never the card pass.
 
 The bar in the TUI (U7, D15, D16) is studio mode's own surface, not the agent's: it draws with or without a
 `[hollywood]` table, since the studios, the new-studio frame and the setup line need no agent — the line opens the
@@ -545,7 +551,7 @@ user's.
 
 ## Guard (D3)
 
-A role works against local state, never outward: publishing, pushing, opening PRs, modifying remotes or upgrading `hc` stay the person's to run. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
+A role works against local state and controlled feature-branch pushes under its studio's `[push]` policy (`recorded` default allows non-protected branch pushes to recorded studio or member remotes; `any` and `none` widen or close auto-pushes). Protected branches, tags (when permitted by policy), unrecorded remotes, and `gh pr create` classify as `Card`: the guard stops the role cleanly and records `role.refused` (`decision: "card"`, full `argv`) so `stage` proposes an `Outward` card (or the role submits one explicitly via `backlot ask --run [--why <r>] -- <cmd>`). Hard-refused calls (force/mirror pushes, config/transport overrides, non-PR `gh` writes, `hc` control, `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm`/`cargo publish`, shell alias or env mutations) record `role.refused` and stop outright. `role_env`/`hrole_env` stamp `BACKLOT_TERMINAL`, and user-privileged CLI verbs (`card`, `--as user`, `approve --as user`, and the Phase-1 `perms revoke` gate) verify the calling process tree against `BACKLOT_TERMINAL` so a subshell cannot escape by unsetting `BACKLOT_*`. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
 
 1. **Command shims (`roles/<role>/bin`).** `role_env` and `hrole_env` place `<role>/bin` first on `PATH`, ahead of `exe_dir`. Small shell wrappers invoke `backlot guard <name> -- "$@"`. Writes are refused (`gh` writes `pr`, `release`, `repo`, `issue`, `gist`, `secret`, `workflow run`, and `api` with non-`GET` method or `-f`/`-F`; `hc update`, `hc machine`, `hc server stop`; `scp`; `rsync` with a `host:` spec; `ssh <host> <command>`; `npm publish`; `cargo publish`); read-only calls resolve and `exec` the real binary past `<role>/bin` on `PATH` (skipping shim markers).
 2. **`git push` hook (`roles/<role>/git-hooks`).** Role env appends `core.hooksPath=<role>/git-hooks` via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` without clobbering any existing `GIT_CONFIG_*` entries. `pre-push` calls `backlot guard git-push -- "$@"`, while client commit/merge/rebase hooks pass through to the repository's own hooks path (`core.hooksPath` or `--git-common-dir`/hooks) when one exists. The user's own `git push` outside the role environment is untouched.
