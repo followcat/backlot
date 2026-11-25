@@ -460,3 +460,47 @@ fn an_app_space_named_in_the_app_wins_over_an_automatic_adoption() {
     doc(&mut v, "hc-tui", None, serde_json::to_value(own).unwrap());
     assert_eq!(project(&v, Some("t1")).snapshot.workspaces[0].label, "work");
 }
+
+const CLOSED_SPACE: &str = "speeab47898378ed12e40bf5e0f6a74369";
+
+/// Workspace count for one app space `s1` holding a live agent `t1`, plus
+/// `t2` tagged into space `space`, finished or still running.
+fn workspaces_with_tagged(space: &str, finished: bool) -> usize {
+    let kept = crate::sidebar::fixture::agent("t1", "idle");
+    let mut other = tagged(term("t2"), space, CLOSED_TAB);
+    if finished {
+        other.state = "finished".into();
+        other.reason = Some("killed".into());
+    }
+    let mut v = view(vec![kept, other], vec![]);
+    doc(
+        &mut v,
+        "herdr-app",
+        None,
+        json!({"spaces":[app_space("s1", "", "/w", &[("tab1", "", "t1")])]}),
+    );
+    project(&v, Some("t1")).snapshot.workspaces.len()
+}
+
+#[test]
+fn a_finished_terminal_of_a_closed_app_space_does_not_come_back_as_a_space() {
+    assert_eq!(workspaces_with_tagged(CLOSED_SPACE, true), 1);
+}
+
+#[test]
+fn a_live_terminal_of_a_closed_app_space_stays_reachable() {
+    assert_eq!(workspaces_with_tagged(CLOSED_SPACE, false), 2);
+}
+
+#[test]
+fn a_finished_terminal_of_a_space_the_app_did_not_make_stays() {
+    // hc-tui's own ids are bare hex; a near-miss of the app's form and a
+    // hand-set name are not app spaces either.
+    for space in [
+        "eeab47898378ed12e40bf5e0f6a74369",
+        "speeab47898378ed12e40bf5e0f6a7436",
+        "spare",
+    ] {
+        assert_eq!(workspaces_with_tagged(space, true), 2, "{space}");
+    }
+}

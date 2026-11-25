@@ -918,7 +918,10 @@ Everything else on the compared surfaces still diffs normally.
   an app space the document no longer lists them in. A finished one is not
   shown, as in the app; a live one stays reachable as an unnamed tab. The
   app's `tb` + 32-hex tab id is an identity like `opaque_id()` and is
-  suppressed the same way.
+  suppressed the same way. Closing a whole space works the same: a
+  finished terminal tagged with an app space id (`sp` + 32 hex) that the
+  document no longer lists is not shown, rather than coming back as a
+  space named by that raw id. A live one stays reachable.
 - **Drain-error isolation.** A dead wire's input-drain failure belongs
   to its terminal, never to the pane's next target: `Pane::want` clears
   a retained `close_error` on retarget, and `Parked`/`Drain`/`Closing`

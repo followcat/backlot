@@ -190,11 +190,11 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     for terminal in rest {
         let (key, label) = crate::project::space_of(terminal);
         // A finished terminal still tagged into an app space whose layout no
-        // longer lists it belongs to a tab the app closed: the app shows it
-        // nowhere, so it does not come back here as a tab of its own.
-        if terminal.state == "finished"
-            && positions.get(&key).is_some_and(|&at| spaces[at].from_app)
-        {
+        // longer lists it belongs to a tab the app closed; one tagged with an
+        // app space id the document no longer lists at all belongs to a space
+        // the app closed. The app shows either nowhere, so neither comes back
+        // here as a tab or a space of its own.
+        if terminal.state == "finished" && closed_by_app(terminal, positions.get(&key), &spaces) {
             continue;
         }
         let at = *positions.entry(key.clone()).or_insert_with(|| {
@@ -270,6 +270,27 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
 /// 128-bit hex id (creation.rs `opaque_id`) or the Herdr app's own tab id
 /// (`tb` and the same 32 hex digits), which a terminal keeps in
 /// `herdr.tab` after the app drops its tab.
+/// Whether the herdr app closed the place `terminal` was tagged into: its
+/// space is still an app space (so only its tab was closed), or it carries an
+/// app-made space id that no space in the document has any more.
+fn closed_by_app(terminal: &Terminal, at: Option<&usize>, spaces: &[Space]) -> bool {
+    match at {
+        Some(&at) => spaces[at].from_app,
+        None => terminal
+            .labels
+            .get("herdr.space")
+            .is_some_and(|space| is_app_space_id(space)),
+    }
+}
+
+/// The herdr app's own space id: `sp` + 32 hex digits. hc-tui's are bare
+/// hex (`opaque_id`), and a hand-set `herdr.space` is a name.
+fn is_app_space_id(label: &str) -> bool {
+    label
+        .strip_prefix("sp")
+        .is_some_and(|hex| hex.len() == 32 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 fn is_opaque_tab_id(label: &str) -> bool {
     let hex = label
         .strip_prefix("tb")
