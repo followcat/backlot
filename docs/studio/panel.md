@@ -39,7 +39,7 @@ focused jumps back to the last row and never closes the dock.
 | `PageUp`/`PageDown` | Move one viewport |
 | `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
 | `i` / `/` | Compose on the selected studio's `›` tell input (`/` seeds `/`, `Tab` completes `/verb`). While composing: `↑`/`↓` step per-studio `user` message history (`StudioSummary.exchange` + session submits, saving/restoring any draft, consecutive repeats collapsed), `Enter` sends and rests, `Esc` rests keeping the draft |
-| `Space` | Open or close the three-line drawer under a person or task; on a studio header it folds the whole block |
+| `Space` | Open or close the three-line drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold line; on a studio header, fold/unfold the whole block |
 | `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
 | `p` | Peek the person's terminal |
@@ -124,6 +124,17 @@ drawn as a rounded frame (`╭╮╰╯`). The selection is `selection_bg` with 
 first column; it lands only on actionable rows — decorative lines and block bottoms are
 skipped — and borders are honest about focus: unfocused, every block edge is `surface1`.
 
+- **Selected-studio folding:** in a lot with two or more studios, only the selected studio draws
+  in full (the studio holding the `▌` cursor, else the `▸` current studio, else the first studio);
+  every unselected studio folds to its top border, one single-line row per live role (no subheaders,
+  detail/working/cue lines, tasks, closed seats, talk or `›`), and its bottom border — keeping its
+  header health mark and `!n` badge. Stepping into a folded studio (`j`/`k`, arrows, `Ctrl+K`/`J`
+  or `Alt+←`/`→`) or clicking its header or a role row selects and unfolds it (folding the studio
+  left) while keeping the cursor on the same row and scrolled into view. A single-studio lot never
+  folds, manual `Space` collapse (`╶` stacked row) or expand overrides still hold, and unselected
+  studios fall back to one-line `╶` stacked rows when even folded blocks exceed the body height.
+  Talk budgets go to the selected full block only.
+
 - The studio id sits in the top border. The first row inside is the **header**: a health
   glyph — `●` live, `◌` stage stopped, `×` offline or a ledger error, `✓` finished — then
   `r<version> · <done>/<total>` and `!<waiting>` in the blocked colour when above zero.
@@ -161,8 +172,12 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   shorten or drop `<progress>` → truncate `working <dur>`. Non-working roles keep their existing single line.
 - **Task rows** list work no live actor carries — uncast, dependency-gated (`waits t0`),
   paused (`=`), blocked or at rework cap, and accepted (`✓`) — each as `· <task> <title>`.
-  Six or more accepted tasks fold into `✓ <n> accepted` and unfold with `Space` on the
-  studio header.
+  Two or more accepted unrepresented tasks fold into `✓ <n> done · <ids>` (ids fitted to the width
+  with `…`) and toggle open/closed with `Space` or `Enter` on the fold line.
+- **Closed seats fold:** when closed roles exist in a full block, they fold by default behind one
+  dim selectable row `□ <n> closed · <names>` (role names in first-seen order, `×k` when repeated,
+  fitted to the width at a name boundary with `…`). `Space` or `Enter` toggles it open or closed per
+  studio; when open, closed seats render underneath and `o` reopens a resumable seat as usual.
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
@@ -336,8 +351,10 @@ that is neither a studio person, a studio shell, the stage nor Hollywood (what h
 ## Mouse
 
 - Click on the title flips collapsed and expanded.
-- Click on a block's top border makes that studio current (as `Alt+Right` would).
+- Click on a block's top border or folded role row selects and unfolds that studio (`Enter` on the
+  header makes it current).
 - Click on a single-line (stacked) block expands it.
+- Click on a fold row (`✓ … done` or `□ … closed`) toggles it open or closed.
 - Click on a person focuses them; a click on a row selects it and acts like `Enter`.
 - Right-click on a row or the dock surface claims the dock's keys, selects the row and opens
   its context menu.

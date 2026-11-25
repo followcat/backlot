@@ -14,6 +14,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **`Alt+L` (`[keys] focus_lot`) focuses the lot on its last selectable row.** Pressing `Alt+L` opens/expands the right-hand lot dock (`lot · N`) if hidden or collapsed, focuses it, and scrolls the selection to its last selectable row (e.g. `› tell producer · / actions`) without entering Compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressing `Alt+L` while the lot is already focused jumps to the last row again without toggling the dock closed. Configurable via `[keys] focus_lot` (empty string unbinds), falls through to the focused program under `--plain`, yields to floats, modals, the Call Sheet, and running compose, and appears in the lot header, `?` help, launcher, and docs (`docs/keys.md`, `docs/studio/hollywood.md`, `docs/studio/panel.md`).
 
+### Changed
+
+- **The lot folds unselected studios and rolls up closed seats and done tasks.** In lots with two or more studios, only the selected studio (where the dock cursor sits, else the `▸` current studio, else the first studio) renders its full block; every other studio folds to its frame and live roles, falling back to stacked one-line rows when cramped, and moving into or clicking a folded studio unfolds it cleanly without jumping the cursor. Inside a full block, closed seats fold into one dim `□ <n> closed · <names>` line (first-seen order with `×k` counts, toggled per studio by `Space`/`Enter`), and accepted tasks fold from 2 tasks on as `✓ <n> done · <ids>` (toggled by `Space`/`Enter`).
+
 ### Fixed
 
 - **Plain `backlot` folders and git checkouts stay visible and reachable with `Ctrl+K` / `Ctrl+J`.** `is_backlot_stage_space` now matches only the internal `herdr.space = "backlot"` space (`space:7:backlot`) instead of every workspace whose label is `"backlot"`. Previously, any plain shell in a `backlot` directory or git checkout disappeared from the left `machines` tree and from `previous_workspace` / `next_workspace` cycling in studio mode.
