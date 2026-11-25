@@ -71,6 +71,19 @@ impl AttentionClass {
     }
 }
 
+/// Interactive prompt/dialog attention reasons that may only be answered in
+/// the agent's own conversation or terminal, never cleared over `plugin.backlot.req`.
+pub fn is_prompt_reason(reason: &str) -> bool {
+    matches!(
+        reason,
+        crate::event::PERMISSION_PROMPT
+            | crate::event::QUESTION
+            | crate::event::FOLDER_TRUST
+            | "folder trust refused"
+    ) || reason.ends_with(" prompt")
+        || reason.contains("dialog")
+}
+
 #[cfg(test)]
 #[path = "attention_tests.rs"]
 mod tests;
