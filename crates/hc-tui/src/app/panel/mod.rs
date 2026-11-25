@@ -140,6 +140,26 @@ impl App {
         }
     }
 
+    /// Whether `key` is the configured `focus_lot` binding (`alt+l`
+    /// by default): active in studio mode (`!plain`), disabled inside
+    /// a running dock compose or inline finish confirm.
+    pub(crate) fn focus_lot_press(&self, key: &super::input::TerminalKey) -> bool {
+        if !self.studio.active || self.panel_editing() || self.panel.finish_confirm.is_some() {
+            return false;
+        }
+        let matched = crate::input::terminal_key_of(key);
+        self.panel_config.keys.focus_lot_matches(&matched)
+    }
+
+    /// Show and focus the lot with the selection on its last
+    /// selectable row (`Alt+L`): never toggles closed and never starts
+    /// composing.
+    pub(crate) fn focus_lot(&mut self) {
+        self.panel.mode = PanelMode::Expanded;
+        self.panel.focused = true;
+        self.panel_select_last();
+    }
+
     /// Close the panel and drop every piece of interaction state.
     pub(super) fn panel_close(&mut self) {
         self.panel.mode = PanelMode::Closed;

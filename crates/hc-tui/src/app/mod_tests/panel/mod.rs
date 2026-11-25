@@ -5,6 +5,7 @@
 mod compose;
 mod draw;
 mod exchange;
+mod focus_lot;
 mod input;
 mod keys;
 mod menus;

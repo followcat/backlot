@@ -168,6 +168,8 @@ fn collides_with_keys(combo: KeyCombo, keys: &StudioKeys) -> Option<&'static str
         Some("previous_role")
     } else if hit(keys.next_role) {
         Some("next_role")
+    } else if hit(keys.focus_lot) {
+        Some("focus_lot")
     } else {
         None
     }

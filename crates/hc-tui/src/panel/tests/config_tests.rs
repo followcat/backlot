@@ -37,6 +37,10 @@ fn a_missing_file_is_defaults() {
         crate::config::parse_key_combo("alt+down")
     );
     assert_eq!(
+        config.keys.focus_lot,
+        crate::config::parse_key_combo("alt+l")
+    );
+    assert_eq!(
         config.keys.shortcut_parts(),
         ("alt ←→ studio".into(), "↑↓ role".into())
     );
@@ -110,6 +114,23 @@ fn studio_keys_parse_unbind_and_fall_back() {
     assert!(notice.contains("config.toml"), "{notice}");
     assert!(notice.contains("keys.previous_role"), "{notice}");
     assert!(!notice.contains("nope"), "{notice}");
+
+    let path_lot = write(&dir, "[keys]\nfocus_lot = \"alt+o\"\n");
+    let (config, notice) = load(&path_lot);
+    assert!(notice.is_none());
+    assert_eq!(
+        config.keys.focus_lot,
+        crate::config::parse_key_combo("alt+o")
+    );
+    let path_lot_bad = write(&dir, "[keys]\nfocus_lot = \"nope+\"\n");
+    let (config, notice) = load(&path_lot_bad);
+    assert_eq!(
+        config.keys.focus_lot,
+        crate::config::parse_key_combo("alt+l")
+    );
+    let notice = notice.expect("invalid focus_lot notices");
+    assert!(notice.contains("keys.focus_lot"), "{notice}");
+    assert!(!notice.contains("nope"), "{notice}");
 }
 
 #[test]
@@ -166,6 +187,23 @@ fn an_unparseable_key_falls_back_to_y_with_a_notice() {
     assert!(notice.contains("config.toml"), "{notice}");
     assert!(notice.contains("panel.key"), "{notice}");
     // The invalid value itself never reaches the screen.
+    assert!(!notice.contains("nope"), "{notice}");
+
+    let path_lot = write(&dir, "[keys]\nfocus_lot = \"alt+o\"\n");
+    let (config, notice) = load(&path_lot);
+    assert!(notice.is_none());
+    assert_eq!(
+        config.keys.focus_lot,
+        crate::config::parse_key_combo("alt+o")
+    );
+    let path_lot_bad = write(&dir, "[keys]\nfocus_lot = \"nope+\"\n");
+    let (config, notice) = load(&path_lot_bad);
+    assert_eq!(
+        config.keys.focus_lot,
+        crate::config::parse_key_combo("alt+l")
+    );
+    let notice = notice.expect("invalid focus_lot notices");
+    assert!(notice.contains("keys.focus_lot"), "{notice}");
     assert!(!notice.contains("nope"), "{notice}");
 }
 
