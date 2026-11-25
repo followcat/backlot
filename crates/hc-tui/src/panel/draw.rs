@@ -131,22 +131,23 @@ pub(crate) fn render(
         &title_text,
         Style::default().fg(title_fg).add_modifier(Modifier::BOLD),
     );
-    if let Some(sheet) = sheet {
-        let sheet_width = display_width(&sheet) as u16;
-        if sheet_width
-            < title
-                .width
-                .saturating_sub(display_width(&title_text) as u16 + 1)
-        {
-            put_text(
-                buf,
-                title.x + title.width - sheet_width,
-                title.y,
-                sheet_width,
-                &sheet,
-                Style::default().fg(palette.overlay0),
-            );
-        }
+    if let Some(hint) = header_hint(
+        mode,
+        keys,
+        sheet.as_deref(),
+        title
+            .width
+            .saturating_sub(display_width(&title_text) as u16 + 1) as usize,
+    ) {
+        let hint_width = display_width(&hint) as u16;
+        put_text(
+            buf,
+            title.x + title.width - hint_width,
+            title.y,
+            hint_width,
+            &hint,
+            Style::default().fg(palette.overlay0),
+        );
     }
     hits.title = title;
 
@@ -549,6 +550,50 @@ pub(crate) fn render(
 
 // The frame's colour and the `│` edges live in `draw_blocks` — the
 // error/next/divider/bottom rows share them with the painters there.
+
+/// Right-aligned hint on the `lot · <n>` header: carries `alt+l`
+/// alongside the Call Sheet hint when space permits, degrading cleanly
+/// across dock widths.
+fn header_hint(
+    mode: PanelMode,
+    keys: &StudioKeys,
+    sheet: Option<&str>,
+    room: usize,
+) -> Option<String> {
+    let lot = keys.focus_lot.map(crate::config::format_key_combo);
+    let sheet = sheet
+        .map(|s| s.strip_suffix(" sheet").unwrap_or(s))
+        .filter(|s| !s.is_empty());
+    let mut candidates = Vec::new();
+    if mode == PanelMode::Collapsed {
+        if let Some(lot) = lot {
+            candidates.push(lot);
+        }
+    } else {
+        match (lot, sheet) {
+            (Some(lot), Some(sheet)) => {
+                candidates.push(format!("{lot} · {sheet} sheet"));
+                candidates.push(format!("{lot} · {sheet}"));
+                if let Some((direct, _)) = sheet.split_once(" / ") {
+                    candidates.push(format!("{lot} · {direct}"));
+                }
+                candidates.push(lot);
+            }
+            (Some(lot), None) => candidates.push(lot),
+            (None, Some(sheet)) => {
+                candidates.push(format!("{sheet} sheet"));
+                candidates.push(sheet.to_string());
+                if let Some((direct, _)) = sheet.split_once(" / ") {
+                    candidates.push(direct.to_string());
+                }
+            }
+            (None, None) => {}
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|cand| display_width(cand) < room)
+}
 
 /// The focused footer's three width tiers — what the *selected* row
 /// can do, so the hints a person sees change with the cursor: a

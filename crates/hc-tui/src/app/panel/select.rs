@@ -49,6 +49,20 @@ impl App {
             .min_by_key(|i| i.abs_diff(self.panel.selected_row.unwrap_or(0)))
             .unwrap_or(0)
     }
+    /// The body height the dock draws into — derived from `self.area`
+    /// when undrawn so an opening jump (`Alt+L`) computes block
+    /// stacking and scroll for the frame about to render.
+    fn panel_body_height(&self) -> u16 {
+        let height = if self.panel_beside(self.area.0) {
+            self.area.1
+        } else {
+            let layout = self.chrome_layout(self.area.0, self.area.1);
+            self.panel_overlay_rect(layout.pane_surface, self.area.0)
+                .height
+        };
+        height.saturating_sub(1 + u16::from(height >= 8))
+    }
+
     /// The first actionable row's target — `j`/`k` never park on a
     /// `None` row, so the cursor starts on something real.
     pub(super) fn panel_select_first(&mut self) {
@@ -58,6 +72,52 @@ impl App {
             self.panel.selected = Some(targets[index].clone());
             self.panel.selected_row = Some(index);
         }
+    }
+
+    /// The last actionable row's target (`Alt+L`): stay resting (never
+    /// arm Compose), jump across multi-row targets to their head row,
+    /// and scroll so the selected row is visible.
+    pub(super) fn panel_select_last(&mut self) {
+        let machines = self.panel_summaries();
+        let body_height = self.panel_body_height();
+        let rows = panel::rows(
+            &machines,
+            |m| self.machine_stage_running(m),
+            |m| self.machine_reachable(m),
+            &self.panel,
+            self.panel_mode_at(self.area.0),
+            self.studio.current.as_ref(),
+            body_height,
+        );
+        let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
+        self.panel.editing = false;
+        self.panel.finish_confirm = None;
+        self.panel.reset_history_nav();
+        let Some(mut index) = targets.iter().rposition(|t| *t != Target::None) else {
+            self.panel.selected = None;
+            self.panel.selected_row = None;
+            return;
+        };
+        while index > 0 && targets[index - 1] == targets[index] {
+            index -= 1;
+        }
+        self.panel.selected = Some(targets[index].clone());
+        self.panel.selected_row = Some(index);
+        let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
+        let reveal = if body_height >= 2
+            && matches!(rows.get(index + 1), Some(panel::Row::BlockBottom(_)))
+        {
+            index
+        } else {
+            index.saturating_sub(1)
+        };
+        self.panel.scroll = scroll::list_scroll_start_to_reveal(
+            &heights,
+            &[],
+            body_height.max(1),
+            self.panel.scroll,
+            reveal,
+        );
     }
 
     /// j/k/arrows and paging: move the selection by `delta` rows and

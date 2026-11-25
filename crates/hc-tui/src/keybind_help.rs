@@ -269,6 +269,13 @@ pub(crate) fn backlot_help_groups(
             vec![
                 entry(chord(panel_tail), "studio dock"),
                 (
+                    studio_key(panel.keys.focus_lot),
+                    Cow::Owned(format!(
+                        "focus lot (last row){}",
+                        shadow(panel.keys.focus_lot)
+                    )),
+                ),
+                (
                     sheet.label(&crate::config::format_prefix_combos(prefixes)),
                     Cow::Borrowed("call sheet") as Cow<'static, str>,
                 ),
