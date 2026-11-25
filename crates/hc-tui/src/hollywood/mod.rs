@@ -20,6 +20,7 @@ mod new_frame;
 mod plan;
 mod reader_chips;
 mod reader_chrome;
+mod reader_compose;
 mod reader_md;
 mod reader_meta;
 mod reader_wrap;
@@ -35,6 +36,7 @@ pub(crate) use hints::for_row;
 pub(crate) use items::{chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
+pub(crate) use reader_compose::{InlineTellState, ReaderComposeOpts, reader_tell_target};
 #[cfg(test)]
 pub(crate) use reader_meta::age_label;
 pub(crate) use reader_meta::{
@@ -46,9 +48,9 @@ pub(crate) use rows::{
     hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
+pub(crate) use view::{CardView, render_view_with_compose};
 #[cfg(test)]
-pub(crate) use view::render_view_at;
-pub(crate) use view::{CardView, render_view};
+pub(crate) use view::{render_view, render_view_at};
 
 use crate::chrome::text_editor::TextEditor;
 

@@ -51,6 +51,7 @@ impl App {
                 raw_body: stdout.to_owned(),
                 scroll: 0,
                 meta,
+                ..CardView::default()
             });
         }
     }
@@ -249,6 +250,7 @@ impl App {
             raw_body: entry.text.clone(),
             scroll: 0,
             meta,
+            ..CardView::default()
         });
     }
 }

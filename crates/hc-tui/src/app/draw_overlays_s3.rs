@@ -113,8 +113,8 @@ pub(super) fn draw_reader(
     let card_pending =
         app.card_pending_label(app.hollywood.view.as_ref().and_then(|v| v.card.as_deref()));
     let owned_sheet_view;
-    let (view, pending) = if let Some(view) = app.hollywood.view.as_ref() {
-        (view, card_pending.as_deref())
+    let (from_sheet, view, pending) = if let Some(view) = app.hollywood.view.as_ref() {
+        (false, view, card_pending.as_deref())
     } else if let Some(sv) = app.sheet.as_ref().and_then(|s| s.view.as_ref()) {
         owned_sheet_view = crate::hollywood::CardView {
             card: None,
@@ -123,8 +123,9 @@ pub(super) fn draw_reader(
             raw_body: sv.raw_body.clone(),
             scroll: sv.scroll,
             meta: sv.meta.clone(),
+            tell: sv.tell.clone(),
         };
-        (&owned_sheet_view, None)
+        (true, &owned_sheet_view, None)
     } else {
         app.hollywood_hits.view = None;
         return false;
@@ -136,15 +137,36 @@ pub(super) fn draw_reader(
     .then_some(app.panel_hits.area);
     dim_cells_except(buf, exclude);
     let surface = app.backlot_modal_surface(area, layout, 64);
-    app.hollywood_hits.view = Some(crate::hollywood::render_view(
+    let compose_info = app.reader_compose_draw_ctx(from_sheet);
+    let compose_opts =
+        compose_info.as_ref().map(
+            |(target, studio, editor)| crate::hollywood::ReaderComposeOpts {
+                editor: *editor,
+                target: target.as_str(),
+                studio: *studio,
+            },
+        );
+    let ren = crate::hollywood::render_view_with_compose(
         buf,
         surface,
         view,
         pending,
+        compose_opts,
         &app.shell.palette,
-    ));
-    app.want_cursor.pos = None;
-    app.want_cursor.anchor = None;
+        crate::update_state::now_ms(),
+    );
+    if let Some(cursor) = ren.cursor.as_ref() {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    } else {
+        app.want_cursor.pos = None;
+        app.want_cursor.anchor = None;
+    }
+    app.hollywood_hits.view = Some(ren);
     true
 }
 

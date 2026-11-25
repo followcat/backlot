@@ -1971,3 +1971,74 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     );
     assert!(tstrip.contains("[y]  ? keys"), "records tier2: {tstrip}");
 }
+
+#[test]
+fn card_view_inline_compose_states_render_band_and_never_overflow_80x24() {
+    use crate::hollywood::{InlineTellState, ReaderKind, ReaderMeta, ReaderOrigin};
+    use crate::studio::StudioKey;
+
+    let palette = &palettes()[0];
+    let mut view = CardView {
+        card: None,
+        title: "acme-shop #188".into(),
+        lines: (1..=25).map(|i| format!("▪ report line {i}")).collect(),
+        scroll: 0,
+        meta: ReaderMeta {
+            kind: ReaderKind::Report,
+            studio: Some("acme-shop".into()),
+            seq: Some(188),
+            from: Some("director".into()),
+            to: Some("user".into()),
+            role: Some("director".into()),
+            role_state: Some("working".into()),
+            role_terminal: Some("t2".into()),
+            origin: ReaderOrigin::StudioExchange(StudioKey::local("acme-shop"), 188),
+            ..ReaderMeta::default()
+        },
+        tell: InlineTellState::Composing,
+        ..CardView::default()
+    };
+
+    let narrow = Rect::new(0, 1, 80, 22);
+    let mut nbuf = Buffer::empty(narrow);
+    let editor = crate::chrome::text_editor::TextEditor::new("hi", false);
+    let opts = crate::hollywood::ReaderComposeOpts {
+        editor: Some(&editor),
+        target: "director",
+        studio: true,
+    };
+    let nren = crate::hollywood::render_view_with_compose(
+        &mut nbuf,
+        narrow,
+        &view,
+        None,
+        Some(opts),
+        palette,
+        0,
+    );
+    assert!(nren.area.bottom() <= narrow.bottom());
+    assert!(nren.compose_rect.is_some());
+    assert!(nren.cursor.is_some());
+
+    view.tell = InlineTellState::Sending {
+        action_id: 7,
+        target: "director".into(),
+        text: "hi".into(),
+    };
+    let sren = crate::hollywood::render_view_with_compose(
+        &mut nbuf,
+        narrow,
+        &view,
+        None,
+        Some(opts),
+        palette,
+        0,
+    );
+    let sline = wide_row_of(
+        &nbuf,
+        sren.area.x,
+        sren.area.right(),
+        sren.area.bottom() - 4,
+    );
+    assert!(sline.contains("■ sending to director…"), "{sline}");
+}

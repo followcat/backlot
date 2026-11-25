@@ -17,6 +17,9 @@ impl App {
         if self.hollywood.view.is_none() {
             return;
         }
+        if self.reader_handle_tell_key(key, false) {
+            return;
+        }
         let combo = crate::input::terminal_key_of(key);
         let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let plain = modifiers.is_empty();
@@ -72,6 +75,9 @@ impl App {
                     self.reader_copy_raw(&raw, &lines);
                 }
             }
+            crossterm::event::KeyCode::Char('t' | 'i') if plain => {
+                let _ = self.reader_open_compose(false);
+            }
             crossterm::event::KeyCode::Char('o') if plain => {
                 if let Some(meta) = self.hollywood.view.as_ref().map(|v| v.meta.clone()) {
                     self.reader_run_o(&meta);
@@ -118,22 +124,34 @@ impl App {
         let Some(hits) = self.hollywood_hits.view.as_ref() else {
             return false;
         };
-        let (area, prev_hit, next_hit, metrics) =
-            (hits.area, hits.prev_hit, hits.next_hit, hits.metrics);
+        let (area, prev_hit, next_hit, compose_hit, metrics) = (
+            hits.area,
+            hits.prev_hit,
+            hits.next_hit,
+            hits.compose_rect,
+            hits.metrics,
+        );
         let chips = hits.chips.clone();
         let point = (mouse.col, mouse.row);
         let pos = ratatui::layout::Position::from(point);
         use input::{MouseButton, MouseEventKind};
         match mouse.kind {
             MouseEventKind::ScrollUp => {
+                self.reader_dismiss_sent(false);
                 if let Some(view) = self.hollywood.view.as_mut() {
                     view.scroll = view.scroll.saturating_sub(3);
                 }
             }
             MouseEventKind::ScrollDown => {
+                self.reader_dismiss_sent(false);
                 if let (Some(view), Some(metrics)) = (self.hollywood.view.as_mut(), metrics) {
                     view.scroll = (view.scroll + 3).min(metrics.max_offset_from_bottom);
                 }
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if compose_hit.is_some_and(|r| r.contains(pos)) =>
+            {
+                let _ = self.reader_open_compose(false);
             }
             MouseEventKind::Down(MouseButton::Left)
                 if prev_hit.is_some_and(|r| r.contains(pos)) =>

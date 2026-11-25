@@ -130,6 +130,9 @@ impl App {
             return;
         };
         match ch {
+            't' => {
+                let _ = self.reader_open_compose(false);
+            }
             'y' => self.reader_copy_raw(&raw, &lines),
             'o' => {
                 self.reader_run_o(&meta);
@@ -169,6 +172,9 @@ impl App {
             return;
         };
         match ch {
+            't' => {
+                let _ = self.reader_open_compose(true);
+            }
             'y' => self.reader_copy_raw(&raw, &lines),
             'o' => {
                 self.reader_run_o(&meta);
@@ -235,5 +241,45 @@ impl App {
             *scroll = (*scroll).min(m.max_offset_from_bottom);
         }
         handled
+    }
+
+    /// Nearest `Sent { until }` deadline across open Readers for `wake_deadline`.
+    pub(crate) fn reader_sent_deadline(&self) -> Option<Instant> {
+        use crate::hollywood::InlineTellState;
+        let hw = self.hollywood.view.as_ref().and_then(|v| match &v.tell {
+            InlineTellState::Sent { until, .. } => Some(*until),
+            _ => None,
+        });
+        let sh = self
+            .sheet
+            .as_ref()
+            .and_then(|s| s.view.as_ref())
+            .and_then(|sv| match &sv.tell {
+                InlineTellState::Sent { until, .. } => Some(*until),
+                _ => None,
+            });
+        match (hw, sh) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+
+    /// Collapse any expired `Sent` banner after 1.5 s.
+    pub(crate) fn expire_reader_sent(&mut self, now: Instant) -> bool {
+        use crate::hollywood::InlineTellState;
+        let mut changed = false;
+        if let Some(v) = self.hollywood.view.as_mut()
+            && matches!(&v.tell, InlineTellState::Sent { until, .. } if now >= *until)
+        {
+            v.tell = InlineTellState::Reading;
+            changed = true;
+        }
+        if let Some(sv) = self.sheet.as_mut().and_then(|s| s.view.as_mut())
+            && matches!(&sv.tell, InlineTellState::Sent { until, .. } if now >= *until)
+        {
+            sv.tell = InlineTellState::Reading;
+            changed = true;
+        }
+        changed
     }
 }

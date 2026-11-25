@@ -153,6 +153,7 @@ impl App {
                             raw_body: text,
                             scroll: 0,
                             meta: *meta,
+                            ..crate::sheet::SheetView::default()
                         });
                     }
                     Err(err) => {
@@ -172,7 +173,7 @@ impl App {
     pub(crate) fn handle_sheet_key(&mut self, key: &TerminalKey) {
         use crossterm::event::{KeyCode, KeyModifiers};
         if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-            if self.reader_handle_prefix(key) {
+            if self.reader_handle_prefix(key) || self.reader_handle_tell_key(key, true) {
                 return;
             }
             let combo = crate::input::terminal_key_of(key);
@@ -210,6 +211,9 @@ impl App {
                 KeyCode::Char('?') if plain || modifiers == KeyModifiers::SHIFT => {
                     self.help = true;
                     self.help_state = crate::chrome::help::HelpState::default();
+                }
+                KeyCode::Char('t' | 'i') if plain => {
+                    self.reader_activate_sheet_chip('t');
                 }
                 KeyCode::Char('y') if plain => {
                     self.reader_activate_sheet_chip('y');
@@ -277,21 +281,23 @@ impl App {
         // An opened report renders in the unified top-level Reader (`R3-M2`):
         // wheel scrolls it, clicks outside Reader close only the Reader.
         if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-            let (reader_area, prev_hit, next_hit, max_scroll, chips) = self
+            let (reader_area, prev_hit, next_hit, compose_hit, max_scroll, chips) = self
                 .hollywood_hits
                 .view
                 .as_ref()
-                .map_or((None, None, None, None, Vec::new()), |v| {
+                .map_or((None, None, None, None, None, Vec::new()), |v| {
                     (
                         Some(v.area),
                         v.prev_hit,
                         v.next_hit,
+                        v.compose_rect,
                         v.metrics.map(|m| m.max_offset_from_bottom),
                         v.chips.clone(),
                     )
                 });
             match mouse.kind {
                 MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                    self.reader_dismiss_sent(true);
                     let delta: isize = if mouse.kind == MouseEventKind::ScrollDown {
                         3
                     } else {
@@ -301,6 +307,9 @@ impl App {
                         let next = view.scroll.saturating_add_signed(delta);
                         view.scroll = max_scroll.map_or(next, |max| next.min(max));
                     }
+                }
+                MouseEventKind::Down(MouseButton::Left) if compose_hit.is_some_and(hit) => {
+                    self.reader_activate_sheet_chip('t');
                 }
                 MouseEventKind::Down(MouseButton::Left) if prev_hit.is_some_and(hit) => {
                     self.sheet_step_file(-1);

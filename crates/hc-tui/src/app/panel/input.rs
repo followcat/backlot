@@ -31,7 +31,7 @@ const SLASH_VERBS: &[&str] = &[
 /// `i/tell producer hi`, `j/pause t1` — the fat-fingered compose a
 /// resting `i`/`j`/`k` left in the buffer. A guarded line is never
 /// sent to the producer and never dropped (R3-B2).
-fn mistyped_verb(line: &str) -> bool {
+pub(crate) fn mistyped_verb(line: &str) -> bool {
     let bytes = line.as_bytes();
     if bytes.len() < 3 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b'/' {
         return false;
@@ -44,6 +44,10 @@ fn mistyped_verb(line: &str) -> bool {
 }
 
 impl App {
+    /// Whether `line` looks like a stray ASCII letter prefixed to a `/verb`.
+    pub(crate) fn panel_mistyped_verb(&self, line: &str) -> bool {
+        mistyped_verb(line)
+    }
     /// `i`/`/` on a focused dock — select the `›` row of the
     /// selection's studio (the current studio when the cursor sits
     /// on a machine/stage row, else the first block's) and arm its
@@ -103,7 +107,7 @@ impl App {
     /// `Resting` either way (R3-2's dock rule), so `j`/`k`/`m`/`Esc`
     /// act on the dock at once.
     /// Sync one studio's Compose history from `StudioSummary.exchange`.
-    pub(super) fn panel_sync_history(&mut self, key: &StudioKey) {
+    pub(crate) fn panel_sync_history(&mut self, key: &StudioKey) {
         let machines = self.panel_summaries();
         if let Some(studio) = crate::panel::data::studio(&machines, key) {
             self.panel.history_mut(key).sync(
@@ -155,7 +159,12 @@ impl App {
         let Some(Target::Input(key)) = self.panel.selected.clone() else {
             return;
         };
-        let draft = self.panel.draft_mut(&key);
+        self.panel_input_complete_for(&key);
+    }
+
+    /// Complete a `/verb` prefix inside `key`'s shared studio draft buffer.
+    pub(crate) fn panel_input_complete_for(&mut self, key: &StudioKey) {
+        let draft = self.panel.draft_mut(key);
         let Some(prefix) = draft.as_str().strip_prefix('/') else {
             return;
         };
@@ -196,7 +205,7 @@ impl App {
     /// `run_studio_act` arm — a reason-needing verb (`/pause t1`)
     /// opens its reason dialog, a destructive one (`/stop`,
     /// `/close`) its confirm, the rest run straight.
-    fn panel_slash(&mut self, key: &StudioKey, rest: &str) {
+    pub(crate) fn panel_slash(&mut self, key: &StudioKey, rest: &str) {
         let machines = self.panel_summaries();
         let Some(studio) = crate::panel::data::studio(&machines, key) else {
             self.show_notice("Unknown studio", "the studio row is gone");

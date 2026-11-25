@@ -70,6 +70,7 @@ pub(crate) struct SheetView {
     pub raw_body: String,
     pub scroll: usize,
     pub meta: crate::hollywood::ReaderMeta,
+    pub tell: crate::hollywood::InlineTellState,
 }
 
 /// The whole client-local sheet state.

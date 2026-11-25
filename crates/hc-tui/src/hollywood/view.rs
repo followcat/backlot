@@ -10,8 +10,12 @@ use super::reader_chips::draw_action_strip;
 use super::reader_chrome::{
     draw_bottom_border, draw_context_row, draw_divider, draw_top_border, put_styled_line,
 };
+use super::reader_compose::{
+    InlineTellState, ReaderComposeOpts, draw_compose_band, draw_composing_hints,
+};
 use super::reader_meta::{HeaderLayout, ReaderMeta};
 use super::reader_wrap::{body_mode_for_title, natural_body_width, render_body_lines};
+use crate::chrome::help::CursorState;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
@@ -28,10 +32,11 @@ pub(crate) struct CardView {
     pub raw_body: String,
     pub scroll: usize,
     pub meta: ReaderMeta,
+    pub tell: InlineTellState,
 }
 
 /// What the mouse needs: the box's rect, the scrollable body, the
-/// scrollbar track when the text overflows, and header nav / action chip rects.
+/// scrollbar track when the text overflows, and header nav / action chip / compose rects.
 #[derive(Debug, Default)]
 pub(crate) struct ViewRender {
     pub area: Rect,
@@ -40,10 +45,13 @@ pub(crate) struct ViewRender {
     pub prev_hit: Option<Rect>,
     pub next_hit: Option<Rect>,
     pub chips: Vec<(Rect, char)>,
+    pub compose_rect: Option<Rect>,
+    pub cursor: Option<CursorState>,
     pub metrics: Option<ScrollMetrics>,
 }
 
 /// Draw the adaptive content-sized Reader centered inside `surface` using wall-clock time.
+#[cfg(test)]
 pub(crate) fn render_view(
     buf: &mut Buffer,
     surface: Rect,
@@ -62,11 +70,25 @@ pub(crate) fn render_view(
 }
 
 /// Draw the adaptive content-sized Reader centered inside `surface` relative to `now_ms`.
+#[cfg(test)]
 pub(crate) fn render_view_at(
     buf: &mut Buffer,
     surface: Rect,
     view: &CardView,
     pending: Option<&str>,
+    palette: &Palette,
+    now_ms: u64,
+) -> ViewRender {
+    render_view_with_compose(buf, surface, view, pending, None, palette, now_ms)
+}
+
+/// Draw the Reader with optional live inline compose editor context and cursor output.
+pub(crate) fn render_view_with_compose(
+    buf: &mut Buffer,
+    surface: Rect,
+    view: &CardView,
+    pending: Option<&str>,
+    compose: Option<ReaderComposeOpts<'_>>,
     palette: &Palette,
     now_ms: u64,
 ) -> ViewRender {
@@ -108,10 +130,13 @@ pub(crate) fn render_view_at(
         .saturating_add(4)
         .clamp(min_w as usize, max_w as usize) as u16;
 
-    // Chrome rows: 4 without secondary context row, 6 with Row 2 + divider.
+    // Chrome rows: 4 without secondary context row, 6 with Row 2 + divider, +2 for compose band.
     let show_row2 = header.has_row2 && surface.height >= 8;
-    let chrome_h: u16 = if show_row2 { 6 } else { 4 };
-    let min_h = 8u16.min(surface.height);
+    let has_compose = view.tell.has_band() && surface.height >= 8;
+    let base_chrome_h: u16 = if show_row2 { 6 } else { 4 };
+    let compose_h: u16 = if has_compose { 2 } else { 0 };
+    let chrome_h: u16 = base_chrome_h + compose_h;
+    let min_h = (chrome_h + 1).min(surface.height);
     let max_h = surface.height.saturating_sub(2).min(32).max(min_h);
     let body_cap = max_h.saturating_sub(chrome_h).max(1);
 
@@ -179,10 +204,31 @@ pub(crate) fn render_view_at(
     let action_y = bottom - 1;
     let div_y = bottom - 2;
     draw_divider(buf, area, div_y, edge, palette);
-    draw_action_strip(buf, area, action_y, view, pending, palette, &mut hits.chips);
+    if view.tell.is_composing() {
+        draw_composing_hints(
+            buf,
+            area,
+            action_y,
+            compose.is_none_or(|c| c.studio),
+            palette,
+        );
+    } else {
+        draw_action_strip(buf, area, action_y, view, pending, palette, &mut hits.chips);
+    }
+
+    let body_end = if has_compose && div_y >= area.y + 3 {
+        let compose_div_y = div_y - 2;
+        let (crect, cursor) =
+            draw_compose_band(buf, area, compose_div_y, &view.tell, compose, edge, palette);
+        hits.compose_rect = crect;
+        hits.cursor = cursor;
+        compose_div_y
+    } else {
+        div_y
+    };
 
     let body_y = area.y + if show_row2 { 3 } else { 1 };
-    let body_h = div_y.saturating_sub(body_y);
+    let body_h = body_end.saturating_sub(body_y);
     if body_h == 0 || area.width <= 4 {
         draw_bottom_border(buf, area, bottom, None, edge, palette);
         return hits;

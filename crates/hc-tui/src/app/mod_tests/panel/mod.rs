@@ -13,6 +13,7 @@ mod menus;
 mod merge;
 mod mouse;
 mod reader_actions;
+mod reader_compose;
 mod revise;
 mod sheet;
 mod stage;

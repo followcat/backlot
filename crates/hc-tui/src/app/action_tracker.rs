@@ -77,6 +77,7 @@ impl App {
         let Some(id) = self.actions.start(action.clone()) else {
             return;
         };
+        self.last_dispatched_action_id = Some(id);
         if let Some(bad) = hostile {
             self.sync_pending();
             self.sched.mark_dirty(Instant::now());
@@ -119,6 +120,12 @@ impl App {
         // form; either way the remembered cfg retires.
         if pending.action.mark == mark::hollywood_setup() {
             self.hw_setup_reply(result.is_ok());
+        }
+        if !pending.action.view
+            && pending.action.mark != mark::hollywood_setup()
+            && self.reader_compose_on_reply(id, &result)
+        {
+            return;
         }
         match result {
             Ok(stdout) if pending.action.view => {

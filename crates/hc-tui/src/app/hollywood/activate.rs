@@ -138,6 +138,7 @@ impl App {
                     raw_body: headline.to_owned(),
                     scroll: 0,
                     meta,
+                    ..hollywood::CardView::default()
                 });
             }
         }

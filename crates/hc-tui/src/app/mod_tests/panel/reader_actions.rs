@@ -389,6 +389,7 @@ async fn slice4_visual_shots() {
                 origin: crate::hollywood::ReaderOrigin::Card("c3".into()),
                 ..crate::hollywood::ReaderMeta::default()
             },
+            ..crate::hollywood::CardView::default()
         });
         let backend = draw_to(&mut app, 120, 36);
         std::fs::write(
