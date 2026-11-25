@@ -666,7 +666,7 @@ async fn real_stage_closed_loop() {
 
     // `studio finish` names the tasks still open; once accepted the
     // actor closes deliberately and stays resumable.
-    let refused = bl_fail(&scratch, &state, "studio finish --as producer");
+    let refused = bl_fail(&scratch, &state, "studio finish --as user");
     assert!(refused.contains("t1"), "{refused}");
     let c = commit_in(&work, "c");
     bl(
@@ -694,7 +694,7 @@ async fn real_stage_closed_loop() {
     bl(
         &scratch,
         &state,
-        "studio finish --reason accepted --as producer",
+        "studio finish --reason accepted --as user",
     );
     wait_kind(&state, "studio.finished", 1);
     wait_absent(&client, "bl-acme-shop-producer").await;

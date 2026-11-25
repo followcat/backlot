@@ -18,6 +18,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **Only you finish a studio.** `backlot studio finish` is the person's alone: a role that runs it — the producer included — is refused with `finishing the studio is the person's call; say in your report that it is ready, and they finish it from the lot`, and nothing joins the ledger. The producer reports that the studio is ready and what is still yours to do; the studio menu in the lot finishes it (`prompts/producer.md`, `docs/studio/guide.md`, `docs/studio/ledger.md`, `docs/studio/design.md`).
 - **The selected studio stands out with an accent border, title chip, and bold strip/stacked label.** Whether or not the lot owns the keys, the selected studio (cursor studio, else `▸` current studio, else first studio) draws all frame edges (`╭ ─ ╮ │ ╰ ╯`) in `accent` with a bold high-contrast `accent` title chip (` ▸ <studio> `) in its top border, while unselected blocks stay muted in `surface1`; collapsed strip and stacked rows also highlight the selected studio's label in bold `accent`.
 
 ## 0.4.5 — 2026-11-25

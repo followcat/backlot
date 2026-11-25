@@ -163,7 +163,7 @@ async fn real_studio_delete_end_to_end_under_live_stage() {
         &scratch,
         &state,
         "acme-shop",
-        "studio finish --reason done --as producer",
+        "studio finish --reason done --as user",
     );
     wait_absent(&client, "bl-acme-shop-producer").await;
     bl(

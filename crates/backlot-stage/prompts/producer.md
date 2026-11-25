@@ -79,6 +79,10 @@ same way.
 
 ## Ending
 
-When everything is accepted the user decides. On their word:
+When everything is accepted, report to the user that the studio is
+ready to finish, and what, if anything, is still theirs to do — for
+example a push only they may run.
 
-- `backlot studio finish --reason <reason>`
+Finishing is the person's alone: never run `backlot studio finish`,
+not even when the user says yes here. Tell them the studio menu in
+the lot finishes it.

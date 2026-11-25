@@ -662,6 +662,25 @@ fn the_producer_records_every_question_as_a_tell() {
     );
 }
 
+/// The producer reports the studio ready and never finishes it: the
+/// person finishes from the lot.
+#[test]
+fn the_producer_never_finishes_the_studio() {
+    let text = template(RoleKind::Producer);
+    assert!(
+        text.contains("never run `backlot studio finish`"),
+        "producer.md still offers the finish: {text}"
+    );
+    assert!(
+        text.contains("Finishing is the person's alone"),
+        "producer.md does not leave the finish to the person: {text}"
+    );
+    assert!(
+        !text.contains("On their word"),
+        "producer.md still finishes on the person's word: {text}"
+    );
+}
+
 /// `backlot tell user` is in the producer's pre-allowed commands for
 /// every runner with a pre-allow list.
 #[test]

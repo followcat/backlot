@@ -809,7 +809,9 @@ raise again one limit later.
 
 ## Finishing
 
-When everything is accepted, tell the producer; on your word it records — or you record:
+When everything is accepted, the producer reports that the studio is ready to finish and what is still yours
+to do. Finishing is yours alone — the producer never runs it, even when you say yes in chat — and the studio
+menu in the lot does it for you:
 
 ```sh
 backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user
