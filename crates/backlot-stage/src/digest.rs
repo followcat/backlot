@@ -66,6 +66,7 @@ pub(crate) fn rank(it: &OutItem) -> u8 {
             "at-cap" => 2,
             "delivered" => 3,
             "rework" => 4,
+            "outward" => 4,
             "attention" | "question" => 5,
             "denied" => 6,
             "stalled" => 7,

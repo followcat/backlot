@@ -161,6 +161,11 @@ pub(crate) struct Stage {
     /// `studio` → the one check process in flight for it; a restart
     /// re-derives what is owed from the ledger.
     pub(crate) checking: std::cell::RefCell<BTreeMap<String, checkwork::Running>>,
+    /// How outward push/PR card commands spawn (`real_spawn_argv` live, scripted in tests).
+    pub(crate) spawn_outward: Box<crate::hcard_outward::OutwardSpawn>,
+    /// In-flight non-blocking outward card processes, keyed by `card.seq`.
+    pub(crate) outward_running:
+        std::cell::RefCell<BTreeMap<u64, crate::hcard_outward::OutwardRunning>>,
     /// Studios whose leftover `checks/run-*` trees the first pass
     /// already swept.
     pruned: std::cell::RefCell<BTreeSet<String>>,
@@ -389,6 +394,13 @@ impl Stage {
         self.exchange_cache.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_watch.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
+        let mut outward = self.outward_running.borrow_mut();
+        for entry in outward.values_mut() {
+            if !present.contains(&entry.studio) {
+                entry.child.kill();
+            }
+        }
+        outward.retain(|_, r| present.contains(&r.studio));
     }
 
     /// Evict a single studio key across all in-memory caches (used when a
@@ -432,6 +444,13 @@ impl Stage {
             .retain(|(s, _), _| s != name);
         self.ask_watch.borrow_mut().retain(|(s, _), _| s != name);
         self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
+        let mut outward = self.outward_running.borrow_mut();
+        for entry in outward.values_mut() {
+            if entry.studio == name {
+                entry.child.kill();
+            }
+        }
+        outward.retain(|_, r| r.studio != name);
     }
 
     /// Reload changed ledgers, reconcile each studio and act. Each
@@ -862,6 +881,8 @@ impl Stage {
             git: std::cell::RefCell::new(Box::new(workareas::real_git)),
             spawn_check: Box::new(checkrun::real_spawn),
             checking: std::cell::RefCell::new(BTreeMap::new()),
+            spawn_outward: Box::new(checkrun::real_spawn_argv),
+            outward_running: std::cell::RefCell::new(BTreeMap::new()),
             pruned: std::cell::RefCell::new(BTreeSet::new()),
             versions: std::cell::RefCell::new(BTreeMap::new()),
             found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
@@ -969,6 +990,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         git: std::cell::RefCell::new(Box::new(workareas::real_git)),
         spawn_check: Box::new(checkrun::real_spawn),
         checking: std::cell::RefCell::new(BTreeMap::new()),
+        spawn_outward: Box::new(checkrun::real_spawn_argv),
+        outward_running: std::cell::RefCell::new(BTreeMap::new()),
         pruned: std::cell::RefCell::new(BTreeSet::new()),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),

@@ -440,6 +440,46 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             ),
         });
     }
+    for c in &state.outward_completions {
+        if sent.contains(&c.seq) {
+            continue;
+        }
+        let Some(req) = state
+            .outward_requests
+            .iter()
+            .find(|r| r.seq == c.source_seq)
+        else {
+            continue;
+        };
+        let status = match c.outcome {
+            backlot_model::event::OutwardOutcome::Succeeded => "succeeded".to_string(),
+            backlot_model::event::OutwardOutcome::Failed => match c.exit_code {
+                Some(code) => format!("failed (exit {code})"),
+                None => "failed".to_string(),
+            },
+            backlot_model::event::OutwardOutcome::TimedOut => "timed out".to_string(),
+            backlot_model::event::OutwardOutcome::Denied => "denied".to_string(),
+            backlot_model::event::OutwardOutcome::Stale => {
+                "stale (HEAD or remote moved before execution)".to_string()
+            }
+        };
+        let mut body = format!("# outward command {status}\n\nCommand: `{}`\n", req.command);
+        if c.card != 0 {
+            body.push_str(&format!("Card: c{}\n", c.card));
+        }
+        if let Some(log) = &c.log_file {
+            body.push_str(&format!("Log: `{}`\n", dir.join(log).display()));
+        }
+        if !c.output_tail.is_empty() {
+            body.push_str(&format!("\n```\n{}\n```\n", c.output_tail));
+        }
+        out.push(Notice {
+            source_seq: c.seq,
+            to: req.role.clone(),
+            label: "outward",
+            body,
+        });
+    }
     for req in &state.requirements {
         if sent.contains(&req.seq) || req.version <= 1 {
             continue;

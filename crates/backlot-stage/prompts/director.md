@@ -71,6 +71,14 @@ the work area, goes to the user.
 
 - `backlot approve --person <role> --decision allow` (or `deny`)
 
+## Outward pushes and PRs
+
+- Feature-branch pushes to a recorded remote run directly. Protected
+  branches, tags, other remotes, or `gh pr create` require a user
+  card: ask explicitly with
+  `backlot ask --run --why <reason> -- <command>` and wait for the
+  `outward` notice. Push the branch before asking to open a PR.
+
 ## The requirement
 
 Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the

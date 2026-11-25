@@ -43,6 +43,8 @@ mod guard_shell_lex;
 mod hcard;
 mod hcard_new;
 mod hcard_outward;
+mod hcard_outward_env;
+mod hcard_outward_exec;
 mod hcard_outward_git;
 mod hdeliver;
 mod hdeliver_fmt;
@@ -223,6 +225,8 @@ mod notices_tests;
 mod nudge_tests;
 #[cfg(test)]
 mod outward_card_tests;
+#[cfg(test)]
+mod outward_exec_tests;
 #[cfg(test)]
 mod permit_cmd_tests;
 #[cfg(test)]

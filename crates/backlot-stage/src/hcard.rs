@@ -38,6 +38,8 @@ pub(crate) enum Step {
     /// Record this kind in the studio `by: user`, then `card.done`.
     /// Boxed: `EventKind` dwarfs the other variants.
     Act(Box<EventKind>),
+    /// Non-blocking outward command is running — leave `card.applied` until it completes.
+    InFlight,
     /// `card.failed` with the reason.
     Fail(String),
 }
@@ -91,6 +93,16 @@ impl Stage {
     /// not `[hollywood]` is configured — the config gates the agent,
     /// never the gate.
     pub(crate) fn hcards(&self, hdir: &Path) -> Result<(), Fail> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        self.hcards_at(hdir, now_ms)
+    }
+
+    /// Tick-driven card pass with explicit clock for deterministic timeout testing.
+    pub(crate) fn hcards_at(&self, hdir: &Path, now_ms: u64) -> Result<(), Fail> {
+        self.poll_outward_running(hdir, now_ms)?;
         self.hrefresh(hdir);
         let applied: Vec<Card> = self
             .hstate
@@ -101,14 +113,15 @@ impl Stage {
             .cloned()
             .collect();
         for card in applied {
-            self.hcard(hdir, &card)?;
+            self.hcard(hdir, &card, now_ms)?;
         }
+        self.reconcile_cancelled_outward();
         Ok(())
     }
 
     /// One applied card: already-done, stale-check, then the action
     /// — and its outcome in Hollywood's ledger.
-    fn hcard(&self, hdir: &Path, card: &Card) -> Result<(), Fail> {
+    fn hcard(&self, hdir: &Path, card: &Card, now_ms: u64) -> Result<(), Fail> {
         // A card's identifiers came in over the ledger — refuse a
         // hostile studio name before it builds a path (D17a).
         if !crate::cli::valid_studio_name(card.action.studio()) {
@@ -126,6 +139,10 @@ impl Stage {
         let step = match &card.action {
             CardAction::StudioNew { .. } => self.studio_new_step(hdir, &sdir, card, sstate),
             CardAction::Setup { .. } => return self.setup_step(hdir, card),
+            CardAction::Outward { .. } => match &sstate {
+                None => Step::Fail(format!("no studio '{}'", card.action.studio())),
+                Some(s) => self.start_outward_card(&sdir, card, s, now_ms),
+            },
             _ => match &sstate {
                 None => Step::Fail(format!("no studio '{}'", card.action.studio())),
                 Some(s) if already_done(card, s) => Step::Done,
@@ -139,6 +156,7 @@ impl Stage {
             },
         };
         match step {
+            Step::InFlight => {}
             Step::Done => {
                 self.happend(
                     hdir,
@@ -323,7 +341,7 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
         }),
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
         CardAction::Setup { .. } => Err("setup is handled apart".into()),
-        CardAction::Outward { .. } => Err("outward execution pending slice 3".into()),
+        CardAction::Outward { .. } => Err("outward is handled apart".into()),
     }
 }
 

@@ -14,7 +14,7 @@ use crate::guard_git_probe::{
     current_branch, git_config_get, is_local_tag, remote_default_branch, resolve_default_remote,
     resolve_remote_push_urls, url_matches_policy,
 };
-use crate::hcard_outward::stage_probe_env;
+use crate::hcard_outward_env::stage_probe_env;
 
 pub(crate) fn is_gh_pr_create(argv: &[String]) -> bool {
     argv.first()

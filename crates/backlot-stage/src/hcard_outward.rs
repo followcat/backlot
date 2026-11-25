@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use backlot_model::event::{EventKind, OutwardOutcome};
+use backlot_model::EventBy;
+use backlot_model::event::OutwardOutcome;
 use backlot_model::hollywood::{Card, CardAction, CardBase, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::{OutwardRequestRecord, StudioState};
-use backlot_model::{EventBy, NewEvent};
 
 use crate::cli::{Caller, Env, Fail};
 use crate::daemon::Stage;
@@ -15,37 +15,23 @@ use crate::guard_git::GitContext;
 use crate::guard_git_env::{normalize_resolve, path_inside, run_real_git};
 use crate::guard_git_probe::resolve_default_remote;
 use crate::guard_rules::{GuardVerdict, classify_with_context};
+use crate::hcard_outward_env::{record_outward_completed, stage_probe_env};
 use crate::hcard_outward_git::{
     inspect_gh_pr, inspect_git_push, is_gh_pr_create, verify_branch_on_remote,
     verify_local_git_clean,
 };
-use crate::store::{self, HPending, Pending};
+use crate::store::{self, HPending};
 
-pub(crate) fn stage_probe_env() -> Env {
-    let mut vars = BTreeMap::new();
-    for k in [
-        "PATH",
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "LC_ALL",
-        "TERM",
-        "TMPDIR",
-        "SSH_AUTH_SOCK",
-        "GH_TOKEN",
-        "GITHUB_TOKEN",
-        "GH_HOST",
-    ] {
-        if let Ok(v) = std::env::var(k) {
-            vars.insert(k.into(), v);
-        }
-    }
-    vars.insert("GIT_CONFIG_COUNT".into(), "0".into());
-    vars.insert("GIT_TERMINAL_PROMPT".into(), "0".into());
-    vars.insert("GH_PROMPT_DISABLED".into(), "1".into());
-    Env { vars }
-}
+pub(crate) use crate::hcard_outward_exec::OutwardRunning;
+
+pub(crate) type OutwardSpawn = dyn Fn(
+        &Path,
+        &[String],
+        &Path,
+        &[(String, String)],
+    ) -> Result<Box<dyn crate::checkrun::CheckChild>, String>
+    + Send
+    + Sync;
 
 /// Validate `backlot ask --run` at CLI time (`classify == Card`).
 pub(crate) fn validate_ask_run(
@@ -144,22 +130,15 @@ impl Stage {
                         });
                         self.hrefresh(hdir);
                     }
-                    Err(reason) => {
-                        let completed = EventKind::OutwardCompleted {
-                            card: 0,
-                            source_seq: req.seq,
-                            outcome: OutwardOutcome::Failed,
-                            exit_code: None,
-                            output_tail: reason,
-                            log_file: None,
-                        };
-                        let _ = store::append(&sdir, |_, _| {
-                            Ok::<_, std::convert::Infallible>(Pending {
-                                event: NewEvent::new(EventBy::role("stage"), completed),
-                                files: Vec::new(),
-                            })
-                        });
-                    }
+                    Err(reason) => record_outward_completed(
+                        &sdir,
+                        0,
+                        req.seq,
+                        OutwardOutcome::Failed,
+                        None,
+                        reason,
+                        None,
+                    ),
                 }
             }
         }
