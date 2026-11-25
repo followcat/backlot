@@ -219,8 +219,9 @@ The summary projection paints at once; `status --json` and `records --json` fill
 it, fetched off the event loop on the studio's own machine — locally through
 `std::env::current_exe()`, remotely through `RemoteRunner`. A reply for a sheet already
 closed or reopened is dropped. `o` on a delivery or check line streams its file through
-`backlot report show` — a local file for a local studio, the same command remotely — and
-`Esc` backs out of the report first. A click outside the frame closes the sheet.
+`backlot report show` — a local file for a local studio, the same command remotely — into the **Lot Reader** (`j`/`k`/`Space`/`b`/`Ctrl+D`/`Ctrl+U`/`g`/`G` scroll, `←`/`→`/`[`/`]` step files, `t`/`i` compose inline sharing the dock's `›` draft and `↑`/`↓` history plus `Tab /verb`, `o` focuses/reopens, `p` peeks read-only, `y` copies raw text, `?` opens help, `Enter`/`Esc`/`q` close back to the sheet). A click outside the frame closes the sheet.
+
+**Lot Reader from the dock:** `Enter` or a click on any `✦` / `›` exchange line (and `m → Records`) opens the same adaptive Reader card beside the undimmed Lot Dock (`▌` tracks `←`/`→` or `[`/`]` stepping in place, and clicks on beside `✦`/`›` lines switch in place). Action strips adapt cleanly down to compact 80-column chips (`[t] tell`, `[o] focus/reopen`, `[p] peek`, `[v] sheet`, `[y] copy`, `? keys`), while `y` copies raw UTF-8 without answering prompts and `d` stays unbound. Pressing `t`/`i` or clicking `[t]` opens the inline composer backed by the studio's `›` draft and `↑`/`↓` history (`Esc` leaves compose keeping any draft; a second `Esc` closes the Reader with the draft still mirrored in the dock).
 
 ## Person states and attentions
 

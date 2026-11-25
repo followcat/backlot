@@ -176,6 +176,7 @@ impl App {
             hollywood_hits: crate::hollywood::HollywoodRender::default(),
 
             actions: crate::action::ActionTracker::default(),
+            last_dispatched_action_id: None,
             action_tx,
             action_rx,
             action_toast: None,

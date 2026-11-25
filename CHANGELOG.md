@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Adaptive Lot Reader with sibling stepping, raw OSC 52 copy, and inline `t` composer.** Reading any studio `✦` / `›` exchange row, Hollywood headline/report, actionable card, actor `records`, or Task & Delivery Sheet report/log opens an adaptive content-sized card centered in the modal surface with structured header metadata (additive optional `to`, `kind`, `task`, and `ts_ms` fields on `backlot/1` summaries), display-width-accurate CJK/URL/Markdown/log wrapping, and an undimmed beside Lot Dock whose `▌` cursor follows `←`/`→` (`[`/`]`) sibling stepping in place. Action strips adapt across width tiers (`[t] tell`, `[o] focus/reopen`, `[p] peek`, `[v] sheet`, `[y] copy`, card `[a] apply` / `[x] cancel`, `? keys`) while keeping `y` copy-only and `d` unbound so prompts are never answered by accident; pressing `t` or `i` opens an inline composer sharing drafts and `↑`/`↓` history (plus studio `Tab` `/verb` completion) directly with the Lot Dock or Call Sheet (`docs/keys.md`, `docs/studio/panel.md`, `docs/studio/hollywood.md`).
+
 ### Changed
 
 - **The selected studio stands out with an accent border, title chip, and bold strip/stacked label.** Whether or not the lot owns the keys, the selected studio (cursor studio, else `▸` current studio, else first studio) draws all frame edges (`╭ ─ ╮ │ ╰ ╯`) in `accent` with a bold high-contrast `accent` title chip (` ▸ <studio> `) in its top border, while unselected blocks stay muted in `surface1`; collapsed strip and stacked rows also highlight the selected studio's label in bold `accent`.

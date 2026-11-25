@@ -386,6 +386,7 @@ pub struct App {
     /// through `run_action` — the pending marks live here and the
     /// replies land on `action_rx`.
     actions: crate::action::ActionTracker,
+    last_dispatched_action_id: Option<u64>,
     action_tx: mpsc::Sender<(u64, Result<String, String>)>,
     action_rx: mpsc::Receiver<(u64, Result<String, String>)>,
     /// The §3 toast — the 3.5 s success card or the 8 s failure
