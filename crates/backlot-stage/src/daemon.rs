@@ -1036,7 +1036,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     let mut live_written: Option<crate::live::Live> = None;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
-        let step = step_daemon(
+        step_daemon(
             &mut stage,
             &live,
             &mut throttle,
@@ -1047,7 +1047,6 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
             &mut last_req_poll_ms,
         )
         .await?;
-        let _ = step;
         live = match sub.as_mut() {
             Some(sub) => match tokio::time::timeout(TICK, sub.recv()).await {
                 // A terminal or request-doc event, or the cadence: refetch the view.
