@@ -33,6 +33,7 @@ pub(crate) struct CardView {
     pub scroll: usize,
     pub meta: ReaderMeta,
     pub tell: InlineTellState,
+    pub action_notice: Option<String>,
 }
 
 /// What the mouse needs: the box's rect, the scrollable body, the
@@ -125,9 +126,14 @@ pub(crate) fn render_view_with_compose(
     let header_w = row1_w.max(row2_w).min(max_w as usize);
 
     let body_nat_w = natural_body_width(&view.lines, mode);
+    let notice_w = view
+        .action_notice
+        .as_deref()
+        .map_or(0, |n| display_width(n) + 4);
     let base_w = body_nat_w
         .max(header_w)
         .saturating_add(4)
+        .max(notice_w)
         .clamp(min_w as usize, max_w as usize) as u16;
 
     // Chrome rows: 4 without secondary context row, 6 with Row 2 + divider, +2 for compose band.
@@ -147,6 +153,7 @@ pub(crate) fn render_view_with_compose(
         body_nat_w
             .max(header_w)
             .saturating_add(5)
+            .max(notice_w)
             .clamp(min_w as usize, max_w as usize) as u16
     } else {
         base_w

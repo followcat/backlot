@@ -124,6 +124,21 @@ pub(super) fn draw_action_strip(
         return;
     }
 
+    if view.card.is_some()
+        && let Some(msg) = view.action_notice.as_deref()
+    {
+        let fitted = truncate_end(msg, avail);
+        put_text(
+            buf,
+            base_x,
+            y,
+            display_width(&fitted) as u16,
+            &fitted,
+            bg.fg(palette.peach),
+        );
+        return;
+    }
+
     let specs = available_chips(view);
     let has_nav = view.meta.nav_total.is_some_and(|n| n > 1);
     let tail = if has_nav { "←/→ · esc" } else { "esc" };

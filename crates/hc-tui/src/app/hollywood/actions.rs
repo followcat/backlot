@@ -123,14 +123,34 @@ impl App {
         self.run_action(studio_cmds::finish(key, None));
     }
 
+    fn refuse_server_card_approval(&mut self) -> bool {
+        if !self.server_mode() {
+            return false;
+        }
+        let msg = backlot_model::req_wire::CARD_QUEUE_REFUSAL;
+        if let Some(view) = self.hollywood.view.as_mut()
+            && view.card.is_some()
+        {
+            view.action_notice = Some(msg.to_owned());
+        }
+        self.show_notice("Card approval", msg);
+        true
+    }
+
     /// `a` / Apply on the selected card: `backlot card apply <id>`.
-    pub(super) fn hollywood_card_apply(&mut self, id: &str) {
+    pub(in crate::app) fn hollywood_card_apply(&mut self, id: &str) {
+        if self.refuse_server_card_approval() {
+            return;
+        }
         self.run_action(studio_cmds::card_apply(id));
     }
 
     /// `x` / Cancel on the selected card: the reason dialog asks
     /// first (§2.1 — a card cancel's reason is optional).
-    pub(super) fn hollywood_card_cancel(&mut self, id: &str) {
+    pub(in crate::app) fn hollywood_card_cancel(&mut self, id: &str) {
+        if self.refuse_server_card_approval() {
+            return;
+        }
         self.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
             format!("Cancel card {id}"),
             false,

@@ -245,8 +245,8 @@ impl App {
                 }
             }
             StudioAct::CardApply => {
-                if let Some(id) = &menu.card {
-                    self.run_action(studio_cmds::card_apply(id));
+                if let Some(id) = menu.card.clone() {
+                    self.hollywood_card_apply(&id);
                 }
             }
             StudioAct::CardShow => {
@@ -255,12 +255,8 @@ impl App {
                 }
             }
             StudioAct::CardCancel => {
-                if let Some(id) = &menu.card {
-                    self.studio_dialog = Some(StudioDialog::reason(
-                        format!("Cancel card {id}"),
-                        false,
-                        ReasonFor::CardCancel { id: id.clone() },
-                    ));
+                if let Some(id) = menu.card.clone() {
+                    self.hollywood_card_cancel(&id);
                 }
             }
             // The lot menu's surfaces (S5 §2.3): no `backlot` command
