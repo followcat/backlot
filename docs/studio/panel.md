@@ -232,7 +232,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | Reason | Class | Shown as |
 |---|---|---|
 | `permission prompt` | needs you | `needs you · <what>`; the prompt row keeps `y`/`d`/`p`, and a non-actor's reads `USER` |
-| `outward action` | needs you | `needs you · <command>` |
+| `outward action` | info | the role's details only, dimmed — a refusal the role's own turn moved past; no counts, no notice |
 | `folder-trust` | needs you | `needs you · <what>` |
 | `folder trust refused` | needs you | `needs you · <what>` |
 | `cannot resume` | needs you | `needs you · <what>` |
@@ -261,6 +261,18 @@ A `stuck` episode that escalates — `rate limited` or `connection error` after 
 or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you`. A reason
 the table does not list is `needs you`, so nothing important is hidden. Stage bookkeeping never
 changes a person's state and never counts as flagged.
+
+**What reaches the person, and why.** Only reasons where the person alone can act are `needs you`
+and count toward the person's needs-you list, the lot pill and notifications: a permission or
+trust prompt the stage will not answer (`permission prompt`, `folder-trust`, `folder trust
+refused`), a question addressed to the user, `cannot resume`, `launch refused` and the
+`<runner> prep failed` / `not supported` / `config malformed` / `not a git repository` / `work
+area failed` launches only the person can fix, `over budget`, `agent error`, and the escalated
+`owed` step. `outward action` is `info`: the guard stopped a role's command and told the role to
+`backlot ask` if it still needs it, so the refusal stays on the studio's attention list and the
+role's row but never counts as the person's to-do — it clears as `role moved on` once the role
+writes anything else to the ledger after it (or the stage delivers it new work). A carded
+outward push or `gh pr create` is unchanged: it surfaces as its own open card.
 
 A person shows exactly one state, in this priority:
 

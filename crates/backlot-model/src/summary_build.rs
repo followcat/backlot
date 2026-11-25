@@ -171,16 +171,33 @@ pub fn role_name(state: &StudioState, role: &str) -> String {
         .unwrap_or_else(base)
 }
 
-/// The first open attention on this role, if any. A `permission
-/// prompt` the director may not answer — a flagged `BACKLOT_*`
-/// screen, or any prompt on a role that is not an actor — is marked
-/// as the user's (S9b).
-/// The first open attention on this role, if any. A `permission
+/// The open attention a role's row should carry: the first that is not
+/// `info`, else the first `info` one. A role can hold both — an
+/// `outward action` refusal (now `info`) beside a permission prompt —
+/// and the row must show the one that waits on the person, never let
+/// the informational refusal mask it.
+pub(crate) fn role_open_attention<'a>(
+    state: &'a StudioState,
+    role: &str,
+) -> Option<&'a crate::state::Attention> {
+    let mut first_info = None;
+    for a in state.open_attention().filter(|a| a.role == role) {
+        if crate::attention::AttentionClass::of(&a.reason, a.needs_user)
+            != crate::attention::AttentionClass::Info
+        {
+            return Some(a);
+        }
+        first_info.get_or_insert(a);
+    }
+    first_info
+}
+
+/// The open attention on this role, if any. A `permission
 /// prompt` the director may not answer — a flagged `BACKLOT_*`
 /// screen, or any prompt on a role that is not an actor — is marked
 /// as the user's (S9b).
 pub(crate) fn role_attention(state: &StudioState, role: &str) -> Option<String> {
-    state.open_attention().find(|a| a.role == role).map(|a| {
+    role_open_attention(state, role).map(|a| {
         if a.reason == crate::event::PERMISSION_PROMPT
             && (a.needs_user || crate::state::actor_task(&a.role).is_none())
         {
@@ -426,7 +443,7 @@ pub(crate) fn role_summary(
         .and_then(|t| state.tasks.get(t))
         .map(|t| t.priority);
     let actor = r.actor.as_ref();
-    let open = state.open_attention().find(|a| a.role == role);
+    let open = role_open_attention(state, role);
     Some(RoleSummary {
         role: cap(role),
         name: role_name(state, role),
