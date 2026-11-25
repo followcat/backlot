@@ -140,7 +140,7 @@ fn an_actor_records_only_its_own_delivery_block_and_messages() {
             EventKind::StudioFinished {
                 reason: "done".into(),
             },
-            "the user or the producer",
+            "the user",
         ),
         (studio_kind(), "the user"),
         (

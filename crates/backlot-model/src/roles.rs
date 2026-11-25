@@ -205,6 +205,6 @@ fn who_can(kind: &EventKind) -> &'static str {
         EventKind::ReportSent { .. } => "the director or the producer",
         EventKind::RoleRefused { .. } => "a role or the stage",
         EventKind::RoleProgress { .. } => "a studio role",
-        EventKind::StudioFinished { .. } => "the user or the producer",
+        EventKind::StudioFinished { .. } => "the user",
     }
 }

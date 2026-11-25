@@ -35,6 +35,10 @@ pub(crate) fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
     }
 }
 
+/// The line a role hears when it tries to finish a studio: finishing
+/// is the person's alone, and the role's part is to report it ready.
+pub(crate) const FINISH_IS_THE_PERSONS_CALL: &str = "finishing the studio is the person's call; say in your report that it is ready, and they finish it from the lot";
+
 /// `priority`, `reopen` and `close` are person-facing commands: the
 /// user or the director records them; a working role cannot.
 pub(crate) fn person_gate(caller: &Caller) -> Result<(), Fail> {
@@ -655,18 +659,15 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
-        // `studio finish` ends the studio; the model refuses while
-        // any task is not terminal, naming them. A studio with no
-        // requirement and no tasks refuses unless `--force` — an
-        // accidental finish of a just-made studio (L5).
+        // `studio finish` ends the studio and is the person's alone:
+        // a role reports the studio ready and the person finishes it
+        // from the lot. The model refuses while any task is not
+        // terminal, naming them. A studio with no requirement and no
+        // tasks refuses unless `--force` — an accidental finish of a
+        // just-made studio (L5).
         Cmd::StudioFinish { reason, force } => {
-            match caller.role.as_str() {
-                "user" | "producer" => {}
-                other => {
-                    return Err(Fail::refused(format!(
-                        "role '{other}' cannot do this; the user or the producer can"
-                    )));
-                }
+            if caller.role != "user" {
+                return Err(Fail::refused(FINISH_IS_THE_PERSONS_CALL));
             }
             Ok(Box::new(move |state, _| {
                 if !force
