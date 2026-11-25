@@ -194,7 +194,19 @@ impl App {
                     return true;
                 }
                 let own = self.project_cache.own_document(&self.view);
-                own.closed.get(&focused) == Some(&term.created_ms)
+                if own.closed.get(&focused) == Some(&term.created_ms) {
+                    return true;
+                }
+                // An exited pane stays "finished" in the inventory until it
+                // is reaped, but the app layout has already dropped it.
+                term.state == "finished"
+                    && !self
+                        .project_cache
+                        .preview(&self.view, Some(&focused))
+                        .snapshot
+                        .panes
+                        .iter()
+                        .any(|pane| pane.pane_id == focused)
             }
         }
     }

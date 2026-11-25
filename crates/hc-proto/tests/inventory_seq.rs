@@ -180,3 +180,26 @@ fn offline_marks_without_clearing_the_inventory() {
     inv.set_offline(false);
     assert!(!inv.is_offline());
 }
+
+#[test]
+fn a_document_only_subscription_ignores_seq_gaps_and_empty_snapshots() {
+    let params = SubscribeParams {
+        docs: vec!["app".into()],
+        ..SubscribeParams::default()
+    };
+    let mut inv = Inventory::for_subscription(&params);
+    assert!(inv.filtered());
+    let snapshot = inv.replace(1, vec![]);
+    assert!(snapshot.snapshot);
+    assert!(inv.terminals().is_empty());
+    // Omitted terminal events advance `seq` on the core without arriving here:
+    // neither a `doc` event past a gap nor a higher heartbeat may resync.
+    let doc = inv.apply(&ev(5, "doc", None, json!({"name": "app", "version": 2})));
+    assert!(!doc.resync);
+    assert!(!inv.is_stale());
+    assert_eq!(doc.docs.len(), 1);
+    assert_eq!(doc.docs[0].name, "app");
+    let hb = inv.heartbeat(&HeartbeatParams { seq: 8 });
+    assert!(!hb.resync);
+    assert!(!inv.is_stale());
+}
