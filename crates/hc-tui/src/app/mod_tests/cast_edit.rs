@@ -279,6 +279,7 @@ fn a_cast_card_label_renders() {
     let action = backlot_model::hollywood::CardAction::Cast {
         studio: "acme-shop".into(),
         cast: "/home/user/acme-shop/cast.toml".into(),
+        snapshot: None,
     };
     assert_eq!(action.label(), "cast acme-shop ← cast.toml");
     let restart = backlot_model::hollywood::CardAction::Restart {

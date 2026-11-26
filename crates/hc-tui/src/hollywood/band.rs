@@ -18,7 +18,7 @@ use super::rows::{HollywoodActivity, Live, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 
 /// The space the band keeps at each side.
@@ -240,13 +240,14 @@ fn draw_wait(
         head
     };
     let head_room = avail.saturating_sub(head_x + chips_w + 1);
-    put_text(
+    put_role_badged_text(
         buf,
         head_x,
         rect.y,
         head_room,
         &truncate_end(&head, head_room as usize),
         Style::default().fg(palette.text).bg(bg),
+        palette,
     );
     // Pending mark on the row while its action runs.
     if let Some(pending) = hollywood.pending.as_deref()

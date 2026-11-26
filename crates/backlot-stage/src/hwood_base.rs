@@ -205,7 +205,7 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
         // A cast card base is the seq of the settings event it edits;
         // the file is validated up front so a card born stale never
         // exists.
-        CardAction::Cast { studio, cast } => {
+        CardAction::Cast { studio, cast, .. } => {
             let s = require_studio(base, studio)?;
             if s.finished.is_some() {
                 return Err(Fail::refused(format!("studio '{studio}' is finished")));
@@ -216,6 +216,18 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
             Ok(CardBase::CastSeq {
                 was: s.cast_seq.unwrap_or(0),
             })
+        }
+        // A reopen card bases on the studio being finished; it is the
+        // only way Hollywood may bring one back (the command is the
+        // person's).
+        CardAction::ReopenStudio { studio } => {
+            let s = require_studio(base, studio)?;
+            if s.finished.is_none() {
+                return Err(Fail::refused(format!(
+                    "studio '{studio}' is not finished — nothing to reopen"
+                )));
+            }
+            Ok(CardBase::StudioFinished)
         }
         CardAction::Outward { .. } => Err(Fail::refused("outward cards are proposed by the stage")),
     }

@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use ratatui::{buffer::Buffer, layout::Rect, style::Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::navigate::WorkspaceNavigationTarget;
 use super::palette::Palette;
@@ -396,145 +395,10 @@ pub(crate) fn render_shell(
     hits
 }
 
-pub(crate) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
-    let width = display_width(text).min(area.width);
-    put_text(
-        buffer,
-        area.right().saturating_sub(width),
-        y,
-        width,
-        text,
-        style,
-    );
-}
+pub(super) use super::text_draw::display_width;
+pub(crate) use super::text_draw::{put_right_text, put_role_badged_text, put_segment, put_text};
 
-pub(crate) fn put_segment(
-    buffer: &mut Buffer,
-    x: u16,
-    y: u16,
-    right: u16,
-    text: &str,
-    style: Style,
-) -> u16 {
-    let width = display_width(text).min(right.saturating_sub(x));
-    put_text(buffer, x, y, width, text, style);
-    x.saturating_add(width)
-}
-
-pub(crate) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
-    if width == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
-        return;
-    }
-    buffer.set_stringn(x, y, text, width as usize, style);
-}
-
-pub(super) fn display_width(text: &str) -> u16 {
-    UnicodeWidthStr::width(text).min(u16::MAX as usize) as u16
-}
-
-/// The version badge's update hint — ` ↑v…` in accent while a newer
-/// release is offered, ` ↻v…` in green once a verified install only
-/// waits on its restart. The restart hint wins while both are known.
-#[derive(Clone, Copy)]
-pub(crate) enum UpdateBadge<'a> {
-    None,
-    Update(&'a str),
-    Restart(&'a str),
-}
-
-impl<'a> UpdateBadge<'a> {
-    pub(crate) fn new(update: Option<&'a str>, restart: Option<&'a str>) -> Self {
-        match (restart, update) {
-            (Some(version), _) => Self::Restart(version),
-            (None, Some(version)) => Self::Update(version),
-            (None, None) => Self::None,
-        }
-    }
-}
-
-impl UpdateBadge<'_> {
-    /// The accent of the update dot and the collapsed toggle: accent while
-    /// an update waits, green once an install waits for its restart.
-    pub(crate) fn accent_style(self, palette: &Palette) -> Option<Style> {
-        match self {
-            UpdateBadge::None => None,
-            UpdateBadge::Update(_) => Some(
-                Style::default()
-                    .fg(palette.accent)
-                    .add_modifier(ratatui::style::Modifier::BOLD),
-            ),
-            UpdateBadge::Restart(_) => Some(
-                Style::default()
-                    .fg(palette.green)
-                    .add_modifier(ratatui::style::Modifier::BOLD),
-            ),
-        }
-    }
-}
-
-/// The badge's two parts: the running `vX.Y.Z`, and — once the
-/// update check reported a newer release — the ` ↑v…` hint in the
-/// notice toast's accent (or ` ↻v…` in green for a pending restart).
-/// The hint stays tight so a two-digit pair still fits the
-/// default-width header.
-fn version_badge_text(update_badge: UpdateBadge<'_>) -> (String, Option<String>) {
-    let hint = match update_badge {
-        UpdateBadge::Update(latest) => Some(format!(" ↑v{latest}")),
-        UpdateBadge::Restart(version) => Some(format!(" ↻v{version}")),
-        UpdateBadge::None => None,
-    };
-    (format!("v{}", env!("CARGO_PKG_VERSION")), hint)
-}
-
-/// Width of the fully drawn badge — callers reserve a slot with it.
-pub(super) fn version_badge_width(update_badge: UpdateBadge<'_>) -> u16 {
-    let (version, hint) = version_badge_text(update_badge);
-    display_width(&version) + hint.as_deref().map_or(0, display_width)
-}
-
-/// Right-aligns the badge inside `row` without crossing `min_left`:
-/// the update hint drops first under pressure, then the whole badge.
-/// Returns the hint's rect — the clickable slice — empty otherwise.
-pub(super) fn put_version_badge(
-    buffer: &mut Buffer,
-    row: Rect,
-    min_left: u16,
-    update_badge: UpdateBadge<'_>,
-    palette: &Palette,
-) -> Rect {
-    let (version, hint) = version_badge_text(update_badge);
-    let ver_w = display_width(&version);
-    let hint_w = hint.as_deref().map_or(0, display_width);
-    let right = row.right();
-    let draw_hint = hint.is_some() && right >= min_left.saturating_add(ver_w + hint_w);
-    let total = ver_w + if draw_hint { hint_w } else { 0 };
-    if right < min_left.saturating_add(total) {
-        return Rect::default();
-    }
-    let ver_x = right.saturating_sub(total);
-    put_text(
-        buffer,
-        ver_x,
-        row.y,
-        ver_w,
-        &version,
-        Style::default().fg(palette.overlay0),
-    );
-    if !draw_hint {
-        return Rect::default();
-    }
-    let hint_x = ver_x.saturating_add(ver_w);
-    let hint_color = match update_badge {
-        UpdateBadge::Restart(_) => palette.green,
-        _ => palette.accent,
-    };
-    put_text(
-        buffer,
-        hint_x,
-        row.y,
-        hint_w,
-        hint.as_deref().unwrap_or_default(),
-        Style::default().fg(hint_color),
-    );
-    Rect::new(hint_x, row.y, hint_w, 1)
-}
+pub(crate) use super::badge::UpdateBadge;
+pub(super) use super::badge::{
+    put_version_badge, version_badge_compact_width, version_badge_width,
+};

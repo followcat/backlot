@@ -4,6 +4,7 @@
 
 pub(crate) mod agent_rows;
 pub mod agents;
+pub(crate) mod badge;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
 pub mod detect;
@@ -47,6 +48,7 @@ pub(crate) mod studio_rows;
 pub(crate) mod studio_tree;
 pub mod tabs;
 pub mod text;
+mod text_draw;
 pub(crate) mod text_editor;
 pub(crate) mod title_text;
 pub mod tokens;

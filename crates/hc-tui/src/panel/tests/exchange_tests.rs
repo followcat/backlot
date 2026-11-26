@@ -157,17 +157,18 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
         .collect()
     };
 
-    // Base block height in `summary()` is 3 (top + input + bottom) + 8 roles = 11.
-    // Unconstrained (0) and roomy (20 >= 11 + 6): all 6 turns render.
+    // Base block height in `summary()` is 3 (top + input + bottom) + 7 live
+    // roles + 3 role-group dividers + the closed fold = 14. Unconstrained
+    // (0) and roomy (20 >= 14 + 6): all 6 turns render.
     assert_eq!(talk_seqs(0), vec![1, 2, 3, 4, 5, 6]);
     assert_eq!(talk_seqs(20), vec![1, 2, 3, 4, 5, 6]);
-    // Partial slack (13 = 11 + 2): newest 2 turns render above `›`.
-    assert_eq!(talk_seqs(13), vec![5, 6]);
-    // Exact fit (11) or cramped (9): 0 turns render so roles + `›` never starve.
-    assert_eq!(talk_seqs(11), Vec::<u64>::new());
-    assert_eq!(talk_seqs(9), Vec::<u64>::new());
+    // Partial slack (16 = 14 + 2): newest 2 turns render above `›`.
+    assert_eq!(talk_seqs(16), vec![5, 6]);
+    // Exact fit (14) or cramped (10): 0 turns render so roles + `›` never starve.
+    assert_eq!(talk_seqs(14), Vec::<u64>::new());
+    assert_eq!(talk_seqs(10), Vec::<u64>::new());
 
-    // Even at exact fit (body_height = 11), every role and `›` Input remain present.
+    // Even at exact fit (body_height = 14), every role and `›` Input remain present.
     let exact_targets: Vec<Target> = rows(
         &machines(Some(&summary)),
         |_| true,
@@ -175,7 +176,7 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
         &panel,
         PanelMode::Expanded,
         Some(&current),
-        11,
+        14,
     )
     .iter()
     .map(|r| r.target())

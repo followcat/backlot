@@ -69,7 +69,8 @@ restart backlot. Set `BACKLOT_VERSION=v<version>` first to move to a specific re
 already running keep the old version until you restart them. `--upgrade` installs into the directory of the running
 binary (`BACKLOT_INSTALL_DIR` overrides it), so the command upgrades the binary you run.
 
-Inside the client, `prefix+u` (or a click on the `↑v…` badge) opens the update card with the release notes of every
+Inside the client, `prefix+u` (or a click on the `↑v…` badge — or the compact `↑` it shrinks to when the sidebar
+header is too narrow for the full label) opens the update card with the release notes of every
 newer release. `↵ update` runs backlot's own install script locally, even when the client is attached to a remote
 host, checks that `backlot --version` reports the new version, and then `↵ restart` re-executes the installed binary
 in place. The card offers `↵ update` only when the install directory is writable; otherwise it shows the command to

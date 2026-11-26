@@ -27,6 +27,11 @@ fn row0(app: &mut App, w: u16, h: u16) -> (String, TestBackend) {
 /// The badge, the studio header and the pill share row 0 at 80, 120
 /// and 160 columns: each string is drawn whole, their cells never
 /// overlap, and the pill keeps its right-hand segment.
+///
+/// The sidebar is a fixed 26 columns in studio mode, so the header
+/// room is the same 14 cells at every width. Whether the badge shows
+/// the full `↑v<latest>` or the compact `↑` depends only on how long
+/// the running version is, so this holds for a `0.4.10`-style bump too.
 #[tokio::test]
 async fn the_badge_the_studio_header_and_the_pill_never_overlap() {
     for w in [80u16, 120, 160] {
@@ -37,7 +42,8 @@ async fn the_badge_the_studio_header_and_the_pill_never_overlap() {
             header.contains(&version()),
             "{w}: badge missing: {header:?}"
         );
-        assert!(header.contains("↑v9.9.9"), "{w}: hint missing: {header:?}");
+        // The hint survives as the full label or the compact glyph.
+        assert!(header.contains('↑'), "{w}: hint missing: {header:?}");
         assert!(header.contains("acme-shop"), "{w}: header: {header:?}");
         assert!(header.contains('✦'), "{w}: pill missing: {header:?}");
         let badge = app.hit_map.update_badge;
@@ -54,6 +60,24 @@ async fn the_badge_the_studio_header_and_the_pill_never_overlap() {
         let text = header.find(&version()).unwrap() as u16;
         assert!(text + version().len() as u16 <= badge.x, "{w}: {header:?}");
         assert!(badge.x >= 10, "{w}: the header label stays: {header:?}");
+        // The hit rect covers exactly the drawn hint: the full label
+        // when the version leaves room for it, the compact glyph
+        // otherwise — so a later `0.4.10`-style bump keeps a hint.
+        let ver = version();
+        let drawn: String = header
+            .chars()
+            .skip(badge.x as usize)
+            .take(badge.width as usize)
+            .collect();
+        if header.contains(&format!("{ver} ↑v9.9.9")) {
+            assert_eq!(drawn, " ↑v9.9.9", "{w}: full hint hit: {header:?}");
+        } else {
+            assert_eq!(drawn, " ↑", "{w}: compact hint hit: {header:?}");
+            assert!(
+                header.contains(&format!("{ver} ↑")),
+                "{w}: the compact hint follows the version: {header:?}"
+            );
+        }
     }
 }
 
@@ -177,7 +201,7 @@ async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
     let (sidebar, dock) = regions(&mut app, 120, 40);
     assert!(dock.contains('▸'), "in-studio mark: {dock}");
     assert!(sidebar.contains("acme-shop · Local"), "cast: {sidebar}");
-    assert!(sidebar.contains("producer"), "cast row: {sidebar}");
+    assert!(sidebar.contains("Ⓟ"), "cast row: {sidebar}");
 
     // The stray `backlot` agent is no studio workspace: the blocks
     // stay, `▸` goes — and the cast keeps naming the remembered
@@ -196,5 +220,5 @@ async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
         sidebar.contains("acme-shop · Local"),
         "the remembered current studio's cast stays: {sidebar}"
     );
-    assert!(sidebar.contains("producer"), "cast row stays: {sidebar}");
+    assert!(sidebar.contains("Ⓟ"), "cast row stays: {sidebar}");
 }

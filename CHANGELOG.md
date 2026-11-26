@@ -10,15 +10,50 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **Studio switching moves to `Alt+PageUp`/`Alt+PageDown`, and `Alt+Left`/`Alt+Right` go back to the terminal.** Studios are a vertical list, so the studio step now lives on the page keys; the old arrow chords were word movement in shells and agent input boxes. `Alt+Up`/`Alt+Down` still move between a studio's people (`docs/keys.md`, `docs/studio/guide.md`, `docs/studio/panel.md`).
+- **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
 ### Fixed
 
 - **Stepping to a studio also switches the main pane.** `Alt+Left`/`Alt+Right` now shows the studio's last member (a role or a shell, else its producer, else its first live person or shell) instead of leaving the previous studio's pane up. Stepping from a terminal moves the keys to the landed member; stepping from the lot or the machines tree swaps the pane but leaves that surface in charge, so you can keep stepping or press `Enter`. A studio with nobody live leaves the pane as it is, quietly (`docs/keys.md`, `docs/studio/guide.md`).
 - **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
 - **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
 
+## 0.4.11 — 2026-11-26
+
+### Added
+
+- **Reopen a finished studio.** `backlot studio reopen --studio <s> --as user` records the reopening (`studio.reopened`), and recasting a role, `studio cast set`, adding tasks and answering permission prompts work again. Only you may reopen — a role or Hollywood is refused — and Hollywood may propose it as a `reopen-studio` card. The guide says when to reopen and when to start a new studio (`docs/studio/guide.md`, `docs/studio/hollywood.md`).
+- **Hollywood can withdraw its own cards.** `backlot hollywood withdraw <card> --reason <text>` takes back an open card Hollywood proposed, recording who withdrew it and why (`card.withdrawn`); the client shows it as `withdrawn`. Only Hollywood's own cards, never yours or the stage's, and never one already applied, cancelled or stale (`docs/studio/hollywood.md`).
+- **A newer card supersedes the older one it conflicts with.** When a new card targets the same single fact an open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a studio's cast (`cast`), its finished state (`reopen-studio`), a studio name (`studio-new`), or Hollywood's identity (`setup`) — the older card is marked `superseded by c<n>` in the same append, so a batch apply can never run both (`docs/studio/hollywood.md`).
+- **`backlot guide [<topic>] [--grep <word>]`.** Backlot's own documentation — every file in `docs/studio/` — is compiled into the binary and printed here: no topic lists them, a topic prints one, and `--grep` narrows either to the matching lines (over every topic when none is named). It needs no studio, ledger or core and never searches the disk. Every role prompt and Hollywood's now say their docs come from `backlot guide` and never from a disk search — the `find /`/glob-for-`guide.md` detours that only stopped at a permission prompt are gone — and the command is pre-allowed for every role on every runner that carries an allow list (`docs/studio/guide.md`, `docs/studio/design.md`, `docs/studio/runners.md`).
+- **A read-only allow list for every role, on every runner.** `git status`, `git log`, `git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for the producer, director, writer and actors alike, so a role's forensic reads never ask a person — previously only actors and the director got git reads, and only on `claude`, so a producer's `git log --stat` prompted. `claude` (argv), `cursor` and `cmd` (the role's `cli-config.json` / `.commandcode/settings.json`) and `cline` (its `PreToolUse.sh`) carry the set; `devin` now writes it into its per-work-area `permissions.allow` (unverified under `smart`); `codex` and `opencode` take no list. Only `git branch`'s two listing forms are rules — never the bare family, whose prefix would also reach `git branch -D`. The role prompts now name the set and say one plain command per shell call, since a `cd … && git log`, a pipe or `git -C` does not match (`docs/studio/runners.md`, `docs/studio/guide.md`, `docs/studio/limits.md`).
+
 ### Changed
 
-- **Studio switching moves to `Alt+PageUp`/`Alt+PageDown`, and `Alt+Left`/`Alt+Right` go back to the terminal.** Studios are a vertical list, so the studio step now lives on the page keys; the old arrow chords were word movement in shells and agent input boxes. `Alt+Up`/`Alt+Down` still move between a studio's people (`docs/keys.md`, `docs/studio/guide.md`, `docs/studio/panel.md`).
+- **The cast shows each role in full.** A role's state text and full model (with effort) wrap over up to four rows instead of being cut to the sidebar width; when the people do not all fit, the focused role keeps its height and the rest fall back to two rows.
+- **The lot's person rows drop the runner and the model.** The cast already names them, so the row gives those cells to the name, task and state.
+- **Roles read as one-cell badges.** `Ⓟ producer`, `Ⓓ director`, `Ⓦ writer` and `Ⓐ actor` (with its task) replace the role words in the cast, the lot, the Call Sheet and the Hollywood frames and band, each in its own theme colour; the state glyph is unchanged.
+- **Group rules inside each studio block.** The producer, director, writer and actor groups are separated by a thin `├──┤` rule; an empty group draws none and the cursor steps over the rules.
+- **An actor's prompt that waits on an unavailable director is routed to you.** When the director is rate-limited, stalled or gone, an actor's open `permission prompt` — one only the director could answer — is cleared `routed to the user` after a one-minute grace and re-raised `needs the user`, with the reason and the wait in its detail: *the director is rate-limited until 12:10; waiting 14m*. From then the prompt is the person's — the panel and Hollywood's `prompt` notice show it, and the director's `backlot approve` is refused — so a prompt no longer sits for hours behind a stalled director (`docs/studio/guide.md`, `docs/studio/design.md`).
+
+### Fixed
+
+- **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
+- **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
+
+## 0.4.10 — 2026-11-26
+
+### Fixed
+
+- **The update hint survives a narrow sidebar.** When the full `↑v<latest>` doesn't fit the sidebar header — as happens as soon as the running version grows a digit, like `v0.4.10` — the hint now shrinks to a single `↑` (or `↻`) instead of disappearing, and that glyph is still the click that opens the update card. Only when even that doesn't fit does the hint go.
+- **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
+- **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
+
+### Changed
+
 - **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
 
 ## 0.4.9 — 2026-11-26

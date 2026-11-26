@@ -206,7 +206,8 @@ Click the terminal-size notice to take control when another viewer may own the g
 Everything else types into the focused terminal.
 Studio commands (`backlot studio`, `req`, `task`, `progress`, `deliver`, `review`, `status`, `records`, …)
 run before this UI; 'backlot <command> --help' shows each one's usage.
-docs/studio/guide.md walks a studio end to end.",
+'backlot guide [<topic>]' prints backlot's own documentation, compiled into the
+binary — docs/studio/ walks a studio end to end.",
         env!("CARGO_PKG_VERSION"),
     )
 }

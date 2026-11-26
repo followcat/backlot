@@ -23,6 +23,7 @@ pub mod casting;
 pub mod correct;
 pub mod event;
 pub mod hollywood;
+mod hollywood_snapshot;
 mod hollywood_state;
 mod hollywood_summary;
 mod hollywood_validate;
@@ -64,6 +65,8 @@ pub mod migrate;
 mod budget_tests;
 #[cfg(test)]
 mod cap_tests;
+#[cfg(test)]
+mod cards_hardening_tests;
 #[cfg(test)]
 mod cast_tests;
 #[cfg(test)]
