@@ -48,8 +48,8 @@ pub(super) fn render_studio_row(
                 rect.x,
                 rect.y,
                 1,
-                "▌",
-                Style::default().fg(palette.accent),
+                "▎",
+                Style::default().fg(palette.overlay1),
             );
         }
     };

@@ -97,7 +97,7 @@ fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
     assert!(row1.contains("writer"), "{row1}");
     assert!(row1.trim_end().ends_with("standby│"), "{row1}");
     // No activity glyph at mark column (index 2 inside `│ <mark> ...`).
-    assert_eq!(buf[(area.x + 2, writer_rect.y)].symbol(), " ");
+    assert_eq!(buf[(writer_rect.x + 2, writer_rect.y)].symbol(), " ");
     let name_x = row1.find("writer").unwrap() as u16;
     assert_eq!(buf[(area.x + name_x, writer_rect.y)].fg, palette.overlay0);
     let state_x = row1.find("standby").unwrap() as u16;

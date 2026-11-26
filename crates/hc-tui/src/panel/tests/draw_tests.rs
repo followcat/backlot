@@ -134,36 +134,37 @@ fn expanded_block_draws_frame_people_and_state_words() {
         assert!(text.contains("working"), "w{width}: {text}");
         assert!(text.contains("alice"), "w{width}: {text}");
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
-        // S2 dropped the `├──┤` group dividers — the people list is
-        // one run under the owed subheader.
+        // S2 dropped role-group `├──┤` dividers; only the compose
+        // `InputDivider` directly above `› tell producer` emits `├`.
         let divider_rows = (area.y..area.y + area.height)
-            .filter(|&y| buf[(area.x, y)].symbol() == "├")
+            .filter(|&y| buf[(area.x + 1, y)].symbol() == "├")
             .count();
-        assert_eq!(divider_rows, 0, "w{width}");
+        assert_eq!(divider_rows, 1, "w{width}");
     }
 }
 
 #[test]
 fn borders_are_honest_about_focus() {
     let summary = summary();
-    let area = Rect::new(0, 0, 26, 30);
+    let area = Rect::new(0, 0, 27, 30);
     let top_y = 1; // title row 0, the block's top border row 1
-    let corner = (area.x + area.width - 1, top_y); // `╮`, past the ▌
+    let corner = (area.x + area.width - 1, top_y); // `╮`
     // Focused and selected: the block draws in the accent, the ▌ at
-    // the row's left edge.
+    // the block's left edge (`area.x + 1`, right of the dock `│` seam).
     let mut focused = panel(PanelMode::Expanded);
     focused.focused = true;
     focused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &focused, None);
+    assert_eq!(buf[(area.x, top_y)].symbol(), "│");
     assert_eq!(buf[corner].fg, palette().accent);
-    assert_eq!(buf[(area.x, top_y)].symbol(), "▌");
-    // Unfocused, the row cursor hides (`╭` is back, no `▌`), while the
-    // selected solo studio still draws its `accent` frame.
+    assert_eq!(buf[(area.x + 1, top_y)].symbol(), "▌");
+    // Unfocused, the row cursor hides (`╭` is back, no `▌`), and the
+    // unfocused studio frame demotes to `border_muted` (single focus ring).
     let mut unfocused = panel(PanelMode::Expanded);
     unfocused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
-    assert_eq!(buf[corner].fg, palette().accent);
-    assert_eq!(buf[(area.x, top_y)].symbol(), "╭");
+    assert_eq!(buf[corner].fg, palette().elevation().border_muted);
+    assert_eq!(buf[(area.x + 1, top_y)].symbol(), "╭");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");
     assert!(!text.contains('▌'), "unfocused draws no selection: {text}");
@@ -272,7 +273,7 @@ fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
     value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 36, 30);
+    let area = Rect::new(0, 0, 37, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -356,7 +357,7 @@ fn short_height_stacks_other_blocks_to_single_lines() {
     let panel = panel(PanelMode::Expanded);
     // Tall enough for one expanded block but not two → the
     // non-current studio draws its `╶` line with mark counts.
-    let area = Rect::new(0, 0, 30, 20);
+    let area = Rect::new(0, 0, 31, 20);
     let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("╶ second-studio"), "{text}");
@@ -809,7 +810,7 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         .unwrap()
         .0
         .y;
-    assert_eq!(active_buf[(1, sel_y)].symbol(), "▌");
+    assert_eq!(active_buf[(2, sel_y)].symbol(), "▌");
     assert_eq!(active_buf[(4, sel_y)].bg, palette.selection_bg);
 
     let mut suppressed_buf = Buffer::empty(area);
@@ -834,7 +835,7 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         &palette,
         1,
     );
-    assert_ne!(suppressed_buf[(1, sel_y)].symbol(), "▌");
+    assert_ne!(suppressed_buf[(2, sel_y)].symbol(), "▌");
     assert_ne!(suppressed_buf[(4, sel_y)].bg, palette.selection_bg);
 }
 
@@ -977,7 +978,55 @@ fn a_lone_studio_drops_the_studio_hint() {
         1,
     );
     let last = &lines(&buf, area)[area.height as usize - 1];
-    assert_eq!(last, "alt ←→ studio  ↑↓ role");
+    assert_eq!(last, "│ alt ←→ studio  ↑↓ role");
+}
+
+#[test]
+fn dock_compose_uses_raised_field_top_rule_and_two_tone_footer_hints() {
+    let summary = summary();
+    let area = Rect::new(0, 0, 36, 22);
+    let pal = palette();
+    let elev = pal.elevation();
+
+    // Focused + composing with empty draft: `├──┤` divider directly above `›`,
+    // `raised_field` interior, `▌` in accent, italic muted placeholder, and cursor on `'t'`.
+    let mut p = panel(PanelMode::Expanded);
+    p.focused = true;
+    p.editing = true;
+    p.selected = Some(Target::Input("acme-shop".into()));
+    let (buf, hits) = draw(area, Some(&summary), &p, Some("acme-shop"));
+    let input_rect = hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Input("acme-shop".into()))
+        .expect("input hit")
+        .0;
+    assert_eq!(buf[(input_rect.x, input_rect.y - 1)].symbol(), "├");
+    assert_eq!(
+        buf[(input_rect.x + 2, input_rect.y - 1)].fg,
+        elev.border_muted
+    );
+    assert_eq!(buf[(input_rect.x + 1, input_rect.y)].symbol(), "▌");
+    assert_eq!(buf[(input_rect.x + 1, input_rect.y)].fg, pal.accent);
+    assert_eq!(buf[(input_rect.x + 4, input_rect.y)].bg, elev.raised_field);
+    assert_eq!(buf[(input_rect.x + 4, input_rect.y)].fg, elev.muted_raised);
+    assert!(
+        buf[(input_rect.x + 4, input_rect.y)]
+            .modifier
+            .contains(ratatui::style::Modifier::ITALIC)
+    );
+    assert!(hits.cursor.is_some());
+
+    // Footer hint row splits keys (`subtext0`) and labels (`muted_surface`) on `surface`.
+    let fy = area.y + area.height - 1;
+    let footer: String = (area.x..area.x + area.width)
+        .map(|x| buf[(x, fy)].symbol())
+        .collect();
+    if let Some(pos) = footer.find("esc") {
+        let cell_x = area.x + crate::chrome::text::display_width(&footer[..pos]) as u16;
+        assert_eq!(buf[(cell_x, fy)].fg, pal.subtext0);
+        assert_eq!(buf[(cell_x, fy)].bg, elev.surface);
+    }
 }
 
 /// R3-N2: a director-blocked person is not just its task id in the

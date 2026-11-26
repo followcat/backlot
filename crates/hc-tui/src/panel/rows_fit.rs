@@ -180,8 +180,8 @@ pub(super) fn closed_height(studio: StudioRef<'_>, panel: &Panel, closed_open: b
 }
 
 /// An expanded block's height without talk rows: top + bottom
-/// borders, `›` / reopen line, owed/report/confirm/next/usage lines,
-/// live people, task section, and closed section.
+/// borders, compose divider + `›` (or reopen line), owed/report/confirm/
+/// next/usage lines, live people, task section, and closed section.
 pub(super) fn block_height(
     studio: StudioRef<'_>,
     panel: &Panel,
@@ -189,7 +189,9 @@ pub(super) fn block_height(
     accepted_open: bool,
     closed_open: bool,
 ) -> usize {
+    let has_input_divider = !(studio.studio.state == "finished" && !studio.studio.ready_to_finish);
     let mut height = 3
+        + usize::from(has_input_divider)
         + usize::from(owed)
         + usize::from(super::data::report_pending(studio.studio))
         + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()))

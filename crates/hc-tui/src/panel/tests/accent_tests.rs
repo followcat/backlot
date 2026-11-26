@@ -48,6 +48,7 @@ fn draw_cur(
 }
 
 fn block_bounds(buf: &Buffer, area: Rect, target_id: &str) -> (u16, u16) {
+    let bx = area.x + 1;
     let top_y = (area.y..area.y + area.height)
         .find(|&y| {
             let row: String = (area.x..area.x + area.width)
@@ -57,7 +58,7 @@ fn block_bounds(buf: &Buffer, area: Rect, target_id: &str) -> (u16, u16) {
         })
         .unwrap_or_else(|| panic!("missing block top for {target_id}"));
     let bot_y = (top_y + 1..area.y + area.height)
-        .find(|&y| buf[(area.x, y)].symbol() == "╰")
+        .find(|&y| buf[(bx, y)].symbol() == "╰")
         .unwrap_or_else(|| panic!("missing block bottom for {target_id}"));
     (top_y, bot_y)
 }
@@ -70,21 +71,26 @@ fn assert_border_fg(
     expected_fg: ratatui::style::Color,
     label: &str,
 ) {
+    let bx = area.x + 1;
+    let rx = area.x + area.width - 1;
     for y in (top_y + 1)..bot_y {
-        assert_eq!(buf[(area.x, y)].symbol(), "│", "{label} left y={y}");
-        assert_eq!(buf[(area.x, y)].fg, expected_fg, "{label} left fg y={y}");
-        let rx = area.x + area.width - 1;
-        assert_eq!(buf[(rx, y)].symbol(), "│", "{label} right y={y}");
+        let lsym = buf[(bx, y)].symbol();
+        let rsym = buf[(rx, y)].symbol();
+        assert!(
+            matches!((lsym, rsym), ("│", "│") | ("├", "┤")),
+            "{label} side y={y}: {lsym:?} / {rsym:?}"
+        );
+        assert_eq!(buf[(bx, y)].fg, expected_fg, "{label} left fg y={y}");
         assert_eq!(buf[(rx, y)].fg, expected_fg, "{label} right fg y={y}");
     }
-    for x in area.x..area.x + area.width {
+    for x in bx..area.x + area.width {
         assert_eq!(buf[(x, bot_y)].fg, expected_fg, "{label} bottom x={x}");
         if buf[(x, top_y)].symbol() == "─" {
             assert_eq!(buf[(x, top_y)].fg, expected_fg, "{label} top dash x={x}");
         }
     }
-    if buf[(area.x, top_y)].symbol() == "╭" {
-        assert_eq!(buf[(area.x, top_y)].fg, expected_fg, "{label} top-left");
+    if buf[(bx, top_y)].symbol() == "╭" {
+        assert_eq!(buf[(bx, top_y)].fg, expected_fg, "{label} top-left");
     }
     assert_eq!(
         buf[(area.x + area.width - 1, top_y)].fg,
@@ -113,43 +119,49 @@ fn col_of(buf: &Buffer, area: Rect, y: u16, needle: &str) -> u16 {
 }
 
 #[test]
-fn unfocused_lot_accent_frames_selected_studio_and_title_chip() {
+fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
     let summary = two_studio_summary();
     let palette = Palette::from_name("catppuccin").unwrap();
+    let elev = palette.elevation();
     let mut panel = Panel {
         mode: PanelMode::Expanded,
         focused: false,
         ..Panel::new()
     };
-    let area = Rect::new(0, 0, 36, 30);
+    let area = Rect::new(0, 0, 37, 30);
 
-    // Unfocused lot, no cursor, `current = acme-shop` -> acme-shop is selected.
+    // Unfocused lot, `current = acme-shop`: single focus ring keeps both borders `border_muted`,
+    // no inverted `accent` chip, no `▌`; active terminal studio uses bold `text` `▸ acme-shop`.
     let (buf, _) = draw_cur(area, &summary, &panel, Some("acme-shop"), &palette);
+    for y in area.y..area.bottom() {
+        assert_eq!(buf[(area.x, y)].symbol(), "│", "dock left seam y={y}");
+        assert_eq!(buf[(area.x, y)].fg, elev.border_muted, "dock seam fg y={y}");
+    }
     let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
     let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
 
-    assert_border_fg(&buf, area, acme_top, acme_bot, palette.accent, "acme-shop");
-    assert_border_fg(&buf, area, blog_top, blog_bot, palette.surface1, "blog");
+    assert_border_fg(
+        &buf,
+        area,
+        acme_top,
+        acme_bot,
+        elev.border_muted,
+        "acme-shop",
+    );
+    assert_border_fg(&buf, area, blog_top, blog_bot, elev.border_muted, "blog");
 
-    // Selected chip ` ▸ acme-shop ` spans cols 1..=13 on top row with bg=accent, contrast fg, BOLD.
     let top_row: String = (area.x..area.x + area.width)
         .map(|x| buf[(x, acme_top)].symbol())
         .collect();
-    assert!(top_row.starts_with("╭ ▸ acme-shop "), "{top_row:?}");
-    let chip_fg = glyphs::contrast_fg(&palette);
-    for x in 1..=13 {
-        let cell = &buf[(x, acme_top)];
-        assert_eq!(cell.bg, palette.accent, "chip bg x={x}: {top_row:?}");
-        assert_eq!(cell.fg, chip_fg, "chip fg x={x}: {top_row:?}");
-        assert!(
-            cell.modifier.contains(Modifier::BOLD),
-            "chip bold x={x}: {top_row:?}"
-        );
-    }
-    // Health tail keeps its own colours and non-accent background.
-    let dot_x = col_of(&buf, area, acme_top, "●");
-    assert_eq!(buf[(dot_x, acme_top)].fg, palette.green);
-    assert_ne!(buf[(dot_x, acme_top)].bg, palette.accent);
+    assert!(top_row.starts_with("│╭ ▸ acme-shop "), "{top_row:?}");
+    let acme_start = col_of(&buf, area, acme_top, "acme-shop");
+    assert_eq!(buf[(acme_start, acme_top)].fg, palette.text);
+    assert!(
+        buf[(acme_start, acme_top)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+    assert_ne!(buf[(acme_start, acme_top)].bg, palette.accent);
 
     // Unselected blog keeps plain subtext0 title, no chip background, no `▌` anywhere.
     let blog_row: String = (area.x..area.x + area.width)
@@ -160,7 +172,7 @@ fn unfocused_lot_accent_frames_selected_studio_and_title_chip() {
     assert_ne!(buf[(blog_start, blog_top)].bg, palette.accent);
     assert!(!blog_row.contains('▌') && !top_row.contains('▌'));
 
-    // Focusing the lot keeps `▌` on the selected row and keeps both borders as before.
+    // Focusing the lot paints the selected `acme-shop` frame accent + chip and `▌` on selected row.
     panel.focused = true;
     panel.selected = Some(Target::Person("acme-shop".into(), "producer".into()));
     let (focused_buf, hits) = draw_cur(area, &summary, &panel, Some("acme-shop"), &palette);
@@ -168,7 +180,7 @@ fn unfocused_lot_accent_frames_selected_studio_and_title_chip() {
         &hits,
         &Target::Person("acme-shop".into(), "producer".into()),
     );
-    assert_eq!(focused_buf[(area.x + 1, prod_y)].symbol(), "▌");
+    assert_eq!(focused_buf[(area.x + 2, prod_y)].symbol(), "▌");
     assert_border_fg(
         &focused_buf,
         area,
@@ -177,18 +189,33 @@ fn unfocused_lot_accent_frames_selected_studio_and_title_chip() {
         palette.accent,
         "focused acme",
     );
+    let ftop: String = (area.x..area.x + area.width)
+        .map(|x| focused_buf[(x, acme_top)].symbol())
+        .collect();
+    assert!(ftop.starts_with("│╭ ▸ acme-shop "), "{ftop:?}");
+    let chip_fg = glyphs::contrast_fg(&palette);
+    for x in 2..=14 {
+        let cell = &focused_buf[(x, acme_top)];
+        assert_eq!(cell.bg, palette.accent, "chip bg x={x}: {ftop:?}");
+        assert_eq!(cell.fg, chip_fg, "chip fg x={x}: {ftop:?}");
+        assert!(cell.modifier.contains(Modifier::BOLD), "chip bold x={x}");
+    }
+    let dot_x = col_of(&focused_buf, area, acme_top, "●");
+    assert_eq!(focused_buf[(dot_x, acme_top)].fg, palette.green);
+    assert_ne!(focused_buf[(dot_x, acme_top)].bg, palette.accent);
 }
 
 #[test]
 fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
     let summary = two_studio_summary();
-    let area = Rect::new(0, 0, 36, 30);
+    let area = Rect::new(0, 0, 37, 30);
 
     for theme in ["catppuccin", "catppuccin-latte", "backlot", "terminal"] {
         let palette = Palette::from_name(theme).unwrap();
+        let elev = palette.elevation();
         let panel = Panel {
             mode: PanelMode::Expanded,
-            focused: false,
+            focused: true,
             selected: Some(Target::Studio("blog".into())),
             ..Panel::new()
         };
@@ -196,8 +223,8 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
         let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
 
-        // `acme-shop` still holds the focused terminal `▸` (`palette.text`), but its border is `surface1`.
-        assert_border_fg(&buf, area, acme_top, acme_bot, palette.surface1, theme);
+        // `acme-shop` still holds the focused terminal `▸` (`palette.text`), but its border is `border_muted`.
+        assert_border_fg(&buf, area, acme_top, acme_bot, elev.border_muted, theme);
         let acme_x = (area.x..area.x + area.width)
             .find(|&x| buf[(x, acme_top)].symbol() == "a")
             .unwrap();
@@ -207,7 +234,7 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         // `blog` is selected: border is `accent`, chip ` blog ` has `bg == accent` and `contrast_fg`, bold.
         assert_border_fg(&buf, area, blog_top, blog_bot, palette.accent, theme);
         let expected_fg = glyphs::contrast_fg(&palette);
-        for x in 1..=6 {
+        for x in 2..=7 {
             let cell = &buf[(x, blog_top)];
             assert_eq!(cell.bg, palette.accent, "{theme} blog chip bg x={x}");
             assert_eq!(cell.fg, expected_fg, "{theme} blog chip fg x={x}");
@@ -215,11 +242,12 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         }
     }
 
-    // No cursor and no current studio -> first studio (`acme-shop`) is accented.
+    // No cursor and no current studio while focused -> first studio (`acme-shop`) is accented.
     let palette = Palette::from_name("catppuccin").unwrap();
+    let elev = palette.elevation();
     let panel = Panel {
         mode: PanelMode::Expanded,
-        focused: false,
+        focused: true,
         ..Panel::new()
     };
     let (buf, _) = draw_cur(area, &summary, &panel, None, &palette);
@@ -238,59 +266,64 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         area,
         blog_top,
         blog_bot,
-        palette.surface1,
+        elev.border_muted,
         "fallback second",
     );
 }
 
 #[test]
-fn strip_and_stacked_selected_studio_uses_accent_bold_label() {
+fn strip_and_stacked_selected_studio_uses_accent_when_focused_and_text_when_unfocused() {
     let summary = two_studio_summary();
     let palette = Palette::from_name("catppuccin").unwrap();
 
-    // Collapsed strip, unfocused, cursor in `blog`.
-    let strip_panel = Panel {
-        mode: PanelMode::Collapsed,
-        focused: false,
-        selected: Some(Target::Strip("blog".into())),
-        ..Panel::new()
-    };
-    let (strip_buf, strip_hits) = draw_cur(
-        Rect::new(0, 0, 16, 20),
-        &summary,
-        &strip_panel,
-        Some("acme-shop"),
-        &palette,
-    );
-    let acme_y = hit_y(&strip_hits, &Target::Strip("acme-shop".into()));
-    let blog_y = hit_y(&strip_hits, &Target::Strip("blog".into()));
-    assert_eq!(strip_buf[(2, acme_y)].fg, palette.text);
-    assert!(!strip_buf[(2, acme_y)].modifier.contains(Modifier::BOLD));
-    assert_eq!(strip_buf[(2, blog_y)].fg, palette.accent);
-    assert!(strip_buf[(2, blog_y)].modifier.contains(Modifier::BOLD));
+    // Collapsed strip, unfocused vs focused, cursor in `blog`.
+    for (focused, want_fg) in [(false, palette.text), (true, palette.accent)] {
+        let strip_panel = Panel {
+            mode: PanelMode::Collapsed,
+            focused,
+            selected: Some(Target::Strip("blog".into())),
+            ..Panel::new()
+        };
+        let (strip_buf, strip_hits) = draw_cur(
+            Rect::new(0, 0, 17, 20),
+            &summary,
+            &strip_panel,
+            Some("acme-shop"),
+            &palette,
+        );
+        let acme_y = hit_y(&strip_hits, &Target::Strip("acme-shop".into()));
+        let blog_y = hit_y(&strip_hits, &Target::Strip("blog".into()));
+        assert_eq!(strip_buf[(3, acme_y)].fg, palette.text);
+        assert!(!strip_buf[(3, acme_y)].modifier.contains(Modifier::BOLD));
+        assert_eq!(strip_buf[(3, blog_y)].fg, want_fg);
+        assert!(strip_buf[(3, blog_y)].modifier.contains(Modifier::BOLD));
+    }
 
-    // Stacked rows, unfocused: manually collapse selected `acme-shop` so `Target::Block` stays selected.
-    let mut stacked_panel = Panel {
-        mode: PanelMode::Expanded,
-        focused: false,
-        selected: Some(Target::Block("acme-shop".into())),
-        ..Panel::new()
-    };
-    stacked_panel.collapsed_blocks.insert("acme-shop".into());
-    stacked_panel.collapsed_blocks.insert("blog".into());
-    let (stack_buf, stack_hits) = draw_cur(
-        Rect::new(0, 0, 36, 20),
-        &summary,
-        &stacked_panel,
-        None,
-        &palette,
-    );
-    let acme_sy = hit_y(&stack_hits, &Target::Block("acme-shop".into()));
-    let blog_sy = hit_y(&stack_hits, &Target::Block("blog".into()));
-    assert_eq!(stack_buf[(2, acme_sy)].fg, palette.accent);
-    assert!(stack_buf[(2, acme_sy)].modifier.contains(Modifier::BOLD));
-    assert_eq!(stack_buf[(2, blog_sy)].fg, palette.subtext0);
-    assert!(!stack_buf[(2, blog_sy)].modifier.contains(Modifier::BOLD));
+    // Stacked rows, unfocused vs focused: selected `acme-shop` uses `text` BOLD when unfocused,
+    // `accent` BOLD when focused.
+    for (focused, want_fg) in [(false, palette.text), (true, palette.accent)] {
+        let mut stacked_panel = Panel {
+            mode: PanelMode::Expanded,
+            focused,
+            selected: Some(Target::Block("acme-shop".into())),
+            ..Panel::new()
+        };
+        stacked_panel.collapsed_blocks.insert("acme-shop".into());
+        stacked_panel.collapsed_blocks.insert("blog".into());
+        let (stack_buf, stack_hits) = draw_cur(
+            Rect::new(0, 0, 37, 20),
+            &summary,
+            &stacked_panel,
+            None,
+            &palette,
+        );
+        let acme_sy = hit_y(&stack_hits, &Target::Block("acme-shop".into()));
+        let blog_sy = hit_y(&stack_hits, &Target::Block("blog".into()));
+        assert_eq!(stack_buf[(3, acme_sy)].fg, want_fg);
+        assert!(stack_buf[(3, acme_sy)].modifier.contains(Modifier::BOLD));
+        assert_eq!(stack_buf[(3, blog_sy)].fg, palette.subtext0);
+        assert!(!stack_buf[(3, blog_sy)].modifier.contains(Modifier::BOLD));
+    }
 }
 
 #[test]
@@ -300,13 +333,13 @@ fn narrow_dock_fits_title_chip_padding_and_truncates_label_before_dropping_tail(
     let palette = Palette::from_name("catppuccin").unwrap();
     let panel = Panel {
         mode: PanelMode::Expanded,
-        focused: false,
+        focused: true,
         selected: Some(Target::Studio("very-long-second-studio-title-01".into())),
         ..Panel::new()
     };
 
     let studio_target = Target::Studio("very-long-second-studio-title-01".into());
-    for width in [36u16, 28u16] {
+    for width in [37u16, 29u16] {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw_cur(area, &summary, &panel, None, &palette);
         let top_y = hit_y(&hits, &studio_target);
@@ -330,7 +363,7 @@ fn narrow_dock_fits_title_chip_padding_and_truncates_label_before_dropping_tail(
 
     // With waiting == 0 the full progress tail (`● r1·1/2`) stays while a long label truncates.
     summary.studios[1].waiting = 0;
-    let area = Rect::new(0, 0, 36, 30);
+    let area = Rect::new(0, 0, 37, 30);
     let (buf, hits) = draw_cur(area, &summary, &panel, None, &palette);
     let top_y = hit_y(&hits, &studio_target);
     let row: String = (area.x..area.x + area.width)
@@ -344,15 +377,16 @@ fn narrow_dock_fits_title_chip_padding_and_truncates_label_before_dropping_tail(
 }
 
 #[test]
-fn screenshot_36x30_renders_selected_chip_and_accent_border_unfocused() {
+fn screenshot_36x30_renders_selected_chip_and_accent_border_when_focused() {
     let summary = two_studio_summary();
     let palette = Palette::from_name("catppuccin").unwrap();
+    let elev = palette.elevation();
     let panel = Panel {
         mode: PanelMode::Expanded,
-        focused: false,
+        focused: true,
         ..Panel::new()
     };
-    let area = Rect::new(0, 0, 36, 30);
+    let area = Rect::new(0, 0, 37, 30);
     let (buf, _) = draw_cur(area, &summary, &panel, Some("acme-shop"), &palette);
     let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
     let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
@@ -362,7 +396,7 @@ fn screenshot_36x30_renders_selected_chip_and_accent_border_unfocused() {
         area,
         blog_top,
         blog_bot,
-        palette.surface1,
+        elev.border_muted,
         "shot blog",
     );
 

@@ -292,8 +292,8 @@ fn segments(
 }
 
 /// A segment's style under the pill's colour rules (§3):
-/// urgent paints the whole pill `red`, cards or unread replies sit on
-/// `surface0`, the calm pill is `surface_dim` with a green `●`.
+/// urgent paints the whole pill `red`, while non-urgent pills (cards,
+/// unread replies, or calm) sit on `elevation.raised_row`.
 fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
     if counts.urgent > 0 {
         return Style::default()
@@ -301,8 +301,8 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
             .bg(palette.red)
             .add_modifier(Modifier::BOLD);
     }
+    let base = Style::default().bg(palette.elevation().raised_row);
     if counts.cards > 0 || counts.unread > 0 {
-        let base = Style::default().bg(palette.surface0);
         match seg {
             Seg::Spark => base.fg(palette.accent),
             Seg::Body => base.fg(palette.text),
@@ -311,7 +311,6 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
             Seg::Live => base.fg(palette.green),
         }
     } else {
-        let base = Style::default().bg(palette.surface_dim);
         match seg {
             Seg::Spark => base.fg(palette.accent),
             Seg::Body => base.fg(palette.subtext0),
@@ -496,15 +495,16 @@ pub(crate) fn header_name_width(header: &StudioHeader) -> u16 {
 /// The studio header's styled left pieces: ` id · machine › part`
 /// with the person glyph and priority mark in their colours.
 fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)> {
-    let text = Style::default().fg(palette.text).bg(palette.panel_bg);
-    let dim = Style::default().fg(palette.overlay0).bg(palette.panel_bg);
+    let header_bg = palette.elevation().surface;
+    let text = Style::default().fg(palette.text).bg(header_bg);
+    let dim = Style::default().fg(palette.overlay0).bg(header_bg);
     if let HeaderKind::Hollywood = header.kind {
         return vec![
             (
                 " hollywood".into(),
                 Style::default()
                     .fg(palette.accent)
-                    .bg(palette.panel_bg)
+                    .bg(header_bg)
                     .add_modifier(Modifier::BOLD),
             ),
             (" ".into(), text),
@@ -516,7 +516,7 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
             if header.studio_focused {
                 Style::default()
                     .fg(palette.accent)
-                    .bg(palette.panel_bg)
+                    .bg(header_bg)
                     .add_modifier(Modifier::BOLD)
             } else {
                 text.add_modifier(Modifier::BOLD)
@@ -549,21 +549,19 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
             if let Some(task) = task {
                 spans.push((
                     format!(" {task}"),
-                    Style::default().fg(palette.accent).bg(palette.panel_bg),
+                    Style::default().fg(palette.accent).bg(header_bg),
                 ));
             }
             if let Some(mark) = mark {
                 spans.push((
                     format!(" {}", mark.still()),
-                    mark.style(palette).bg(palette.panel_bg),
+                    mark.style(palette).bg(header_bg),
                 ));
             }
             if let Some(priority) = priority {
                 spans.push((
                     format!(" {}", priority.glyph()),
-                    Style::default()
-                        .fg(priority.color(palette))
-                        .bg(palette.panel_bg),
+                    Style::default().fg(priority.color(palette)).bg(header_bg),
                 ));
             }
         }
@@ -590,7 +588,7 @@ pub(crate) fn render_studio_header(
     if area.is_empty() {
         return;
     }
-    buf.set_style(area, Style::default().bg(palette.panel_bg));
+    buf.set_style(area, Style::default().bg(palette.elevation().surface));
     let pill_w = pill_width(&lot.counts, tier, lot.agent);
     let name_rows = area.width.saturating_sub(pill_w.saturating_add(1));
     let mut x = area.x;

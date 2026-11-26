@@ -108,8 +108,8 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     );
     assert_eq!(
         t.iter().filter(|x| **x == Target::None).count(),
-        2,
-        "title + bottom: {t:?}"
+        3,
+        "title + input-divider + bottom: {t:?}"
     );
     assert_eq!(
         people(&t),

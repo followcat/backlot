@@ -229,6 +229,11 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         line: &'a StudioExchange,
     },
+    /// The `├──┤` rule separating open roles/tasks/talk from the studio's
+    /// `›` compose field.
+    InputDivider {
+        studio: StudioRef<'a>,
+    },
     /// The block's `›` tell/command line — the studio's own input
     /// surface inside its frame, before the bottom border.
     Input {
@@ -296,6 +301,7 @@ impl Row<'_> {
             | Row::Empty
             | Row::Owed { .. }
             | Row::Usage { .. }
+            | Row::InputDivider { .. }
             | Row::BlockBottom(_)
             | Row::Drawer { .. }
             | Row::Update { .. } => Target::None,
@@ -476,6 +482,7 @@ fn block_rows<'a>(
     if studio.studio.state == "finished" && !studio.studio.ready_to_finish {
         out.push(Row::ReopenProducer { studio });
     } else {
+        out.push(Row::InputDivider { studio });
         out.push(Row::Input { studio });
     }
     out.push(Row::BlockBottom(studio));

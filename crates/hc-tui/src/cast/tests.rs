@@ -257,7 +257,7 @@ fn an_alert_takes_the_whole_second_row_at_the_default_width() {
 }
 
 #[test]
-fn the_focused_person_gets_the_accent_bar_and_active_background() {
+fn the_focused_person_gets_the_overlay_bar_and_active_background() {
     let summary = summary();
     let view = cast_view(&summary, vec![], false, Some("t4"));
     let palette = Palette::from_name("catppuccin").unwrap();
@@ -268,8 +268,8 @@ fn the_focused_person_gets_the_accent_bar_and_active_background() {
         .find(|(_, t)| t == "t4")
         .map(|(rect, _)| *rect)
         .expect("alice's hit row");
-    assert_eq!(buf[(alice.x, alice.y)].symbol(), "▌");
-    assert_eq!(buf[(alice.x, alice.y)].fg, palette.accent);
+    assert_eq!(buf[(alice.x, alice.y)].symbol(), "▎");
+    assert_eq!(buf[(alice.x, alice.y)].fg, palette.overlay1);
     assert_eq!(buf[(alice.x, alice.y)].bg, palette.active_row_bg);
     assert_eq!(buf[(alice.x, alice.y + 1)].bg, palette.active_row_bg);
 }
@@ -279,8 +279,9 @@ fn cast_order_and_hit_rows_cover_the_people_and_others() {
     let summary = summary();
     let view = cast_view(&summary, vec![agent_row("t99", "outside")], false, None);
     let rows = cast_rows(&view);
-    // 4 people (dave closed last) + the others row.
-    assert_eq!(rows.len(), 5);
+    // 3 open people + closed divider + 1 closed person (dave) + the others row.
+    assert_eq!(rows.len(), 6);
+    assert!(matches!(rows[3], CastRow::ClosedDivider { count: 1 }));
     let order: Vec<&str> = rows
         .iter()
         .filter_map(|row| match row {
@@ -290,7 +291,9 @@ fn cast_order_and_hit_rows_cover_the_people_and_others() {
         .collect();
     assert_eq!(order, vec!["producer", "alice", "bob", "dave"]);
 
-    let (_, hits, ..) = draw(&view, 26, 20);
+    let (buf, hits, ..) = draw(&view, 26, 20);
+    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
+    assert!(text.contains("┄ closed (1) ┄"), "{text}");
     assert!(!hits.cast_others.is_empty(), "the others row hit");
     // Person clicks carry the terminal, the others row its own rect.
     let terminals: Vec<&str> = hits.agents.iter().map(|(_, t)| t.as_str()).collect();
@@ -418,5 +421,35 @@ fn stopped_cast_renders_start_untruncated_at_26_cols() {
     assert!(
         wide.contains("stage stopped — s to start"),
         "full form when width fits: {wide}"
+    );
+}
+
+#[test]
+fn cast_divider_uses_border_muted_and_closed_divider_omits_when_homogeneous() {
+    let mut s = summary();
+    let cfg = config();
+    let view = cast_view(&s, vec![], false, None);
+    let (buf, ..) = draw(&view, 26, 20);
+    assert_eq!(buf[(0, 0)].symbol(), "─");
+    assert_eq!(buf[(0, 0)].fg, cfg.palette.elevation().border_muted);
+
+    // Only open roles -> no ClosedDivider.
+    s.studios[0].roles.retain(|r| r.state != "closed");
+    let open_only = cast_view(&s, vec![], false, None);
+    assert!(
+        !cast_rows(&open_only)
+            .iter()
+            .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
+    );
+
+    // Only closed roles -> no ClosedDivider.
+    for role in &mut s.studios[0].roles {
+        role.state = "closed".into();
+    }
+    let closed_only = cast_view(&s, vec![], false, None);
+    assert!(
+        !cast_rows(&closed_only)
+            .iter()
+            .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
     );
 }

@@ -233,7 +233,7 @@ async fn a_stacked_block_click_expands_it() {
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
     // A short body stacks the non-current blocks.
-    draw_to(&mut app, 120, 9);
+    draw_to(&mut app, 120, 10);
     let stacked = app
         .panel_hits
         .rows
