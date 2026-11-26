@@ -80,10 +80,13 @@ fn a_relative_cast_path_resolves_at_propose() {
     )
     .expect("the relative files exist under the proposer's directory")
     .expect("a studio-new draft resolves its files");
-    assert_eq!(files.cast, work.join("cast.toml"));
+    // Compare real paths: on macOS the temp dir is reached through the
+    // `/var` -> `/private/var` link, so one side may be spelled either way.
+    let real = |p: &std::path::Path| p.canonicalize().unwrap();
+    assert_eq!(real(&files.cast), real(&work.join("cast.toml")));
     assert_eq!(
-        files.brief.as_deref(),
-        Some(work.join("brief.md").as_path())
+        files.brief.as_deref().map(real),
+        Some(real(&work.join("brief.md")))
     );
     assert!(files.cast.is_absolute(), "the resolved path is absolute");
 }
@@ -141,12 +144,12 @@ fn propose_studio_new_copies_its_files_into_the_card() {
             let snapshot = snapshot.as_ref().expect("the card carries a snapshot");
             let snap_cast = snapshot.cast.as_ref().unwrap();
             // The proposer's own path, absolute.
+            // Real paths on both sides (macOS reaches temp through `/var` -> `/private/var`).
             assert_eq!(
-                snap_cast.source,
-                cast_path(&scratch)
+                std::path::Path::new(&snap_cast.source)
                     .canonicalize()
-                    .unwrap()
-                    .to_string_lossy()
+                    .unwrap(),
+                cast_path(&scratch).canonicalize().unwrap()
             );
             assert_eq!(
                 snap_cast.sha256,
