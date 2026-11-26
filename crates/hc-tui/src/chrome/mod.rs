@@ -4,6 +4,7 @@
 
 pub(crate) mod agent_rows;
 pub mod agents;
+pub(crate) mod badge;
 pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
 pub mod detect;
