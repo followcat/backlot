@@ -367,7 +367,7 @@ headline and its open cards. It appears only while `[hollywood]` is configured. 
 `backlot/1`) `card` for a `card.proposed` Hollywood wrote itself — so the band can draw a proposal as a reply and the
 Reader can open it as a card. Independently of `[hollywood]`, each
 `StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
-and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike.
+and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike; when a studio's ledger contains unknown event kinds at `v <= LEDGER_VERSION`, the stage pauses read-only for that studio and marks its summary entry with `needs_upgrade: true` and `unknown_kinds` (omitted on normal studios) so the TUI and `wherdr` display `"upgrade backlot"`.
 
 ## Hollywood
 
