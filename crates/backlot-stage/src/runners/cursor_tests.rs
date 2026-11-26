@@ -507,6 +507,7 @@ fn plan_carries_its_prep() {
         stage_env: &env,
         role: "director",
         checks: &[],
+        answer_trust: true,
     };
     let ident = ActorIdentity {
         runner: "cursor".into(),

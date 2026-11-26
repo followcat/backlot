@@ -321,6 +321,7 @@ fn devin_hollywood_launch_writes_and_passes_a_prompt_file() {
             stage_env: &stage_env,
             role: HOLLYWOOD,
             checks: &[],
+            answer_trust: true,
         },
     )
     .expect("devin plan");
@@ -352,6 +353,7 @@ fn devin_hollywood_launch_writes_and_passes_a_prompt_file() {
             stage_env: &stage_env,
             role: HOLLYWOOD,
             checks: &[],
+            answer_trust: true,
         },
     )
     .expect("devin resume plan");

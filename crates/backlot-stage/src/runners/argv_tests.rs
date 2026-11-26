@@ -40,6 +40,7 @@ fn role_ctx<'a>(
         stage_env,
         role,
         checks,
+        answer_trust: true,
     }
 }
 

@@ -189,6 +189,7 @@ impl Stage {
                     stage_env: &self.env_vars,
                     role: HOLLYWOOD,
                     checks: &[],
+                    answer_trust: self.stage_cfg.get().answer_trust,
                 },
             ) && let Some(prep) = launch.prep.as_ref()
             {

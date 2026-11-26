@@ -11,10 +11,10 @@ measured on 2026-11-11, cmd on 2026-11-13 (hooks measured on 1.93.0 on 2026-11-2
 | Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` | `--model` | `-m`, session-scoped — the global `model`/`provider` config keys were untouched in the before/after snapshot | `-m` beside `-P cline-pass` — the provider is taken from a `cline-pass/<model>` id, and any other model is a plan refusal (`model not supported`), because no config channel carries a provider | `--model` |
 | Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` — low, medium, high, xhigh, max, ultra (the union across the model list; a per-model refusal is codex's own) | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured | Part of the model ID (`composer-2.5`, `gpt-5.3-codex-low`) | Not carried — `--effort` is accepted but writes the GLOBAL `reasoningEffort.<model>` config key (measured), so the adapter emits nothing and a cast effort is refused | `--thinking none`, `low`, `medium`, `high` or `xhigh`; there is no `max` | `--effort` (low, medium, high, xhigh, max) |
 | First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Positional; submits on open, fresh and resumed | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) | `-i "<prompt>"` on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) |
-| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) | `--id <id>`, context kept (a recall question was answered correctly); the positional prompt is ignored | `--conversation <id>`; `-i` is not passed on a resume, so the prompt goes in after the composer opens; no dialog on a trusted cwd, folder-trust dialog first on an untrusted cwd |
+| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) | `--id <id>`, context kept (a recall question was answered correctly); the positional prompt is ignored | `--conversation <id>`; `-i` is not passed on a resume, so the prompt goes in after the composer opens; `--settings` `trustedWorkspaces` keeps the folder-trust dialog away when `[stage] answer_trust` is on, and shows it first when `answer_trust = false` on an untrusted cwd |
 | Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` | `create-chat` prints a uuid and `--resume <uuid>` starts in it; the stage instead finds the newest chat under `<config>/chats/<md5(cwd)>/<uuid>/` after launch — its `meta.json` holds the cwd | No — cmd mints the uuid. The stage finds the newest `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after launch; line 1 `{"type":"session",...,"id","cwd"}` is authoritative | No — cline mints it. The stage finds the manifest `<id>/<id>.json` in the user's session store, created at or after launch, whose `cwd` is the role's and whose `pid` is the engine child of the terminal's `node` wrapper | No — agy mints it. `cache/last_conversations.json` maps the cwd to its id; else the newest `conversations/<uuid>.db` whose bytes carry the workspace URI |
 | Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) | `permissions.allow`/`deny` `Shell(...)` rules, written per launch into the workdir's `.commandcode/settings.json` (see below); `deny` carries `mcp__<server>` per global server | a stage-written work-area hook, `<cwd>/.cline/hooks/PreToolUse.sh`: the role's command rules, default-deny, the network tools and MCP names always cancelled (see below) | `--settings <dir>/.agy-settings.json` with `toolPermission: always-proceed` (session-only; other valid values on 1.5.16: `request-review`, `strict`, `proceed-in-sandbox`); `permissions.allow`/`deny` use `command(<prefix>)` without `*` |
-| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead | None seen — a role's work area sits inside an existing repository | `Accessing workspace: ... Do you trust the contents of this project?`, cursor starts on `> Yes, I trust this folder` (`enter` accepts and persists; `down`+`enter` or `esc` exits 0); shown on both fresh and `--conversation` launches in an untrusted folder |
+| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead | None seen — a role's work area sits inside an existing repository | launch handles: `--settings` `trustedWorkspaces` = the work area (exact path; the global settings are untouched; measured on 1.5.18 on 2026-11-27) |
 | hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout | None — no `]7501;` bytes in a typescript capture; hc's screen source still classifies idle/working/blocked(permission) fine | None — `hc get` showed `agent: null`; the stage's screen markers carry the role (S14a) | Native OSC 7501 (`app: "antigravity"`): `idle` on composer, `working` during turns and backgrounded tasks, `done` (with `msg`) after a turn, `blocked` with `kind: "permission"` or `"question"` (`waiting_for_person: false`) |
 
 ## Capabilities
@@ -32,7 +32,7 @@ and the docs test fails when this drifts.
 | cursor-agent | none | `--model` | positional | `--resume` (keeps prompt; id not read from argv) | files | launch handles | screen block, structured status | `y` | none sent | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
 | cmd | none | `-m` | positional | -r, --resume, --session (prompt after open) | files | launch handles | screen block, structured status | `enter` | `esc` | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
 | cline | required (none, low, medium, high, xhigh) | `-P cline-pass -m` | positional | --id (prompt after open) | files | not applicable | screen block | none sent | none sent | screen only | PreToolUse |
-| agy | required (low, medium, high, xhigh, max) | `--model` | `-i` | --conversation (prompt after open) | cwd map, then sqlite | unmeasured | screen block, structured status | none sent | none sent | native 7501 | SessionStart, PreInvocation, PreToolUse, PostToolUse, PostInvocation, Stop |
+| agy | required (low, medium, high, xhigh, max) | `--model` | `-i` | --conversation (prompt after open) | cwd map, then sqlite | launch handles | screen block, structured status | none sent | none sent | native 7501 | SessionStart, PreInvocation, PreToolUse, PostToolUse, PostInvocation, Stop |
 | fake | required (low, medium, high) | `FAKE_MODEL` | not carried | none | terminal name | stage answers | screen block, hook | `enter` | `esc` | screen only | UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification, Stop, StopFailure |
 <!-- END GENERATED runner-caps -->
 
@@ -463,7 +463,7 @@ prompt after the idle composer shows (the devin and cmd rule).
 
 ## Per-session file (agy)
 
-Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
+Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16; `trustedWorkspaces` measured on 1.5.18 on 2026-11-27).
 
 - `agy --help` documents `--mode` (`accept-edits`, `auto`, `plan`), `--effort`
   (`low`, `medium`, `high`, `xhigh`, `max`), `--model`, `--settings` (a JSON object or file path,
@@ -482,9 +482,10 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   and no other role claims it. A missing, unreadable or malformed file — and an id that fails any of
   those checks — falls through to the byte scan below, which finds the newest `.db` at or after the
   role's start whose bytes carry the role cwd's URI — a plain scan, no sqlite dependency.
-  `--conversation <id>` resumes; `-i` is not passed on a resume (the devin and cmd rule). When the
-  cwd is already trusted, `--conversation <id>` restores the transcript straight to the idle
-  composer with no dialog; in an untrusted folder it shows the folder-trust dialog first.
+  `--conversation <id>` resumes; `-i` is not passed on a resume (the devin and cmd rule). When
+  `[stage] answer_trust` is on (the default) or the cwd is already trusted, `--conversation <id>`
+  restores the transcript straight to the idle composer with no dialog; with `answer_trust = false`
+  in an untrusted folder it shows the folder-trust dialog first.
 - The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
   before every start and resume, `agy::prepare` writes (or splices byte-preservingly)
   `toolPermission: "always-proceed"` together with policy-aware `permissions.deny` containing the outward-action
@@ -494,7 +495,10 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   `command(hc send)`, `command(hc keys)`, `command(hc connect)`, `command(systemd-run)`,
   `command(tmux new -d)`, `command(tmux new-session -d)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
   `command(npm publish)`, `command(cargo publish)`) — **without** trailing ` *` — while preserving
-  any other top-level settings and any existing `permissions.allow`. Feature-branch pushes under `recorded`/`any`
+  any other top-level settings and any existing `permissions.allow`. When `[stage] answer_trust` is
+  on (the default), `agy::prepare` also splices `"trustedWorkspaces"` keeping any existing entries and
+  adding the role's canonical absolute cwd once; when `answer_trust = false`, `trustedWorkspaces` is
+  not added. Feature-branch pushes under `recorded`/`any`
   pass `permissions.deny` and are checked at execution time by the per-role `pre-push` hook and `PreToolUse`
   (`backlot hook --runner agy`), which also rejects segment-level `BACKLOT_*`/`GIT_CONFIG_*`/`PATH` env
   mutations and `backlot card`/`perms`/`--as user` self-approval attempts. agy reads `.agy-settings.json` once at startup,
@@ -515,10 +519,15 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
     auto-allowed `echo …` under `request-review` while `command(echo *)` still prompted). A denied
     command never opens a picker and prints
     `Permission denied for unsandboxed(<command>). Matches user-configured deny rule.`
-- Folder trust: on first use (or `--conversation`) in an untrusted directory, `agy` renders
-  `Accessing workspace: ... Do you trust the contents of this project?` with `> Yes, I trust this
-  folder` highlighted (`status.state: "blocked"`, `kind: "permission"`, `waiting_for_person: false`).
-  `enter` accepts and persists trust; `down`+`enter` or `esc` exits 0.
+- Folder trust: measured on agy 1.5.18 (2026-11-27) — passing `--settings` with
+  `{"trustedWorkspaces": ["<cwd>"]}` (exact canonical absolute path; trusting a parent directory
+  does not match) skips the dialog and goes straight to the prompt on both fresh and
+  `--conversation` launches, while `~/.gemini/antigravity-cli/settings.json` stays byte-identical.
+  Only when `[stage] answer_trust` is on (the default) is the cwd added; when `answer_trust = false`,
+  `agy` renders `Accessing workspace: ... Do you trust the contents of this project?` with
+  `> Yes, I trust this folder` highlighted (`status.state: "blocked"`, `kind: "permission"`,
+  `waiting_for_person: false`), where `enter` accepts and persists trust and `down`+`enter` or `esc`
+  exits 0.
 - Plan mode (`--mode plan`): `ask_question` opens `Question 1/1:` with numbered options (`> 1.`)
   and `Write-in...` (`status.state: "blocked"`, `kind: "question"`, `waiting_for_person: false`),
   even while `esc to cancel` stays visible at the bottom. `up`/`down` move the cursor, `enter`
@@ -571,7 +580,7 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 | cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cmd | `Do you trust the files in this folder?` with `❯ 1. Yes, proceed` | First launch in a non-empty untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cline | `Cline needs permission` with `Approve tool call?` and `[y] Approve   [n] Deny` | Auto-approve was switched off by hand — `--yolo` forces it on, so the prompt should never appear | The stage presses nothing: `y` and `n` are both a mode it must not change. The attention stays open for the user |
-| agy | `Accessing workspace:` with `Do you trust the contents of this project?` and `> Yes, I trust this folder` | First launch (or `--conversation`) in an untrusted folder (1.5.16) | Cursor starts on `Yes`: `enter` accepts; `down` then `enter` (or `esc`) exits 0 |
+| agy | `Accessing workspace:` with `Do you trust the contents of this project?` and `> Yes, I trust this folder` | First launch (or `--conversation`) in an untrusted folder when `[stage] answer_trust = false` (1.5.16; 1.5.18 skips via `--settings` `trustedWorkspaces` when on) | Stage writes `trustedWorkspaces` at launch when `answer_trust` is on; when off or seen, cursor starts on `Yes` and the stage leaves it for the user |
 | agy | `Requesting permission for:` / `Run this command?` with `> 1. Yes, run command` | Command needing approval under `request-review`, `strict` or unsandboxed `proceed-in-sandbox` (1.5.16) | `enter` runs once (`1.`); `esc` cancels (`Interrupted`); `4` (`request-review`) or `2` (`strict`) declines. Escalated under D2 |
 | agy | `Question 1/1:` with `> 1.` options and `↑/↓ Navigate · enter Select · esc Skip` | Plan-mode question picker (`--mode plan`, 1.5.16) | `up`/`down` + `enter` selects; `esc` skips. Escalated under D2 |
 | Any | Permission dialog | Waiting on a person | Approval policy |

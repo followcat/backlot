@@ -10,6 +10,16 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.18 — 2026-11-27
+
+### Fixed
+
+- **Studio-role `backlot tell user` question guard, `--note`, and `--ask` CLI pass-through.** Running `backlot tell user` as a studio role (`producer`, `director`, `writer`, `actor-<task>-c<n>`) with `?` or `？` outside inline code spans, fenced code blocks, and URL query strings (`?key=`) now refuses with exit code 2 unless `--ask` or `--note` is given, adds `--note` for plain-info `tell user` messages (mutually exclusive with `--ask`), preserves `--ask` on CLI `tell user` calls so `message.queued` records `purpose = "ask"` and `RoleSummary.asks` surfaces the question, and updates `producer.md`, `director.md`, `writer.md`, `hollywood-cli.md`, and `docs/studio/` (`guide.md`, `ledger.md`, `panel.md`, `design.md`).
+- **agy roles no longer stop on the folder-trust dialog in their own work area.** Every agy launch (fresh, `--conversation` resume, Hollywood, replacement, and handoff) now writes the canonical absolute work-area path into `trustedWorkspaces` in the per-session `--settings` file when `[stage] answer_trust` is on (preserving any existing `trustedWorkspaces` entries without duplicating the path and leaving `~/.gemini/antigravity-cli/settings.json` untouched); `[stage] answer_trust = false` omits it (`docs/studio/runners.md`).
+- **Persistent floats keep their configured size across restarts and config reloads.** Adopted floats look up `hc-tui.command` in `[[keys.command]]` on adoption, show, hide, and host resize (falling back to the stored or default size only when no binding matches), so an `80%` float stays `80%` instead of collapsing to half the pane.
+
+## 0.4.17 — 2026-11-27
+
 ### Added
 
 - **Opening design event model, `DesignState`, `design_gate`, and `StudioSummary.design` (`backlot-model`).** Added `design.opened` (`DesignOpened`), `design.entry` (`DesignEntry` with `DesignSlot`, `EntrySource`, and up to 3 `DesignQuestion`s), and `design.signed` (`DesignSigned` with `SignMode`) as known ledger kinds, reduced into `DesignState` / `DesignPhase` (retaining signed versions in `design_history` on `req.version` changes); added `design_gate = "required" | "off"` on `studio.created`, `studio.cast`, and `cast.toml` (defaulting to `off` for existing and new studios until role prompts land); projected active or finalized design state into `StudioSummary.design` (with `waiting_user` for `?N` placement, capped fields, and omitted when inactive); and enforced role and phase validation rules for the new design events (`docs/studio/ledger.md`).
