@@ -25,6 +25,11 @@ and you can reopen a finished studio.
 
 - **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
 - **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
+
+## 0.4.10 — 2026-11-26
+
+### Fixed
+
 - **The update hint survives a narrow sidebar.** When the full `↑v<latest>` doesn't fit the sidebar header — as happens as soon as the running version grows a digit, like `v0.4.10` — the hint now shrinks to a single `↑` (or `↻`) instead of disappearing, and that glyph is still the click that opens the update card. Only when even that doesn't fit does the hint go.
 - **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
 - **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
@@ -32,7 +37,6 @@ and you can reopen a finished studio.
 ### Changed
 
 - **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
-
 
 ## 0.4.9 — 2026-11-26
 
