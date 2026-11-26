@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.20 — 2026-11-27
+
 ### Added
 
 - **Call Sheet `DECISION` item, Lot Pill `?N` asks bucket, and Lot Dock opening-design UI (`hc-tui`).** Surfaced `StudioSummary.design` when `waiting_user` as `Wait::Decision` in the Call Sheet (`WaitBucket::Asks` -> warm peach `?N` pill, never `!N` blocking or urgent), displaying studio id, round or `skip suggested`, producer summary, up to 3 `Q1..Q3` questions with recommendations + `section_ref`, and `[o] read` (opening `ReaderKind::Design` on `design/v<N>.md`) / `[r] reply` (`discuss` on `SuggestSkip`) / `[a] sign` (`skip` on `SuggestSkip`) / `[↵] open`; pressing `a` opens the shared confirmation modal naming mode (`sign off` vs `skip`) and frozen file (`design/v<N>-final.md` from `design/v<N>.md`) before sending `backlot design sign [--skip]`. Expanded the Lot Dock block with `◆ design · R<r> · you` (`proposal` / `review` / `summary` / `skip suggested`), question previews, `r`/`o`/`a` keys + focused footer hints, and added the warm-peach `◆R<r> ?` / `◆?` badge to the 16-col collapsed strip (`docs/studio/panel.md`, `docs/studio/hollywood.md`).
