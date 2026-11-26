@@ -37,7 +37,7 @@ pub(crate) fn render_cast(
         area.y,
         area.width,
         &"─".repeat(area.width as usize),
-        Style::default().fg(palette.surface_dim),
+        Style::default().fg(palette.elevation().border_muted),
     );
     if area.height < 2 {
         return;
@@ -57,7 +57,7 @@ pub(crate) fn render_cast(
                 .map(|label| label.fit(id_width as usize))
                 .unwrap_or_else(|| studio.studio.id.clone());
             let header_fg = if view.studio_focused {
-                palette.accent
+                palette.text
             } else {
                 palette.overlay0
             };
@@ -93,7 +93,7 @@ pub(crate) fn render_cast(
         }
     }
 
-    let rows = cast_rows(view);
+    let mut rows = cast_rows(view);
     let body = Rect::new(
         area.x,
         area.y.saturating_add(3),
@@ -104,6 +104,22 @@ pub(crate) fn render_cast(
     if body.is_empty() || rows.is_empty() {
         *cast_scroll = 0;
         return;
+    }
+    if rows
+        .iter()
+        .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
+    {
+        let compact_total: usize = rows
+            .iter()
+            .map(|row| match row {
+                CastRow::Person { role, .. } if !row.focused() => person::COMPACT_LINES,
+                CastRow::Person { role, .. } => person::full_height(role, view, body.width),
+                _ => row.lines(),
+            })
+            .sum::<u16>() as usize;
+        if compact_total > body.height as usize {
+            rows.retain(|r| !matches!(r, CastRow::ClosedDivider { .. }));
+        }
     }
 
     // Heights depend on width (wrapped roles) and on whether every role
@@ -171,6 +187,9 @@ pub(crate) fn render_cast(
                 }
                 let full = heights[index] > person::COMPACT_LINES;
                 person::draw(buffer, rect, role, *focused, full, view, palette);
+            }
+            CastRow::ClosedDivider { count } => {
+                super::simple::draw_closed_divider(buffer, rect, *count, palette);
             }
             CastRow::Shells => super::simple::draw_shells_header(buffer, rect, palette),
             CastRow::Shell { shell, focused } => {
@@ -251,8 +270,8 @@ fn draw_shell(
             rect.x,
             rect.y,
             1,
-            "▌",
-            Style::default().fg(palette.accent),
+            "▎",
+            Style::default().fg(palette.overlay1),
         );
     }
     let (symbol, style) = match shell.mark {

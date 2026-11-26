@@ -238,21 +238,102 @@ pub(crate) struct ShellRenderState<'a> {
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
-    buffer.set_style(area, Style::default().bg(palette.sidebar_bg));
-    // The edge faces the panes and takes the sidebar's own last
-    // column, never width from them. An opaque sidebar gets the
-    // theme's surface0 rule; a translucent herdr one keeps the
-    // reference's dim separator.
-    let edge = if palette.sidebar_bg == ratatui::style::Color::Reset {
-        palette.surface_dim
+    let elev = palette.elevation();
+    // Translucent themes keep `Color::Reset` + `surface_dim` for Herdr
+    // parity. Opaque `backlot` joins `elevation.surface` unless the
+    // user explicitly overrode `[theme.custom] sidebar_bg`.
+    let (bg, edge) = if palette.sidebar_bg == ratatui::style::Color::Reset {
+        (palette.sidebar_bg, palette.surface_dim)
+    } else if palette.sidebar_bg == Palette::backlot().sidebar_bg {
+        (elev.surface, elev.border_muted)
     } else {
-        palette.surface0
+        (palette.sidebar_bg, elev.border_muted)
     };
+    buffer.set_style(area, Style::default().bg(bg));
     let separator_x = area.right().saturating_sub(1);
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
-            cell.set_style(Style::default().fg(edge));
+            cell.set_style(Style::default().fg(edge).bg(bg));
+        }
+    }
+}
+
+/// Draw a unified two-tone footer hint bar (`key` in `subtext0`,
+/// `label` in `muted_surface`) on `elevation.surface`. Groups may be
+/// separated by runs of two or more spaces (`"  "`) or middle dots (`" · "`).
+pub(crate) fn put_hint_bar(
+    buf: &mut Buffer,
+    x: u16,
+    y: u16,
+    max_w: u16,
+    text: &str,
+    palette: &Palette,
+) {
+    if max_w == 0 {
+        return;
+    }
+    let elev = palette.elevation();
+    let bg = elev.surface;
+    let key_style = Style::default().fg(palette.subtext0).bg(bg);
+    let label_style = Style::default().fg(elev.muted_surface).bg(bg);
+    let gap_style = Style::default().bg(bg);
+    let mut cx = x;
+    let limit = x.saturating_add(max_w);
+    let mut rest = text.trim_start();
+    while !rest.is_empty() && cx < limit {
+        let next_spaces = rest.find("  ");
+        let next_dot = rest.find(" · ");
+        let (split, sep_dot) = match (next_spaces, next_dot) {
+            (Some(s), Some(d)) if d < s => (d, true),
+            (Some(s), _) => (s, false),
+            (None, Some(d)) => (d, true),
+            (None, None) => (rest.len(), false),
+        };
+        let group = &rest[..split];
+        if !group.is_empty() {
+            if let Some(sp) = group.find(' ') {
+                let (key, label) = group.split_at(sp);
+                let w_key = crate::chrome::text::display_width(key) as u16;
+                if cx.saturating_add(w_key) > limit {
+                    break;
+                }
+                put_text(buf, cx, y, limit - cx, key, key_style);
+                cx = cx.saturating_add(w_key);
+                let w_lbl = crate::chrome::text::display_width(label) as u16;
+                if cx < limit && w_lbl > 0 {
+                    let clip = (limit - cx).min(w_lbl);
+                    put_text(buf, cx, y, clip, label, label_style);
+                    cx = cx.saturating_add(clip);
+                }
+            } else {
+                let w_grp = (crate::chrome::text::display_width(group) as u16).min(limit - cx);
+                put_text(buf, cx, y, w_grp, group, key_style);
+                cx = cx.saturating_add(w_grp);
+            }
+        }
+        rest = &rest[split..];
+        if rest.is_empty() {
+            break;
+        }
+        if sep_dot {
+            let dot = " · ";
+            let take = (crate::chrome::text::display_width(dot) as u16).min(limit - cx);
+            put_text(buf, cx, y, take, dot, label_style);
+            cx = cx.saturating_add(take);
+            rest = &rest[dot.len()..];
+        } else {
+            let gap_len = rest.bytes().take_while(|&b| b == b' ').count();
+            if gap_len == 0 {
+                break;
+            }
+            if cx < limit {
+                let take = (gap_len as u16).min(limit - cx);
+                let gap = " ".repeat(take as usize);
+                put_text(buf, cx, y, take, &gap, gap_style);
+                cx = cx.saturating_add(take);
+            }
+            rest = &rest[gap_len..];
         }
     }
 }

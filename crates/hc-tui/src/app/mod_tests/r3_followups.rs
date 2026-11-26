@@ -74,8 +74,8 @@ async fn studio_focus_separates_sidebar_highlight_from_cast_and_pane_typing() {
     let backend = draw_to(&mut app, 120, 24);
     assert_eq!(
         backend.buffer()[(cast_row.x, cast_row.y)].symbol(),
-        "▌",
-        "the landed member carries the cast cursor"
+        "▎",
+        "the landed member carries the cast indicator"
     );
     let before = app.pane.input_backlog().0;
     send_key(&mut app, hc_vt::Key::Char('x'), hc_vt::Mods::NONE);

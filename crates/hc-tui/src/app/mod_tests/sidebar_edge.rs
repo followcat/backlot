@@ -15,6 +15,7 @@ async fn the_backlot_sidebar_is_opaque_with_an_edge() {
     let mut app = app_with(&["t1"]);
     let p = Palette::backlot();
     app.shell.palette = p.clone();
+    let elev = p.elevation();
     let (sidebar, backend) = sidebar_cells(&mut app);
     assert!(sidebar.width > 1, "a sidebar to inspect: {sidebar:?}");
     let buffer = backend.buffer();
@@ -28,10 +29,19 @@ async fn the_backlot_sidebar_is_opaque_with_an_edge() {
         }
         let edge = &buffer[(sidebar.right() - 1, y)];
         assert_eq!(edge.symbol(), "│", "edge at row {y}");
-        assert_eq!(edge.fg, p.surface0, "edge colour at row {y}");
+        assert_eq!(edge.fg, elev.border_muted, "edge colour at row {y}");
     }
-    // The base is the theme's opaque sidebar background.
-    assert_eq!(buffer[(sidebar.x, sidebar.y)].bg, p.sidebar_bg);
+    // The default backlot sidebar joins `elevation.surface`; custom overrides stay honoured.
+    assert_eq!(buffer[(sidebar.x, sidebar.y)].bg, elev.surface);
+
+    let mut custom = p.clone();
+    custom.sidebar_bg = Color::Rgb(20, 24, 34);
+    app.shell.palette = custom.clone();
+    let (c_sidebar, c_backend) = sidebar_cells(&mut app);
+    assert_eq!(
+        c_backend.buffer()[(c_sidebar.x, c_sidebar.y)].bg,
+        custom.sidebar_bg
+    );
 }
 
 #[tokio::test]

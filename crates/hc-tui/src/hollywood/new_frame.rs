@@ -20,17 +20,18 @@ pub(crate) fn draw_new(buf: &mut Buffer, rect: Rect, selected: bool, palette: &P
     if rect.width < 4 || rect.height < 3 {
         return;
     }
+    let elev = palette.elevation();
     let border = if selected {
         palette.accent
     } else {
-        palette.overlay0
+        elev.border_muted
     };
     let bg = if selected {
-        palette.selection_bg
+        elev.raised_row
     } else {
         palette.panel_bg
     };
-    let edge = on(border, palette.surface_dim);
+    let edge = on(border, elev.surface);
     // The dashed outline: corners solid, the arithmetic `┄`.
     put_text(buf, rect.x, rect.y, 1, "╭", edge);
     put_text(
@@ -81,16 +82,21 @@ pub(crate) fn draw_new(buf: &mut Buffer, rect: Rect, selected: bool, palette: &P
         rect.y + 3,
         note.chars().count() as u16,
         &note,
-        on(palette.overlay0, bg),
+        on(elev.muted_surface, bg),
     );
     if inner >= 3 {
+        let chip_bg = if selected || elev.is_dark {
+            palette.surface0
+        } else {
+            elev.surface
+        };
         put_text(
             buf,
             centre(" n "),
             rect.y + 5,
             3,
             " n ",
-            on(palette.accent, palette.surface0).add_modifier(Modifier::BOLD),
+            on(palette.accent, chip_bg).add_modifier(Modifier::BOLD),
         );
     }
 }

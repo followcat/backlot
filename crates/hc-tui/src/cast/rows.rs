@@ -19,6 +19,8 @@ pub(crate) enum CastRow<'a> {
         /// background and the accent `▌`.
         focused: bool,
     },
+    /// A divider separating open and closed roles (`┄ closed (n) ┄`).
+    ClosedDivider { count: usize },
     /// ` shells` — the group header for the studio's own shells.
     Shells,
     /// A studio shell — `shell`'s two display lines, laid out like a
@@ -47,7 +49,11 @@ impl CastRow<'_> {
     pub(crate) fn lines(&self) -> u16 {
         match self {
             CastRow::Person { .. } | CastRow::Shell { .. } => 2,
-            CastRow::Shells | CastRow::Others { .. } | CastRow::Hint | CastRow::Stopped => 1,
+            CastRow::ClosedDivider { .. }
+            | CastRow::Shells
+            | CastRow::Others { .. }
+            | CastRow::Hint
+            | CastRow::Stopped => 1,
             CastRow::Agent(row) => row.rows.len().max(1).min(u16::MAX as usize) as u16,
         }
     }
@@ -58,14 +64,19 @@ impl CastRow<'_> {
         match self {
             CastRow::Person { focused, .. } | CastRow::Shell { focused, .. } => *focused,
             CastRow::Agent(row) => row.focused,
-            CastRow::Shells | CastRow::Others { .. } | CastRow::Hint | CastRow::Stopped => false,
+            CastRow::ClosedDivider { .. }
+            | CastRow::Shells
+            | CastRow::Others { .. }
+            | CastRow::Hint
+            | CastRow::Stopped => false,
         }
     }
 }
 
 /// The section's rows: cast order first, then the `shells` group,
 /// then `others` (and its expanded rows). Two rows per person or
-/// shell, no gap anywhere.
+/// shell, plus a `┄ closed (n) ┄` divider when open and closed roles
+/// are both present.
 pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
     let mut rows = Vec::new();
     if view.hint {
@@ -73,11 +84,20 @@ pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
     } else if view.server_stopped || view.stopped {
         rows.push(CastRow::Stopped);
     }
-    for role in view
+    let ordered = view
         .studio
         .map(|studio| studio::cast_order(studio.studio))
-        .unwrap_or_default()
-    {
+        .unwrap_or_default();
+    let has_open = ordered.iter().any(|r| r.state != "closed");
+    let closed_count = ordered.iter().filter(|r| r.state == "closed").count();
+    let mut divider_emitted = false;
+    for role in ordered {
+        if has_open && closed_count > 0 && !divider_emitted && role.state == "closed" {
+            rows.push(CastRow::ClosedDivider {
+                count: closed_count,
+            });
+            divider_emitted = true;
+        }
         rows.push(CastRow::Person {
             role,
             focused: view.focused_terminal.is_some()

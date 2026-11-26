@@ -34,22 +34,21 @@ async fn modals_dim_backdrop_and_suppress_underlying_cursors_and_highlights() {
     app.hollywood.editing = true;
 
     let base = draw_to(&mut app, 160, 47);
-    let alice_row_y = app
+    let alice_row = app
         .panel_hits
         .rows
         .iter()
         .find(|(_, t)| *t == PanelTarget::Person("acme-shop".into(), "actor-alice".into()))
         .unwrap()
-        .0
-        .y;
-    let dock_x = app.panel_hits.area.x;
+        .0;
+    let alice_row_y = alice_row.y;
     let palette = app.shell.palette.clone();
     assert_eq!(
-        base.buffer()[(dock_x + 1, alice_row_y)].symbol(),
+        base.buffer()[(alice_row.x + 1, alice_row_y)].symbol(),
         glyphs::SELECTION_BAR
     );
     assert_eq!(
-        base.buffer()[(dock_x + 4, alice_row_y)].bg,
+        base.buffer()[(alice_row.x + 3, alice_row_y)].bg,
         palette.selection_bg
     );
     assert!(app.hollywood_hits.cursor.is_some());
@@ -64,20 +63,20 @@ async fn modals_dim_backdrop_and_suppress_underlying_cursors_and_highlights() {
         let buf = drawn.buffer();
         // Underlying Dock `▌` bar and `selection_bg` suppressed (and DIM set).
         assert_ne!(
-            buf[(dock_x + 1, alice_row_y)].symbol(),
+            buf[(alice_row.x + 1, alice_row_y)].symbol(),
             glyphs::SELECTION_BAR,
             "{label}: Dock selection bar suppressed"
         );
         assert_ne!(
-            buf[(dock_x + 4, alice_row_y)].bg,
+            buf[(alice_row.x + 3, alice_row_y)].bg,
             palette.selection_bg,
             "{label}: Dock selection_bg suppressed"
         );
         let mut probe = ratatui::buffer::Cell::default();
-        probe.set_bg(palette.panel_bg);
+        probe.set_bg(palette.elevation().surface);
         palette.elevation().dim_cell(&mut probe, &palette);
         assert_eq!(
-            buf[(dock_x + 4, alice_row_y)].bg,
+            buf[(alice_row.x + 3, alice_row_y)].bg,
             probe.bg,
             "{label}: backdrop dimmed"
         );
@@ -321,4 +320,28 @@ async fn popup_backdrop_none_and_shadow_false_and_hit_area_gutter_vs_shadow() {
         app.hollywood.view.is_none(),
         "shadow click must dismiss modal"
     );
+}
+
+#[tokio::test]
+async fn expanded_call_sheet_casts_external_shadow_above_beside_lot_dock() {
+    let mut app = s4_app();
+    app.area = (160, 44);
+    app.panel.mode = PanelMode::Expanded;
+    app.hollywood.mode = LayerMode::Expanded;
+    let drawn = draw_to(&mut app, 160, 44);
+    assert!(app.hollywood_hits.shadow_drawn);
+    assert_eq!(
+        app.panel_hits.area.y,
+        app.hollywood_hits.area.bottom() + 1,
+        "beside Lot dock starts below 1-row external shadow"
+    );
+    let shadow_x = app.panel_hits.area.x + 2;
+    let shadow_y = app.hollywood_hits.area.bottom();
+    let shadow = app.shell.palette.elevation().shadow.unwrap();
+    assert_eq!(drawn.buffer()[(shadow_x, shadow_y)].bg, shadow);
+
+    app.shell.popup_shadow = false;
+    draw_to(&mut app, 160, 44);
+    assert!(!app.hollywood_hits.shadow_drawn);
+    assert_eq!(app.panel_hits.area.y, app.hollywood_hits.area.bottom());
 }
