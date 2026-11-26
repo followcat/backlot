@@ -84,9 +84,49 @@ fn tell_file_inner(
     guard: bool,
 ) -> Result<TellResult, Fail> {
     let dir = store::studio_dir(base, &caller.studio);
+    let msg_file = file.clone();
+    let is_user_to_producer = caller.role == "user" && role == "producer";
+    let caller_by = caller.by();
     // Keep identity/lock rules aligned with `commands::build` while letting `tell_text` skip the guard.
     let built = commands::tell_cmd(caller, &role, file, ask, note, guard)?;
-    let event = store::append(&dir, built)?;
+    let events = store::append_many(&dir, move |state, seq| {
+        let first = built(state, seq)?;
+        let mut out = vec![first];
+        if is_user_to_producer
+            && state.design_phase() == backlot_model::design::DesignPhase::WaitingUser
+            && let Some(d) = state.design.as_ref()
+        {
+            let entry_seq = seq + 1;
+            let dest = format!(
+                "design/v{}/r{}-{entry_seq}-user_input.md",
+                d.version, d.round
+            );
+            out.push(store::Pending {
+                event: backlot_model::NewEvent::new(
+                    caller_by,
+                    EventKind::DesignEntry {
+                        version: d.version,
+                        round: d.round,
+                        slot: backlot_model::design::DesignSlot::UserInput,
+                        file: dest.clone(),
+                        source: Some(backlot_model::design::EntrySource::Tell),
+                        refs: vec![seq],
+                        questions: Vec::new(),
+                    },
+                ),
+                files: vec![store::PendingFile {
+                    src: msg_file,
+                    dest,
+                    append: None,
+                }],
+            });
+        }
+        Ok(out)
+    })?;
+    let event = events
+        .into_iter()
+        .next()
+        .expect("tell always appends MessageQueued");
     let dest = match event.kind {
         EventKind::MessageQueued {
             file: Some(dest), ..

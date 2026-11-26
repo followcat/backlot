@@ -2,9 +2,9 @@
 
 use backlot_model::req_results::{
     AskAcknowledgeResult, AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult,
-    CloseResult, HollywoodSetupResult, RecastResult, ReopenResult, RestartResult,
-    StudioFinishResult, StudioNewResult, StudioPlan, StudioReopenResult, TaskPriorityResult,
-    TaskStateResult, TellHollywoodResult, TellResult,
+    CloseResult, DesignSignResult, DesignStartRoundResult, HollywoodSetupResult, RecastResult,
+    ReopenResult, RestartResult, StudioFinishResult, StudioNewResult, StudioPlan,
+    StudioReopenResult, TaskPriorityResult, TaskStateResult, TellHollywoodResult, TellResult,
 };
 use backlot_model::req_wire::{ReqAction, ResAck};
 use serde::de::DeserializeOwned;
@@ -13,7 +13,7 @@ use crate::cli::Fail;
 use crate::delete::DeleteReport;
 use crate::prune::PruneReport;
 use crate::restore::RestoreReport;
-use crate::{verbs_card_show, verbs_fmt, verbs_hwood};
+use crate::{verbs_card_show, verbs_design, verbs_fmt, verbs_hwood};
 
 fn parse_res<T: DeserializeOwned>(ack: &ResAck) -> Result<T, Fail> {
     let val = ack
@@ -216,6 +216,24 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
                     .map_err(|e| Fail::refused(format!("switch status: {e}")))?
             } else {
                 format_hollywood_switch_status(&res)
+            }
+        }
+        ReqAction::DesignSign { .. } => {
+            let res: DesignSignResult = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&res)
+                    .map_err(|e| Fail::refused(format!("design sign: {e}")))?
+            } else {
+                verbs_design::format_design_sign(&res)
+            }
+        }
+        ReqAction::DesignStartRound { .. } => {
+            let res: DesignStartRoundResult = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&res)
+                    .map_err(|e| Fail::refused(format!("design start-round: {e}")))?
+            } else {
+                verbs_design::format_design_open(&res)
             }
         }
     };

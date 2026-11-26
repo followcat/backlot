@@ -352,18 +352,41 @@ impl AppendGuard<backlot_model::hollywood::HRefusal> for backlot_model::hollywoo
     }
 }
 
-fn append_locked<Ev, New, S, E, V>(
-    dir: &Path,
-    reduce: impl Fn(&[Ev]) -> S,
-    build: impl FnOnce(&S, u64) -> Result<Vec<(New, Vec<PendingFile>)>, E>,
-    stamp: impl Fn(New, u64, u64) -> Ev,
-    mut check: impl FnMut(&S, &New) -> Result<(), V>,
-    mut apply: impl FnMut(&mut S, &Ev),
+struct AppendOps<R, St, C, A, Pre, W, Post> {
+    reduce: R,
+    stamp: St,
+    check: C,
+    apply: A,
+    pre_copy: Pre,
+    write_log: W,
+    post_copy: Post,
     migrate: MigrateFn,
+}
+
+pub(crate) fn write_events_file(events_path: &Path, buf: &[u8]) -> io::Result<()> {
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(events_path)?;
+    f.write_all(buf)?;
+    f.sync_data()
+}
+
+fn append_locked<Ev, New, S, E, V, R, St, C, A, Pre, W, Post>(
+    dir: &Path,
+    build: impl FnOnce(&S, u64) -> Result<Vec<(New, Vec<PendingFile>)>, E>,
+    mut ops: AppendOps<R, St, C, A, Pre, W, Post>,
 ) -> Result<Vec<Ev>, StoreError<E, V>>
 where
     Ev: DeserializeOwned + Serialize + HasSeq,
     S: AppendGuard<V>,
+    R: Fn(&[Ev]) -> S,
+    St: Fn(New, u64, u64) -> Ev,
+    C: FnMut(&S, &New) -> Result<(), V>,
+    A: FnMut(&mut S, &Ev),
+    Pre: FnOnce(&[Ev], &[PendingFile]) -> Result<(), StoreError<E, V>>,
+    W: FnOnce(&Path, &[u8]) -> io::Result<()>,
+    Post: FnOnce(&S, &[Ev]),
 {
     fs::create_dir_all(dir)?;
     let _lock = take_lock(dir)?;
@@ -389,8 +412,9 @@ where
             .open(&events_path)?
             .set_len(keep)?;
     }
-    let (events, _) = parse_log(&bytes[..keep as usize], migrate).map_err(StoreError::Corrupt)?;
-    let mut state = reduce(&events);
+    let (events, _) =
+        parse_log(&bytes[..keep as usize], ops.migrate).map_err(StoreError::Corrupt)?;
+    let mut state = (ops.reduce)(&events);
     state.guard_state().map_err(StoreError::Refused)?;
     let next_seq = events.iter().map(|e| e.seq()).max().unwrap_or(0) + 1;
     let built = build(&state, next_seq).map_err(StoreError::Build)?;
@@ -406,25 +430,17 @@ where
     let mut copies: Vec<PendingFile> = Vec::new();
     for (offset, (new, files)) in built.into_iter().enumerate() {
         let seq = next_seq + offset as u64;
-        check(&state, &new).map_err(StoreError::Refused)?;
-        let event = stamp(new, seq, now);
-        apply(&mut state, &event);
+        (ops.check)(&state, &new).map_err(StoreError::Refused)?;
+        let event = (ops.stamp)(new, seq, now);
+        (ops.apply)(&mut state, &event);
         stamped.push(event);
         copies.extend(files);
     }
 
+    (ops.pre_copy)(&stamped, &copies)?;
     for pf in &copies {
         let dest = dir.join(&pf.dest);
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::copy(&pf.src, &dest)?;
-        if let Some(extra) = &pf.append {
-            OpenOptions::new()
-                .append(true)
-                .open(&dest)?
-                .write_all(extra.as_bytes())?;
-        }
+        crate::design_doc::copy_pending_atomic(pf, &dest)?;
     }
 
     // One buffer, one `write_all`: a torn append can land a prefix of
@@ -436,12 +452,8 @@ where
             .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
         buf.push(b'\n');
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&events_path)?;
-    f.write_all(&buf)?;
-    f.sync_data()?;
+    (ops.write_log)(&events_path, &buf)?;
+    (ops.post_copy)(&state, &stamped);
     Ok(stamped)
 }
 
@@ -450,14 +462,69 @@ pub fn append<E, F>(dir: &Path, build: F) -> Result<Event, StoreError<E>>
 where
     F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
 {
+    let mut events = append_many(dir, move |state, seq| build(state, seq).map(|p| vec![p]))?;
+    Ok(events.remove(0))
+}
+
+/// Several studio events into `dir`'s `events.jsonl` under one lock —
+/// e.g. `message.queued` paired atomically with `design.entry`.
+pub fn append_many<E, F>(dir: &Path, build: F) -> Result<Vec<Event>, StoreError<E>>
+where
+    F: FnOnce(&StudioState, u64) -> Result<Vec<Pending>, E>,
+{
+    append_locked(
+        dir,
+        |state, seq| {
+            build(state, seq).map(|v| {
+                v.into_iter()
+                    .map(|p| (p.event, p.files))
+                    .collect::<Vec<_>>()
+            })
+        },
+        AppendOps {
+            reduce: replay,
+            stamp: |new: NewEvent, seq, ts| new.stamp(seq, ts),
+            check: validate,
+            apply: backlot_model::state::apply,
+            pre_copy: |stamped: &[Event], copies: &[PendingFile]| {
+                crate::design_doc::verify_pending_entries(stamped, copies)
+            },
+            write_log: write_events_file,
+            post_copy: |state: &StudioState, stamped: &[Event]| {
+                crate::design_doc::sync_on_append(dir, state, stamped);
+            },
+            migrate: backlot_model::migrate::migrate_event_value,
+        },
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn append_with_test_hooks<E, F, W, Post>(
+    dir: &Path,
+    build: F,
+    write_log: W,
+    post_copy: Post,
+) -> Result<Event, StoreError<E>>
+where
+    F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
+    W: FnOnce(&Path, &[u8]) -> io::Result<()>,
+    Post: FnOnce(&StudioState, &[Event]),
+{
     let mut events = append_locked(
         dir,
-        replay,
         |state, seq| build(state, seq).map(|p| vec![(p.event, p.files)]),
-        |new, seq, ts| new.stamp(seq, ts),
-        validate,
-        backlot_model::state::apply,
-        backlot_model::migrate::migrate_event_value,
+        AppendOps {
+            reduce: replay,
+            stamp: |new: NewEvent, seq, ts| new.stamp(seq, ts),
+            check: validate,
+            apply: backlot_model::state::apply,
+            pre_copy: |stamped: &[Event], copies: &[PendingFile]| {
+                crate::design_doc::verify_pending_entries(stamped, copies)
+            },
+            write_log,
+            post_copy,
+            migrate: backlot_model::migrate::migrate_event_value,
+        },
     )?;
     Ok(events.remove(0))
 }
@@ -489,7 +556,6 @@ where
 {
     append_locked(
         dir,
-        hollywood::replay,
         |state, seq| {
             build(state, seq).map(|v| {
                 v.into_iter()
@@ -497,9 +563,15 @@ where
                     .collect::<Vec<_>>()
             })
         },
-        |new, seq, ts| new.stamp(seq, ts),
-        hollywood::validate,
-        hollywood::apply,
-        backlot_model::migrate::migrate_hollywood_value,
+        AppendOps {
+            reduce: hollywood::replay,
+            stamp: |new: NewHollywoodEvent, seq, ts| new.stamp(seq, ts),
+            check: hollywood::validate,
+            apply: hollywood::apply,
+            pre_copy: |_: &[HollywoodEvent], _: &[PendingFile]| Ok(()),
+            write_log: write_events_file,
+            post_copy: |_: &HollywoodState, _: &[HollywoodEvent]| {},
+            migrate: backlot_model::migrate::migrate_hollywood_value,
+        },
     )
 }

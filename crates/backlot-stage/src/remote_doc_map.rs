@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::args::{CardCmd, CastCmd, Cmd, Common, HollywoodCmd, TextSource};
+use crate::args::{CardCmd, CastCmd, Cmd, Common, DesignCmd, HollywoodCmd, TextSource};
 use crate::cli::{Env, Fail};
 use backlot_model::event::TaskStateChange;
 use backlot_model::hollywood::HOLLYWOOD;
@@ -301,6 +301,20 @@ pub(super) fn map(
             all: *all,
         }),
         Cmd::Runners { json: _ } => MappedCmd::Action(ReqAction::Runners),
+        Cmd::Design(DesignCmd::Sign { skip, reason, note }) => {
+            let (skip, reason, note) = (*skip, reason.clone(), note.clone());
+            with_studio(common, env, move |studio| ReqAction::DesignSign {
+                studio,
+                skip,
+                reason,
+                note,
+            })
+        }
+        Cmd::Design(DesignCmd::Open {
+            req: None,
+            suggest_skip: false,
+            reason: None,
+        }) => with_studio(common, env, |studio| ReqAction::DesignStartRound { studio }),
         _ => MappedCmd::Unsupported,
     };
     Ok(mapped)

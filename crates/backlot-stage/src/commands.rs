@@ -395,8 +395,8 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }
-        Cmd::Hollywood(..) | Cmd::Card(..) => {
-            unreachable!("Hollywood's own ledger is appended in hwood")
+        Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::Design(..) => {
+            unreachable!("Hollywood's and design's own handlers append outside commands::build")
         }
         Cmd::StudioNew {
             title,

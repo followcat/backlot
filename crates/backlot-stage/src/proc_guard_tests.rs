@@ -283,3 +283,95 @@ fn server_control_is_refused_from_a_role_terminal_and_allowed_for_the_person() {
         .is_some()
     );
 }
+
+#[test]
+fn design_sign_is_refused_from_role_terminal_and_allowed_for_user() {
+    let reader = |pid: u32| -> Option<(u32, Vec<(String, String)>)> {
+        match pid {
+            // `env -u BACKLOT_ROLE` child under a producer role terminal
+            300 => Some((200, vec![])),
+            200 => Some((
+                100,
+                vec![
+                    ("BACKLOT_STUDIO".into(), "acme-shop".into()),
+                    ("BACKLOT_ROLE".into(), "producer".into()),
+                    ("BACKLOT_TERMINAL".into(), "bl-acme-shop-producer".into()),
+                ],
+            )),
+            // `env -u BACKLOT_ROLE` child under an actor role terminal
+            301 => Some((201, vec![])),
+            201 => Some((
+                100,
+                vec![
+                    ("BACKLOT_STUDIO".into(), "acme-shop".into()),
+                    ("BACKLOT_TERMINAL".into(), "bl-acme-shop-actor-t1-c1".into()),
+                ],
+            )),
+            100 => Some((1, vec![("HOME".into(), "/home/user".into())])),
+            _ => None,
+        }
+    };
+    let clean_env = Env::default();
+    let common = Common::default();
+
+    for child_pid in [300, 301] {
+        let err = check_cli_gate_with(CliVerb::DesignSign, &common, &clean_env, &reader, child_pid)
+            .unwrap_err();
+        assert!(err.message().contains("role terminal ancestor"), "{err:?}");
+    }
+
+    for r in ["producer", "writer", "director", "actor", "hollywood"] {
+        let mut role_env = Env::default();
+        role_env.vars.insert("BACKLOT_ROLE".into(), r.into());
+        let err =
+            check_cli_gate_with(CliVerb::DesignSign, &common, &role_env, &reader, 100).unwrap_err();
+        assert!(err.message().contains("BACKLOT_ROLE is set"), "{err:?}");
+    }
+
+    let as_producer = Common {
+        role: Some("producer".into()),
+        ..Default::default()
+    };
+    let err = check_cli_gate_with(CliVerb::DesignSign, &as_producer, &clean_env, &reader, 100)
+        .unwrap_err();
+    assert!(err.message().contains("user"), "{err:?}");
+
+    assert!(check_cli_gate_with(CliVerb::DesignSign, &common, &clean_env, &reader, 100).is_ok());
+
+    let as_user = Common {
+        role: Some("user".into()),
+        ..Default::default()
+    };
+    assert!(check_cli_gate_with(CliVerb::DesignSign, &as_user, &clean_env, &reader, 100).is_ok());
+
+    assert!(
+        crate::proc_guard::check_segment_self_approval(
+            &["backlot".into(), "design".into(), "sign".into()],
+            Some("producer"),
+        )
+        .is_some()
+    );
+    assert!(
+        crate::proc_guard::check_segment_self_approval(
+            &[
+                "backlot".into(),
+                "design".into(),
+                "sign".into(),
+                "--as".into(),
+                "user".into(),
+                "--skip".into(),
+                "--reason".into(),
+                "none".into(),
+            ],
+            Some("writer"),
+        )
+        .is_some()
+    );
+    assert!(
+        crate::proc_guard::check_segment_self_approval(
+            &["backlot".into(), "design".into(), "show".into()],
+            Some("producer"),
+        )
+        .is_none()
+    );
+}
