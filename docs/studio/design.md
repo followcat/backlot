@@ -50,9 +50,17 @@ count on the runner, or at their count while the writer or a candidate shares it
 for the rest. A held role accrues no task budget and owes nothing until its first `role.started`, which then becomes
 the floor for its obligations' age.
 
+On top of the per-runner caps, the cast's `max_actors` (default 4) caps how many actors play at once. Only actors
+count — the producer, the director and the writer never fill an actor slot — and an actor being started counts too.
+A candidate is a *kind* of actor, not a person: one candidate may be cast to several tasks at once, each cast a
+separate actor with its own terminal, worktree and branch. A wanted actor past the cap waits with
+`waiting for an actor slot` (distinct from a `[limits]` wait) and starts the tick an actor closes; `backlot status`
+shows `actors <live>/<cap>` so the director casts up to the cap and no further. A `max_actors` below 1 is refused.
+Both caps travel in the cast and are what `studio cast set`, `Edit cast…` and Hollywood `cast` cards change.
+
 The cast file only **initializes** a studio; it locks nothing afterwards. A `studio.cast` event carries the whole new
 cast — the three roles, the candidates, the rework cap, the timings, `check_env`, the declared checks,
-`task_budget_s`, `[limits]` and the push knobs — and the newest `studio.cast` (or `studio.created` when there is none)
+`task_budget_s`, `[limits]`, `max_actors` and the push knobs — and the newest `studio.cast` (or `studio.created` when there is none)
 is what the stage reads from then on. The binding (`repo`, `members`, `no_git`, `mode`) and the push remotes recorded
 at creation are facts, not cast, and never travel in the event. A fixed role whose identity the change moves is
 recorded as a `role.recast` for that role, appended just before the `studio.cast`: that is what makes the stage close a

@@ -76,6 +76,9 @@ pub(crate) fn read(path: &Path) -> Result<CastSettings, Fail> {
             .map(|(_, checks)| checks)?,
         task_budget_s: file.task_budget_s,
         limits: file.limits.clone(),
+        max_actors: file
+            .max_actors
+            .unwrap_or_else(backlot_model::event::default_max_actors),
         push: backlot_model::event::PushPolicy {
             protected_branches: file
                 .push

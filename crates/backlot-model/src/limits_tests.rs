@@ -6,7 +6,8 @@
 use std::collections::BTreeMap;
 
 use crate::event::*;
-use crate::limits::held;
+use crate::limits::{Held, held};
+use crate::refusal::Refusal;
 use crate::state::replay;
 use crate::testkit::*;
 use crate::wanted::wanted_roles;
@@ -113,8 +114,8 @@ fn held_roles_name_the_runner_they_wait_on() {
     assert_eq!(
         held,
         BTreeMap::from([
-            ("writer".to_string(), "fake".to_string()),
-            ("actor-t1-c1".to_string(), "fake".to_string()),
+            ("writer".to_string(), Held::Runner("fake".to_string())),
+            ("actor-t1-c1".to_string(), Held::Runner("fake".to_string())),
         ])
     );
 }
@@ -284,7 +285,7 @@ fn actors_order_by_priority_then_task_seq() {
     let held = held(&state);
     assert_eq!(
         held,
-        BTreeMap::from([("actor-t2-c1".to_string(), "fake".to_string())])
+        BTreeMap::from([("actor-t2-c1".to_string(), Held::Runner("fake".to_string()))])
     );
 }
 
@@ -379,4 +380,145 @@ fn limits_are_per_studio() {
     ];
     let state = replay(&events);
     assert!(held(&state).is_empty(), "one free slot remains");
+}
+
+/// `studio_kind()` plus a studio-wide actor cap — every runner stays
+/// unlimited, so only the actor cap can hold a start.
+fn capped(max: u32) -> EventKind {
+    let mut kind = all_on("fake");
+    let EventKind::StudioCreated { max_actors, .. } = &mut kind else {
+        unreachable!()
+    };
+    *max_actors = max;
+    kind
+}
+
+fn dispatch(seq: u64) -> Event {
+    ev(
+        seq,
+        "producer",
+        EventKind::MessageQueued {
+            to: "writer".into(),
+            file: None,
+            purpose: Some("dispatch".into()),
+            source_seq: None,
+        },
+    )
+}
+
+/// Two candidates cannot play more than the cap: the fifth wanted
+/// actor waits on an actor slot and takes it when one actor closes.
+#[test]
+fn the_actor_cap_holds_the_fifth_wanted_actor_and_frees_it() {
+    let mut events = vec![ev(1, "user", capped(4)), dispatch(2)];
+    let mut seq = 2;
+    for i in 1..=5 {
+        seq += 1;
+        events.push(ev(
+            seq,
+            "director",
+            task_created(&format!("t{i}"), "feature", 1),
+        ));
+        seq += 1;
+        events.push(ev(
+            seq,
+            "director",
+            cast_on(&format!("t{i}"), "actor-a", "fake"),
+        ));
+    }
+    for role in ["producer", "director"] {
+        seq += 1;
+        events.push(started(seq, role, "fake"));
+    }
+    for i in 1..=4 {
+        seq += 1;
+        events.push(started(seq, &format!("actor-t{i}-c1"), "fake"));
+    }
+    let state = replay(&events);
+    assert_eq!(
+        held(&state).get("actor-t5-c1"),
+        Some(&Held::Actor),
+        "the fifth actor waits on the cap: {:?}",
+        held(&state)
+    );
+    assert!(!held(&state).contains_key("actor-t1-c1"));
+
+    // One actor finishes: its task is abandoned and the stage closes
+    // the role, freeing the slot the fifth takes.
+    seq += 1;
+    events.push(ev(
+        seq,
+        "director",
+        task_state("t1", TaskStateChange::Abandoned, "done"),
+    ));
+    seq += 1;
+    events.push(ev(
+        seq,
+        "stage",
+        EventKind::RoleClosed {
+            role: "actor-t1-c1".into(),
+            reason: Some("no longer desired".into()),
+        },
+    ));
+    let state = replay(&events);
+    assert!(
+        held(&state).is_empty(),
+        "the fifth actor takes the freed slot: {:?}",
+        held(&state)
+    );
+}
+
+/// Fixed roles never fill an actor slot: with cap 1 and the producer,
+/// director and writer all live, the studio's one candidate still
+/// starts.
+#[test]
+fn fixed_roles_do_not_count_against_the_actor_cap() {
+    let events = vec![
+        ev(1, "user", capped(1)),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "s".into(),
+            },
+        ),
+        ev(
+            3,
+            "producer",
+            EventKind::MessageQueued {
+                to: "writer".into(),
+                file: None,
+                purpose: Some("plan".into()),
+                source_seq: None,
+            },
+        ),
+        ev(4, "director", task_created("t1", "feature", 1)),
+        ev(5, "director", cast_on("t1", "actor-a", "fake")),
+        started(6, "producer", "fake"),
+        started(7, "director", "fake"),
+        started(8, "writer", "fake"),
+    ];
+    let state = replay(&events);
+    assert!(
+        held(&state).is_empty(),
+        "the fixed three fill no actor slot: {:?}",
+        held(&state)
+    );
+}
+
+/// A `studio.cast` setting `max_actors` below one is refused; the cap
+/// travels in the event and moves the wanted set.
+#[test]
+fn a_cast_below_one_refuses_and_a_new_cap_moves_the_wanted_set() {
+    let state = replay(&base_events());
+    let mut next = crate::cast::CastSettings::of(&state).unwrap();
+    next.max_actors = 0;
+    assert_eq!(
+        crate::cast::check(&state, &next),
+        Err(Refusal::CastBadMaxActors)
+    );
+    next.max_actors = 7;
+    assert!(crate::cast::check(&state, &next).is_ok());
 }

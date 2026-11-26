@@ -284,7 +284,15 @@ re-raise one `stall_limit_s` later.
   the runner, or at their count while the writer or a candidate shares it. **Hollywood is outside
   every cap** — `bl-hollywood` is not a studio role and no cast counts it — but its start still
   spends the tick's one-real-runner slot like any other launch.
-- **A held role owes nothing until it starts.** A start a `[limits]` cap holds back accrues no
+- **`max_actors` caps actors per studio, on top of the runner caps.** The cast's `max_actors`
+  (default 4) holds a wanted actor back once that many actors are live or being started. Only
+  actors count — the producer, the director and the writer never fill an actor slot — and a
+  candidate is a kind of actor, so one candidate cast to several tasks is several actors. A held
+  actor waits `waiting for an actor slot` (distinct from a `waiting for a <runner> slot`) and
+  starts the tick one closes; `backlot status` shows `actors <live>/<cap>`, and the panel and
+  Hollywood frame show the same. A `max_actors` below 1 is refused. This is behavioural only:
+  nothing ever refused a second actor on a candidate, and the per-runner caps are unchanged.
+- **A held role owes nothing until it starts.** A start a `[limits]` or `max_actors` cap holds back accrues no
   task budget (the clock opens at the first `role.started`), owes no step, draws no nudge and no
   `owed` attention; once the role starts, an owed step ages from the later of its ordinary
   `since` and that start.

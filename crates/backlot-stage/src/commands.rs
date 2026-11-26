@@ -98,6 +98,10 @@ pub(crate) struct CastFile {
     /// studio; a runner with no entry is unlimited.
     #[serde(default)]
     pub(crate) limits: std::collections::BTreeMap<String, u32>,
+    /// The studio-wide actor cap: at most this many actors live at
+    /// once; fixed roles never count.
+    #[serde(default)]
+    pub(crate) max_actors: Option<u32>,
     pub(crate) producer: ActorIdentity,
     pub(crate) director: ActorIdentity,
     pub(crate) writer: ActorIdentity,
@@ -148,6 +152,11 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     // number or absent and unlimited.
     if let Some((runner, _)) = cast.limits.iter().find(|(_, cap)| **cap == 0) {
         return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
+    }
+    // The studio-wide actor cap is a real number too: a studio with no
+    // actor slot can never cast.
+    if cast.max_actors == Some(0) {
+        return Err(Fail::usage("max_actors must be at least 1"));
     }
     // The effort rule is the runner's caps: required (with its
     // levels), accepted-and-ignored, or absent. A level set on a
@@ -440,6 +449,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         checks,
                         task_budget_s: cast.task_budget_s,
                         limits: cast.limits,
+                        max_actors: cast.max_actors.unwrap_or_else(default_max_actors),
                         push,
                     },
                     by,

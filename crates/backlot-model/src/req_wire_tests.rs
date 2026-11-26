@@ -202,6 +202,7 @@ fn card_ids_accept_c_prefix_or_numeric_and_prompt_reasons_refused() {
             },
             candidates: Vec::new(),
             limits: Default::default(),
+            max_actors: None,
             rework_cap: None,
             stall_limit_s: None,
             nudge_after_s: None,

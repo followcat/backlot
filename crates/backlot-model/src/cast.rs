@@ -22,7 +22,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::{
     ActorIdentity, Candidate, CheckDecl, EventKind, PushPolicy, RoleConfigs,
-    default_escalate_after_s, default_nudge_after_s, default_rework_cap, default_stall_limit_s,
+    default_escalate_after_s, default_max_actors, default_nudge_after_s, default_rework_cap,
+    default_stall_limit_s,
 };
 use crate::refusal::Refusal;
 use crate::state::StudioState;
@@ -57,6 +58,9 @@ pub struct CastSettings {
     pub task_budget_s: Option<u32>,
     #[serde(default)]
     pub limits: BTreeMap<String, u32>,
+    /// At most this many actors live at once; fixed roles never count.
+    #[serde(default = "default_max_actors")]
+    pub max_actors: u32,
     /// The push policy's knobs; `remotes` is ignored on the way in and
     /// kept from the recorded settings on the way out.
     #[serde(default)]
@@ -85,6 +89,7 @@ impl CastSettings {
             checks: cfg.checks.clone(),
             task_budget_s: cfg.task_budget_s,
             limits: cfg.limits.clone(),
+            max_actors: cfg.max_actors,
             push: cfg.push.clone(),
         })
     }
@@ -114,6 +119,7 @@ impl CastSettings {
             && self.checks == other.checks
             && self.task_budget_s == other.task_budget_s
             && self.limits == other.limits
+            && self.max_actors == other.max_actors
             && self.push.protected_branches == other.push.protected_branches
             && self.push.protect_tags == other.push.protect_tags
             && self.push.protect_default_branch == other.push.protect_default_branch
@@ -133,6 +139,7 @@ impl CastSettings {
             checks: self.checks.clone(),
             task_budget_s: self.task_budget_s,
             limits: self.limits.clone(),
+            max_actors: self.max_actors,
             push: self.push.clone(),
             card,
         }
@@ -180,6 +187,11 @@ pub fn check_runnable(state: &StudioState, new: &CastSettings) -> Result<(), Ref
                 runner: runner.clone(),
             });
         }
+    }
+    // A studio with no actor slot can never cast: the cap is a real
+    // number like every other cast value.
+    if new.max_actors < 1 {
+        return Err(Refusal::CastBadMaxActors);
     }
     for actor in new.identities() {
         if !matches!(actor.permission_profile.as_str(), "standard" | "worktree") {

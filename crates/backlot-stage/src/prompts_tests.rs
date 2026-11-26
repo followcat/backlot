@@ -105,6 +105,7 @@ fn studio_config(checks: Vec<CheckDecl>) -> StudioConfig {
         checks,
         task_budget_s: None,
         limits: BTreeMap::new(),
+        max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
     }
 }
@@ -659,6 +660,44 @@ fn the_producer_records_every_question_as_a_tell() {
     assert!(
         text.contains("Every question you put to the user also goes through"),
         "{text}"
+    );
+}
+
+/// The director is told a candidate is a kind of actor, one candidate
+/// can play several tasks at once, independent tasks run in parallel,
+/// and the actor cap bounds how many play — with the studio's own cap
+/// filled in. The producer's dispatch line asks for that parallelism.
+#[test]
+fn the_director_prompt_teaches_parallel_actors() {
+    let dir = tmp();
+    let mut state = state_with_task();
+    state.studio = Some(studio_config(Vec::new()));
+    state.studio.as_mut().unwrap().max_actors = 3;
+    let text = fs::read_to_string(
+        prepare(
+            &dir,
+            "acme-shop",
+            &start(RoleKind::Director, "director", None),
+            &state,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for want in [
+        "of worker, not a person",
+        "several tasks at once",
+        "run in parallel",
+        "actor cap (`3` actors at once here)",
+        "actors <live>/<cap>",
+        "waits for",
+    ] {
+        assert!(text.contains(want), "director.md misses {want:?}:\n{text}");
+    }
+    // The producer's dispatch asks the director to spread the work.
+    let producer = template(RoleKind::Producer);
+    assert!(
+        producer.contains("run in parallel"),
+        "producer.md does not ask for parallelism:\n{producer}"
     );
 }
 
