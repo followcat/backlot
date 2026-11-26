@@ -55,6 +55,7 @@ fn draw_cast(summary: &Summary, width: u16, height: u16) -> Buffer {
         others: Vec::new(),
         others_expanded: false,
         spin: 0,
+        now_ms: 1,
         studio_focused: false,
         hint: false,
         stopped: false,
@@ -92,7 +93,7 @@ fn row_text(buf: &Buffer, area: Rect, y: u16) -> String {
 }
 
 #[test]
-fn standby_writer_in_cast_renders_dim_blank_mark_and_plan_hint() {
+fn standby_writer_in_cast_renders_single_line_without_runner_or_plan_hint() {
     let summary = summary_with_standby("standby", "live");
     let palette = Palette::from_name("catppuccin").unwrap();
     let view = CastView {
@@ -109,12 +110,15 @@ fn standby_writer_in_cast_renders_dim_blank_mark_and_plan_hint() {
         others: Vec::new(),
         others_expanded: false,
         spin: 0,
+        now_ms: 1,
         studio_focused: false,
         hint: false,
         stopped: false,
         server_stopped: false,
     };
-    let order: Vec<&str> = cast_rows(&view)
+    let rows_built = cast_rows(&view);
+    assert!(rows_built.iter().all(|r| r.lines() == 1));
+    let order: Vec<&str> = rows_built
         .into_iter()
         .filter_map(|r| match r {
             CastRow::Person { role, .. } => Some(role.role.as_str()),
@@ -128,34 +132,33 @@ fn standby_writer_in_cast_renders_dim_blank_mark_and_plan_hint() {
     let rows: Vec<String> = (0..area.height).map(|y| row_text(&buf, area, y)).collect();
     let y = rows
         .iter()
-        .position(|l| l.contains("writer"))
+        .position(|l| l.contains("Ⓦ"))
         .expect("writer row") as u16;
     assert_eq!(buf[(1, y)].symbol(), " ");
-    let name_x = rows[y as usize].find("writer").unwrap() as u16;
-    assert_eq!(buf[(name_x, y)].fg, palette.overlay0);
-
-    let line2 = &rows[y as usize + 1];
+    let row = &rows[y as usize];
+    let badge_x = row[..row.find("Ⓦ").unwrap()].chars().count() as u16;
+    assert_eq!(buf[(badge_x, y)].fg, palette.teal);
+    assert!(row.contains("standby"), "{:?}", row);
+    let st_x = row[..row.find("standby").unwrap()].chars().count() as u16;
+    assert_eq!(buf[(st_x, y)].fg, palette.overlay0);
     assert!(
-        line2.contains("starts when the director plans"),
-        "expected plan hint on row 2, got: {line2:?}"
+        !rows
+            .iter()
+            .any(|l| l.contains("starts when the director plans")),
+        "standby hint moved out of regular cast rows: {rows:?}"
     );
-    let hint_x = line2.find("starts").unwrap() as u16;
-    assert_eq!(buf[(hint_x, y + 1)].fg, palette.overlay0);
 }
 
 #[test]
-fn standby_producer_in_cast_renders_studio_start_hint() {
+fn standby_producer_in_cast_renders_single_line_standby() {
     let summary = summary_with_standby("standby", "standby");
     let area = Rect::new(0, 0, 50, 20);
     let buf = draw_cast(&summary, area.width, area.height);
     let rows: Vec<String> = (0..area.height).map(|y| row_text(&buf, area, y)).collect();
-    let y = rows
-        .iter()
-        .position(|l| l.contains("producer"))
-        .expect("producer row");
+    let prod = rows.iter().find(|l| l.contains("Ⓟ")).expect("producer row");
+    assert!(prod.contains("standby"), "{prod:?}");
     assert!(
-        rows[y + 1].contains("starts with the studio"),
-        "expected studio start hint, got: {:?}",
-        rows[y + 1]
+        !rows.iter().any(|l| l.contains("starts with the studio")),
+        "{rows:?}"
     );
 }

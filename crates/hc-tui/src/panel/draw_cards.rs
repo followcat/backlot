@@ -11,10 +11,10 @@ use super::data::{StudioLabel, StudioRef};
 use super::draw::PanelRender;
 use super::mark_counts;
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio;
-use crate::studio::glyphs::{Health, Person, PriorityMark};
+use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
 /// Right-aligned `(<text>, <colour>)` parts — `count` marks the
 /// label's right end; returns where the tail started.
@@ -162,10 +162,9 @@ pub(super) fn draw_strip(
     }
 }
 
-/// A strip's active-or-blocked role line: `× dir      USER` or
-/// `◐ act-a    t1 ↑` — the mark keeps its colour, the name
-/// truncates, the task id and its priority flag or the `USER` word
-/// hold the right edge (A4.3).
+/// A strip's active-or-blocked role line: `× Ⓐ t8   USER` or
+/// `◐ Ⓐ t9   work` — the mark and badge keep their colour, the label
+/// truncates, and the short state word holds the right edge.
 pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, palette: &Palette) {
     let mark = Person::of(role);
     put_text(
@@ -176,49 +175,50 @@ pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, 
         mark.glyph(0),
         mark.style(palette),
     );
-    let flag = role.priority.and_then(PriorityMark::of);
-    let mut right = String::new();
-    if mark == Person::UserPrompt {
-        right = "USER".to_string();
-    } else if let Some(task) = &role.task {
-        right = task.clone();
-        if let Some(flag) = flag {
-            right.push(' ');
-            right.push_str(flag.glyph());
-        }
-        // R3-N2: `t2 dir` — a director-blocked person is not just
-        // its task id; the `dir` cue stays beside it.
-        if mark == Person::DirPrompt {
-            right.push_str(" dir");
-        }
-    } else if mark == Person::DirPrompt {
-        right = "dir".to_string();
-    }
-    let right_w = display_width(&right) as u16;
+    let right = match mark {
+        Person::UserPrompt => "USER",
+        Person::DirPrompt => "dir",
+        Person::Asks => "asks",
+        Person::NeedsYou => "needs",
+        Person::Stuck => "stuck",
+        Person::Failed => "failed",
+        Person::Lost => "lost",
+        Person::Working => "work",
+        Person::Slot => "queue",
+        _ => "",
+    };
+    let right_w = display_width(right) as u16;
     if right_w > 0 {
         put_text(
             buf,
             rect.x + rect.width.saturating_sub(right_w),
             rect.y,
             right_w,
-            &right,
-            Style::default().fg(if mark == Person::UserPrompt {
-                palette.red
-            } else {
-                palette.subtext0
-            }),
+            right,
+            match mark {
+                Person::UserPrompt => Style::default().fg(palette.red),
+                Person::Working => Style::default().fg(palette.subtext0),
+                _ => mark.style(palette),
+            },
         );
+    }
+    let flag = role.priority.and_then(PriorityMark::of);
+    let mut label = glyphs::role_label(role);
+    if let Some(flag) = flag {
+        label.push(' ');
+        label.push_str(flag.glyph());
     }
     let name_w = rect
         .width
         .saturating_sub(3 + right_w + u16::from(right_w > 0));
-    put_text(
+    put_role_badged_text(
         buf,
         rect.x + 3,
         rect.y,
         name_w,
-        &truncate_end(&role.name, name_w as usize),
+        &truncate_end(&label, name_w as usize),
         Style::default().fg(palette.subtext0),
+        palette,
     );
 }
 

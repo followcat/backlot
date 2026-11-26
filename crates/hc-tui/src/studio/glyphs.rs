@@ -143,8 +143,7 @@ impl Person {
     pub(crate) fn glyph(self, spin: usize) -> &'static str {
         match self {
             Person::Working => SPINNER[spin % SPINNER.len()],
-            Person::Idle => "○",
-            Person::Ready => "◦",
+            Person::Idle | Person::Ready => "○",
             Person::Slot => "◌",
             Person::Standby => " ",
             Person::UserPrompt | Person::DirPrompt => "×",
@@ -188,11 +187,12 @@ impl Person {
         }
     }
 
-    /// The state word for a role — the plain [`Person::word`], except
-    /// a live role that has sat at its prompt past `IDLE_SHOWN_MS`
-    /// reads `idle <n>m` instead of `waiting`.
+    /// The state word for a role — unified [`Person::word`], except
+    /// a live idle role that has sat at its prompt past `IDLE_SHOWN_MS`
+    /// reads `idle <n>m`.
+    #[allow(dead_code)]
     pub(crate) fn role_word(self, role: &RoleSummary, now_ms: u64) -> String {
-        if self == Person::Idle
+        if matches!(self, Person::Idle | Person::Ready)
             && let Some(since) = role.idle_since_ms
             && now_ms.saturating_sub(since) >= backlot_model::summary::IDLE_SHOWN_MS
         {
@@ -201,12 +201,12 @@ impl Person {
         self.word().to_string()
     }
 
-    /// The short state word shown at a row's right edge.
+    /// The short state word shared by Cast and Lot rows.
     pub(crate) fn word(self) -> &'static str {
         match self {
             Person::Working => "working",
-            Person::Idle | Person::Slot => "waiting",
-            Person::Ready => "ready",
+            Person::Idle | Person::Ready => "idle",
+            Person::Slot => "queued",
             Person::UserPrompt => "USER",
             Person::DirPrompt => "dir",
             Person::NeedsYou => "needs you",
@@ -218,54 +218,14 @@ impl Person {
             Person::Standby => "standby",
         }
     }
-
-    /// The one state the person's row reads, in plain words — the
-    /// same priority [`Person::of`] uses: `needs you · <what>`,
-    /// `asks you · <question>`, `stuck · <reason>`, `working · <doing>`,
-    /// `waiting`, `ready`, then the terminal states.
-    pub(crate) fn state_text(role: &RoleSummary) -> String {
-        let detail = || {
-            role.attention_detail
-                .as_deref()
-                .or(role.attention.as_deref())
-                .unwrap_or("a prompt")
-        };
-        match Person::of(role) {
-            Person::UserPrompt | Person::DirPrompt | Person::NeedsYou => {
-                format!("needs you · {}", detail())
-            }
-            Person::Asks => role
-                .asks
-                .as_deref()
-                .map(|q| format!("asks you · {q}"))
-                .unwrap_or_else(|| "asks you".into()),
-            Person::Stuck => format!("stuck · {}", detail()),
-            Person::Working => match role
-                .doing
-                .as_deref()
-                .filter(|d| *d != "idle")
-                .or_else(|| role.running.as_ref().map(|r| r.cmd.as_str()))
-            {
-                Some(doing) => format!("working · {doing}"),
-                None => "working".into(),
-            },
-            Person::Idle => match role.doing.as_deref().filter(|d| *d != "idle") {
-                Some(doing) => format!("waiting · {doing}"),
-                None => "waiting".into(),
-            },
-            Person::Slot => role
-                .doing
-                .clone()
-                .unwrap_or_else(|| "waiting for a slot".into()),
-            Person::Ready => "ready".into(),
-            other => other.word().into(),
-        }
-    }
 }
 
-/// The short model form the cast and the lot share: drop a
+pub(crate) use super::role_row::{RoleBadge, role_label};
+
+/// The short model form for top headers and drawers: drop a
 /// `<provider>/` prefix and a leading `claude-`, cut to at most 10
 /// cells with `…`.
+#[allow(dead_code)]
 pub(crate) fn short_model(model: &str) -> String {
     let tail = model.rsplit('/').next().unwrap_or(model);
     crate::chrome::text::truncate_end(tail.strip_prefix("claude-").unwrap_or(tail), 10)

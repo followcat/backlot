@@ -97,6 +97,7 @@ fn cast_view<'a>(
         others,
         others_expanded,
         spin: 0,
+        now_ms: 1,
         studio_focused: false,
         hint: false,
         stopped: false,
@@ -146,114 +147,89 @@ fn the_header_names_the_studio_and_its_position() {
 }
 
 #[test]
-fn a_person_draws_two_rows_mark_name_task_runner_title_model() {
+fn a_person_draws_one_line_with_role_badge_state_and_omits_runner_model() {
     let summary = summary();
     let view = cast_view(&summary, vec![], false, None);
     for width in [26u16, 20] {
         let (buf, ..) = draw(&view, width, 20);
         let text = lines(&buf, Rect::new(0, 0, width, 20)).join("\n");
-        // Alice: mark, `alice task-1` (cut at 20), the runner kept.
-        assert!(text.contains("alice ta"), "w{width}: {text}");
-        assert!(text.contains("agent-a"), "w{width}: {text}");
-        // Row 2: the title (cut at 20) and the short model.
-        assert!(text.contains("featu"), "w{width}: {text}");
-        assert!(text.contains("sonnet"), "w{width}: {text}");
-        // The producer's model drops the provider and `claude-`.
-        assert!(text.contains("opus-4-7"), "w{width}: {text}");
-        assert!(!text.contains("anthropic/"), "w{width}: {text}");
-        assert!(!text.contains("claude-sonnet"), "w{width}: {text}");
-        // Closed people stay listed, after the live ones.
+        assert!(text.contains("Ⓟ"), "w{width}: {text}");
+        assert!(text.contains("Ⓐ"), "w{width}: {text}");
         assert!(text.contains("dave"), "w{width}: {text}");
+        assert!(!text.contains("agent-a"), "w{width}: {text}");
+        assert!(!text.contains("opus"), "w{width}: {text}");
+        assert!(!text.contains("sonnet"), "w{width}: {text}");
     }
-    // At 26 the full task and title survive.
-    let (buf, ..) = draw(&view, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("alice task-1"), "{text}");
-    assert!(text.contains("feature"), "{text}");
+    let (buf, ..) = draw(&view, 32, 20);
+    let text = lines(&buf, Rect::new(0, 0, 32, 20)).join("\n");
+    assert!(text.contains("Ⓐ task-1"), "{text}");
+    assert!(text.contains("working"), "{text}");
+    assert!(text.contains("dir"), "{text}");
+    assert!(text.contains("closed"), "{text}");
 }
 
 #[test]
 fn the_model_short_form_cuts_to_ten_cells() {
-    // Producer: `anthropic/claude-opus-4-7` → `opus-4-7` (8 cells).
-    // Give alice a long one: `claude-verylongmodelname` → 10 cells `…`.
+    assert_eq!(
+        crate::studio::glyphs::short_model("anthropic/claude-opus-4-7"),
+        "opus-4-7"
+    );
+    assert_eq!(
+        crate::studio::glyphs::short_model("claude-verylongmodelname"),
+        "verylongm…"
+    );
+}
+
+#[test]
+fn idle_detail_prefers_doing_then_terminal_title_excluding_idle() {
     let mut value = summary_json();
-    value["studios"][0]["roles"][1]["model"] = serde_json::json!("claude-verylongmodelname");
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    value["studios"][0]["roles"][0]["work"] = serde_json::json!("waiting");
+    value["studios"][0]["roles"][0]["doing"] = serde_json::json!("idle");
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let view = cast_view(&summary, vec![], false, None);
     let (buf, ..) = draw(&view, 40, 20);
-    let text = lines(&buf, Rect::new(0, 0, 40, 20)).join("\n");
-    assert!(text.contains("verylongm…"), "{text}");
-    assert!(!text.contains("verylongmodelname"), "{text}");
-}
+    let rows = lines(&buf, Rect::new(0, 0, 40, 20));
+    let prod = rows.iter().find(|l| l.contains("Ⓟ")).unwrap();
+    assert!(prod.contains("idle · stage console"), "{prod}");
 
-#[test]
-fn the_title_falls_back_to_doing_then_the_state_word() {
-    let summary = summary();
-    let mut view = cast_view(&summary, vec![], false, None);
-    // bob has no title entry → his `doing` when present, else his
-    // state word; the fixture gives him neither, so `dir`.
-    view.titles.remove("t5");
-    let (buf, ..) = draw(&view, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("dir"), "{text}");
-    // With a `doing` it wins over the state word.
-    let mut value = summary_json();
-    value["studios"][0]["roles"][2]["doing"] = serde_json::json!("mends tests");
+    value["studios"][0]["roles"][0]["doing"] = serde_json::json!("mends tests");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let view2 = cast_view(&summary, vec![], false, None);
-    let (buf, ..) = draw(&view2, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("mends tests"), "{text}");
+    let (buf, ..) = draw(&view2, 40, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 40, 20));
+    let prod = rows.iter().find(|l| l.contains("Ⓟ")).unwrap();
+    assert!(prod.contains("idle · mends tests"), "{prod}");
 }
 
 #[test]
-fn attention_wins_over_failed_and_both_replace_the_title() {
+fn attention_wins_over_failed_and_both_sit_inline_without_title() {
     let mut value = summary_json();
     value["studios"][0]["roles"][1]["attention"] = serde_json::json!("needs permission");
     value["studios"][0]["roles"][1]["failed"] = serde_json::json!("rate_limit");
     value["studios"][0]["roles"][2]["failed"] = serde_json::json!("rate_limit");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let view = cast_view(&summary, vec![], false, None);
-    let (buf, ..) = draw(&view, 40, 20);
-    let text = lines(&buf, Rect::new(0, 0, 40, 20)).join("\n");
-    assert!(text.contains("needs you · needs permission"), "{text}");
-    assert!(text.contains("last turn failed"), "{text}");
-    // The attention row hides both the title and the failure line on
-    // alice's entry — only bob's failed line shows the words.
-    let alice = lines(&buf, Rect::new(0, 0, 40, 20))
-        .iter()
-        .position(|l| l.contains("alice"))
-        .unwrap();
-    let row2 = &lines(&buf, Rect::new(0, 0, 40, 20))[alice + 1];
-    assert!(row2.contains("needs you · needs permission"), "{row2}");
-    assert!(!row2.contains("feature"), "{row2}");
+    let (buf, ..) = draw(&view, 48, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 48, 20));
+    let alice = rows.iter().find(|l| l.contains("task-1")).unwrap();
+    assert!(alice.contains("needs you · needs permission"), "{alice}");
+    assert!(!alice.contains("feature"), "{alice}");
+    let bob = rows.iter().find(|l| l.contains("task-2")).unwrap();
+    assert!(bob.contains("failed · rate_limit"), "{bob}");
 }
 
 #[test]
-fn an_alert_takes_the_whole_second_row_at_the_default_width() {
-    // At the default 26 columns a model beside the alert left
-    // `! permissi…`: the alert replaces row two, model included.
+fn long_detail_truncates_with_ellipsis_cjk_aware() {
     let mut value = summary_json();
-    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("permission prompt");
-    value["studios"][0]["roles"][0]["failed"] = serde_json::json!("rate_limit");
-    let alerted: Summary = serde_json::from_value(value).unwrap();
-    let view = cast_view(&alerted, vec![], false, None);
-    let (buf, ..) = draw(&view, 26, 20);
-    let rows = lines(&buf, Rect::new(0, 0, 26, 20));
-    let below = |name: &str| rows[rows.iter().position(|l| l.contains(name)).unwrap() + 1].clone();
-    let alice = below("alice");
-    assert!(alice.contains("needs you"), "{alice}");
-    assert!(!alice.contains("sonnet"), "{alice}");
-    let producer = below("producer");
-    assert!(producer.contains("last turn failed"), "{producer}");
-    assert!(!producer.contains("opus"), "{producer}");
-    // Without an alert the model keeps its place.
-    let plain = summary();
-    let view = cast_view(&plain, vec![], false, None);
-    let (buf, ..) = draw(&view, 26, 20);
-    let rows = lines(&buf, Rect::new(0, 0, 26, 20));
-    let alice = rows[rows.iter().position(|l| l.contains("alice")).unwrap() + 1].clone();
-    assert!(alice.contains("sonnet-4-5"), "{alice}");
+    value["studios"][0]["roles"][0]["work"] = serde_json::json!("waiting");
+    value["studios"][0]["roles"][0]["doing"] =
+        serde_json::json!("请确认本批范围是否正确、有无需要增减？");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let view = cast_view(&summary, vec![], false, None);
+    let (buf, ..) = draw(&view, 25, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 25, 20));
+    let prod = rows.iter().find(|l| l.contains("Ⓟ")).unwrap();
+    assert!(prod.ends_with('…'), "expected ellipsis on cut: {prod}");
 }
 
 #[test]
@@ -268,10 +244,10 @@ fn the_focused_person_gets_the_overlay_bar_and_active_background() {
         .find(|(_, t)| t == "t4")
         .map(|(rect, _)| *rect)
         .expect("alice's hit row");
+    assert_eq!(alice.height, 1);
     assert_eq!(buf[(alice.x, alice.y)].symbol(), "▎");
     assert_eq!(buf[(alice.x, alice.y)].fg, palette.overlay1);
     assert_eq!(buf[(alice.x, alice.y)].bg, palette.active_row_bg);
-    assert_eq!(buf[(alice.x, alice.y + 1)].bg, palette.active_row_bg);
 }
 
 #[test]
@@ -316,37 +292,36 @@ fn the_expanded_others_row_lists_herdr_agent_rows() {
 #[test]
 fn the_rows_scroll_and_the_track_draws_on_overflow() {
     let summary = summary();
-    // A body of six lines shows three of the four people.
+    // Header is 3 rows; height 6 leaves 3 body rows for 5 cast rows.
     let view = cast_view(&summary, vec![], false, None);
-    let (_, hits, scroll) = draw(&view, 26, 10);
+    let (_, hits, scroll) = draw(&view, 26, 6);
     assert_eq!(scroll, 0);
     assert!(!hits.agent_scrollbar.is_empty(), "overflow draws the track");
-    // Scrolled down two lines the first person leaves the frame.
-    let mut buf = Buffer::empty(Rect::new(0, 0, 26, 10));
+    let mut buf = Buffer::empty(Rect::new(0, 0, 26, 6));
     let mut hits = ShellHitMap::default();
-    let mut scroll = 2usize;
+    let mut scroll = 1usize;
     let mut reveal = false;
     render_cast(
         &mut buf,
-        Rect::new(0, 0, 26, 10),
+        Rect::new(0, 0, 26, 6),
         &view,
         &config(),
         &mut scroll,
         &mut reveal,
         &mut hits,
     );
-    let text = lines(&buf, Rect::new(0, 0, 26, 10)).join("\n");
-    assert!(!text.contains("producer"), "{text}");
-    assert!(text.contains("alice"), "{text}");
+    let text = lines(&buf, Rect::new(0, 0, 26, 6)).join("\n");
+    assert!(!text.contains("Ⓟ"), "{text}");
+    assert!(text.contains("task-1"), "{text}");
 }
 
 #[test]
 fn a_focus_change_scrolls_the_focused_person_into_view() {
-    // A body of three lines shows one person; alice is second in the
-    // list, so the reveal moves the start down to her.
+    // A body of one line (height 4) shows one person; alice (`t4`) is
+    // second in the list, so the reveal moves the start down to her.
     let summary = summary();
     let view = cast_view(&summary, vec![], false, Some("t4"));
-    let area = Rect::new(0, 0, 26, 6);
+    let area = Rect::new(0, 0, 26, 4);
     let mut buf = Buffer::empty(area);
     let mut hits = ShellHitMap::default();
     let mut scroll = 0usize;
@@ -363,8 +338,8 @@ fn a_focus_change_scrolls_the_focused_person_into_view() {
     assert!(!reveal, "the render consumes the armed reveal");
     assert_eq!(scroll, 1, "the list moved to alice's row");
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("alice"), "{text}");
-    assert!(!text.contains("producer"), "{text}");
+    assert!(text.contains("task-1"), "{text}");
+    assert!(!text.contains("Ⓟ"), "{text}");
 
     // Without an armed reveal the manual offset holds.
     let mut buf = Buffer::empty(area);
@@ -381,7 +356,7 @@ fn a_focus_change_scrolls_the_focused_person_into_view() {
         &mut hits,
     );
     assert_eq!(scroll, 0, "no focus change, no scroll");
-    assert!(lines(&buf, area).join("\n").contains("producer"));
+    assert!(lines(&buf, area).join("\n").contains("Ⓟ"));
 }
 
 #[test]

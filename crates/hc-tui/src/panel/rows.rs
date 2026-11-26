@@ -103,40 +103,6 @@ pub(crate) enum Owed {
     Next,
 }
 
-/// An extra line under a person.
-#[derive(Debug)]
-pub(crate) enum PersonLine {
-    /// `! <attention>` or the prompt cue — the blocked colour.
-    Cue,
-    /// `! last turn failed: <e>` — only when no attention shows.
-    Failed,
-    /// `working <dur> · "<progress>" <age> ago · <doing> <dur>` —
-    /// shown only while [`super::working_line::show_working_line`] holds.
-    Working,
-    /// `starts when the director plans` / `starts with the studio`.
-    Standby,
-}
-
-/// Which detail row (if any) sits immediately under `role`.
-pub(super) fn person_line_kind(role: &RoleSummary) -> Option<PersonLine> {
-    if role.state == "standby" {
-        return Some(PersonLine::Standby);
-    }
-    let cue = role.asks.is_some()
-        || (role.attention.is_some()
-            && crate::studio::glyphs::Person::attention_class(role)
-                != Some(backlot_model::attention::AttentionClass::Info));
-    if cue {
-        Some(PersonLine::Cue)
-    } else if role.failed.is_some() {
-        Some(PersonLine::Failed)
-    } else if super::working_line::show_working_line(role) {
-        Some(PersonLine::Working)
-    } else {
-        None
-    }
-}
-
 /// One display row, borrowing its data from the summaries.
 #[derive(Debug)]
 pub(crate) enum Row<'a> {
@@ -187,16 +153,10 @@ pub(crate) enum Row<'a> {
     },
     /// `╰──╯`
     BlockBottom(StudioRef<'a>),
-    /// `│ <mark> <name> <task> <flag>   <state> │`
+    /// `│ <mark> <role_badge>[ <flag>]  <state>[ <age>][ · <detail…>] │`
     Person {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
-    },
-    /// A person's attention-cue/failed/confirm/hint extra line.
-    PersonLine {
-        studio: StudioRef<'a>,
-        role: &'a RoleSummary,
-        kind: PersonLine,
     },
     /// A task with no live actor row: `│ · task t2 (waits t1)  dep │`.
     Task {
@@ -310,7 +270,6 @@ impl Row<'_> {
             Row::SetupHint => Target::Setup,
             Row::BlockTop { studio, .. } => Target::Studio(studio.key()),
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
-            Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::OutwardCard { studio, card } => Target::OutwardCard(studio.key(), card.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
@@ -416,14 +375,6 @@ fn block_rows<'a>(
     let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
         let key = studio.key();
         out.push(Row::Person { studio, role });
-        // The state's own detail line: a prompt's cue, a needs-you
-        // attention, an unanswered question or a stuck episode. An
-        // `info` attention has no line here — it lives in the details,
-        // and a blocked screen with no attention row keeps its old
-        // one-line row.
-        if let Some(kind) = person_line_kind(role) {
-            out.push(Row::PersonLine { studio, role, kind });
-        }
         let target = Target::Person(key, role.role.clone());
         if panel.drawer.as_ref() == Some(&target) {
             for text in person_drawer(studio, role) {

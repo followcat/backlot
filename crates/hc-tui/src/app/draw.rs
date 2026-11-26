@@ -102,6 +102,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             app.studio.others_expanded,
             cast_focused,
             app.panel.spin,
+            crate::update_state::now_ms(),
         )
     });
     if let Some(view) = cast.as_mut() {

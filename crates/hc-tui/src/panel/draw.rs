@@ -14,8 +14,8 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_input, draw_outward_card, draw_owed, draw_person, draw_person_line, draw_reopen,
-    draw_talk, draw_top, draw_usage, frame_style,
+    draw_input, draw_outward_card, draw_owed, draw_person, draw_reopen, draw_talk, draw_top,
+    draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
 use super::draw_tasks::{draw_closed_fold, draw_drawer, draw_fold, draw_task};
@@ -415,17 +415,6 @@ pub(crate) fn render(
                     frame_of(&studio.key()),
                     panel.spin,
                     now_ms,
-                    palette,
-                );
-            }
-            Row::PersonLine { studio, role, kind } => {
-                draw_person_line(
-                    buf,
-                    rect,
-                    role,
-                    kind,
-                    now_ms,
-                    frame_of(&studio.key()),
                     palette,
                 );
             }

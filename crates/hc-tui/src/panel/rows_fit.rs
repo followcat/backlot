@@ -132,11 +132,9 @@ pub(super) fn fold_count(studio: &StudioSummary) -> usize {
     accepted_fold_ids(studio).len()
 }
 
-/// A person's line count: itself plus its cue/failed line and an
-/// open drawer — as tall as the drawer's own lines, one more when
-/// the stage's answer line rides along.
+/// A person's line count: itself plus an open `Space` drawer.
 pub(super) fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
-    let mut height = 1 + usize::from(super::rows::person_line_kind(role).is_some());
+    let mut height = 1;
     if panel
         .drawer
         .as_ref()

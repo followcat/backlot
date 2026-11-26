@@ -78,7 +78,6 @@ fn every_state_has_its_own_mark_and_color() {
     let marks = [
         Person::Working,
         Person::Idle,
-        Person::Ready,
         Person::Slot,
         Person::UserPrompt,
         Person::DirPrompt,
@@ -131,8 +130,9 @@ fn expanded_block_draws_frame_people_and_state_words() {
         // The id truncates with `…` at w22 — the spec's ellipsis
         // rule, not a clip.
         assert!(text.contains("acme"), "w{width}: {text}");
-        assert!(text.contains("working"), "w{width}: {text}");
-        assert!(text.contains("alice"), "w{width}: {text}");
+        let work_word = if width < 24 { "work" } else { "working" };
+        assert!(text.contains(work_word), "w{width}: {text}");
+        assert!(text.contains("Ⓐ task-1"), "w{width}: {text}");
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
         // S2 dropped role-group `├──┤` dividers; only the compose
         // `InputDivider` directly above `› tell producer` emits `├`.
@@ -221,10 +221,10 @@ fn the_usage_line_shows_only_with_figures() {
 }
 
 #[test]
-fn a_person_draws_one_line_with_the_state_word_right() {
+fn a_person_draws_one_line_with_role_badge_and_state() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 44, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -235,19 +235,45 @@ fn a_person_draws_one_line_with_the_state_word_right() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("alice · task-1"), "{line}");
-    assert!(line.trim_end().ends_with("working│"), "{line}");
-    // L4: the dim runner tag and short model ride before the state;
-    // the `doing` text stays off the row.
-    assert!(line.contains("agent-a"), "{line}");
-    assert!(line.contains(" m "), "{line}");
-    assert!(!line.contains("writes code"), "{line}");
+    assert!(line.contains("Ⓐ task-1"), "{line}");
+    assert!(line.contains("working · writes code"), "{line}");
+    // Neither runner nor model leaks onto regular lot rows.
+    assert!(!line.contains("agent-a"), "{line}");
 }
 
-/// L4: a narrow row keeps the state word and gives up the runner tag
-/// first — the tag never pushes the state off the line.
 #[test]
-fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
+fn lot_person_rows_use_coloured_role_badges() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let palette = palette();
+    let cases = [
+        ("producer", "Ⓟ", palette.mauve),
+        ("director", "Ⓓ", palette.blue),
+        ("writer", "Ⓦ", palette.teal),
+        ("actor-alice", "Ⓐ", palette.peach),
+    ];
+    for (role_key, badge, color) in cases {
+        let rect = hits
+            .rows
+            .iter()
+            .find(|(_, t)| matches!(t, Target::Person(_, r) if r == role_key))
+            .map(|(rect, _)| *rect)
+            .unwrap_or_else(|| panic!("{role_key} row"));
+        let line = (area.x..area.x + area.width)
+            .map(|x| buf[(x, rect.y)].symbol())
+            .collect::<String>();
+        assert!(line.contains(badge), "{role_key}: {line}");
+        let x = line[..line.find(badge).unwrap()].chars().count() as u16;
+        assert_eq!(buf[(area.x + x, rect.y)].fg, color, "{role_key}");
+    }
+}
+
+/// Narrow rows keep the state word visible, switching `working` to
+/// `work` below 24 cols so state never drops off the line.
+#[test]
+fn a_narrow_row_keeps_the_state_and_drops_runner() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 22, 30);
@@ -261,14 +287,13 @@ fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(line.contains("work"), "{line}");
     assert!(!line.contains("agent-a"), "{line}");
 }
 
-/// L4: the badge uses only spare cells — at a 36-column dock a long
-/// task keeps every cell and the runner tag drops.
+/// A long task keeps the cells available and never pushes state off.
 #[test]
-fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
+fn a_long_task_keeps_its_cells_and_omits_runner() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
     let summary: Summary = serde_json::from_value(value).unwrap();
@@ -284,9 +309,9 @@ fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("alice · task-1234567890"), "{line}");
+    assert!(line.contains("Ⓐ task-1234567890"), "{line}");
     assert!(!line.contains("agent-a"), "{line}");
-    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(line.contains("working"), "{line}");
 }
 
 /// S2: a newer install puts one dim line at the foot of the lot.
@@ -307,12 +332,12 @@ fn a_newer_install_draws_the_restart_line_at_the_foot() {
 }
 
 #[test]
-fn an_attention_adds_a_bang_line_under_the_person() {
+fn an_attention_renders_inline_on_the_person_row() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 48, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -321,18 +346,18 @@ fn an_attention_adds_a_bang_line_under_the_person() {
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
     let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
     assert!(line.contains("needs you · needs permission"), "{line}");
 }
 
 #[test]
-fn a_failed_role_draws_its_failed_line_when_no_attention() {
+fn a_failed_role_draws_failed_inline_when_no_attention() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["failed"] = serde_json::json!("rate_limit");
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 48, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -341,9 +366,9 @@ fn a_failed_role_draws_its_failed_line_when_no_attention() {
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
     let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("! last turn failed: rate_limit"), "{line}");
+    assert!(line.contains("failed · rate_limit"), "{line}");
 }
 
 #[test]
@@ -735,7 +760,7 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let area = Rect::new(0, 0, 16, 12);
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("◦2 ✓1"), "calm role counts render: {text}");
+    assert!(text.contains("○2 ✓1"), "calm role counts render: {text}");
 
     // Stage down renders a concise stage cue instead of blank space.
     let mut down_buf = Buffer::empty(area);

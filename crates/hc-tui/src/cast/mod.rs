@@ -56,6 +56,8 @@ pub(crate) struct CastView<'a> {
     pub(crate) others_expanded: bool,
     /// The working-mark spinner frame (~120 ms ticks).
     pub(crate) spin: usize,
+    /// Current wall clock timestamp in milliseconds for idle/working durations.
+    pub(crate) now_ms: u64,
     /// `true` when `StudioFocus::Studio(_)` owns focus rather than any role.
     pub(crate) studio_focused: bool,
     /// C1: no studio is current but more than one exists — the body's
@@ -87,6 +89,7 @@ impl<'a> CastView<'a> {
         others_expanded: bool,
         focused: Option<&'a str>,
         spin: usize,
+        now_ms: u64,
     ) -> CastView<'a> {
         let studios = crate::panel::data::studios(machines);
         let index = current.and_then(|key| studios.iter().position(|s| &s.key() == key));
@@ -187,6 +190,7 @@ impl<'a> CastView<'a> {
             others,
             others_expanded,
             spin,
+            now_ms,
             studio_focused: false,
             hint,
             stopped: false,

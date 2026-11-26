@@ -512,7 +512,7 @@ async fn mobile_60x20_activates_mobile_header_full_pane_and_full_width_overlay()
     let open = draw_to(&mut app, 60, 20);
     let text = screen_lines(&open).join("\n");
     assert!(text.contains("lot · 1"), "{text}");
-    assert!(text.contains("alice · task-1"), "{text}");
+    assert!(text.contains("Ⓐ task-1"), "{text}");
     assert!(text.contains("tell producer"), "{text}");
     // Mobile header stays visible on row 0 above the overlay.
     assert!(screen_lines(&open)[0].contains("acme-shop"), "{text}");
@@ -551,7 +551,7 @@ async fn narrow_80x24_hides_unfocused_and_opens_expanded_overlay_on_toggle() {
 
     let open = draw_to(&mut app, 80, 24);
     let text = screen_lines(&open).join("\n");
-    assert!(text.contains("alice · task-1"), "{text}");
+    assert!(text.contains("Ⓐ task-1"), "{text}");
     assert!(text.contains("tell producer"), "{text}");
     // Space drawer works inside the 80x24 Expanded overlay.
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
@@ -664,7 +664,7 @@ async fn manual_c_strip_at_120x40_shows_calm_summary_for_idle_studio() {
     assert_eq!(app.panel_width(120), 16);
     let drawn = draw_to(&mut app, 120, 40);
     let text = screen_lines(&drawn).join("\n");
-    assert!(text.contains("◦2 ✓1"), "{text}");
+    assert!(text.contains("○2 ✓1"), "{text}");
 }
 
 #[tokio::test]

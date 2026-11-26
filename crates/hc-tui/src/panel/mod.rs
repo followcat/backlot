@@ -6,7 +6,6 @@
 //! to herdr: no columns are reserved, no keys are consumed and no
 //! timer is armed.
 
-mod badge;
 mod config;
 pub(crate) mod data;
 mod draw;
@@ -20,7 +19,6 @@ mod rows;
 mod rows_fit;
 mod rows_fold;
 mod update;
-mod working_line;
 
 pub(crate) use config::{
     CallSheetStart, PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,

@@ -1,7 +1,6 @@
 //! The cast's renderer: divider and ` <id>` header in the
-//! agents section's slots, then the rows under `chrome/scroll`'s list
-//! metrics — same scroll model as herdr's agents list, so the wheel
-//! and the scrollbar take no new code.
+//! agents section's slots, then the 1-line rows under `chrome/scroll`'s
+//! list metrics — same scroll model as herdr's agents list.
 
 use backlot_model::summary::RoleSummary;
 use ratatui::buffer::Buffer;
@@ -15,19 +14,6 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::{ShellHitMap, put_right_text, put_text};
 use crate::chrome::scroll::{list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::{display_width, truncate_end};
-use crate::studio::glyphs::{self, Person};
-
-/// A person's second row's state — the shared vocabulary's own
-/// `needs you · <what>` / `asks you · <question>` / `stuck · …` /
-/// `working · …` / `waiting` / `ready` text.
-fn state_word(role: &RoleSummary) -> String {
-    Person::state_text(role)
-}
-
-/// The short model form, shared with the lot's person rows.
-fn short_model(model: &str) -> String {
-    glyphs::short_model(model)
-}
 
 /// The whole cast section: `─` divider, ` <id>` + `<n>/<total>`
 /// header, one blank row, then the scrolled rows.
@@ -120,7 +106,7 @@ pub(crate) fn render_cast(
     }
 
     let heights: Vec<u16> = rows.iter().map(|row| row.lines()).collect();
-    // The cast packs its entries: two lines per person, no gap.
+    // The cast packs its entries: one line per person, two per shell, no gap.
     let gaps = vec![0u16; rows.len().saturating_sub(1)];
     let target = std::mem::take(reveal_focused_agent)
         .then(|| rows.iter().position(|row| row.focused()))
@@ -216,11 +202,8 @@ pub(crate) fn render_cast(
     }
 }
 
-/// A person's two rows: mark, `name task`, runner — over the
-/// terminal's title (or its fallbacks) and the short model. Focus
-/// paints the active-row background and the accent `▌`; an
-/// `attention` (else a `failed` turn) replaces the whole second row,
-/// model included.
+/// A person's single-line entry: focus bar `▎`, mark, role badge,
+/// priority flag, unified inline state word/age, and truncated detail.
 fn draw_person(
     buffer: &mut Buffer,
     rect: Rect,
@@ -229,7 +212,7 @@ fn draw_person(
     view: &CastView<'_>,
     palette: &Palette,
 ) {
-    if rect.height < 2 {
+    if rect.height == 0 {
         return;
     }
     if focused {
@@ -243,118 +226,22 @@ fn draw_person(
             Style::default().fg(palette.overlay1),
         );
     }
-    let dim = matches!(role.state.as_str(), "closed" | "standby");
-    let mark = Person::of(role);
-    put_text(
+    let title = role
+        .terminal
+        .as_deref()
+        .and_then(|t| view.titles.get(t).and_then(|v| v.as_deref()));
+    crate::studio::role_row::render_role_row(
         buffer,
+        rect,
         rect.x + 1,
-        rect.y,
-        1,
-        mark.glyph(view.spin),
-        mark.style(palette),
-    );
-    let text_fg = |main| {
-        if dim { palette.overlay0 } else { main }
-    };
-
-    // Row 1: `name task` left, the runner right-aligned — the runner
-    // keeps its cells while the name cuts before it.
-    let mut name = role.name.clone();
-    if let Some(task) = &role.task {
-        name.push(' ');
-        name.push_str(task);
-    }
-    let runner = role.runner.as_deref().unwrap_or_default();
-    let runner_width = display_width(runner).min(rect.width.saturating_sub(5) as usize) as u16;
-    let name_width = rect
-        .width
-        .saturating_sub(3 + runner_width + u16::from(runner_width > 0));
-    put_text(
-        buffer,
         rect.x + 3,
-        rect.y,
-        name_width,
-        &truncate_end(&name, name_width as usize),
-        Style::default().fg(text_fg(palette.text)),
+        rect.right(),
+        role,
+        view.spin,
+        view.now_ms,
+        title,
+        palette,
     );
-    if runner_width > 0 {
-        put_text(
-            buffer,
-            rect.right().saturating_sub(runner_width),
-            rect.y,
-            runner_width,
-            runner,
-            Style::default().fg(palette.overlay0),
-        );
-    }
-
-    // Row 2: the one shown state — `needs you`, `asks you`, `stuck`
-    // take the whole row, so beside a model it was cut to a word at
-    // the default width. A `failed` turn and the title/doing/state
-    // fallback follow. `info` attentions never reach this row.
-    let info_only = matches!(
-        Person::attention_class(role),
-        Some(backlot_model::attention::AttentionClass::Info)
-    );
-    let attention_shown = role.attention.is_some() && !info_only;
-    let failed = role.failed.is_some() && !attention_shown && role.asks.is_none();
-    let alert = attention_shown || role.asks.is_some() || failed;
-    let model = role
-        .model
-        .as_deref()
-        .map(short_model)
-        .filter(|model| !alert && !model.is_empty());
-    let model_width = model
-        .as_deref()
-        .map(display_width)
-        .unwrap_or(0)
-        .min(rect.width.saturating_sub(5) as usize) as u16;
-    let left_width = rect
-        .width
-        .saturating_sub(3 + model_width + u16::from(model_width > 0));
-    let (text, style) = if failed {
-        (
-            "last turn failed".to_string(),
-            Person::Failed.style(palette),
-        )
-    } else if alert {
-        (state_word(role), mark.style(palette))
-    } else if role.state == "standby" {
-        (
-            crate::studio::standby_hint(&role.role).to_string(),
-            Style::default().fg(text_fg(palette.subtext0)),
-        )
-    } else {
-        let title = role
-            .terminal
-            .as_deref()
-            .and_then(|t| view.titles.get(t).and_then(|title| title.clone()))
-            .or_else(|| {
-                role.doing
-                    .clone()
-                    .or_else(|| role.running.as_ref().map(|r| r.cmd.clone()))
-            })
-            .unwrap_or_else(|| mark.word().to_string());
-        (title, Style::default().fg(text_fg(palette.subtext0)))
-    };
-    put_text(
-        buffer,
-        rect.x + 3,
-        rect.y + 1,
-        left_width,
-        &truncate_end(&text, left_width as usize),
-        style,
-    );
-    if let Some(model) = model {
-        put_text(
-            buffer,
-            rect.right().saturating_sub(model_width),
-            rect.y + 1,
-            model_width,
-            &model,
-            Style::default().fg(palette.overlay0),
-        );
-    }
 }
 
 /// A shell's two rows, laid out like a person's: a dim `$` (or the

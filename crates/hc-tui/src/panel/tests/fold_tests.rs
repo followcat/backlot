@@ -144,7 +144,6 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
             Row::BlockTop { .. } => "BlockTop",
             Row::Person { .. } => "Person",
             Row::BlockBottom(_) => "BlockBottom",
-            Row::PersonLine { .. } => "PersonLine",
             Row::Owed { .. } => "Owed",
             Row::Usage { .. } => "Usage",
             Row::Task { .. } => "Task",
@@ -226,8 +225,8 @@ fn moving_cursor_to_second_studio_folds_first_and_unfolds_second() {
         "{blog:?}"
     );
     assert!(
-        blog.iter().any(|r| matches!(r, Row::PersonLine { .. })),
-        "unfolded blog keeps PersonLine: {blog:?}"
+        blog.iter().any(|r| matches!(r, Row::Person { .. })),
+        "unfolded blog keeps Person rows: {blog:?}"
     );
 }
 
