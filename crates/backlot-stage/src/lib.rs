@@ -386,6 +386,10 @@ mod text_src_tests;
 #[cfg(test)]
 mod transcript_tests;
 #[cfg(test)]
+mod unknown_stage_tests;
+#[cfg(test)]
+mod unknown_tests;
+#[cfg(test)]
 mod usage_tests;
 #[cfg(test)]
 mod watch_tests;

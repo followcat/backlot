@@ -99,6 +99,8 @@ pub(crate) enum Owed {
     Offline,
     /// `! <error>` — the ledger/stage error.
     Error,
+    /// `! upgrade backlot` — ledger holds newer unknown kinds.
+    Upgrade,
     /// `· next: <step>` — the studio's own next step.
     Next,
 }
@@ -365,6 +367,16 @@ fn block_rows<'a>(
         }
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
+    } else if studio.studio.needs_upgrade {
+        let kinds = if studio.studio.unknown_kinds.is_empty() {
+            "upgrade backlot".to_string()
+        } else {
+            format!(
+                "upgrade backlot · {}",
+                studio.studio.unknown_kinds.join(", ")
+            )
+        };
+        Some((Owed::Upgrade, kinds))
     } else if studio.studio.ready_to_finish {
         // R3-3: `f` is offered as soon as every task is accepted —
         // a post-acceptance `node report` step must not hide it.
@@ -381,7 +393,7 @@ fn block_rows<'a>(
     }
     // R3-3: while the wrap report is missing the offer carries a
     // dim `report pending` under it.
-    let report_pending = super::data::report_pending(studio.studio);
+    let report_pending = !studio.studio.needs_upgrade && super::data::report_pending(studio.studio);
     if report_pending {
         out.push(Row::Owed {
             studio,
@@ -392,7 +404,7 @@ fn block_rows<'a>(
     // `f` armed the finish confirm — its `y`/`n` line sits under
     // the owed step, cleared by Esc or a selection move (S2 §2). An
     // early finish (report still pending) warns inside the ask.
-    if panel.finish_confirm.as_ref() == Some(&studio.key()) {
+    if !studio.studio.needs_upgrade && panel.finish_confirm.as_ref() == Some(&studio.key()) {
         let pending = if report_pending {
             " (report pending)"
         } else {
@@ -406,7 +418,9 @@ fn block_rows<'a>(
     }
     // The studio's own next step, when its state names one — the
     // ledger's owed step is a different line above it.
-    if let Some(step) = super::data::next_step(studio.studio) {
+    if !studio.studio.needs_upgrade
+        && let Some(step) = super::data::next_step(studio.studio)
+    {
         out.push(Row::Owed {
             studio,
             kind: Owed::Next,
@@ -645,19 +659,18 @@ pub(crate) fn rows<'a>(
                     health,
                 });
                 let roles = strip_roles(studio.studio);
-                if roles.is_empty() {
+                if roles.is_empty() || studio.studio.needs_upgrade {
                     out.push(Row::StripSummary {
                         studio: *studio,
                         stage,
                         reachable: reach,
                     });
-                } else {
-                    for role in roles {
-                        out.push(Row::StripRole {
-                            studio: *studio,
-                            role,
-                        });
-                    }
+                }
+                for role in roles {
+                    out.push(Row::StripRole {
+                        studio: *studio,
+                        role,
+                    });
                 }
             }
         }
@@ -667,6 +680,7 @@ pub(crate) fn rows<'a>(
                 !reachable(studio.machine)
                     || !stage_running(studio.machine)
                     || studio.studio.error.is_some()
+                    || studio.studio.needs_upgrade
                     || studio.studio.next.is_some()
                     || studio.studio.ready_to_finish
             };

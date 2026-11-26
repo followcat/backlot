@@ -503,6 +503,12 @@ impl Stage {
                 }
                 match load_studio(&dir) {
                     Ok(state) => {
+                        if !state.unknown_kinds.is_empty() {
+                            let msg = backlot_model::refusal::upgrade_required_message(
+                                state.unknown_kinds.iter().map(String::as_str),
+                            );
+                            self.log_once(&name, &msg);
+                        }
                         self.cached.insert(name.clone(), state);
                         self.broken.remove(&name);
                     }
@@ -589,6 +595,9 @@ impl Stage {
             return Ok(());
         }
         let state = &self.cached[name];
+        if !state.unknown_kinds.is_empty() {
+            return Ok(());
+        }
         let view = reconcile::studio_view(name, &live.terms);
         for action in reconcile::reconcile(name, state, &view, now_ms) {
             if !live_ledger() {

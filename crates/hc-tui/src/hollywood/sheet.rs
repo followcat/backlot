@@ -109,6 +109,7 @@ pub(crate) enum Wait<'a> {
     /// Hollywood itself: a user-owned prompt (`attention_user`) or a
     /// blocked screen with no prompt.
     Hollywood(&'a backlot_model::summary::HollywoodSummary),
+    Upgrade(StudioItem<'a>),
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
@@ -154,6 +155,10 @@ impl Wait<'_> {
                 item.role.role.clone(),
             ),
             Wait::Hollywood(_) => super::Target::Hollywood,
+            Wait::Upgrade(item) => super::Target::Upgrade(StudioKey {
+                machine: item.machine.map(str::to_string),
+                id: item.studio.id.clone(),
+            }),
             Wait::NoRequirement(item) => super::Target::Tell(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -189,7 +194,7 @@ impl Wait<'_> {
             | Wait::Outward(_)
             | Wait::NoRequirement(_) => true,
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
-            Wait::Stage(_) => false,
+            Wait::Stage(_) | Wait::Upgrade(_) => false,
         }
     }
 }
@@ -215,6 +220,16 @@ pub(crate) fn waiting_items<'a>(
                         role,
                     }));
                 }
+            }
+        }
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
+            if studio.needs_upgrade {
+                out.push(Wait::Upgrade(StudioItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                }));
             }
         }
     }
@@ -251,7 +266,10 @@ pub(crate) fn waiting_items<'a>(
     }
     for m in machines {
         for studio in &m.summary.studios {
-            if studio.requirement_version == 0 && studio.state != "finished" {
+            if studio.requirement_version == 0
+                && studio.state != "finished"
+                && !studio.needs_upgrade
+            {
                 out.push(Wait::NoRequirement(StudioItem {
                     machine: m.machine.as_deref(),
                     studio,
@@ -313,7 +331,7 @@ pub(crate) fn waiting_items<'a>(
     }
     for m in machines {
         for studio in &m.summary.studios {
-            if studio.ready_to_finish {
+            if studio.ready_to_finish && !studio.needs_upgrade {
                 out.push(Wait::Ready(ReadyItem {
                     machine: m.machine.as_deref(),
                     studio,

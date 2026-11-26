@@ -671,6 +671,9 @@ pub struct StudioState {
     /// Completed/failed/denied/stale outward outcomes recorded by `stage`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outward_completions: Vec<OutwardCompletedRecord>,
+    /// `EventKind::Unknown` kind names encountered during replay.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub unknown_kinds: std::collections::BTreeSet<String>,
     pub last_seq: u64,
 }
 
