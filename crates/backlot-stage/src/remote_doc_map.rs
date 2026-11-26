@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::args::{CardCmd, Cmd, Common, HollywoodCmd, TextSource};
+use crate::args::{CardCmd, CastCmd, Cmd, Common, HollywoodCmd, TextSource};
 use crate::cli::{Env, Fail};
 use backlot_model::event::TaskStateChange;
 use backlot_model::hollywood::HOLLYWOOD;
@@ -184,6 +184,29 @@ pub(super) fn map(
                 studio,
                 reason,
                 force,
+            })
+        }
+        Cmd::StudioCast(CastCmd::Show { json }) => {
+            let json = *json;
+            with_studio(common, env, move |studio| ReqAction::StudioCastShow {
+                studio,
+                json,
+            })
+        }
+        // The cast file is read on the client and sent as content — the
+        // hub never resolves a client path.
+        Cmd::StudioCast(CastCmd::Set {
+            file,
+            dry_run,
+            json,
+        }) => {
+            let cast = read_body(file, stdin, "--file")?;
+            let (dry_run, json) = (*dry_run, *json);
+            with_studio(common, env, move |studio| ReqAction::StudioCastSet {
+                studio,
+                cast,
+                dry_run,
+                json,
             })
         }
         Cmd::StudioPrune {

@@ -58,6 +58,13 @@ A client on another machine (`--server host-a[/backlot]`, `BACKLOT_SERVER`, or `
   needs the token when its dry run would rename the copy.
 - `repos` and `runners` answer from the hub, which is what the New Studio dialog's folder and
   runner Steps browse and list.
+- `studio cast show` answers from the hub — the effective cast as a cast file (or the settings
+  with `--json`) — so the client's `Edit cast…` and an off-hub `backlot studio cast show` see the
+  hub's cast, not a local copy.
+- `studio cast set` sends the cast file as **content**; the hub stages it to a temp file and parses
+  it with `studio new`'s own rules. A `--dry-run` returns the diff and records nothing. A fixed role
+  whose identity the file moves is recast on the hub in the same apply. `recast` on an actor key
+  travels the same way. A role terminal stays refused: the queue's caller is the person.
 
 The hub-local CLI keeps writing the ledger directly, with no token. Remote studio *placement*
 (`--remote` on `studio new`) is still Phase 2 and refuses as before.

@@ -12,7 +12,7 @@ use crate::store;
 /// runnable check `studio new --dry-run` runs. `CAST_TOML`'s placeholder
 /// runner names are fine for `studio new` (which does not check them),
 /// but `set` does.
-const REAL_CAST: &str = r#"
+pub(crate) const REAL_CAST: &str = r#"
 rework_cap = 2
 
 [producer]

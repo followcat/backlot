@@ -22,6 +22,12 @@ pub(super) const RUNNERS_JSON: &str = r#"[
 
 pub(super) const PRUNE_PLAN: &str = "backlot/acme-shop/integration: removed\nwork/t1: removed";
 
+/// A cast file as `studio cast show` prints one.
+pub(super) const CAST_TOML: &str = "rework_cap = 2\n\n[producer]\nrunner = \"claude\"\nmodel = \"m1\"\neffort = \"high\"\npermission_profile = \"standard\"\n";
+
+/// A dry-run diff as `studio cast set --dry-run` prints one.
+pub(super) const CAST_DIFF: &str = "dry run: studio 'acme-shop' — nothing recorded\n  candidate + actor-b (claude/m2/high (worktree))";
+
 pub(super) const ARCHIVED_JSON: &str = r#"{
   "pinned": true,
   "archived": [
@@ -107,8 +113,13 @@ pub(super) fn scripted(app: &mut App) -> Arc<Mutex<Vec<Vec<String>>>> {
     let sink = recorded.clone();
     app.set_ns_run(Arc::new(move |_machine, argv, _stdin| {
         sink.lock().unwrap().push(argv.clone());
+        let words: Vec<&str> = argv.iter().map(String::as_str).collect();
         let out = if argv.first().map(String::as_str) == Some("runners") {
             Ok(RUNNERS_JSON.to_owned())
+        } else if words.starts_with(&["studio", "cast", "show"]) {
+            Ok(CAST_TOML.to_owned())
+        } else if words.starts_with(&["studio", "cast", "set"]) {
+            Ok(CAST_DIFF.to_owned())
         } else if argv.iter().any(|a| a == "--dry-run") {
             Ok(PRUNE_PLAN.to_owned())
         } else {

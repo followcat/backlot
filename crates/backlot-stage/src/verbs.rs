@@ -354,6 +354,45 @@ pub(crate) fn cast_set(
     })
 }
 
+/// `studio cast set` as the server queue's typed result: the same
+/// `cast_set`, flattened into [`backlot_model::req_results::StudioCastSetResult`].
+pub(crate) fn cast_set_result(
+    base: &Path,
+    env: &Env,
+    caller: &Caller,
+    file: &Path,
+    dry_run: bool,
+    json: bool,
+) -> Result<backlot_model::req_results::StudioCastSetResult, Fail> {
+    let out = cast_set(base, env, caller, file, dry_run, json)?;
+    Ok(backlot_model::req_results::StudioCastSetResult {
+        studio: out.studio,
+        dry_run: out.dry_run,
+        seq: out.seq,
+        diff: out.diff,
+        recasts: out.recasts,
+    })
+}
+
+/// `studio cast show`: the effective cast of `studio`, as a cast file
+/// (`json == false`) or the settings structured. Read-only — the CLI and
+/// the server queue both go through here.
+pub(crate) fn cast_show(
+    base: &Path,
+    studio: &str,
+    json: bool,
+) -> Result<backlot_model::req_results::StudioCastShowResult, Fail> {
+    let dir = store::studio_dir(base, studio);
+    let state = store::load_state(&dir).map_err(crate::hwood::store_fail)?;
+    let cast = backlot_model::cast::CastSettings::of(&state)
+        .ok_or_else(|| Fail::refused(format!("no studio '{studio}'")))?;
+    Ok(backlot_model::req_results::StudioCastShowResult {
+        studio: studio.to_string(),
+        cast: backlot_model::cast::to_toml(&cast),
+        settings: json.then_some(cast),
+    })
+}
+
 /// `priority --task <t> --level low|normal|high`.
 pub(crate) fn task_priority(
     base: &Path,

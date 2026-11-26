@@ -727,13 +727,14 @@ backlot hollywood propose recast --studio acme-shop --person director --runner c
 The card shows `recast director → cmd/deepseek-v4.1-flash`; applying it re-checks the role's
 identity, and the stage records one `role.recast` with the card's marker.
 
-The client offers the same command as **`Recast…`** on a fixed seat's role menu. The picker
-asks for the runner, then the model, then the effort, taking the runner and model lists from
-`backlot runners --json` on the studio's machine. The effort step follows the runner's caps: a
-runner that requires an effort lists its levels with one preselected, an optional one allows an
-empty choice, and a runner with no effort flag has no effort step at all. A summary line shows
-the old identity beside the new one before Enter runs `backlot recast … --as user`; a refusal
-comes back verbatim.
+The client offers the same command as **`Recast…`** on every live person's role menu — a fixed
+seat or an actor. The picker asks for the runner, then the model, then the effort, taking the
+runner and model lists from `backlot runners --json` on the studio's machine. The effort step
+follows the runner's caps: a runner that requires an effort lists its levels with one
+preselected, an optional one allows an empty choice, and a runner with no effort flag has no
+effort step at all. A summary line shows the old identity beside the new one before Enter runs
+`backlot recast … --as user`; a refusal comes back verbatim. Recasting an actor keeps its task,
+terminal and worktree (see [Changing who plays a role](#changing-who-plays-a-role)).
 
 ## Changing a studio after it starts
 
@@ -777,6 +778,13 @@ same apply: the stage closes the old terminal (reason `recast`) and starts a fre
   rechecked; the next one is.
 - **New timings** — the rework cap, the stall and nudge limits, the task budget — apply from the
   next tick.
+
+The client offers the same change as **`Edit cast…`** on the studio menu. It opens the effective
+cast in your `$VISUAL`/`$EDITOR` in a floating terminal; save and close it and the client checks the
+file with `backlot studio cast set --dry-run`, shows the diff in a confirm, and records it on
+Enter. A refusal (a runner the machine has not got, a cap that leaves a seat empty) shows in the
+dialog with its reason; a file that changes nothing says "nothing changes". On a server client the
+file is edited on your machine and sent as content — the hub never resolves your path.
 
 ## Changing the requirement midway
 

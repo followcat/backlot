@@ -200,6 +200,33 @@ pub struct StudioFinishResult {
     pub reason: String,
 }
 
+/// Result of `studio cast show`: the effective cast as a cast file
+/// (`cast`), or the same settings structured (`settings`, when `--json`).
+/// `cast` is always the printable form — the CLI prints `cast` verbatim
+/// and the JSON flag only changes which one the caller asked for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StudioCastShowResult {
+    pub studio: String,
+    pub cast: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<crate::cast::CastSettings>,
+}
+
+/// Result of `studio cast set` — the same shape [`crate::cast::CastDiff`]
+/// prints, with the settings event's seq (`None` on a dry run) and the
+/// fixed roles carried out as `role.recast`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StudioCastSetResult {
+    pub studio: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
+    pub diff: crate::cast::CastDiff,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recasts: Vec<(String, u64)>,
+}
+
 /// A destructive commit that arrived without the dry run's token.
 pub const ERR_NEEDS_REVIEW: &str = "confirm this from a dry run first";
 

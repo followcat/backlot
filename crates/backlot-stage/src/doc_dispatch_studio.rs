@@ -275,24 +275,32 @@ fn to_json<T: serde::Serialize>(val: T) -> Result<Value, Fail> {
 
 /// A request's content staged on the hub so the unchanged local code
 /// can read it as a file; removed when the handler returns.
-struct TempFile(PathBuf);
+pub(crate) struct TempFile(PathBuf);
 
 impl TempFile {
     fn new(kind: &str, body: &str) -> Result<Self, Fail> {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let path = std::env::temp_dir().join(format!(
-            "backlot-req-{kind}-{}-{}.txt",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        std::fs::write(&path, body)
-            .map_err(|e| Fail::refused(format!("cannot stage the {kind}: {e}")))?;
-        Ok(TempFile(path))
+        stage_content(kind, body)
     }
 
-    fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.0
     }
+}
+
+/// Write request content (a cast file, an ask, a brief) to a temp file
+/// under the system temp dir, removed on drop — the hub never resolves a
+/// client path, so content is what travels. Shared with the person half
+/// of the dispatcher (`studio cast set`).
+pub(crate) fn stage_content(kind: &str, body: &str) -> Result<TempFile, Fail> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "backlot-req-{kind}-{}-{}.txt",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&path, body)
+        .map_err(|e| Fail::refused(format!("cannot stage the {kind}: {e}")))?;
+    Ok(TempFile(path))
 }
 
 impl Drop for TempFile {

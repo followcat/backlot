@@ -86,6 +86,7 @@ impl StudioMenu {
                 StudioAct::Revise,
             ),
             item("Tell producer…".to_owned(), Some('t'), StudioAct::Tell),
+            item("Edit cast…".to_owned(), Some('e'), StudioAct::EditCast),
         ];
         // The stage serves its whole machine, so its stop lives on the
         // machine row's menu; a studio only offers the start that
@@ -162,6 +163,11 @@ impl StudioMenu {
             "Tell producer…".to_owned(),
             Some('t'),
             StudioAct::Tell,
+        ));
+        out.push(item(
+            "Edit cast…".to_owned(),
+            Some('e'),
+            StudioAct::EditCast,
         ));
         if self.stage_down {
             out.push(item(
@@ -430,8 +436,10 @@ impl StudioMenu {
 }
 
 /// A live person's lifecycle rows (L1, L2, L3): `Restart` reloads the
-/// seat in place; a fixed seat — producer, director, writer — adds
-/// `Recast…` and never offers the `Close` that `close` refuses on it.
+/// seat in place; `Recast…` swaps the agent that plays it. A fixed seat —
+/// producer, director, writer — and an actor both recast (the picker
+/// starts from the role's current identity, and an actor keeps its task);
+/// a fixed seat never offers the `Close` that `close` refuses on it.
 fn role_lifecycle_items(
     item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
     role: &MenuRole,
@@ -442,9 +450,11 @@ fn role_lifecycle_items(
         Some('r'),
         StudioAct::Restart,
     )];
-    if role.fixed_seat() {
-        out.push(item("Recast…".to_owned(), Some('e'), StudioAct::Recast));
-    } else if allow_close {
+    // An actor recasts onto a new identity; the task, its terminal and
+    // its work area stay. `e` is free on an actor row (a fixed seat's
+    // `Close`, which actors keep, is `c`).
+    out.push(item("Recast…".to_owned(), Some('e'), StudioAct::Recast));
+    if !role.fixed_seat() && allow_close {
         // An actor or held seat still closes; a fixed seat cannot.
         out.push(item(
             format!("Close {}…", role.name),

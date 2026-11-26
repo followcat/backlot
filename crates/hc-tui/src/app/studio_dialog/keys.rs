@@ -84,6 +84,9 @@ impl App {
             Some(StudioDialog::Restore(d)) => {
                 self.studio_dialog = self.restore_key(d, key, combo.code);
             }
+            Some(StudioDialog::CastEdit(d)) => {
+                self.studio_dialog = self.cast_edit_key(d, combo.code, combo.modifiers);
+            }
             None => {}
         }
     }
@@ -365,6 +368,13 @@ impl App {
                         }
                     }
                 },
+                Some(StudioDialog::CastEdit(d)) => {
+                    if d.ready && !d.busy {
+                        self.cast_edit_apply(&d);
+                    } else {
+                        self.studio_dialog = Some(StudioDialog::CastEdit(d));
+                    }
+                }
                 None => {}
             }
             return;

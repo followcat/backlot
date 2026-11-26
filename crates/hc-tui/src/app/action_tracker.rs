@@ -119,6 +119,11 @@ impl App {
         if self.delete_studio_reply(&pending, &result) {
             return;
         }
+        // `Edit cast…`'s `studio cast show` — its text opens the person's
+        // editor, never a toast or the reader.
+        if self.cast_show_reply(&pending, &result) {
+            return;
+        }
         // The setup dialog's write: `Ok` flips the bar to its agent
         // form; either way the remembered cfg retires.
         if pending.action.mark == mark::hollywood_setup() {

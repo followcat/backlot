@@ -4,6 +4,7 @@ mod alt_arrows_b;
 mod argv_hygiene;
 mod cases_1;
 mod cases_2;
+mod cast_edit;
 mod chrome_marks;
 mod closing;
 mod delete_studio;

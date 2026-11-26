@@ -145,6 +145,31 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
             let (res, _) = verbs_hwood::hollywood_setup(env, &cfg)?;
             to_json(res)
         }
+        // `studio cast show|set`: the cast file `set` carries is content,
+        // staged into a temp file the hub parses with `studio new`'s own
+        // rules — the same `verbs::cast_set` the local CLI runs.
+        ReqAction::StudioCastShow { studio, json } => {
+            let studio = cli::check_studio_name(&studio)?;
+            to_json(verbs::cast_show(base, &studio, json)?)
+        }
+        ReqAction::StudioCastSet {
+            studio,
+            cast,
+            dry_run,
+            json,
+        } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let file = crate::doc_dispatch_studio::stage_content("cast", &cast)?;
+            let caller = Caller::doc_user(&studio);
+            to_json(verbs::cast_set_result(
+                base,
+                env,
+                &caller,
+                file.path(),
+                dry_run,
+                json,
+            )?)
+        }
         ReqAction::Version => {
             unreachable!("the version probe is dispatched by doc_dispatch_studio")
         }

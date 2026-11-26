@@ -10,6 +10,9 @@ use crate::studio::StudioKey;
 mod lifecycle;
 pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog, RestoreDialog, RestoreStep};
 
+mod cast_edit;
+pub(crate) use cast_edit::{CastEditDialog, CastEditStep};
+
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
 #[derive(Debug, Clone)]
@@ -149,6 +152,7 @@ pub(crate) enum StudioDialog {
     Restart(RestartDialog),
     Recast(RecastDialog),
     Restore(RestoreDialog),
+    CastEdit(CastEditDialog),
 }
 
 impl StudioDialog {

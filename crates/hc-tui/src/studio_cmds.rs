@@ -319,6 +319,56 @@ pub(crate) fn revise(key: &StudioKey, summary: &str, body: String) -> Action {
     a
 }
 
+/// `studio cast show` — the effective cast as a cast file, read into the
+/// TUI for the `Edit cast…` editor. A view action (`view: true`), so its
+/// stdout lands in the dialog rather than a toast.
+pub(crate) fn cast_show(key: &StudioKey) -> Action {
+    let mut a = action(
+        "reading the cast".to_owned(),
+        format!("read the cast of {}", key.id),
+        "read cast".to_owned(),
+        key,
+        mark::cast_show(key),
+    );
+    a.argv = studio_argv(&["studio".into(), "cast".into(), "show".into()], key);
+    a.view = true;
+    a
+}
+
+/// `studio cast set --file - [--dry-run]` with the file's content on
+/// stdin — the same bytes on a local core and over the server queue,
+/// where content travels and a client path never does.
+pub(crate) fn cast_set(key: &StudioKey, body: String, dry_run: bool) -> Action {
+    let (label, done, name) = if dry_run {
+        (
+            "checking the cast",
+            format!("checked the cast of {}", key.id),
+            "check cast",
+        )
+    } else {
+        (
+            "setting the cast",
+            format!("set the cast of {}", key.id),
+            "set cast",
+        )
+    };
+    let mut a = action(
+        label.to_owned(),
+        done,
+        name.to_owned(),
+        key,
+        mark::studio(key),
+    );
+    let mut command = vec!["studio".to_owned(), "cast".to_owned(), "set".to_owned()];
+    command.extend(["--file".into(), "-".into()]);
+    if dry_run {
+        command.push("--dry-run".into());
+    }
+    a.argv = studio_argv(&command, key);
+    a.stdin = Some(body);
+    a
+}
+
 /// `card apply <id>` on `machine` (`None` is local).
 pub(crate) fn card_apply_on(machine: Option<String>, id: &str) -> Action {
     Action {

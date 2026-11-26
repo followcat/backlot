@@ -227,6 +227,12 @@ pub(crate) mod mark {
     pub(crate) fn studio_talk(key: &StudioKey, seq: u64) -> String {
         format!("talk:{}:{}:{seq}", machine(key.machine.as_deref()), key.id)
     }
+    /// The `Edit cast…` read — its `studio cast show` never dedups the
+    /// studio's other actions, and its reply lands in the dialog, not a
+    /// toast.
+    pub(crate) fn cast_show(key: &StudioKey) -> String {
+        format!("cast:{}:{}", machine(key.machine.as_deref()), key.id)
+    }
 
     /// A dock `Target`'s mark — `None` targets mark nothing.
     pub(crate) fn of(target: &Target) -> Option<String> {

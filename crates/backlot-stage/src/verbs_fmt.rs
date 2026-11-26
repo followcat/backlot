@@ -65,13 +65,34 @@ pub(crate) fn format_cast_set(res: &crate::studio_cast::CastSetOutput) -> String
     if res.json {
         return serde_json::to_string_pretty(res).unwrap_or_default();
     }
-    let lines = res.diff.lines();
-    let mut out = if res.dry_run {
-        format!("dry run: studio '{}' — nothing recorded\n", res.studio)
+    cast_set_text(&res.studio, res.dry_run, res.seq, &res.diff, &res.recasts)
+}
+
+/// The same text from the server queue's typed result.
+pub(crate) fn format_cast_set_result(
+    res: &backlot_model::req_results::StudioCastSetResult,
+    json: bool,
+) -> String {
+    if json {
+        return serde_json::to_string_pretty(res).unwrap_or_default();
+    }
+    cast_set_text(&res.studio, res.dry_run, res.seq, &res.diff, &res.recasts)
+}
+
+fn cast_set_text(
+    studio: &str,
+    dry_run: bool,
+    seq: Option<u64>,
+    diff: &backlot_model::cast::CastDiff,
+    recasts: &[(String, u64)],
+) -> String {
+    let lines = diff.lines();
+    let mut out = if dry_run {
+        format!("dry run: studio '{studio}' — nothing recorded\n")
     } else {
-        let mut head = format!("event {}: studio.cast", res.seq.unwrap_or(0));
-        if !res.recasts.is_empty() {
-            let roles: Vec<&str> = res.recasts.iter().map(|(r, _)| r.as_str()).collect();
+        let mut head = format!("event {}: studio.cast", seq.unwrap_or(0));
+        if !recasts.is_empty() {
+            let roles: Vec<&str> = recasts.iter().map(|(r, _)| r.as_str()).collect();
             head.push_str(&format!(" — recast {}", roles.join(", ")));
         }
         head.push('\n');
