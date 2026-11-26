@@ -14,6 +14,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **The update hint survives a narrow sidebar.** When the full `↑v<latest>` doesn't fit the sidebar header — as happens as soon as the running version grows a digit, like `v0.4.10` — the hint now shrinks to a single `↑` (or `↻`) instead of disappearing, and that glyph is still the click that opens the update card. Only when even that doesn't fit does the hint go.
 - **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
 - **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
 
