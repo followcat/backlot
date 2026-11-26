@@ -11,9 +11,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::draw::{CHIP_GAP, HollywoodRender};
-use super::items::{
-    chip_text, chips_of, default_chip_index, live_head, target_label, ultra_head, wait_head,
-};
+use super::items::{chip_text, chips_of, default_chip_index, live_head, target_label, ultra_head};
 use super::rows::{HollywoodActivity, Live, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
@@ -41,14 +39,16 @@ pub(crate) fn draw_row(
     mobile: bool,
     suppress_highlights: bool,
     activity: HollywoodActivity,
+    now_ms: u64,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
+    let elev = palette.elevation();
     let target = row.target(waits);
     let selected = !suppress_highlights && hollywood.selected.as_ref() == Some(&target);
     match row {
         Row::Headline(headline) => {
-            let base = Style::default().bg(palette.surface_dim);
+            let base = Style::default().bg(elev.surface);
             put_text(
                 buf,
                 rect.x + MARGIN,
@@ -95,7 +95,7 @@ pub(crate) fn draw_row(
             }
         }
         Row::Calm { studios } => {
-            let base = Style::default().bg(palette.surface_dim);
+            let base = Style::default().bg(elev.surface);
             put_text(buf, rect.x + MARGIN, rect.y, 1, "✓", base.fg(palette.teal));
             let text = format!(" nothing waiting on you across {studios} studios");
             put_text(
@@ -104,13 +104,13 @@ pub(crate) fn draw_row(
                 rect.y,
                 rect.width.saturating_sub(MARGIN + 1),
                 &truncate_end(&text, rect.width as usize),
-                base.fg(palette.overlay1),
+                base.fg(elev.muted_surface),
             );
         }
         Row::Talk(line) => {
-            super::talk::draw_talk(buf, rect, line, selected, palette);
+            super::talk::draw_talk(buf, rect, line, selected, now_ms, palette);
         }
-        Row::Fold { count, .. } => super::talk::draw_fold(buf, rect, *count, selected, palette),
+        Row::Fold { .. } => {}
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
         Row::Input => draw_input(
             buf,
@@ -145,43 +145,39 @@ fn draw_wait(
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
+    let elev = palette.elevation();
     let bg = if selected {
-        palette.selection_bg
+        elev.raised_row
     } else {
-        palette.surface_dim
+        elev.surface
     };
     buf.set_style(rect, Style::default().bg(bg));
     let stopped_server = matches!(wait, Wait::Stage(item) if !item.offline && item.machine.is_none())
         && hollywood.server_stopped_cmd.is_some();
-    let (mut head, glyph) = if stopped_server {
-        (
-            hollywood.server_stopped_cmd.clone().unwrap_or_default(),
-            "◌",
-        )
+    let colour = super::items::glyph_colour(wait, palette);
+    let mut parts = if stopped_server {
+        super::items::WaitParts {
+            glyph: "◌",
+            verb: hollywood.server_stopped_cmd.clone().unwrap_or_default(),
+            gap: "",
+            studio: String::new(),
+            rest: String::new(),
+        }
     } else {
-        wait_head(wait, local, multi)
+        super::items::wait_parts(wait, local, multi)
     };
     let extra = super::rows::group_extra(waits, wait);
     if extra > 0 {
-        head.push_str(&format!(" · +{extra}"));
+        parts.rest.push_str(&format!(" · +{extra}"));
     }
-    let glyph_colour = match wait {
-        Wait::Prompt(_) => palette.red,
-        Wait::Role(item) if item.asks => palette.peach,
-        Wait::Role(_) => palette.red,
-        Wait::Hollywood(hollywood) if hollywood.attention_user => palette.red,
-        Wait::Hollywood(_) => palette.peach,
-        Wait::NoRequirement(_) => palette.accent,
-        Wait::Stage(item) if item.offline => palette.red,
-        Wait::Stage(_) => palette.peach,
-        Wait::Card(_) | Wait::Outward(_) => palette.accent,
-        Wait::Ready(_) => palette.teal,
-    };
-    let mut x = rect.x;
+    if rect.width < 90 && parts.gap.len() > 1 {
+        parts.gap = " ";
+    }
+    let head_plain = format!("{}{}{}{}", parts.verb, parts.gap, parts.studio, parts.rest);
     if selected {
         put_text(
             buf,
-            x,
+            rect.x,
             rect.y,
             1,
             "▌",
@@ -189,22 +185,31 @@ fn draw_wait(
         );
         put_text(
             buf,
-            x + 1,
+            rect.x + 1,
             rect.y,
             1,
             "▸",
             Style::default().fg(palette.accent).bg(bg),
         );
     }
-    x += MARGIN;
+    let bar_x = rect.x + MARGIN;
     put_text(
         buf,
-        x,
+        bar_x,
         rect.y,
         1,
-        glyph,
+        "▎",
+        Style::default().fg(colour).bg(bg),
+    );
+    let glyph_x = bar_x + 2;
+    put_text(
+        buf,
+        glyph_x,
+        rect.y,
+        1,
+        parts.glyph,
         Style::default()
-            .fg(glyph_colour)
+            .fg(colour)
             .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
@@ -214,8 +219,6 @@ fn draw_wait(
         chips_of(wait)
     };
     let gaps = chips.len().saturating_sub(1) as u16 * CHIP_GAP;
-    // Compact chips at the narrow cut, and whenever the full labels
-    // cannot leave the head its twenty cells.
     let full_w: u16 = chips
         .iter()
         .map(|c| display_width(&chip_text(c, false)) as u16)
@@ -226,39 +229,60 @@ fn draw_wait(
         .map(|c| display_width(&chip_text(c, true)) as u16)
         .sum::<u16>()
         + gaps;
-    let head_x = x + 2;
+    let head_x = glyph_x + 2;
     let avail = rect.x + rect.width - MARGIN;
     let head_room_full = avail.saturating_sub(head_x + full_w + 1);
-    let compact = mobile || head_room_full < 20.min(display_width(&head) as u16);
+    let compact = mobile || head_room_full < 20.min(display_width(&head_plain) as u16);
     let chips_w = if compact { compact_w } else { full_w };
     let head_room = avail.saturating_sub(head_x + chips_w + 1);
-    // Ultra-compact at the narrowest: `× #7 dir` — the kind word
-    // drops out of the head.
-    let head = if head_room < 12 && matches!(wait, Wait::Prompt(_)) {
-        ultra_head(wait, local, multi)
+
+    let drawn_w = if head_room < 12 && matches!(wait, Wait::Prompt(_)) {
+        let ultra = ultra_head(wait, local, multi);
+        let clipped = truncate_end(&ultra, head_room as usize);
+        put_text(
+            buf,
+            head_x,
+            rect.y,
+            head_room,
+            &clipped,
+            Style::default().fg(palette.text).bg(bg),
+        );
+        display_width(&clipped) as u16
     } else {
-        head
+        let segs = [
+            (
+                parts.verb.as_str(),
+                Style::default()
+                    .fg(colour)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            (parts.gap, Style::default().bg(bg)),
+            (
+                parts.studio.as_str(),
+                Style::default()
+                    .fg(palette.text)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            (
+                parts.rest.as_str(),
+                Style::default().fg(palette.subtext0).bg(bg),
+            ),
+        ];
+        paint_head_segs(buf, head_x, rect.y, head_room, &segs)
     };
-    let head_room = avail.saturating_sub(head_x + chips_w + 1);
-    put_text(
-        buf,
-        head_x,
-        rect.y,
-        head_room,
-        &truncate_end(&head, head_room as usize),
-        Style::default().fg(palette.text).bg(bg),
-    );
-    // Pending mark on the row while its action runs.
     if let Some(pending) = hollywood.pending.as_deref()
         && pending.contains(target_label(wait))
     {
+        let px = head_x + drawn_w.min(head_room);
         put_text(
             buf,
-            head_x + head_room.min(display_width(&head) as u16),
+            px,
             rect.y,
-            avail.saturating_sub(head_x + head_room.min(display_width(&head) as u16)),
+            avail.saturating_sub(px),
             " …",
-            Style::default().fg(palette.overlay0).bg(bg),
+            Style::default().fg(elev.muted_surface).bg(bg),
         );
     }
     let focused_chip = selected.then(|| {
@@ -267,7 +291,6 @@ fn draw_wait(
             .unwrap_or_else(|| default_chip_index(wait, &chips))
             .min(chips.len().saturating_sub(1))
     });
-    // S5: the chips paint and record their click targets together.
     super::draw::paint_wait_chips(
         buf,
         rect.y,
@@ -283,8 +306,30 @@ fn draw_wait(
     );
 }
 
-/// A waiting row's second line: the prompt's detail or the card's
-/// `why:` — the ready confirm's own line while it asks.
+fn paint_head_segs(buf: &mut Buffer, mut x: u16, y: u16, room: u16, segs: &[(&str, Style)]) -> u16 {
+    let mut used = 0u16;
+    for (seg, style) in segs {
+        let rem = room.saturating_sub(used);
+        if rem == 0 {
+            break;
+        }
+        if seg.is_empty() {
+            continue;
+        }
+        let clipped = truncate_end(seg, rem as usize);
+        let w = (display_width(&clipped) as u16).min(rem);
+        put_text(buf, x, y, w, &clipped, *style);
+        x += w;
+        used += w;
+        if display_width(seg) > rem as usize {
+            break;
+        }
+    }
+    used
+}
+
+/// A waiting row's second line: indented directly under the head verb,
+/// keeping the col-2 severity bar.
 fn draw_detail(
     buf: &mut Buffer,
     rect: Rect,
@@ -293,18 +338,34 @@ fn draw_detail(
     selected: bool,
     palette: &Palette,
 ) {
+    let elev = palette.elevation();
     let bg = if selected {
-        palette.selection_bg
+        elev.raised_row
     } else {
-        palette.surface_dim
+        elev.surface
     };
     buf.set_style(rect, Style::default().bg(bg));
-    let x = rect.x + MARGIN + 2;
-    let width = rect.width.saturating_sub(MARGIN * 2 + 2);
-    // The finish confirm reuses the line while it asks `y/n` — an
-    // early finish (the wrap report still owed) warns inside the ask
-    // (R3-3). It draws on the wait the confirm targets, wherever the
-    // selection sits — a frame's `f` arms the same row.
+    if selected {
+        put_text(
+            buf,
+            rect.x,
+            rect.y,
+            1,
+            "▌",
+            Style::default().fg(palette.accent).bg(bg),
+        );
+    }
+    let colour = super::items::glyph_colour(wait, palette);
+    put_text(
+        buf,
+        rect.x + MARGIN,
+        rect.y,
+        1,
+        "▎",
+        Style::default().fg(colour).bg(bg),
+    );
+    let x = rect.x + MARGIN + 4;
+    let width = rect.width.saturating_sub(MARGIN * 2 + 4);
     if let Some(Confirm::Finish(key)) = hollywood.confirm.as_ref()
         && wait.target() == super::Target::Ready(key.clone())
     {
@@ -376,10 +437,8 @@ fn draw_detail(
                 palette.subtext0,
             )
         }
-        // R3-3: the wrap report has not landed — a dim line under the
-        // READY row says so, like the dock's `· report pending`.
         Wait::Ready(item) if crate::panel::data::report_pending(item.studio) => {
-            ("report pending".to_string(), palette.overlay0)
+            ("report pending".to_string(), elev.muted_surface)
         }
         _ => return,
     };
@@ -393,22 +452,21 @@ fn draw_detail(
     );
 }
 
-/// Hollywood's live row under the newest `user ›` line: `… sending to
-/// hollywood`, `⠶ hollywood: <doing>` or `⚠ hollywood asks: <prompt>` —
-/// one line, cut to the width, on the band's own background.
+/// Hollywood's live row under the newest `user ›` line.
 fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, palette: &Palette) {
+    let elev = palette.elevation();
     let bg = if selected {
-        palette.active_row_bg
+        elev.raised_row
     } else {
-        palette.surface_dim
+        elev.surface
     };
     buf.set_style(rect, Style::default().bg(bg));
     let (text, glyph) = live_head(live);
     let (colour, bold) = match live {
-        Live::Pending => (palette.overlay0, false),
+        Live::Pending => (elev.muted_surface, false),
         Live::Working(_) => (palette.yellow, false),
         Live::Prompt(_) => (palette.red, true),
-        Live::Idle => (palette.overlay0, false),
+        Live::Idle => (elev.muted_surface, false),
     };
     let mut x = rect.x;
     if selected {
@@ -452,8 +510,7 @@ fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, pale
     );
 }
 
-/// The `tell hollywood` line on `active_row_bg`: `›` in accent, then
-/// the placeholder or the editor's text.
+/// The `tell hollywood` line on `elevation.raised_field`.
 #[allow(clippy::too_many_arguments)]
 fn draw_input(
     buf: &mut Buffer,
@@ -465,85 +522,99 @@ fn draw_input(
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
+    let elev = palette.elevation();
     let field = Rect::new(
         rect.x + MARGIN,
         rect.y,
         rect.width.saturating_sub(MARGIN * 2),
         1,
     );
-    if field.width < 4 {
+    if field.width < 6 {
         return;
     }
-    let field_bg = if suppress_highlights {
-        palette.surface_dim
-    } else {
-        palette.active_row_bg
-    };
+    let field_bg = elev.raised_field;
     buf.set_style(field, Style::default().bg(field_bg));
-    if selected {
-        put_text(
-            buf,
-            rect.x,
-            rect.y,
-            1,
+    let editing = hollywood.editing && !suppress_highlights;
+    let (bar_sym, bar_fg, prompt_style) = if editing {
+        (
             "▌",
-            Style::default().fg(palette.accent).bg(palette.surface_dim),
-        );
-        put_text(
-            buf,
-            rect.x + 1,
-            rect.y,
-            1,
-            "▸",
-            Style::default().fg(palette.accent).bg(palette.surface_dim),
-        );
-    }
-    let prompt_style = if suppress_highlights || !selected {
-        Style::default().fg(palette.overlay0).bg(field_bg)
-    } else {
-        Style::default()
-            .fg(palette.accent)
-            .bg(field_bg)
-            .add_modifier(Modifier::BOLD)
-    };
-    put_text(buf, field.x + 1, field.y, 1, "›", prompt_style);
-    hits.input = field;
-    let badge = match activity {
-        HollywoodActivity::Working if field.width >= 24 => Some((
-            format!(
-                " {} thinking… ",
-                crate::studio::glyphs::Person::Working.glyph(hollywood.spin)
-            ),
             palette.accent,
-        )),
-        HollywoodActivity::Queued if field.width >= 24 => Some((
-            format!(
-                " {} queued… ",
-                crate::studio::glyphs::Person::Working.glyph(hollywood.spin)
-            ),
-            palette.peach,
-        )),
+            Style::default()
+                .fg(palette.accent)
+                .bg(field_bg)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else if selected && !suppress_highlights {
+        (
+            "▎",
+            palette.accent,
+            Style::default().fg(palette.accent).bg(field_bg),
+        )
+    } else {
+        (
+            "▎",
+            elev.border_muted,
+            Style::default().fg(elev.muted_raised).bg(field_bg),
+        )
+    };
+    put_text(
+        buf,
+        field.x,
+        field.y,
+        1,
+        bar_sym,
+        Style::default().fg(bar_fg).bg(field_bg),
+    );
+    put_text(buf, field.x + 2, field.y, 1, "›", prompt_style);
+    hits.input = field;
+    let glyph = crate::studio::glyphs::Person::Working.glyph(hollywood.spin);
+    let badge = match activity {
+        HollywoodActivity::Working if field.width >= 46 => {
+            Some((format!(" {glyph} thinking… "), palette.accent))
+        }
+        HollywoodActivity::Working if field.width >= 30 => {
+            Some((format!(" {glyph} thinking "), palette.accent))
+        }
+        HollywoodActivity::Queued if field.width >= 46 => {
+            Some((format!(" {glyph} queued… "), palette.peach))
+        }
+        HollywoodActivity::Queued if field.width >= 30 => {
+            Some((format!(" {glyph} queued "), palette.peach))
+        }
         _ => None,
     };
     let badge_w = badge.as_ref().map_or(0, |(b, _)| display_width(b) as u16);
     let text = Rect::new(
-        field.x + 3,
+        field.x + 4,
         field.y,
-        (field.width - 3).saturating_sub(badge_w),
+        (field.width - 4).saturating_sub(badge_w),
         1,
     );
-    if hollywood.editing && !suppress_highlights {
+    let placeholder = match hollywood.reply_to.as_ref() {
+        Some((_, role)) => format!("reply to {role}…"),
+        None => "tell hollywood…".to_owned(),
+    };
+    if editing {
         hits.cursor = crate::chrome::text_editor::render(
             buf,
             text,
             &hollywood.input,
             Style::default().fg(palette.text).bg(field_bg),
         );
+        if hollywood.input.as_str().is_empty() && text.width > 0 {
+            put_text(
+                buf,
+                text.x,
+                text.y,
+                text.width,
+                &truncate_end(&placeholder, text.width as usize),
+                Style::default()
+                    .fg(elev.muted_raised)
+                    .bg(field_bg)
+                    .add_modifier(Modifier::ITALIC),
+            );
+        }
     } else if hollywood.input.as_str().is_empty() {
-        let placeholder = match hollywood.reply_to.as_ref() {
-            Some((_, role)) => format!("reply to {role}…"),
-            None => "tell hollywood what you need…".to_owned(),
-        };
         put_text(
             buf,
             text.x,
@@ -551,7 +622,7 @@ fn draw_input(
             text.width,
             &truncate_end(&placeholder, text.width as usize),
             Style::default()
-                .fg(palette.overlay0)
+                .fg(elev.muted_raised)
                 .bg(field_bg)
                 .add_modifier(Modifier::ITALIC),
         );
@@ -564,7 +635,7 @@ fn draw_input(
             &truncate_end(hollywood.input.as_str(), text.width as usize),
             Style::default()
                 .fg(if suppress_highlights {
-                    palette.overlay0
+                    elev.muted_raised
                 } else {
                     palette.text
                 })
@@ -583,13 +654,10 @@ fn draw_input(
     }
 }
 
-/// `✦ an agent can watch every studio and tell you what needs you:`
-/// then `⏎ hollywood setup` — the lead in `overlay0`, the
-/// actionable command in `subtext0`; Enter/click opens the in-TUI
-/// dialog (U7, R22).
 fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
+    let elev = palette.elevation();
     let x = rect.x + MARGIN;
-    let base = Style::default().bg(palette.surface_dim);
+    let base = Style::default().bg(elev.surface);
     // R3-M13: the lead shortens before the button ever clips — the
     // full sentence while both fit, the short lead under ~84 cols,
     // the bare button at the narrowest.
@@ -604,7 +672,7 @@ fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
     };
     let lead_w = (display_width(&lead) as u16).min(room);
     if lead_w > 0 {
-        put_text(buf, x, rect.y, lead_w, &lead, base.fg(palette.overlay0));
+        put_text(buf, x, rect.y, lead_w, &lead, base.fg(elev.muted_surface));
     }
     let rest = room.saturating_sub(lead_w);
     if rest > 0 {

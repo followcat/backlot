@@ -20,10 +20,13 @@ use crate::panel::data::{MachineSummary, studio_count};
 /// themes) they are `overlay0` on `surface0` so the perforations
 /// stay opaque and legible.
 pub(crate) fn draw_sprocket(buf: &mut Buffer, area: Rect, y: u16, glyph: char, palette: &Palette) {
-    let (fg, bg) = if palette.sidebar_bg != Color::Reset {
-        (palette.surface1, palette.sidebar_bg)
+    let elev = palette.elevation();
+    let (fg, bg) = if elev.is_terminal_16 {
+        (elev.border_muted, Color::Reset)
+    } else if elev.is_dark {
+        (elev.border_muted, palette.panel_bg)
     } else {
-        (palette.overlay0, palette.surface0)
+        (elev.border_muted, elev.surface)
     };
     buf.set_style(Rect::new(area.x, y, area.width, 1), Style::default().bg(bg));
     let style = Style::default().fg(fg).bg(bg);
@@ -56,13 +59,15 @@ pub(crate) fn draw_title(
     agent: bool,
     activity: rows::HollywoodActivity,
     spin: usize,
+    title_scroll: Option<(usize, usize)>,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
     let row = Rect::new(area.x, y, area.width, 1);
     hits.title = row;
     hits.rows.push((row, Target::Title));
-    let base = Style::default().bg(palette.surface_dim);
+    let elev = palette.elevation();
+    let base = Style::default().bg(elev.surface);
     let mark_w = MARK.chars().count() as u16;
     put_text(
         buf,
@@ -78,14 +83,14 @@ pub(crate) fn draw_title(
     let count = format!("{studios} studio{}", if studios == 1 { "" } else { "s" });
     let wait = if waits.is_empty() {
         String::new()
+    } else if let Some((top, bot)) = title_scroll {
+        format!("  ·  {top}–{bot}/{} waiting on you", waits.len())
     } else {
         format!("  ·  {} waiting on you", waits.len())
     };
-    // User urgency is red: a prompt or a down/offline stage. Cards
-    // and ready studios alone are peach.
-    let user_urgent = waits
-        .iter()
-        .any(|w| matches!(w, Wait::Prompt(_) | Wait::Stage(_)));
+    // User urgency is red: a prompt, blocked/needs-you role, user-prompting
+    // hollywood, or a down/offline stage. Cards and ready studios alone are peach.
+    let user_urgent = super::items::any_user_urgent(waits);
     let summary = rows::local_summary(machines);
     let state = summary
         .and_then(|s| s.hollywood.as_ref())
@@ -160,7 +165,7 @@ pub(crate) fn draw_title(
         };
         put_text(buf, x, y, 1, glyph, base.fg(colour));
     } else {
-        put_text(buf, x, y, 1, "·", base.fg(palette.overlay0));
+        put_text(buf, x, y, 1, "·", base.fg(elev.muted_surface));
     }
     if !text.is_empty() {
         put_text(
@@ -170,9 +175,9 @@ pub(crate) fn draw_title(
             room,
             &text,
             base.fg(if agent {
-                palette.overlay1
+                palette.subtext0
             } else {
-                palette.overlay0
+                elev.muted_surface
             }),
         );
     }
@@ -183,7 +188,7 @@ pub(crate) fn draw_title(
             y,
             count.chars().count() as u16,
             &count,
-            base.fg(palette.overlay0),
+            base.fg(elev.muted_surface),
         );
         if !wait.is_empty() {
             let style = base

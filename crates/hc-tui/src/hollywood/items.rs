@@ -248,8 +248,46 @@ fn ask_age(studio: &backlot_model::summary::StudioSummary, role: &str) -> Option
     super::reader_meta::age_label(Some(ts), crate::update_state::now_ms())
 }
 
-/// The row's glyph and head text.
-pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &'static str) {
+/// Whether any waiting item demands the user's direct attention (red urgency).
+pub(crate) fn any_user_urgent(waits: &[Wait<'_>]) -> bool {
+    waits.iter().any(|w| {
+        matches!(w, Wait::Prompt(_) | Wait::Stage(_))
+            || matches!(w, Wait::Role(r) if !r.asks)
+            || matches!(w, Wait::Hollywood(h) if h.attention_user)
+    })
+}
+
+/// Structured pieces of a waiting row's first line so painters can style
+/// the verb, studio id, and trailing detail independently.
+pub(crate) struct WaitParts {
+    pub glyph: &'static str,
+    pub verb: String,
+    pub gap: &'static str,
+    pub studio: String,
+    pub rest: String,
+}
+
+/// The semantic colour a waiting row's indicator, glyph, and verb share.
+pub(crate) fn glyph_colour(
+    wait: &Wait<'_>,
+    palette: &crate::chrome::palette::Palette,
+) -> ratatui::style::Color {
+    match wait {
+        Wait::Prompt(_) => palette.red,
+        Wait::Role(item) if item.asks => palette.peach,
+        Wait::Role(_) => palette.red,
+        Wait::Hollywood(hollywood) if hollywood.attention_user => palette.red,
+        Wait::Hollywood(_) => palette.peach,
+        Wait::NoRequirement(_) => palette.accent,
+        Wait::Stage(item) if item.offline => palette.red,
+        Wait::Stage(_) => palette.peach,
+        Wait::Card(_) | Wait::Outward(_) => palette.accent,
+        Wait::Ready(_) => palette.teal,
+    }
+}
+
+/// Structured pieces of a waiting item's first line.
+pub(crate) fn wait_parts(wait: &Wait<'_>, local: &str, multi: bool) -> WaitParts {
     match wait {
         Wait::Prompt(PromptItem {
             machine,
@@ -263,10 +301,13 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             } else {
                 format!("{machine} · ")
             };
-            (
-                format!("PROMPT #{seq}  {} · {machine}{}", studio.id, role.name),
-                "×",
-            )
+            WaitParts {
+                glyph: "×",
+                verb: format!("PROMPT #{seq}"),
+                gap: "  ",
+                studio: studio.id.clone(),
+                rest: format!(" · {machine}{}", role.name),
+            }
         }
         Wait::Role(RoleItem {
             machine,
@@ -285,34 +326,48 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                     .map(|a| format!(" · {a}"))
                     .unwrap_or_default();
                 let question = role.asks.as_deref().unwrap_or("a question");
-                (
-                    format!(
-                        "ASKS {} · {machine}{}{age} — {}",
-                        studio.id,
+                WaitParts {
+                    glyph: "?",
+                    verb: "ASKS".into(),
+                    gap: " ",
+                    studio: studio.id.clone(),
+                    rest: format!(
+                        " · {machine}{}{age} — {}",
                         role.name,
                         first_sentence(question)
                     ),
-                    "?",
-                )
+                }
             } else {
-                (
-                    format!("NEEDS YOU {} · {machine}{}", studio.id, role.name),
-                    "×",
-                )
+                WaitParts {
+                    glyph: "×",
+                    verb: "NEEDS YOU".into(),
+                    gap: " ",
+                    studio: studio.id.clone(),
+                    rest: format!(" · {machine}{}", role.name),
+                }
             }
         }
-        Wait::Hollywood(hollywood) if hollywood.attention_user => (
-            format!(
-                "HOLLYWOOD asks: {}",
+        Wait::Hollywood(hollywood) if hollywood.attention_user => WaitParts {
+            glyph: "⚠",
+            verb: "HOLLYWOOD".into(),
+            gap: " ",
+            studio: String::new(),
+            rest: format!(
+                "asks: {}",
                 hollywood
                     .attention_detail
                     .as_deref()
                     .or(hollywood.attention.as_deref())
                     .unwrap_or("permission prompt")
             ),
-            "⚠",
-        ),
-        Wait::Hollywood(_) => ("HOLLYWOOD blocked".to_string(), "!"),
+        },
+        Wait::Hollywood(_) => WaitParts {
+            glyph: "!",
+            verb: "HOLLYWOOD".into(),
+            gap: " ",
+            studio: String::new(),
+            rest: "blocked".into(),
+        },
         Wait::NoRequirement(StudioItem { machine, studio }) => {
             let machine = machine_label(*machine, local, multi);
             let machine = if machine.is_empty() {
@@ -320,7 +375,13 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             } else {
                 format!(" · {machine}")
             };
-            (format!("NEW {}{machine} · no requirement", studio.id), "✦")
+            WaitParts {
+                glyph: "✦",
+                verb: "NEW".into(),
+                gap: " ",
+                studio: studio.id.clone(),
+                rest: format!("{machine} · no requirement"),
+            }
         }
         Wait::Stage(StageItem {
             machine,
@@ -334,32 +395,47 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 machine.to_string()
             };
             if *offline {
-                (format!("OFFLINE {machine}"), "×")
+                WaitParts {
+                    glyph: "×",
+                    verb: "OFFLINE".into(),
+                    gap: " ",
+                    studio: machine,
+                    rest: String::new(),
+                }
             } else {
-                (
-                    format!(
-                        "STAGE STOPPED {machine} · affects {studios} studio{}",
+                WaitParts {
+                    glyph: "◌",
+                    verb: "STAGE STOPPED".into(),
+                    gap: " ",
+                    studio: machine,
+                    rest: format!(
+                        " · affects {studios} studio{}",
                         if *studios == 1 { "" } else { "s" }
                     ),
-                    "◌",
-                )
+                }
             }
         }
-        Wait::Card(card) => (
-            format!("CARD {}  {} · {}", card.id, card.studio, card.action),
-            "◆",
-        ),
+        Wait::Card(card) => WaitParts {
+            glyph: "◆",
+            verb: format!("CARD {}", card.id),
+            gap: "  ",
+            studio: card.studio.clone(),
+            rest: format!(" · {}", card.action),
+        },
         Wait::Outward(item) => {
             let machine = machine_label(item.machine, local, multi);
-            let where_ = if machine.is_empty() {
-                item.studio.id.clone()
+            let rest = if machine.is_empty() {
+                format!(" · {}", item.card.command)
             } else {
-                format!("{} · {machine}", item.studio.id)
+                format!(" · {machine} · {}", item.card.command)
             };
-            (
-                format!("CARD {}  {where_} · {}", item.card.id, item.card.command),
-                "◆",
-            )
+            WaitParts {
+                glyph: "◆",
+                verb: format!("CARD {}", item.card.id),
+                gap: "  ",
+                studio: item.studio.id.clone(),
+                rest,
+            }
         }
         Wait::Ready(ReadyItem {
             machine, studio, ..
@@ -370,15 +446,28 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             } else {
                 format!(" · {machine}")
             };
-            (
-                format!(
-                    "READY {}{machine} · {}/{} tasks accepted",
-                    studio.id, studio.tasks_done, studio.tasks_total
+            WaitParts {
+                glyph: "✓",
+                verb: "READY".into(),
+                gap: " ",
+                studio: studio.id.clone(),
+                rest: format!(
+                    "{machine} · {}/{} tasks accepted",
+                    studio.tasks_done, studio.tasks_total
                 ),
-                "✓",
-            )
+            }
         }
     }
+}
+
+/// The row's glyph and head text.
+#[cfg(test)]
+pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &'static str) {
+    let p = wait_parts(wait, local, multi);
+    (
+        format!("{}{}{}{}", p.verb, p.gap, p.studio, p.rest),
+        p.glyph,
+    )
 }
 
 /// The second line the needs-you rows carry — a role's what or

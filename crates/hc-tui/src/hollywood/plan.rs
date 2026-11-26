@@ -18,13 +18,12 @@ use crate::panel::data::MachineSummary;
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
-/// The most rows the newest Hollywood line wraps to on a wide band.
-pub(crate) const WRAP_TALK_ROWS: u16 = 4;
-/// The cap on a narrow/mobile band.
-pub(crate) const WRAP_TALK_ROWS_MOBILE: u16 = 2;
+/// Every exchange message clamps to at most 2 wrapped lines.
+pub(crate) const WRAP_TALK_ROWS: u16 = 2;
 
 /// The band's height while expanded — the dock's seam (A5.2) reads
 /// the same number before it picks its own `y`.
+#[cfg(test)]
 pub(crate) fn expanded_height(
     frame: Rect,
     machines: &[MachineSummary],
@@ -32,8 +31,21 @@ pub(crate) fn expanded_height(
     hollywood: &Hollywood,
     opts: LayerOpts,
 ) -> u16 {
+    expanded_extent(frame, machines, status, hollywood, opts).0
+}
+
+/// Both the band's internal height (`bar_h`) and its external bottom
+/// drop-shadow height (`0` or `1`), so a beside Lot dock clears the shadow.
+pub(crate) fn expanded_extent(
+    frame: Rect,
+    machines: &[MachineSummary],
+    status: &Status<'_>,
+    hollywood: &Hollywood,
+    opts: LayerOpts,
+) -> (u16, u16) {
     let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
-    plan(frame, &waits, &band_rows, hollywood, opts).height()
+    let p = plan(frame, &waits, &band_rows, hollywood, opts);
+    (p.height(), u16::from(p.shadow))
 }
 
 /// The plan for one layout pass — shared by the height read and the
@@ -50,67 +62,58 @@ pub(crate) fn plan(
     } else {
         (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
     };
-    // The selected waiting item keeps its detail through the ladder.
     let selected_wait = hollywood
         .selected
         .as_ref()
         .and_then(|t| waits.iter().position(|w| &w.target() == t));
-    // The armed `finish?` confirm borrows its row's detail line —
-    // keep it in the plan even though a ready row is not detailable.
     let confirming = hollywood.confirm.as_ref().map(|c| match c {
         Confirm::Finish(key) => Target::Ready(key.clone()),
     });
-    let talk_lines: Vec<&backlot_model::summary::Exchange> = band_rows
+    let talk_wraps: Vec<u16> = band_rows
         .iter()
         .filter_map(|r| match r {
-            Row::Talk(e) => Some(*e),
+            Row::Talk(e) => {
+                let text_w = talk::talk_text_width(frame.width, &e.who);
+                let rows = crate::hollywood::reader_wrap::wrap_plain(
+                    &e.text,
+                    text_w,
+                    WRAP_TALK_ROWS as usize,
+                );
+                Some((rows.len() as u16).saturating_sub(1))
+            }
             _ => None,
         })
         .collect();
-    let wrap_seq = talk_lines.iter().rposition(|e| e.who == "hollywood");
+    let total_talk = talk_wraps.len() as u16;
+    let breathing = frame.height >= 50;
     let mut plan = Plan {
         top_sprocket: true,
         title: true,
-        blank_1: true,
+        blank_1: breathing,
+        studios_rule: true,
         frames_h: frames::FRAME_H,
-        blank_2: true,
+        blank_2: breathing || waits.is_empty(),
+        waiting_rule: !waits.is_empty(),
         headline: band_rows.iter().any(|r| matches!(r, Row::Headline(_))),
         details: waits
             .iter()
             .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
             .collect(),
         shown: waits.len(),
-        talk: band_rows
-            .iter()
-            .filter(|r| matches!(r, Row::Talk(_) | Row::Fold { .. }))
-            .count() as u16,
-        wrap: 0,
-        wrap_keep: wrap_seq.map(|p| (talk_lines.len() - p) as u16).unwrap_or(0),
-        wrap_seq: wrap_seq.map(|p| talk_lines[p].seq),
+        hollywood_rule: opts.agent,
+        setup_hairline: !opts.agent && breathing,
+        talk: total_talk,
+        talk_wraps,
         live: band_rows.iter().any(|r| matches!(r, Row::Live(_))),
         tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
         hints: true,
         bottom_sprocket: true,
+        shadow: !opts.no_shadow && frame.height >= 16,
     };
-    // The newest Hollywood line wraps to a few rows at the band's own
-    // width — never more than the mobile or wide cap, and never past
-    // the band's height.
-    if let Some(line) = plan.wrap_seq.and_then(|seq| {
-        band_rows.iter().find_map(|r| match r {
-            Row::Talk(e) if e.seq == seq => Some(*e),
-            _ => None,
-        })
-    }) {
-        let text_w = talk::talk_text_width(frame.width, &line.who);
-        let cap = if opts.mobile {
-            WRAP_TALK_ROWS_MOBILE
-        } else {
-            WRAP_TALK_ROWS
-        };
-        let rows = crate::hollywood::reader_wrap::wrap_plain(&line.text, text_w, cap as usize);
-        plan.wrap = (rows.len() as u16).saturating_sub(1);
-    }
     fit(&mut plan, cap, frame.height, selected_wait);
+    if opts.no_shadow || frame.height < 16 || plan.height() >= frame.height {
+        plan.shadow = false;
+    }
     plan
 }
 
@@ -120,50 +123,54 @@ pub(crate) struct Plan {
     pub top_sprocket: bool,
     pub title: bool,
     pub blank_1: bool,
+    pub studios_rule: bool,
     /// `7` draws the film frames, `1` the chip strip, `0` nothing.
     pub frames_h: u16,
     pub blank_2: bool,
-    /// The headline row — a flag now, not a band entry, so the
-    /// ladder drops it before the hints.
+    pub waiting_rule: bool,
+    /// The headline row — dropped after zone rules and old talk.
     pub headline: bool,
     /// Per waiting item: `true` draws its detail line.
     pub details: Vec<bool>,
     /// How many waiting rows the scroll window shows — never fewer
-    /// than `1` while items exist; the rest scroll (`i/N`).
+    /// than `1` while items exist.
     pub shown: usize,
-    /// How many exchange lines the dialog shows above the input —
-    /// the oldest lines leave first when the band runs short.
+    pub hollywood_rule: bool,
+    pub setup_hairline: bool,
+    /// How many `Row::Talk` lines draw above the compose field.
     pub talk: u16,
-    /// The seq of the newest Hollywood line that wraps, if any.
-    pub wrap_seq: Option<u64>,
-    /// How many talk rows from the wrapped line to the newest — the
-    /// wrap only draws while that many talk rows survive the ladder.
-    pub wrap_keep: u16,
-    /// The extra rows that line's wrap adds beyond its first row.
-    pub wrap: u16,
+    /// Extra wrapped line (`0` or `1`) per visible `Row::Talk`, oldest first.
+    pub talk_wraps: Vec<u16>,
     /// Hollywood's live progress row under the newest user line.
     pub live: bool,
-    /// The tell/setup/calm tail rows — always drawn, `calm` or
-    /// `setup` standing in for the waiting list.
+    /// The tell/setup/calm tail rows — never drops below `1`.
     pub tail_rows: u16,
     pub hints: bool,
     pub bottom_sprocket: bool,
+    /// External 1-row bottom shadow drawn at `y = area.bottom()`.
+    pub shadow: bool,
 }
 
 impl Plan {
-    /// The wrapped line's extra rows, counted only while the line is
-    /// still drawn (the ladder has not dropped `talk` past it).
+    /// Total extra wrap rows among the visible tail of `talk_wraps`.
     pub(crate) fn wrap_rows(&self) -> u16 {
-        if self.wrap_keep > 0 && self.talk >= self.wrap_keep {
-            self.wrap
-        } else {
+        let len = self.talk_wraps.len();
+        let skip = len.saturating_sub(self.talk as usize);
+        self.talk_wraps[skip..].iter().sum()
+    }
+
+    /// Extra wrap row (`0` or `1`) for `talk_index` in `0..self.talk_wraps.len()`.
+    pub(crate) fn talk_wrap_at(&self, talk_index: usize) -> u16 {
+        let len = self.talk_wraps.len();
+        let skip = len.saturating_sub(self.talk as usize);
+        if talk_index < skip {
             0
+        } else {
+            self.talk_wraps.get(talk_index).copied().unwrap_or(0)
         }
     }
 
-    /// The plan's full height in rows. `shown` waiting rows each
-    /// take one line plus their detail when kept; the wrapped newest
-    /// Hollywood line adds its extra rows while it is still drawn.
+    /// The plan's internal height in rows (excluding the external bottom shadow).
     pub fn height(&self) -> u16 {
         let waits: u16 = self
             .details
@@ -175,10 +182,14 @@ impl Plan {
         u16::from(self.top_sprocket)
             + u16::from(self.title)
             + u16::from(self.blank_1)
+            + u16::from(self.studios_rule)
             + self.frames_h
             + u16::from(self.blank_2)
+            + u16::from(self.waiting_rule)
             + u16::from(self.headline)
             + waits
+            + u16::from(self.hollywood_rule)
+            + u16::from(self.setup_hairline)
             + talk
             + u16::from(self.live)
             + self.tail_rows
@@ -187,18 +198,35 @@ impl Plan {
     }
 }
 
-/// Fit `plan` into `height`, compressing in the spec's order: the
-/// blanks, the unselected details (`keep` is the selected item's
-/// index — its detail stays), the frames to chips, the headline,
-/// the hints; under ten rows the top sprocket goes too, and the
-/// scroll window shrinks before the bottom sprocket ever leaves.
-/// Every branch frees at least one row, so the loop terminates.
+/// 10-step compression ladder into `height`:
+/// 1. blanks / optional hairlines
+/// 2. exchange 2-line wrap -> 1-line (oldest wrapped message first)
+/// 3. unselected waiting details (`keep` keeps its detail)
+/// 4. oldest visible `Row::Talk` lines (bumps `earlier` count on `HOLLYWOOD` rule)
+/// 5. zone label rules (`HOLLYWOOD` -> `WAITING ON YOU` -> `STUDIOS`)
+/// 6. non-duplicate `Row::Headline`, then `Row::Live`
+/// 7. 7-row frames -> 1-row chip strip
+/// 8. hint row
+/// 9. waiting scroll window down to `1`
+/// 10. external shadow -> top sprocket -> bottom sprocket -> chip strip (`0`) -> title
 pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) {
     while plan.height() > height {
+        let skip = plan.talk_wraps.len().saturating_sub(plan.talk as usize);
         if plan.blank_1 {
             plan.blank_1 = false;
         } else if plan.blank_2 {
             plan.blank_2 = false;
+        } else if plan.setup_hairline {
+            plan.setup_hairline = false;
+        } else if let Some(idx) = plan
+            .talk_wraps
+            .iter()
+            .enumerate()
+            .skip(skip)
+            .find(|(_, w)| **w > 0)
+            .map(|(i, _)| i)
+        {
+            plan.talk_wraps[idx] -= 1;
         } else if let Some(i) = plan
             .details
             .iter()
@@ -207,36 +235,40 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
             .map(|(i, _)| i)
         {
             plan.details[i] = false;
-        } else if plan.frames_h > 1 {
-            plan.frames_h = 1;
-        } else if plan.headline {
-            plan.headline = false;
-        } else if plan.hints {
-            plan.hints = false;
-        } else if plan.wrap_rows() > 0 {
-            // The wrap gives its extra rows back, down to the one
-            // line, before a talk line or any waiting row is dropped.
-            plan.wrap -= 1;
         } else if plan.talk > 0 {
             plan.talk -= 1;
+        } else if plan.hollywood_rule {
+            plan.hollywood_rule = false;
+        } else if plan.waiting_rule {
+            plan.waiting_rule = false;
+        } else if plan.studios_rule {
+            plan.studios_rule = false;
+        } else if plan.headline {
+            plan.headline = false;
         } else if plan.live {
             plan.live = false;
-        } else if rows < 10 && plan.top_sprocket {
-            plan.top_sprocket = false;
+        } else if plan.frames_h > 1 {
+            plan.frames_h = 1;
+        } else if plan.hints {
+            plan.hints = false;
         } else if plan.shown > usize::from(!plan.details.is_empty()) {
             plan.shown -= 1;
-        } else if plan.bottom_sprocket {
-            plan.bottom_sprocket = false;
-        } else if plan.top_sprocket {
-            plan.top_sprocket = false;
-        } else if plan.frames_h > 0 {
-            plan.frames_h = 0;
-        } else if plan.title {
-            plan.title = false;
-        } else if plan.tail_rows > 1 {
-            plan.tail_rows -= 1;
         } else {
-            break;
+            // Step 10 drops the external shadow row first, then tight chrome.
+            plan.shadow = false;
+            if plan.top_sprocket && (rows < 10 || plan.height() > height) {
+                plan.top_sprocket = false;
+            } else if plan.bottom_sprocket {
+                plan.bottom_sprocket = false;
+            } else if plan.frames_h > 0 {
+                plan.frames_h = 0;
+            } else if plan.title {
+                plan.title = false;
+            } else if plan.tail_rows > 1 {
+                plan.tail_rows -= 1;
+            } else {
+                break;
+            }
         }
     }
 }

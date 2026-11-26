@@ -29,6 +29,7 @@ mod sheet;
 mod talk;
 mod title;
 mod view;
+mod zone;
 
 pub(crate) use draw::{HollywoodRender, render};
 // The footer's and Reader's own tests inspect these directly.
@@ -36,6 +37,8 @@ pub(crate) use draw::{HollywoodRender, render};
 pub(crate) use hints::for_row;
 pub(crate) use items::{chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
+pub(crate) use plan::expanded_extent;
+#[cfg(test)]
 pub(crate) use plan::expanded_height;
 pub(crate) use reader_compose::{InlineTellState, ReaderComposeOpts, reader_tell_target};
 #[cfg(test)]
@@ -102,6 +105,8 @@ pub(crate) struct LayerOpts {
     /// Suppress active selection highlights, `▌` bars, active `›`
     /// `active_row_bg`, and edit cursors while a modal covers it (`R3-M2`).
     pub suppress_highlights: bool,
+    /// Disable the external 1-row bottom drop shadow (`[ui] popup_shadow = false`).
+    pub no_shadow: bool,
 }
 
 /// The whole client-local layer state (D21): which of the three
@@ -152,6 +157,10 @@ pub(crate) struct Hollywood {
     /// One-line start command when `backlot-cat` is present while the server
     /// terminal is gone.
     pub server_stopped_cmd: Option<String>,
+    /// Currently active main-pane studio (renders `▸` prefix on unselected frame).
+    pub active_studio: Option<crate::studio::StudioKey>,
+    /// Optional clock override (`ms` since epoch) used by tests for exchange age labels.
+    pub now_ms: Option<u64>,
 }
 
 /// The inline `y/n` confirm S1 arms on a ready row: which studio
@@ -183,6 +192,8 @@ impl Hollywood {
             spin: 0,
             seen_hollywood_seq: None,
             server_stopped_cmd: None,
+            active_studio: None,
+            now_ms: None,
         }
     }
 
