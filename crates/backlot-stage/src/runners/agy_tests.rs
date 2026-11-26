@@ -685,24 +685,39 @@ fn settings_splices_trusted_workspaces_and_respects_answer_trust() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn prepare_canonicalizes_symlinked_work_area_and_respects_none() {
     let dir = tmp("trust-canon");
     let real = dir.join("real-work");
     let link = dir.join("link-work");
     fs::create_dir_all(&real).unwrap();
-    std::os::unix::fs::symlink(&real, &link).unwrap();
+    #[cfg(unix)]
+    if std::os::unix::fs::symlink(&real, &link).is_err() {
+        return;
+    }
+    #[cfg(windows)]
+    if std::os::windows::fs::symlink_dir(&real, &link).is_err() {
+        return;
+    }
+    #[cfg(not(any(unix, windows)))]
+    return;
     let canon = fs::canonicalize(&real)
         .unwrap()
         .to_string_lossy()
         .into_owned();
+    let link_str = link.to_str().unwrap();
     let env = BTreeMap::new();
 
-    let l = plan(&ident(Some("high")), &ctx(&env, link.to_str().unwrap())).unwrap();
+    // `settings_content` and `plan` never resolve symlinks on their own.
+    let pure: serde_json::Value =
+        serde_json::from_slice(&settings_content(None, Some(link_str)).unwrap()).unwrap();
+    assert_eq!(pure["trustedWorkspaces"], serde_json::json!([link_str]));
+
+    let l = plan(&ident(Some("high")), &ctx(&env, link_str)).unwrap();
     let Some(Prep::Agy(p)) = l.prep else {
         panic!("expected AgyPrep");
     };
+    assert_eq!(p.trusted_workspace.as_deref(), Some(link.as_path()));
     assert_eq!(prepare(&p).unwrap(), None);
     let v: serde_json::Value =
         serde_json::from_slice(&fs::read(real.join(".agy-settings.json")).unwrap()).unwrap();
@@ -710,7 +725,7 @@ fn prepare_canonicalizes_symlinked_work_area_and_respects_none() {
 
     // With answer_trust = false, prepare omits trustedWorkspaces.
     fs::remove_file(real.join(".agy-settings.json")).unwrap();
-    let mut off_ctx = ctx(&env, link.to_str().unwrap());
+    let mut off_ctx = ctx(&env, link_str);
     off_ctx.answer_trust = false;
     let Prep::Agy(off_p) = plan(&ident(Some("high")), &off_ctx).unwrap().prep.unwrap() else {
         panic!("expected AgyPrep");
