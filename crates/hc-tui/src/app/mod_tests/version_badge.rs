@@ -94,17 +94,34 @@ async fn a_two_digit_pair_still_shows_the_hint() {
 }
 
 #[tokio::test]
-async fn a_narrow_sidebar_drops_the_hint_first() {
+async fn a_narrow_sidebar_keeps_the_hint_as_the_compact_glyph() {
+    // Pick a sidebar just wide enough for the version and the compact
+    // ` ↑` but not the full ` ↑v<latest>` — room is `sidebar - 10`, and
+    // this holds whatever the running version's length is.
     let mut app = app_with(&["t1"]);
-    app.sidebar_width = 18;
+    app.sidebar_width = version().len() as u16 + 13;
     app.update_latest = Some("9.9.9".into());
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
     assert!(header.contains(&version()), "the version stays: {header:?}");
-    assert!(!header.contains('↑'), "the hint drops first: {header:?}");
+    // Too narrow for ` ↑v9.9.9`: the hint shrinks to ` ↑` rather than
+    // vanishing, so the update card stays one click away.
+    assert!(header.contains('↑'), "the hint lingers: {header:?}");
+    assert!(
+        !header.contains("↑v9.9.9"),
+        "the full hint is gone: {header:?}"
+    );
+    let hit = app.hit_map.update_badge;
+    assert_eq!(hit.width, 2, "the compact hint is the clickable slice");
+    let drawn: String = header
+        .chars()
+        .skip(hit.x as usize)
+        .take(hit.width as usize)
+        .collect();
+    assert_eq!(drawn, " ↑", "the hit covers the drawn glyph: {header:?}");
     // Nothing wrote over the divider column.
-    assert_eq!(backend.buffer()[(17, 0)].symbol(), "│");
-    assert!(app.hit_map.update_badge.is_empty());
+    let divider = app.sidebar_width.saturating_sub(1);
+    assert_eq!(backend.buffer()[(divider, 0)].symbol(), "│");
 }
 
 #[tokio::test]
