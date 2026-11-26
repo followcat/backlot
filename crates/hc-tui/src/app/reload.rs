@@ -94,6 +94,7 @@ impl App {
         self.shell_state.reveal_focused_workspace = true;
         self.last_window_title = None;
         self.refresh_projection();
+        self.popup_resize();
         self.sync_pixel_mouse();
         self.sched.mark_dirty(Instant::now());
     }

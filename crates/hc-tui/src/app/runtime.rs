@@ -91,6 +91,7 @@ impl App {
                 lease.allocated(inner.width.max(1), inner.height.max(1));
             }
         }
+        self.sync_popup_geometry(layout.pane_surface);
         for lease in self.size_leases.values_mut() {
             lease.on_view(&self.view);
         }
