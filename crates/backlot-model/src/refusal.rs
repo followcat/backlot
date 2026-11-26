@@ -209,6 +209,17 @@ pub enum Refusal {
     BadProgress(String),
     /// An invalid `outward.requested` or `outward.completed` payload.
     InvalidOutward(String),
+    /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
+    NewerRecords(Vec<String>),
+}
+
+/// Format the upgrade error shown whenever a ledger contains unknown kinds.
+pub fn upgrade_required_message<'a>(kinds: impl IntoIterator<Item = &'a str>) -> String {
+    let list: Vec<&str> = kinds.into_iter().collect();
+    format!(
+        "this ledger has records from a newer backlot ({}); upgrade backlot",
+        list.join(", ")
+    )
 }
 
 impl fmt::Display for Refusal {
@@ -438,6 +449,9 @@ impl fmt::Display for Refusal {
             }
             Refusal::CastBadMaxActors => write!(f, "max_actors must be at least 1"),
             Refusal::BadProgress(msg) | Refusal::InvalidOutward(msg) => f.write_str(msg),
+            Refusal::NewerRecords(kinds) => {
+                f.write_str(&upgrade_required_message(kinds.iter().map(String::as_str)))
+            }
         }
     }
 }

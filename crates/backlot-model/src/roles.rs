@@ -235,6 +235,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::TaskReviewed { .. }
         | EventKind::TaskFinding { .. }
         | EventKind::Correction { .. } => "the user, the producer or the director",
+        EventKind::Unknown { .. } => "nobody (read-only unknown record)",
         EventKind::MessageQueued { purpose, .. } => {
             if purpose.is_none() {
                 "a person"
