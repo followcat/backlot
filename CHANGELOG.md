@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.9 — 2026-11-26
+
 A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.
 
 ### Added
