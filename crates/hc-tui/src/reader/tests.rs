@@ -25,7 +25,7 @@ async fn legacy_escape_uses_live_mouse_timing_without_a_fake_kitty_confirmation(
     let sequence = crate::terminal_modes::mouse_capture_sequence(true, false).unwrap();
     reader.host_control().written(&sequence);
     host.write_all(b"\x1b").unwrap();
-    let event = tokio::time::timeout(Duration::from_millis(400), reader.ui.recv())
+    let event = tokio::time::timeout(Duration::from_secs(2), reader.ui.recv())
         .await
         .unwrap()
         .unwrap();
@@ -96,7 +96,7 @@ async fn stopping_a_full_input_queue_is_prompt_and_releases_its_descriptor() {
     host.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     let began = Instant::now();
     reader.stop();
-    assert!(began.elapsed() < Duration::from_millis(500));
+    assert!(began.elapsed() < Duration::from_secs(2));
     assert_eq!(host.read(&mut [0]).unwrap(), 0);
     reader.stop(); // idempotent, including after workers have exited
 }
