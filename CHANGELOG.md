@@ -10,6 +10,22 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+A card executes what you reviewed, and Hollywood can take one back. A proposal resolves its files,
+refuses one that could not apply, and carries a snapshot of the cast and brief it references; a
+newer card supersedes the older one it conflicts with, Hollywood can withdraw its own open cards,
+and you can reopen a finished studio.
+
+### Added
+
+- **Reopen a finished studio.** `backlot studio reopen --studio <s> --as user` records the reopening (`studio.reopened`), and recasting a role, `studio cast set`, adding tasks and answering permission prompts work again. Only you may reopen — a role or Hollywood is refused — and Hollywood may propose it as a `reopen-studio` card. The guide says when to reopen and when to start a new studio (`docs/studio/guide.md`, `docs/studio/hollywood.md`).
+- **Hollywood can withdraw its own cards.** `backlot hollywood withdraw <card> --reason <text>` takes back an open card Hollywood proposed, recording who withdrew it and why (`card.withdrawn`); the client shows it as `withdrawn`. Only Hollywood's own cards, never yours or the stage's, and never one already applied, cancelled or stale (`docs/studio/hollywood.md`).
+- **A newer card supersedes the older one it conflicts with.** When a new card targets the same single fact an open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a studio's cast (`cast`), its finished state (`reopen-studio`), a studio name (`studio-new`), or Hollywood's identity (`setup`) — the older card is marked `superseded by c<n>` in the same append, so a batch apply can never run both (`docs/studio/hollywood.md`).
+
+### Fixed
+
+- **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
+- **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
+
 ## 0.4.8 — 2026-11-26
 
 Change a studio's cast from the client: `Recast…` now works on actors, and `Edit cast…` on the studio menu opens the cast in your editor, shows what would change, and applies it on confirm. The same commands work over `--server`.

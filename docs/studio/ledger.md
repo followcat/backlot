@@ -65,6 +65,7 @@ prints `already at ledger v1`.
 | `role.recast` | role, new actor identity, reason, optional `card` |
 | `role.approval` | role, decision (`allow` or `deny`) |
 | `studio.finished` | reason |
+| `studio.reopened` | reason, optional `card` — `user` only; clears the finished marker so recasts, cast changes and new tasks work again |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
@@ -275,6 +276,8 @@ message to the producer (R26).
 | `card.proposed` | the exact `action` (D18, including stage-proposed `Outward` cards), a one-line `why`, and the `base` (`GitHead` for outward) — `hollywood` or `stage` |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
+| `card.withdrawn` | card id, reason — `hollywood` only, on its own open card |
+| `card.superseded` | card id, `by_card`, reason — `hollywood` or `stage`, appended with the newer proposal so a batch apply cannot run both |
 | `card.stale` | card id, reason — `user` at apply time on an open card, `stage` on an applied one (H3) |
 | `card.done` / `card.failed` | card id, optional detail / reason — `stage` only (H3) |
 | `hollywood.reported` | headline (one nonempty line), optional body file — `hollywood` only |
@@ -284,7 +287,8 @@ message to the producer (R26).
 
 A card's **base** is the fact it was proposed against — `studio_absent` for `studio-new`,
 `person_held`/`person_closed` for `close`/`reopen`, `task_priority { was }` for `priority`,
-`task_status { was }` for `pause`/`resume`/`abandon`. The reducer holds cards by seq; staleness is a
+`task_status { was }` for `pause`/`resume`/`abandon`, `cast_seq { was }` for `cast`, and
+`studio_finished` for `reopen-studio`. The reducer holds cards by seq; staleness is a
 pure read of the card against the studio's state, checked at apply time (a moved base records
 `card.stale` instead of `card.applied`) and again when the stage executes an applied card.
 `card.done`/`card.failed`/`card.stale`-by-stage are refused on a card that is not `applied`; an
