@@ -132,8 +132,12 @@ async fn a_theme_reload_repaints_the_drawn_frame() {
     app.pane.install_vt(vt);
     app.area = (120, 24);
     app.panel.mode = crate::panel::PanelMode::Expanded;
-    let backlot_bg = crate::chrome::palette::Palette::backlot().panel_bg;
-    let dracula_bg = crate::chrome::palette::Palette::dracula().panel_bg;
+    let backlot_bg = crate::chrome::palette::Palette::backlot()
+        .elevation()
+        .surface;
+    let dracula_bg = crate::chrome::palette::Palette::dracula()
+        .elevation()
+        .surface;
     assert_ne!(backlot_bg, dracula_bg, "the probe must differ");
 
     let before = draw_to(&mut app, 120, 24);

@@ -261,7 +261,7 @@ async fn a_stacked_block_click_expands_it() {
     app.panel.mode = PanelMode::Expanded;
     // A body too short for every block stacks the non-current ones;
     // the first stacked row still fits under the expanded acme-shop.
-    draw_to(&mut app, 120, 10);
+    draw_to(&mut app, 120, 11);
     let stacked = app
         .panel_hits
         .rows

@@ -101,7 +101,8 @@ pub(crate) fn render(
             }
         }
     }
-    buf.set_style(area, Style::default().bg(palette.panel_bg));
+    let elev = palette.elevation();
+    buf.set_style(area, Style::default().bg(elev.surface));
     let mut hits = PanelRender {
         area,
         ..PanelRender::default()
@@ -109,11 +110,26 @@ pub(crate) fn render(
     if area.width == 0 || area.height == 0 {
         return hits;
     }
+    if area.width > 1 {
+        let seam = Style::default().fg(elev.border_muted).bg(elev.surface);
+        for y in area.y..area.bottom() {
+            if let Some(cell) = buf.cell_mut((area.x, y)) {
+                cell.set_symbol("│");
+                cell.set_style(seam);
+            }
+        }
+    }
+    let inner = if area.width > 1 {
+        Rect::new(area.x + 1, area.y, area.width - 1, area.height)
+    } else {
+        area
+    };
 
+    let lot_focused = panel.focused && active_surface;
     // `lot · <n>` — accent while the panel owns the keys; the call
     // sheet's key sits at the row's right end when it fits.
-    let title = Rect::new(area.x, area.y, area.width, 1);
-    let title_fg = if panel.focused && active_surface {
+    let title = Rect::new(inner.x, inner.y, inner.width, 1);
+    let title_fg = if lot_focused {
         palette.accent
     } else {
         palette.text
@@ -146,7 +162,7 @@ pub(crate) fn render(
             title.y,
             hint_width,
             &hint,
-            Style::default().fg(palette.overlay0),
+            Style::default().fg(elev.muted_surface),
         );
     }
     hits.title = title;
@@ -175,32 +191,32 @@ pub(crate) fn render(
         let focused_tiers = hint_tiers(panel.selected.as_ref(), panel.editing, machines, esc);
         let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
         let keys_line = if panel.focused {
-            fit_hints(&tier_refs, area.width as usize).to_string()
+            fit_hints(&tier_refs, inner.width.saturating_sub(1) as usize).to_string()
         } else {
             // R3-M13 + wide-01: the unfocused footer fits clean
             // tiers too, and each nav hint is conditional — `studio`
             // needs ≥2 studios, `role` ≥2 cast entries.
             let tiers = keys.footer_tiers(studios >= 2, cast_entries >= 2);
             let refs: Vec<&str> = tiers.iter().map(String::as_str).collect();
-            fit_hints(&refs, area.width as usize).to_string()
+            fit_hints(&refs, inner.width.saturating_sub(1) as usize).to_string()
         };
-        put_text(
+        crate::chrome::render::put_hint_bar(
             buf,
-            area.x,
-            area.y + area.height - 1,
-            area.width,
+            inner.x + 1,
+            inner.y + inner.height - 1,
+            inner.width.saturating_sub(1),
             &keys_line,
-            Style::default().fg(palette.overlay0),
+            palette,
         );
     }
 
     // Body rows scroll under the title; the scrollbar keeps the last
     // column of the body.
     let body = Rect::new(
-        area.x,
-        area.y + 1,
-        area.width,
-        area.height.saturating_sub(1 + u16::from(shortcuts)),
+        inner.x,
+        inner.y + 1,
+        inner.width,
+        inner.height.saturating_sub(1 + u16::from(shortcuts)),
     );
     if body.height == 0 {
         return hits;
@@ -233,8 +249,12 @@ pub(crate) fn render(
     let selected = panel.selected.as_ref();
     let studio_refs = super::data::studios(machines);
     let selected_studio = super::rows_fold::selected_studio(&studio_refs, panel, current);
-    let frame_of =
-        |studio: &StudioKey| frame_style(selected_studio.as_ref() == Some(studio), palette);
+    let frame_of = |studio: &StudioKey| {
+        frame_style(
+            lot_focused && selected_studio.as_ref() == Some(studio),
+            palette,
+        )
+    };
     let mut y = body.y;
     for row in all.iter().skip(1 + start) {
         let height = row.height();
@@ -250,8 +270,7 @@ pub(crate) fn render(
         // unfocused panel (or one dimmed behind an active modal)
         // keeps the remembered row but draws none of it: no
         // highlight, no `▌`.
-        let paints = panel.focused
-            && active_surface
+        let paints = lot_focused
             && selected == Some(&target)
             && matches!(
                 row,
@@ -267,7 +286,7 @@ pub(crate) fn render(
                     | Row::Input { .. }
                     | Row::ReopenProducer { .. }
             );
-        if paints {
+        if paints && !matches!(row, Row::Input { .. }) {
             // A block-interior row's `│` borders keep the border
             // colour on the panel background: the highlight lives
             // inside them.
@@ -279,7 +298,6 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }
-                    | Row::Input { .. }
                     | Row::ReopenProducer { .. }
             ) {
                 Rect {
@@ -355,7 +373,7 @@ pub(crate) fn render(
                 );
             }
             Row::BlockTop { studio, health } => {
-                let is_selected = selected_studio.as_ref() == Some(&studio.key());
+                let is_selected = lot_focused && selected_studio.as_ref() == Some(&studio.key());
                 let frame = frame_of(&studio.key());
                 draw_top(
                     buf,
@@ -444,6 +462,24 @@ pub(crate) fn render(
             Row::Talk { studio, line } => {
                 draw_talk(buf, rect, line, paints, frame_of(&studio.key()), palette);
             }
+            Row::InputDivider { studio } => {
+                let edge = frame_of(&studio.key());
+                let rule = Style::default().fg(elev.border_muted).bg(elev.surface);
+                put_text(buf, rect.x, rect.y, 1, "├", edge);
+                if rect.width > 2 {
+                    put_text(
+                        buf,
+                        rect.x + 1,
+                        rect.y,
+                        rect.width.saturating_sub(2),
+                        &"─".repeat(rect.width.saturating_sub(2) as usize),
+                        rule,
+                    );
+                }
+                if rect.width > 1 {
+                    put_text(buf, rect.x + rect.width - 1, rect.y, 1, "┤", edge);
+                }
+            }
             Row::Input { studio } => {
                 let producer_mark = crate::action::mark::role(&studio.key(), "producer");
                 let tell_in_flight = pending
@@ -502,6 +538,7 @@ pub(crate) fn render(
                     *studio,
                     &label(*studio),
                     selected_studio.as_ref() == Some(&studio.key()),
+                    lot_focused,
                     panel.spin,
                     palette,
                     &mut hits,
@@ -514,6 +551,7 @@ pub(crate) fn render(
                     *studio,
                     *health,
                     selected_studio.as_ref() == Some(&studio.key()),
+                    lot_focused,
                     local,
                     palette,
                 );
@@ -549,7 +587,7 @@ pub(crate) fn render(
                 );
             }
         }
-        if paints {
+        if paints && !matches!(row, Row::Input { .. }) {
             // `▌` over the row's left edge — inside the block border
             // on a person's row — after the content, so nothing
             // redraws over it.
@@ -561,7 +599,6 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }
-                    | Row::Input { .. }
                     | Row::ReopenProducer { .. }
             ) {
                 rect.x + 1

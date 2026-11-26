@@ -92,11 +92,18 @@ pub(super) fn render_overlays_and_cursor(
     let active_surface = !app.has_active_modal();
     let panel_active_surface =
         active_surface || super::draw_overlays_s3::dock_live_with_reader(app, area);
+    let mark = match &app.studio.focus {
+        Some(crate::studio::StudioFocus::Studio(key))
+        | Some(crate::studio::StudioFocus::Role(key, _)) => Some(key),
+        None if app.studio.lot.studio_workspace => app.studio.current.as_ref(),
+        None => None,
+    };
+    app.hollywood.active_studio = mark.cloned();
     let band_over_page = app.hollywood.expanded();
     let call_sheet_band = app.call_sheet_band(area);
-    let bar_h = if band_over_page && app.opening.ready() {
+    let (bar_h, bar_shadow) = if band_over_page && app.opening.ready() {
         let machines = app.panel_summaries();
-        crate::hollywood::expanded_height(
+        crate::hollywood::expanded_extent(
             call_sheet_band,
             &machines,
             &crate::hollywood::status_of(&app.view),
@@ -105,20 +112,22 @@ pub(super) fn render_overlays_and_cursor(
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
                 suppress_highlights: !active_surface,
+                no_shadow: !app.shell.popup_shadow,
             },
         )
     } else {
-        0
+        (0, 0)
     };
     app.panel_hits = if app.panel_mode_at(area.width) != crate::panel::PanelMode::Closed {
         overlay_painted |= app.panel_fullscreen_at(area.width);
+        let top_reserved = bar_h + bar_shadow;
         let rect = if app.panel_beside(area.width) {
             let width = app.panel_width(area.width);
             Rect::new(
                 area.x + area.width - width,
-                area.y + bar_h,
+                area.y + top_reserved,
                 width,
-                area.height.saturating_sub(bar_h),
+                area.height.saturating_sub(top_reserved),
             )
         } else {
             // An overlay dock lives inside the pane surface: the
@@ -126,15 +135,6 @@ pub(super) fn render_overlays_and_cursor(
             app.panel_overlay_rect(layout.pane_surface, area.width)
         };
         let machines = app.panel_summaries();
-        // R3-M6: `▸` belongs to a studio workspace's studio only —
-        // over `backlot`/`stage`, `bl-hollywood` or a plain workspace
-        // the remembered `current` does not paint as active.
-        let mark = match &app.studio.focus {
-            Some(crate::studio::StudioFocus::Studio(key))
-            | Some(crate::studio::StudioFocus::Role(key, _)) => Some(key),
-            None if app.studio.lot.studio_workspace => app.studio.current.as_ref(),
-            None => None,
-        };
         // wide-01: `↑↓ role` only has somewhere to go while the
         // current studio cycles ≥2 live members (roles + shells).
         let cast_entries = app
@@ -199,6 +199,7 @@ pub(super) fn render_overlays_and_cursor(
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
                 suppress_highlights: !active_surface,
+                no_shadow: !app.shell.popup_shadow,
             },
             &app.shell.palette,
         )

@@ -35,6 +35,8 @@ const FRAME_W_MAX: u16 = 36;
 #[derive(Clone, Copy)]
 pub(crate) struct FramesView<'a> {
     pub selected: Option<&'a Target>,
+    /// Studio currently focused in the main pane (draws `▸` when not selected).
+    pub active_studio: Option<&'a crate::studio::StudioKey>,
     /// Index of the first frame drawn.
     pub scroll: usize,
     pub mobile: bool,
@@ -123,7 +125,17 @@ pub(crate) fn render(
                 Frame::Studio(studio) => {
                     let label =
                         studio_label(&studio.studio.id, studio.machine, view.local, view.multi);
-                    draw_studio(buf, rect, *studio, &label, selected, view.status, palette)
+                    let is_active = view.active_studio == Some(&studio.key());
+                    draw_studio(
+                        buf,
+                        rect,
+                        *studio,
+                        &label,
+                        selected,
+                        is_active,
+                        view.status,
+                        palette,
+                    )
                 }
                 Frame::New => draw_new(buf, rect, selected, palette),
             }
@@ -137,7 +149,9 @@ pub(crate) fn render(
     out.more_right = start + out.drawn < frames.len();
     // `‹` / `›` in the margins, on the frames' top row: the band edge,
     // in accent.
-    let caret = Style::default().fg(palette.accent).bg(palette.surface_dim);
+    let caret = Style::default()
+        .fg(palette.accent)
+        .bg(palette.elevation().surface);
     if out.more_left && area.width > 0 {
         put_text(buf, area.x, area.y, 1, "‹", caret);
     }
@@ -151,25 +165,28 @@ pub(crate) fn render(
 /// its own machine's line and stage — the role on set, what it is
 /// doing, and the cast line. The label's machine part is what
 /// narrows first.
+#[allow(clippy::too_many_arguments)]
 fn draw_studio(
     buf: &mut Buffer,
     rect: Rect,
     studio: StudioRef<'_>,
     label: &StudioLabel,
     selected: bool,
+    active: bool,
     status: &Status<'_>,
     palette: &Palette,
 ) {
     if rect.width < 4 || rect.height < 3 {
         return;
     }
+    let elev = palette.elevation();
     let border = if selected {
         palette.accent
     } else {
-        palette.surface1
+        elev.border_muted
     };
     let bg = if selected {
-        palette.selection_bg
+        elev.raised_row
     } else {
         palette.panel_bg
     };
@@ -180,20 +197,22 @@ fn draw_studio(
             buf[(x, y)].set_style(on(border, bg));
         }
     }
-    // `╭─ <label> ─…╮` — the label in the top edge, bold, accent when
-    // the frame is selected; a machine name that does not fit is cut
-    // before the studio id is.
-    let edge = on(border, palette.surface_dim);
+    // `╭─ [▸ ]<label> ─…╮` — the label in the top edge, bold `accent`
+    // when selected; active main-pane studio gets `▸ ` in bold `text`
+    // while border stays `border_muted`.
+    let edge = on(border, elev.surface);
     put_text(buf, rect.x, rect.y, 2, "╭─", edge);
-    let id = label.fit(rect.width.saturating_sub(6) as usize);
-    let title = format!(" {id} ");
+    let prefix = if !selected && active { "▸ " } else { "" };
+    let budget = rect.width.saturating_sub(6 + prefix.chars().count() as u16) as usize;
+    let id = label.fit(budget);
+    let title = format!(" {prefix}{id} ");
     let title_style = on(
         if selected {
             palette.accent
         } else {
             palette.text
         },
-        palette.surface_dim,
+        elev.surface,
     )
     .add_modifier(Modifier::BOLD);
     let used = 2 + title.chars().count() as u16;
@@ -219,15 +238,8 @@ fn draw_studio(
     put_text(buf, rect.x + rect.width - 1, rect.y, 1, "╮", edge);
     // The sides and the bottom.
     for y in rect.y + 1..rect.y + rect.height - 1 {
-        put_text(buf, rect.x, y, 1, "│", on(border, palette.surface_dim));
-        put_text(
-            buf,
-            rect.x + rect.width - 1,
-            y,
-            1,
-            "│",
-            on(border, palette.surface_dim),
-        );
+        put_text(buf, rect.x, y, 1, "│", edge);
+        put_text(buf, rect.x + rect.width - 1, y, 1, "│", edge);
     }
     let bottom = rect.y + rect.height - 1;
     put_text(buf, rect.x, bottom, 1, "╰", edge);
@@ -287,7 +299,7 @@ fn draw_studio(
                 chip.chars().count() as u16,
                 &chip,
                 on(
-                    palette.panel_bg,
+                    crate::studio::glyphs::contrast_fg(palette),
                     if user { palette.red } else { palette.peach },
                 )
                 .add_modifier(Modifier::BOLD),
@@ -304,7 +316,7 @@ fn draw_studio(
         rect.y + 2,
         inner,
         &format!(" {}", truncate_end(&who, inner.saturating_sub(1) as usize)),
-        on(palette.overlay1, bg),
+        on(elev.muted_surface, bg),
         palette,
     );
     // Row 3: what it is doing — or the ledger's error / upgrade banner.
@@ -334,7 +346,9 @@ fn draw_studio(
     );
     // Row 4: the studio's own next step — the one thing to do next
     // when its state names it. Everything else stays blank.
-    if let Some(step) = crate::panel::data::next_step(studio.studio) {
+    if !studio.studio.needs_upgrade
+        && let Some(step) = crate::panel::data::next_step(studio.studio)
+    {
         let text = format!("next: {step}");
         put_text(
             buf,
@@ -342,7 +356,7 @@ fn draw_studio(
             rect.y + 4,
             inner,
             &format!(" {}", truncate_end(&text, inner.saturating_sub(1) as usize)),
-            on(palette.overlay1, bg),
+            on(elev.muted_surface, bg),
         );
     }
     // Row 5: the cast, one glyph each; `◈ <open> rev` in blue when
@@ -377,7 +391,7 @@ fn draw_studio(
                 if studio.studio.open_reviews > 0 {
                     palette.blue
                 } else {
-                    palette.overlay0
+                    elev.muted_surface
                 },
                 bg,
             ),

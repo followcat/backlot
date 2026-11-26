@@ -13,6 +13,17 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Added
 
 - **Forward-compatible read-only unknown ledger events (`EventKind::Unknown`, write guard, stage pause, TUI banner).** Ledgers with valid JSON lines at `v <= LEDGER_VERSION` and an unknown `kind` now load cleanly into `EventKind::Unknown { raw_kind }` (preserving `seq`, `ts_ms`, `by`, counting toward `next_seq`, preserving raw lines byte-for-byte on rewrite or `studio migrate`, and ignoring unknown payloads in state reduction); `store::append_locked` refuses every write with `this ledger has records from a newer backlot (<kinds>); upgrade backlot`; `backlot stage` pauses read-only for that studio while continuing sibling studios and projecting `needs_upgrade: true` + `unknown_kinds` in `plugin.backlot.summary`; and the Lot, Call Sheet, and studio frames display `"upgrade backlot"` (`docs/studio/ledger.md`).
+
+## 0.4.15 — 2026-11-27
+
+### Changed
+
+- **Call Sheet zones, unified tonal surfaces, and single focus ring.** Added titled zone rules (`STUDIOS`, `WAITING ON YOU`, `HOLLYWOOD` with inline fold badge), persistent col-2 severity bars, fixed speaker columns with 2-line CJK wrap and relative age, `raised_field` compose styling with persistent empty placeholder, 1-row external drop shadow, shared two-tone footer hints, and unified `elevation.surface` / single-focus-ring styling across sidebar (`backlot` theme), Lot dock, Cast (`┄ closed (n) ┄` divider), and Call Sheet (`docs/studio/hollywood.md`, `docs/theme.md`, `docs/parity.md`).
+
+## 0.4.14 — 2026-11-26
+
+### Added
+
 - **Make-before-break Hollywood agent switch (`backlot hollywood switch`, unified `HwSwitch` picker, `w` / `[switch w]` / `Switch agent…`).** Launches candidate Hollywood beside the live overseer with a redacted ledger brief and extracted conversation tail, commits config/routing only after readiness proof (keeping `hollywood-previous` readable for 10 minutes and rolling back cleanly on failure or cancel), pauses quota-blocked delivery, and blocks live `hollywood setup` without `--force-offline` (`docs/studio/hollywood.md`, `docs/keys.md`, `docs/studio/requests.md`, `docs/studio/guide.md`).
 
 ## 0.4.13 — 2026-11-26

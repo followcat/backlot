@@ -33,6 +33,25 @@ fn put_parts_right(buf: &mut Buffer, rect: Rect, parts: &[(String, Color)]) -> u
     rect.x + rect.width.saturating_sub(glyphs + spaces)
 }
 
+fn studio_title_style(
+    selected: bool,
+    focused: bool,
+    unselected_fg: Color,
+    palette: &Palette,
+) -> Style {
+    if selected {
+        Style::default()
+            .fg(if focused {
+                palette.accent
+            } else {
+                palette.text
+            })
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(unselected_fg)
+    }
+}
+
 /// A stacked block's single line: `╶ <label> ⠿2 ○3 ×1 !<n>` — each
 /// mark count in its mark's colour, the attention count in the
 /// blocked colour.
@@ -43,6 +62,7 @@ pub(super) fn draw_stacked(
     studio: StudioRef<'_>,
     label: &StudioLabel,
     selected: bool,
+    focused: bool,
     spin: usize,
     palette: &Palette,
     hits: &mut PanelRender,
@@ -69,13 +89,7 @@ pub(super) fn draw_stacked(
     let id_end = tail.saturating_sub(gap);
     if id_end > rect.x + 2 {
         let id_width = id_end - (rect.x + 2);
-        let style = if selected {
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(palette.subtext0)
-        };
+        let style = studio_title_style(selected, focused, palette.subtext0, palette);
         put_text(
             buf,
             rect.x + 2,
@@ -91,12 +105,14 @@ pub(super) fn draw_stacked(
 /// health glyph, a short `id·<machine>` label and `<done>/<total>`
 /// or `!<n>` right-aligned (A4.3). Never blank: a studio with no
 /// tasks and nothing waiting still shows its health and name.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_strip(
     buf: &mut Buffer,
     rect: Rect,
     studio: StudioRef<'_>,
     health: Health,
     selected: bool,
+    focused: bool,
     local: Option<&str>,
     palette: &Palette,
 ) {
@@ -134,13 +150,7 @@ pub(super) fn draw_strip(
     let id = truncate_end(&studio.studio.id, id_room.max(1));
     let label = format!("{id}·{short_m}");
     if label_w > 0 {
-        let style = if selected {
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(palette.text)
-        };
+        let style = studio_title_style(selected, focused, palette.text, palette);
         put_text(
             buf,
             rect.x + 2,

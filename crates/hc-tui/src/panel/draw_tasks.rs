@@ -206,22 +206,21 @@ pub(super) fn draw_drawer(
     frame: Style,
     palette: &Palette,
 ) {
+    let field_bg = palette.elevation().raised_field;
     draw_inner(buf, rect, frame);
     let inner = Rect {
         x: rect.x + 1,
         width: rect.width.saturating_sub(2),
         ..rect
     };
-    buf.set_style(inner, Style::default().bg(palette.surface_dim));
+    buf.set_style(inner, Style::default().bg(field_bg));
     put_text(
         buf,
         rect.x + 2,
         rect.y,
         1,
         "┆",
-        Style::default()
-            .fg(palette.overlay0)
-            .bg(palette.surface_dim),
+        Style::default().fg(palette.overlay0).bg(field_bg),
     );
     put_text(
         buf,
@@ -229,8 +228,6 @@ pub(super) fn draw_drawer(
         rect.y,
         rect.width.saturating_sub(5),
         &truncate_end(text, rect.width.saturating_sub(5) as usize),
-        Style::default()
-            .fg(palette.subtext0)
-            .bg(palette.surface_dim),
+        Style::default().fg(palette.subtext0).bg(field_bg),
     );
 }

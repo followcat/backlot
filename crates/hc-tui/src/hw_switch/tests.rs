@@ -169,3 +169,58 @@ fn popup_chrome_standard_renders_gutter_rounded_corners_and_drop_shadow() {
     assert_ne!(buf[(outer.right(), outer.y)].bg, shadow_bg);
     assert_ne!(buf[(outer.x, outer.bottom())].bg, shadow_bg);
 }
+
+#[test]
+fn hw_switch_uses_elevation_tokens_on_overlay_and_selected_rows() {
+    let band = Rect::new(0, 0, 80, 24);
+    for name in ["backlot", "catppuccin", "catppuccin-latte"] {
+        let palette = Palette::from_name(name).unwrap();
+        let elev = palette.elevation();
+        let mut d = HwSwitch::new(None, false);
+        d.runners = Probe::Done(vec![RunnerRow {
+            runner: "claude".into(),
+            status: "found".into(),
+            version: Some("2".into()),
+            path: Some("/usr/bin/claude".into()),
+            needs_path: false,
+            models: vec!["claude-sonnet-5-5".into()],
+            efforts: vec!["high".into()],
+        }]);
+        d.prefill();
+        let mut buf = Buffer::empty(band);
+        let hits = super::render_with_shadow(&mut buf, &d, &palette, band, true);
+        let outer = hits.area;
+        let row_str = |y: u16| -> String {
+            (outer.x..outer.right())
+                .map(|x| buf[(x, y)].symbol())
+                .collect()
+        };
+        let esc_y = (outer.y..outer.bottom())
+            .find(|&y| row_str(y).contains("esc cancel"))
+            .expect("esc cancel row");
+        let esc_line = row_str(esc_y);
+        let esc_x = outer.x
+            + esc_line[..esc_line.find("esc cancel").unwrap()]
+                .chars()
+                .count() as u16;
+        assert_eq!(buf[(esc_x, esc_y)].fg, elev.muted_overlay, "{name}");
+        assert_eq!(buf[(esc_x, esc_y)].bg, elev.overlay, "{name}");
+
+        let sel_y = (outer.y..outer.bottom())
+            .find(|&y| row_str(y).contains("runner"))
+            .expect("runner row");
+        let sel_line = row_str(sel_y);
+        let runner_x =
+            outer.x + sel_line[..sel_line.find("runner").unwrap()].chars().count() as u16;
+        assert_eq!(buf[(runner_x, sel_y)].bg, elev.raised_on_overlay, "{name}");
+        assert_eq!(buf[(runner_x, sel_y)].fg, elev.muted_raised, "{name}");
+
+        let hint_y = (outer.y..outer.bottom())
+            .find(|&y| row_str(y).contains("↑↓"))
+            .expect("hint row");
+        let hint_line = row_str(hint_y);
+        let hint_x = outer.x + hint_line[..hint_line.find("↑↓").unwrap()].chars().count() as u16;
+        assert_eq!(buf[(hint_x, hint_y)].fg, elev.muted_overlay, "{name}");
+        assert_eq!(buf[(hint_x, hint_y)].bg, elev.overlay, "{name}");
+    }
+}
