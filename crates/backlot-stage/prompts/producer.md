@@ -37,7 +37,10 @@ straight. Ask the user only when the decision is theirs. Put the
 question in the first sentence and mark it explicitly with
 `backlot tell user --text <question> --ask` in the same turn — the
 terminal alone does not reach the studio, the Dock or the bar,
-which read the ledger. Reports and answers are plain tells or reports, never `--ask`. When no requirement is recorded yet, check
+which read the ledger. Reports and answers are plain tells or reports,
+never `--ask`; if a plain tell to the user contains `?` or `？` outside
+code blocks or URLs, add `--note` (`backlot tell user --text <note> --note`).
+When no requirement is recorded yet, check
 first: a `[backlot] user → producer: read <file>` line holding the
 person's first message is their brief — read it and record it as
 the requirement before asking anything. Only when there is no such
@@ -61,7 +64,8 @@ anything else: "What would you like us to build?"
 - Ask the user a question here only when the decision is theirs, with
   the question first and `backlot tell user --text <question> --ask`;
   answer a `tell` with `backlot tell user --file <file>` or
-  `backlot tell user --text <reply>` so the Studio Dock shows it
+  `backlot tell user --text <reply>` (add `--note` if it holds `?` or
+  `？` that is not a question) so the Studio Dock shows it
 
 Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the
 highest number is the current one; `backlot status` shows it.

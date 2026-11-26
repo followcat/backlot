@@ -330,6 +330,28 @@ impl HasSeq for HollywoodEvent {
 /// `reduce`, `stamp` and `check` are the ledger's replay, stamping
 /// and append-time rules — the shared core under `append` (studios)
 /// and `append_hollywood`.
+trait AppendGuard<V> {
+    fn guard_state(&self) -> Result<(), V>;
+}
+
+impl AppendGuard<backlot_model::Refusal> for StudioState {
+    fn guard_state(&self) -> Result<(), backlot_model::Refusal> {
+        if self.unknown_kinds.is_empty() {
+            Ok(())
+        } else {
+            Err(backlot_model::Refusal::NewerRecords(
+                self.unknown_kinds.iter().cloned().collect(),
+            ))
+        }
+    }
+}
+
+impl AppendGuard<backlot_model::hollywood::HRefusal> for backlot_model::hollywood::HollywoodState {
+    fn guard_state(&self) -> Result<(), backlot_model::hollywood::HRefusal> {
+        Ok(())
+    }
+}
+
 fn append_locked<Ev, New, S, E, V>(
     dir: &Path,
     reduce: impl Fn(&[Ev]) -> S,
@@ -341,6 +363,7 @@ fn append_locked<Ev, New, S, E, V>(
 ) -> Result<Vec<Ev>, StoreError<E, V>>
 where
     Ev: DeserializeOwned + Serialize + HasSeq,
+    S: AppendGuard<V>,
 {
     fs::create_dir_all(dir)?;
     let _lock = take_lock(dir)?;
@@ -368,6 +391,7 @@ where
     }
     let (events, _) = parse_log(&bytes[..keep as usize], migrate).map_err(StoreError::Corrupt)?;
     let mut state = reduce(&events);
+    state.guard_state().map_err(StoreError::Refused)?;
     let next_seq = events.iter().map(|e| e.seq()).max().unwrap_or(0) + 1;
     let built = build(&state, next_seq).map_err(StoreError::Build)?;
 

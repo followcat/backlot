@@ -98,7 +98,7 @@ no per-agent integration beyond the launch flags in `runners.md`.
 | Writer | `backlot plan publish` |
 | Director | `backlot task new`, `backlot cast`, `backlot review`, `backlot report`, `backlot ask` |
 | Actor | `backlot deliver`, `backlot block` |
-| Any | `backlot status`, `backlot progress`, `backlot tell <role>`, `backlot guide` |
+| Any | `backlot status`, `backlot progress`, `backlot tell <role> [--ask \| --note]`, `backlot guide` |
 
 `backlot guide [<topic>] [--grep <word>]` prints backlot's own docs, compiled into the binary from
 `docs/studio/` (one topic per file) — no studio, ledger or core. Every role prompt says its docs come
@@ -138,7 +138,11 @@ If an actor goes quiet without delivering, the stage reminds it once and then ra
 ## Messages
 
 - **User to producer:** the user types in the producer's terminal. Selecting a studio focuses it.
-- **Role to role:** `backlot tell` records the message and writes its body to a file. A `tell` to the writer or the
+- **Role to role:** `backlot tell` records the message and writes its body to a file. When a studio role
+  (`producer`, `director`, `writer`, or `actor-<task>-c<n>`) sends `backlot tell user` containing `?` or `？`
+  outside inline code spans, fenced code blocks, and URL query strings (`?key=`), it must pass `--ask`
+  (question awaiting the person) or `--note` (explicit plain information), or the CLI refuses (exit code 2).
+  A `tell` to the writer or the
   director while it is closed because it is not wanted wakes it again — the same way a `plan` request does, unless the
   studio is finished: a delivered-pending tell keeps the role in the wanted set until the role answers it (its next
   ledger write, such as a step-boundary `progress`, or a `tell` back). An actor of a finished or abandoned task is never
@@ -367,7 +371,7 @@ headline and its open cards. It appears only while `[hollywood]` is configured. 
 `backlot/1`) `card` for a `card.proposed` Hollywood wrote itself — so the band can draw a proposal as a reply and the
 Reader can open it as a card. Independently of `[hollywood]`, each
 `StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
-and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike.
+and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike; when a studio's ledger contains unknown event kinds at `v <= LEDGER_VERSION`, the stage pauses read-only for that studio and marks its summary entry with `needs_upgrade: true` and `unknown_kinds` (omitted on normal studios) so the TUI and `wherdr` display `"upgrade backlot"`.
 
 ## Hollywood
 

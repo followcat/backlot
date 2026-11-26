@@ -72,6 +72,8 @@ fn summary(studio: &str, roles: Vec<RoleSummary>) -> Summary {
             exchange: Vec::new(),
             pending_tell: false,
             outward_cards: Vec::new(),
+            needs_upgrade: false,
+            unknown_kinds: Vec::new(),
         }],
         hollywood: None,
         backlot_version: None,

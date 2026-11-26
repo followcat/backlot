@@ -1180,3 +1180,29 @@ fn stopped_ledger_renders_start_untruncated_at_38_cols() {
         "full form when width fits: {wide}"
     );
 }
+
+#[test]
+fn a_studio_needing_upgrade_draws_single_line_in_lot_and_strip() {
+    let mut value = summary_json();
+    value["studios"][0]["needs_upgrade"] = serde_json::json!(true);
+    value["studios"][0]["unknown_kinds"] = serde_json::json!(["design.opened"]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+
+    let (buf, _) = draw(
+        Rect::new(0, 0, 40, 24),
+        Some(&summary),
+        &panel(PanelMode::Expanded),
+        None,
+    );
+    let text = lines(&buf, Rect::new(0, 0, 40, 24)).join("\n");
+    assert!(text.contains("! upgrade backlot"), "{text}");
+
+    let (strip_buf, _) = draw(
+        Rect::new(0, 0, 16, 20),
+        Some(&summary),
+        &panel(PanelMode::Collapsed),
+        None,
+    );
+    let strip = lines(&strip_buf, Rect::new(0, 0, 16, 20)).join("\n");
+    assert!(strip.contains("! upgrade"), "{strip}");
+}

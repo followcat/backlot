@@ -200,6 +200,7 @@ fn render_band(
             Target::Prompt(..)
                 | Target::Role(..)
                 | Target::Tell(..)
+                | Target::Upgrade(..)
                 | Target::Stage(..)
                 | Target::Card(..)
                 | Target::OutwardCard(..)

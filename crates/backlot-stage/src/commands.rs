@@ -285,6 +285,37 @@ fn source_file(source: &crate::args::TextSource) -> Result<PathBuf, Fail> {
     }
 }
 
+/// Build a `tell` event, validating `--ask`/`--note` flags and running the
+/// studio-role question guard when `guard` is enabled.
+pub(crate) fn tell_cmd(
+    caller: &Caller,
+    role: &str,
+    file: PathBuf,
+    ask: bool,
+    note: bool,
+    guard: bool,
+) -> Result<PendingBuilder, Fail> {
+    if ask && note {
+        return Err(Fail::usage("pick at most one of --ask and --note"));
+    }
+    if ask && role != "user" {
+        return Err(Fail::usage("--ask only applies to tell user"));
+    }
+    if note && role != "user" {
+        return Err(Fail::usage("--note only applies to tell user"));
+    }
+    must_exist(&file, "--file")?;
+    if guard && role == "user" && !ask && !note {
+        crate::tell_guard::check_tell_user(caller, &file)?;
+    }
+    message_cmd(
+        caller.by(),
+        file,
+        role.to_string(),
+        if ask { Some("ask") } else { None },
+    )
+}
+
 /// A role-to-role message with its body copied into `messages/`.
 /// `purpose` tags the two command-sent messages the stage acts on:
 /// `plan` (writer wanted) and `dispatch` (writer released).
@@ -554,17 +585,12 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
-        Cmd::Tell { role, source, ask } => {
-            if ask && role != "user" {
-                return Err(Fail::usage("--ask only applies to tell user"));
-            }
-            message_cmd(
-                by,
-                source_file(&source)?,
-                role,
-                if ask { Some("ask") } else { None },
-            )
-        }
+        Cmd::Tell {
+            role,
+            source,
+            ask,
+            note,
+        } => tell_cmd(caller, &role, source_file(&source)?, ask, note, true),
         Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;

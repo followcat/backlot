@@ -22,6 +22,7 @@ mod cast_file;
 pub mod casting;
 pub mod correct;
 pub mod event;
+mod event_unknown;
 pub mod hollywood;
 mod hollywood_snapshot;
 mod hollywood_state;
@@ -120,6 +121,8 @@ mod studio_exchange_tests;
 mod summary_standby_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod unknown_tests;
 #[cfg(test)]
 mod usage_tests;
 #[cfg(test)]
