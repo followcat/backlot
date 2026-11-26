@@ -236,19 +236,22 @@ fn parse_local_ampm(text: &str, now_ms: u64) -> Option<u64> {
             continue;
         };
         let tail = lower[at + needle.len()..].trim_start();
-        let (hh, tail) = front_digits(tail, 1, 2)?;
-        let tail = tail.strip_prefix(':')?;
-        let (mm, tail) = front_digits(tail, 2, 2)?;
-        let pm = if tail.starts_with("pm") {
-            true
-        } else if tail.starts_with("am") {
-            false
-        } else {
-            return None;
+        let clock = (|| {
+            let (hh, tail) = front_digits(tail, 1, 2)?;
+            let tail = tail.strip_prefix(':')?;
+            let (mm, tail) = front_digits(tail, 2, 2)?;
+            let pm = if tail.starts_with("pm") {
+                true
+            } else if tail.starts_with("am") {
+                false
+            } else {
+                return None;
+            };
+            ((1..=12).contains(&hh) && mm <= 59).then_some((hh, mm, pm))
+        })();
+        let Some((hh, mm, pm)) = clock else {
+            continue;
         };
-        if !(1..=12).contains(&hh) || mm > 59 {
-            return None;
-        }
         let hour = (hh % 12) + u64::from(pm) * 12;
         let timestamp = (now_ms / 1000).min(i64::MAX as u64) as libc::time_t;
         let mut local: libc::tm = unsafe { std::mem::zeroed() };

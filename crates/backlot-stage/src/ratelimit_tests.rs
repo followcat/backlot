@@ -79,6 +79,25 @@ fn the_absolute_reset_wins_over_the_relative() {
 }
 
 #[test]
+fn a_non_clock_resets_phrase_falls_through_to_auto_continue() {
+    // `resets soon` must not end the search: the later explicit
+    // auto-continuation clock is the wait the runner promised.
+    let timestamp = (NOON / 1000).min(i64::MAX as u64) as libc::time_t;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    assert!(!unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null());
+    let total = (local.tm_hour as u64 * 60 + local.tm_min as u64 + 2) % (24 * 60);
+    let hour24 = total / 60;
+    let minute = total % 60;
+    let hour12 = if hour24 % 12 == 0 { 12 } else { hour24 % 12 };
+    let suffix = if hour24 >= 12 { "pm" } else { "am" };
+    let screen = format!(
+        "session limit reached · resets soon\nContinuing automatically at {hour12}:{minute:02}{suffix}"
+    );
+    let wait = parse_wait(&screen, NOON).expect("the auto-continue clock parses");
+    assert!((60_001..=120_000).contains(&wait), "{wait}");
+}
+
+#[test]
 fn only_the_latest_limit_lines_clause_counts() {
     // Stacked banners in scrollback: the freshest one's reset
     // wins — the stale `54` above must not answer.
