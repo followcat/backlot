@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 use crate::cli::{Env, Fail, run};
 use crate::test_support::TestDir;
 
+/// Serializes `temp_dir()/backlot-body-*` staging tests against `text_src_tests`'s
+/// `staged_left()` leak assertions across concurrent unit tests.
+pub(crate) static STAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub struct Scratch {
     pub dir: TestDir,
     pub files: PathBuf,

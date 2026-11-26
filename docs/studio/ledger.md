@@ -141,7 +141,12 @@ Three `message.queued` purposes carry fixed meanings: `plan request` records `pl
 (to the writer), `dispatch` records `dispatch` (to the director), and `tell user --ask` records
 `ask` as the explicit person-question mark. The writer is wanted from a
 `plan` message until the next `dispatch`; other plain `tell`/`ask` messages carry no purpose, so a
-plain `tell user` remains a report and never becomes a question merely because it is newest. A plain
+plain `tell user` (or `tell user --note`) remains a report and never becomes a question merely
+because it is newest. When a studio role (`producer`, `director`, `writer`, or `actor-<task>-c<n>`)
+calls `backlot tell user` via the CLI with `?` or `？` outside inline code spans, fenced code blocks,
+and URL query strings (`?key=`), the CLI requires either `--ask` (record a question) or `--note`
+(explicitly send as plain information) and refuses with exit code 2 otherwise; `plugin.backlot.req`
+(`tell_text`) and calls to other roles are unaffected. A plain
 `tell` to the writer or director also keeps that role wanted — while it is undelivered, and after
 delivery until the role writes to the ledger again — so a tell to a role closed as `no longer
 desired` starts it again and delivers the message, the way a `plan` request does. A `tell` to an
