@@ -338,15 +338,34 @@ pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
                 let ver = stem
                     .split_once('-')
                     .map_or(stem, |(ver, slug)| if !slug.is_empty() { ver } else { "" });
-                ver.strip_prefix('v')
-                    .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
+                is_v_digits(ver)
             })
         }),
+        "design" => {
+            parts[1..].iter().all(|p| !p.starts_with('.'))
+                && match parts.as_slice() {
+                    [_, file] => file.strip_suffix(".md").is_some_and(|stem| {
+                        let ver = stem.strip_suffix("-final").unwrap_or(stem);
+                        is_v_digits(ver)
+                    }),
+                    [_, ver_dir, file] => {
+                        is_v_digits(ver_dir)
+                            && file.starts_with('r')
+                            && file.strip_suffix(".md").is_some_and(|s| !s.is_empty())
+                    }
+                    _ => false,
+                }
+        }
+        "plan" => {
+            parts.len() >= 2
+                && parts[1..].iter().all(|p| !p.starts_with('.'))
+                && name.strip_suffix(".md").is_some_and(|s| !s.is_empty())
+        }
         _ => false,
     };
     if !ok {
         return Err(Fail::refused(format!(
-            "--file '{name}' is not under reports/, checks/, messages/, attention/ or requirements/"
+            "--file '{name}' is not under reports/, checks/, messages/, attention/, requirements/, design/ or plan/"
         )));
     }
     let mut rel = std::path::PathBuf::from(root.as_str());
@@ -357,6 +376,11 @@ pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
         rel.push(part);
     }
     Ok(rel)
+}
+
+fn is_v_digits(s: &str) -> bool {
+    s.strip_prefix('v')
+        .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// `studio new --dry-run`: every `studio new` check plus the draft's

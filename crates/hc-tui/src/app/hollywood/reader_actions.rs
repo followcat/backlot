@@ -133,6 +133,11 @@ impl App {
             't' => {
                 let _ = self.reader_open_compose(false);
             }
+            'r' => {
+                if meta.kind == crate::hollywood::ReaderKind::Design && !meta.design_finalized() {
+                    let _ = self.reader_open_compose(false);
+                }
+            }
             'y' => self.reader_copy_raw(&raw, &lines),
             'o' => {
                 self.reader_run_o(&meta);
@@ -148,6 +153,8 @@ impl App {
                     && self.card_pending_label(Some(&id)).is_none()
                 {
                     self.hollywood_card_apply(&id);
+                } else if meta.design_awaiting_user() {
+                    self.reader_design_sign_off();
                 }
             }
             'x' => {
@@ -159,6 +166,86 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Jump forward/backward across parsed design section anchors in the open Reader.
+    pub(crate) fn reader_design_step(&mut self, delta: isize) {
+        let Some(view) = self.hollywood.view.as_ref() else {
+            return;
+        };
+        if view.meta.kind != crate::hollywood::ReaderKind::Design {
+            return;
+        }
+        let metrics = self.hollywood_hits.view.as_ref().and_then(|v| v.metrics);
+        let mut sections = self
+            .hollywood_hits
+            .view
+            .as_ref()
+            .map(|v| v.sections.clone())
+            .unwrap_or_default();
+        if sections.is_empty() {
+            let w = usize::from(self.area.0).saturating_sub(6).clamp(40, 88);
+            sections = crate::hollywood::render_body_lines_with_sections(&view.lines, w);
+        }
+        if sections.is_empty() {
+            return;
+        }
+        let cur = view.meta.design_section_idx.unwrap_or_else(|| {
+            self.hollywood_hits.view.as_ref().map_or_else(
+                || {
+                    sections
+                        .iter()
+                        .rposition(|(_, ln)| *ln <= view.scroll)
+                        .unwrap_or(0)
+                },
+                |vr| vr.active_section.min(sections.len() - 1),
+            )
+        });
+        let next_idx = if delta < 0 {
+            cur.saturating_sub(delta.unsigned_abs())
+        } else {
+            cur.saturating_add(delta as usize).min(sections.len() - 1)
+        };
+        let (label, target_line) = sections[next_idx].clone();
+        let max_scroll = metrics.map_or(target_line, |m| m.max_offset_from_bottom);
+        let target_scroll = target_line.min(max_scroll);
+        if let Some(v) = self.hollywood.view.as_mut() {
+            v.scroll = target_scroll;
+            v.meta.design_section_idx = Some(next_idx);
+            v.meta.design_section = Some(label);
+            v.meta.nav_index = Some(next_idx + 1);
+            v.meta.nav_total = Some(sections.len());
+        }
+        if let Some(vr) = self.hollywood_hits.view.as_mut() {
+            vr.active_section = next_idx;
+        }
+    }
+
+    /// Open sign-off confirmation when viewing an actionable design document.
+    pub(crate) fn reader_design_sign_off(&mut self) {
+        let Some(view) = self.hollywood.view.as_ref() else {
+            return;
+        };
+        if !view.meta.design_awaiting_user() {
+            return;
+        }
+        let Some(key) = view.meta.sheet_studio_key().or_else(|| {
+            view.meta
+                .studio
+                .as_ref()
+                .map(|id| crate::studio::StudioKey {
+                    machine: view.meta.machine.clone(),
+                    id: id.clone(),
+                })
+        }) else {
+            return;
+        };
+        let skip = view.meta.design_phase == Some(backlot_model::design::DesignPhase::SuggestSkip);
+        self.studio_dialog = Some(crate::studio_dialog::StudioDialog::design_sign(
+            &key,
+            skip,
+            view.meta.file.as_deref(),
+        ));
     }
 
     /// Activate an action chip (`[k]`) on an open Sheet Reader (`sheet.view`).

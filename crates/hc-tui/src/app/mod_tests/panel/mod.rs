@@ -15,6 +15,7 @@ mod merge;
 mod mouse;
 mod reader_actions;
 mod reader_compose;
+mod reader_design;
 mod revise;
 mod sheet;
 mod stage;

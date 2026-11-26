@@ -71,6 +71,8 @@ pub(crate) enum ConfirmFor {
         key: StudioKey,
         token: Option<String>,
     },
+    /// `design sign [--skip]` confirmation from the Design Reader.
+    DesignSign { key: StudioKey, skip: bool },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -183,6 +185,31 @@ impl StudioDialog {
     /// Local` when the studio sits on this core.
     pub(crate) fn place(key: &StudioKey) -> String {
         format!("{} · {}", key.id, key.machine.as_deref().unwrap_or("Local"))
+    }
+
+    /// Confirm design gate sign-off (`backlot design sign [--skip]`) from the Design Reader.
+    pub(crate) fn design_sign(key: &StudioKey, skip: bool, file: Option<&str>) -> StudioDialog {
+        let title = if skip {
+            format!("Skip opening design? · {}", Self::place(key))
+        } else {
+            format!("Sign off opening design? · {}", Self::place(key))
+        };
+        let doc = file.unwrap_or("design doc");
+        let body = if skip {
+            format!(
+                "Skip remaining opening design rounds for `{doc}` and allow execution to begin?"
+            )
+        } else {
+            format!("Sign off `{doc}`, freeze the final snapshot, and unlock execution?")
+        };
+        Self::confirm(
+            title,
+            body,
+            ConfirmFor::DesignSign {
+                key: key.clone(),
+                skip,
+            },
+        )
     }
 
     /// The D9 override confirm (§2.2): a director-routed prompt the

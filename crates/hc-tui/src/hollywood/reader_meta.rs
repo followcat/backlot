@@ -1,12 +1,13 @@
 //! Reader metadata model and Row 1 / Row 2 header layout for every
 //! entry kind: Studio Exchange (`OUTCOME`/`REPORT`/`TELL`), Hollywood
 //! exchange (`REPORT`/`TELL`), Actionable Cards (`CARD`), Task Sheet
-//! artifacts (`CHECK`/`DELIVERY`/`REQ`), and Actor Records (`RECORDS`).
+//! artifacts (`CHECK`/`DELIVERY`/`REQ`), Actor Records (`RECORDS`),
+//! and Opening Design (`DESIGN`).
 
 use backlot_model::summary::{HollywoodSummary, RoleSummary, StudioSummary, Work};
 use ratatui::style::{Color, Style};
 
-use super::view::CardView;
+use super::reader_design::nav_token;
 use crate::chrome::palette::Palette;
 use crate::studio::StudioKey;
 use crate::studio::glyphs::Person;
@@ -24,6 +25,7 @@ pub(crate) enum ReaderKind {
     Delivery,
     Req,
     Records,
+    Design,
 }
 
 /// Originating list for `←`/`→` and `[`/`]` sibling entry stepping.
@@ -36,6 +38,7 @@ pub(crate) enum ReaderOrigin {
     Card(String),
     SheetDeliveries(StudioKey, Option<String>),
     Records(StudioKey),
+    Design(StudioKey),
 }
 
 /// Structured header and action context attached to a [`CardView`] or `SheetView`.
@@ -78,6 +81,18 @@ pub(crate) struct ReaderMeta {
     pub studio_counts: Option<(u32, u32, usize)>,
     /// Whether the target studio is already finished.
     pub studio_finished: bool,
+    /// Active design version (`design/v<N>.md`).
+    pub design_version: Option<u32>,
+    /// Active design discussion round (`R<r>`).
+    pub design_round: Option<u32>,
+    /// Active design discussion phase (`proposal`, `review`, `summary`, `waiting on you`, ...).
+    pub design_phase: Option<backlot_model::design::DesignPhase>,
+    /// Optional design sign-off mode (`Approved` / `Skipped`) once finalized.
+    pub design_sign_mode: Option<backlot_model::design::SignMode>,
+    /// Current section label shown in the design reader top bar.
+    pub design_section: Option<String>,
+    /// Explicit active section index when jumping with `[` / `]` in Design Reader.
+    pub design_section_idx: Option<usize>,
     pub origin: ReaderOrigin,
 }
 
@@ -127,12 +142,25 @@ impl ReaderMeta {
                 | ReaderKind::Delivery
                 | ReaderKind::Req
         ) || (self.kind == ReaderKind::Records && !self.studio_finished)
+            || (self.kind == ReaderKind::Design && !self.design_finalized())
+    }
+
+    /// Whether this design document is finalized/signed (`Signed` or `-final.md`).
+    pub(crate) fn design_finalized(&self) -> bool {
+        super::reader_design::design_finalized(self)
+    }
+
+    /// Whether this design document awaits user sign-off (`WaitingUser` or `SuggestSkip`).
+    pub(crate) fn design_awaiting_user(&self) -> bool {
+        super::reader_design::design_awaiting_user(self)
     }
 
     /// Originating studio for `[v] sheet` (None for Hollywood entries or when already inside Sheet).
     pub(crate) fn sheet_studio_key(&self) -> Option<StudioKey> {
         match &self.origin {
-            ReaderOrigin::StudioExchange(k, _) | ReaderOrigin::Records(k) => Some(k.clone()),
+            ReaderOrigin::StudioExchange(k, _)
+            | ReaderOrigin::Records(k)
+            | ReaderOrigin::Design(k) => Some(k.clone()),
             ReaderOrigin::Card(_) => self.studio.as_ref().map(|id| StudioKey {
                 machine: self.machine.clone(),
                 id: id.clone(),
@@ -215,7 +243,7 @@ pub(crate) fn find_studio_role<'a>(
         .find(|r| r.role == name_or_role || r.name == name_or_role)
 }
 
-fn join_non_empty(parts: impl IntoIterator<Item = Option<String>>) -> String {
+pub(super) fn join_non_empty(parts: impl IntoIterator<Item = Option<String>>) -> String {
     parts
         .into_iter()
         .flatten()
@@ -243,11 +271,16 @@ pub(crate) struct HeaderLayout {
 }
 
 impl HeaderLayout {
-    pub(crate) fn build(view: &CardView, now_ms: u64, palette: &Palette) -> Self {
-        let m = &view.meta;
+    pub(crate) fn build(
+        title: &str,
+        card: Option<&str>,
+        m: &ReaderMeta,
+        now_ms: u64,
+        palette: &Palette,
+    ) -> Self {
         if m.kind == ReaderKind::None {
             return Self {
-                left: view.title.clone(),
+                left: title.to_string(),
                 right: String::new(),
                 nav_token: None,
                 row2_left: String::new(),
@@ -260,14 +293,18 @@ impl HeaderLayout {
         let left = if let Some(loading) = m.loading_label.as_deref() {
             format!("■ loading {loading}…")
         } else {
-            format_row1_left(view)
+            format_row1_left(title, card, m)
         };
 
-        let nav_token = match (m.nav_index, m.nav_total) {
-            (Some(i), Some(n)) if n > 0 && m.kind != ReaderKind::Records => {
-                Some(format!("◀ {i}/{n} ▶"))
+        let nav_token = if m.kind == ReaderKind::Design {
+            nav_token(m)
+        } else {
+            match (m.nav_index, m.nav_total) {
+                (Some(i), Some(n)) if n > 0 && m.kind != ReaderKind::Records => {
+                    Some(format!("◀ {i}/{n} ▶"))
+                }
+                _ => None,
             }
-            _ => None,
         };
         let age = if m.kind == ReaderKind::Records {
             None
@@ -299,10 +336,9 @@ impl HeaderLayout {
     }
 }
 
-fn format_row1_left(view: &CardView) -> String {
-    let m = &view.meta;
+fn format_row1_left(title: &str, card: Option<&str>, m: &ReaderMeta) -> String {
     match m.kind {
-        ReaderKind::None => view.title.clone(),
+        ReaderKind::None => title.to_string(),
         ReaderKind::Outcome | ReaderKind::Report | ReaderKind::Tell => {
             let tag = match m.kind {
                 ReaderKind::Outcome => "OUTCOME",
@@ -317,9 +353,7 @@ fn format_row1_left(view: &CardView) -> String {
             join_non_empty([Some(head), m.studio.clone()])
         }
         ReaderKind::Card => {
-            let card_id = view
-                .card
-                .as_deref()
+            let card_id = card
                 .map(|id| format!("■ CARD {id}"))
                 .unwrap_or_else(|| "■ CARD".to_string());
             join_non_empty([Some(card_id), m.studio.clone(), m.card_status.clone()])
@@ -334,6 +368,7 @@ fn format_row1_left(view: &CardView) -> String {
             join_non_empty([Some(tag.to_string()), m.studio.clone()])
         }
         ReaderKind::Records => join_non_empty([Some("■ RECORDS".to_string()), m.studio.clone()]),
+        ReaderKind::Design => super::reader_design::row1_left(m),
     }
 }
 
@@ -380,5 +415,6 @@ fn build_row2(
                 .unwrap_or_default();
             (left, None, String::new())
         }
+        ReaderKind::Design => super::reader_design::row2(m, palette),
     }
 }
