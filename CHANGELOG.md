@@ -12,6 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **agy roles no longer stop on the folder-trust dialog in their own work area.** Every agy launch (fresh, `--conversation` resume, Hollywood, replacement, and handoff) now writes the canonical absolute work-area path into `trustedWorkspaces` in the per-session `--settings` file when `[stage] answer_trust` is on (preserving any existing `trustedWorkspaces` entries without duplicating the path and leaving `~/.gemini/antigravity-cli/settings.json` untouched); `[stage] answer_trust = false` omits it (`docs/studio/runners.md`).
 - **Persistent floats keep their configured size across restarts and config reloads.** Adopted floats look up `hc-tui.command` in `[[keys.command]]` on adoption, show, hide, and host resize (falling back to the stored or default size only when no binding matches), so an `80%` float stays `80%` instead of collapsing to half the pane.
 
 ## 0.4.15 — 2026-11-27

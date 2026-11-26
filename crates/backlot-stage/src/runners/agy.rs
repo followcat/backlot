@@ -18,10 +18,12 @@
 //! Isolation reality: `~/.gemini/antigravity-cli` hangs off `HOME`
 //! only — no per-role tree exists. The boundary is the workdir's
 //! own `.agy-settings.json`, written before every start and resume
-//! with `toolPermission = "always-proceed"`: `--settings` is
-//! session-only and never saved, so the role's tools proceed
-//! without the prompts a role cannot answer while the user's
-//! global settings stay untouched.
+//! with `toolPermission = "always-proceed"`, policy-aware
+//! `permissions.deny`, and (when `[stage] answer_trust` is on)
+//! `trustedWorkspaces` containing the canonical absolute work-area
+//! path: `--settings` is session-only and never saved, so the role's
+//! tools proceed and the folder-trust dialog stays away while the
+//! user's global settings stay untouched.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -79,6 +81,9 @@ pub struct AgyPrep {
     pub hooks: PathBuf,
     /// `<studio>/roles/<role>/signals.jsonl`.
     pub signals: PathBuf,
+    /// Work-area path to add to `trustedWorkspaces`, or `None` when
+    /// `[stage] answer_trust` is off.
+    pub trusted_workspace: Option<PathBuf>,
 }
 
 /// The settings file's bytes: `{"toolPermission":"always-proceed"}`
@@ -129,16 +134,55 @@ fn permissions_json(existing: &str) -> String {
     serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_default()
 }
 
-/// The settings file's bytes: `toolPermission = "always-proceed"`
-/// and `permissions.deny` written fresh, or spliced byte-exact into an
+fn canonical_abs(path: &Path) -> PathBuf {
+    let base = if path.is_absolute() {
+        PathBuf::from("/")
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"))
+    };
+    crate::guard_git_env::normalize_resolve(&base, path)
+}
+
+fn trusted_workspaces_json(existing: &str, cwd: &str) -> String {
+    let mut list = serde_json::from_str::<serde_json::Value>(existing)
+        .ok()
+        .and_then(|v| {
+            v.get("trustedWorkspaces")
+                .and_then(|t| t.as_array())
+                .cloned()
+        })
+        .unwrap_or_default();
+    if !list.iter().any(|entry| entry.as_str() == Some(cwd)) {
+        list.push(serde_json::Value::String(cwd.to_string()));
+    }
+    serde_json::to_string(&serde_json::Value::Array(list)).unwrap_or_default()
+}
+
+/// The settings file's bytes: `toolPermission = "always-proceed"`,
+/// `permissions.deny`, and (when `trusted_workspace` is `Some`)
+/// `trustedWorkspaces` written fresh or spliced byte-exact into an
 /// existing object — every other member keeps its whitespace and order.
-pub(crate) fn settings_content(existing: Option<&[u8]>) -> Result<Vec<u8>, String> {
+pub(crate) fn settings_content(
+    existing: Option<&[u8]>,
+    trusted_workspace: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let trusted = trusted_workspace.map(|ws| canonical_abs(Path::new(ws)));
+    let trusted_str = trusted.as_deref().map(|p| p.to_string_lossy().into_owned());
     let fresh = || {
-        let obj = serde_json::json!({
-            "toolPermission": "always-proceed",
-            "permissions": { "deny": deny_rules() },
-        });
-        Ok(format!("{}\n", serde_json::to_string(&obj).unwrap_or_default()).into_bytes())
+        let mut obj = serde_json::Map::new();
+        obj.insert("toolPermission".into(), serde_json::json!("always-proceed"));
+        obj.insert(
+            "permissions".into(),
+            serde_json::json!({ "deny": deny_rules() }),
+        );
+        if let Some(cwd) = &trusted_str {
+            obj.insert("trustedWorkspaces".into(), serde_json::json!([cwd]));
+        }
+        Ok(format!(
+            "{}\n",
+            serde_json::to_string(&serde_json::Value::Object(obj)).unwrap_or_default()
+        )
+        .into_bytes())
     };
     let Some(text) = existing.and_then(|b| std::str::from_utf8(b).ok()) else {
         return fresh();
@@ -149,7 +193,14 @@ pub(crate) fn settings_content(existing: Option<&[u8]>) -> Result<Vec<u8>, Strin
         return fresh();
     };
     let perms = permissions_json(trimmed);
-    match splice_permissions(&with_tp, &perms) {
+    let Some(with_perms) = splice_permissions(&with_tp, &perms) else {
+        return fresh();
+    };
+    let Some(cwd) = &trusted_str else {
+        return Ok(format!("{with_perms}\n").into_bytes());
+    };
+    let tw = trusted_workspaces_json(trimmed, cwd);
+    match splice_member(&with_perms, "trustedWorkspaces", &tw) {
         Some(spliced) => Ok(format!("{spliced}\n").into_bytes()),
         None => fresh(),
     }
@@ -159,13 +210,21 @@ pub(crate) fn settings_content(existing: Option<&[u8]>) -> Result<Vec<u8>, Strin
 /// it once at startup, so the value must be in place before
 /// `terminal.run` and a failure is an attention, never a
 /// half-allowed role. The file lands mode 600 like every
-/// stage-written file; always `Ok(false)` — the workdir itself is
+/// stage-written file; always `Ok(None)` — the workdir itself is
 /// the boundary and there is no open-dir drift to report.
 pub fn prepare(p: &AgyPrep) -> Result<Option<super::PrepNote>, String> {
-    let dir = p.settings.parent().unwrap_or_else(|| Path::new("."));
+    let dir = p
+        .settings
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let existing = std::fs::read(&p.settings).ok();
-    let bytes = settings_content(existing.as_deref())?;
+    let trusted = p
+        .trusted_workspace
+        .as_ref()
+        .map(|ws| ws.to_string_lossy().into_owned());
+    let bytes = settings_content(existing.as_deref(), trusted.as_deref())?;
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
 
     const REL: &str = ".agents/hooks.json";
@@ -339,6 +398,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
                 .join("roles")
                 .join(ctx.role)
                 .join("signals.jsonl"),
+            trusted_workspace: ctx.answer_trust.then(|| canonical_abs(Path::new(ctx.cwd))),
         })),
     })
 }

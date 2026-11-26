@@ -25,6 +25,7 @@ fn ctx<'a>(env: &'a BTreeMap<String, String>, cwd: &'a str) -> LaunchCtx<'a> {
         stage_env: env,
         role: "actor-t1-c1",
         checks: &[],
+        answer_trust: true,
     }
 }
 
@@ -175,13 +176,18 @@ fn settings_splices_tool_permission_only() {
         }
     };
 
-    let fresh = settings_content(None).unwrap();
+    let fresh = settings_content(None, Some("/home/user/acme-shop")).unwrap();
     assert!(fresh.ends_with(b"\n"));
     check_rules(&fresh);
+    let fresh_v: serde_json::Value = serde_json::from_slice(&fresh).unwrap();
+    assert_eq!(
+        fresh_v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/acme-shop"])
+    );
 
     // An existing object keeps its other members and bytes verbatim.
     let existing = b"{\n  \"model\": \"gemini-4-neon\",\n  \"toolPermission\": \"prompt\",\n  \"verbosity\": \"low\"\n}";
-    let spliced = settings_content(Some(existing)).unwrap();
+    let spliced = settings_content(Some(existing), Some("/home/user/acme-shop")).unwrap();
     let text = String::from_utf8(spliced.clone()).unwrap();
     assert!(text.contains("\"model\": \"gemini-4-neon\""), "{text}");
     assert!(
@@ -191,19 +197,28 @@ fn settings_splices_tool_permission_only() {
     assert!(!text.contains("\"prompt\""), "{text}");
     assert!(text.contains("\"verbosity\": \"low\""), "{text}");
     check_rules(&spliced);
+    let spliced_v: serde_json::Value = serde_json::from_slice(&spliced).unwrap();
+    assert_eq!(
+        spliced_v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/acme-shop"])
+    );
 
     // Existing permissions.allow survives alongside injected deny.
     let with_allow = b"{\n  \"model\": \"gemini-4-neon\",\n  \"permissions\": {\"allow\": [\"command(echo)\"]}\n}";
-    let spliced_allow = settings_content(Some(with_allow)).unwrap();
+    let spliced_allow = settings_content(Some(with_allow), Some("/home/user/acme-shop")).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&spliced_allow).unwrap();
     assert_eq!(
         v["permissions"]["allow"],
         serde_json::json!(["command(echo)"])
     );
+    assert_eq!(
+        v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/acme-shop"])
+    );
     check_rules(&spliced_allow);
 
     // A non-object file is healed, not preserved.
-    let healed = settings_content(Some(b"not json\n")).unwrap();
+    let healed = settings_content(Some(b"not json\n"), Some("/home/user/acme-shop")).unwrap();
     assert_eq!(healed, fresh);
 }
 
@@ -219,6 +234,7 @@ fn prepare_writes_the_session_settings() {
         settings: settings.clone(),
         hooks: dir.join("work/.agents/hooks.json"),
         signals: dir.join("signals.jsonl"),
+        trusted_workspace: Some(dir.join("work")),
     };
     assert_eq!(prepare(&p).unwrap(), None);
     let text = fs::read_to_string(&settings).unwrap();
@@ -269,6 +285,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         settings: wt.join(".agy-settings.json"),
         hooks: hooks.clone(),
         signals: sig.clone(),
+        trusted_workspace: Some(wt.clone()),
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     // Exclude lands in the main repo's info/exclude (via commondir) so git status stays clean.
@@ -327,6 +344,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         settings: tracked_repo.join(".agy-settings.json"),
         hooks: tracked_hooks.clone(),
         signals: sig,
+        trusted_workspace: Some(tracked_repo.clone()),
     };
     assert_eq!(
         prepare(&tprep).unwrap(),
@@ -375,4 +393,506 @@ fn pre_tool_use_missing_binary_falls_back_to_allow_under_sh() {
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stdout, "{\"decision\":\"allow\"}\n");
+}
+
+#[test]
+fn fresh_and_resume_launches_trust_the_work_area() {
+    let dir = tmp("trust-fresh-resume");
+    let work = dir.join("work");
+    fs::create_dir_all(&work).unwrap();
+    let work_str = work.to_string_lossy().into_owned();
+    let canon = fs::canonicalize(&work)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let env = BTreeMap::new();
+
+    for resume in [None, Some("0373977e-3d0c-4628-9218-13ba9695cd55")] {
+        let mut c = ctx(&env, &work_str);
+        c.resume = resume;
+        if resume.is_none() {
+            c.prompt = Some("do the thing");
+        }
+        let l = plan(&ident(Some("high")), &c).unwrap();
+        let Some(Prep::Agy(p)) = l.prep else {
+            panic!("agy launch carries its prep");
+        };
+        let _ = fs::remove_file(&p.settings);
+        assert_eq!(prepare(&p).unwrap(), None);
+        let v: serde_json::Value = serde_json::from_slice(&fs::read(&p.settings).unwrap()).unwrap();
+        assert_eq!(
+            v["trustedWorkspaces"],
+            serde_json::json!([canon]),
+            "resume={resume:?}: {v}"
+        );
+    }
+}
+
+#[test]
+fn prepare_keeps_existing_trusted_workspaces_and_avoids_duplicating_cwd() {
+    let dir = tmp("trust-existing");
+    let work = dir.join("work");
+    fs::create_dir_all(&work).unwrap();
+    let work_str = work.to_string_lossy().into_owned();
+    let canon = fs::canonicalize(&work)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let env = BTreeMap::new();
+
+    let l = plan(&ident(Some("high")), &ctx(&env, &work_str)).unwrap();
+    let Some(Prep::Agy(p)) = l.prep else {
+        panic!("agy launch carries its prep");
+    };
+    fs::write(
+        &p.settings,
+        "{\n  \"model\": \"gemini-4-neon\",\n  \"trustedWorkspaces\": [\"/home/user/other\"]\n}\n",
+    )
+    .unwrap();
+    assert_eq!(prepare(&p).unwrap(), None);
+    let text = fs::read_to_string(&p.settings).unwrap();
+    assert!(text.contains("\"model\": \"gemini-4-neon\""), "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/other", canon])
+    );
+
+    // A second prepare (e.g. resume) keeps existing entries and never duplicates cwd.
+    assert_eq!(prepare(&p).unwrap(), None);
+    let v2: serde_json::Value = serde_json::from_slice(&fs::read(&p.settings).unwrap()).unwrap();
+    assert_eq!(
+        v2["trustedWorkspaces"],
+        serde_json::json!(["/home/user/other", canon])
+    );
+}
+
+async fn fake_stage_client() -> hc_proto::client::Client {
+    use hc_proto::client::Client;
+    use hc_proto::codec::Reader;
+    use hc_proto::frame::{Frame, Kind};
+    use serde_json::{Value, json};
+    use tokio::io::AsyncWriteExt;
+
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(async move {
+        let (read, mut write) = tokio::io::split(core_side);
+        let mut reader = Reader::new(read);
+        let _ = reader.read_line().await.unwrap().unwrap();
+        let hello = serde_json::to_string(&json!({
+            "jsonrpc": "2.0", "id": 0,
+            "result": {
+                "generation": 1, "version": "fake-core 0.0",
+                "framed": true,
+                "core": {"id": "core-fake-1", "name": "fake-core"},
+                "methods": ["terminal.run", "terminal.kill", "terminal.rm", "terminal.read", "terminal.list"],
+                "features": [],
+            }
+        }))
+        .unwrap();
+        write.write_all(hello.as_bytes()).await.unwrap();
+        write.write_all(b"\n").await.unwrap();
+        let mut next = 0u32;
+        while let Ok(Some(frame)) = reader.read_frame().await {
+            if frame.channel != 0 || frame.kind != Kind::Data {
+                continue;
+            }
+            let req: Value = serde_json::from_slice(&frame.payload).unwrap();
+            let id = req["id"].clone();
+            let result = match req["method"].as_str().unwrap_or("") {
+                "terminal.run" => {
+                    next += 1;
+                    json!({
+                        "address": format!("t-{next}"),
+                        "name": req["params"]["name"],
+                        "labels": req["params"]["labels"],
+                        "argv": req["params"]["argv"],
+                        "cwd": req["params"]["cwd"],
+                        "state": "live",
+                        "created_ms": 0,
+                        "screen": "",
+                        "cols": 200, "rows": 120,
+                    })
+                }
+                _ => json!({}),
+            };
+            let reply = serde_json::to_vec(&json!({
+                "jsonrpc": "2.0", "id": id, "result": result,
+            }))
+            .unwrap();
+            write
+                .write_all(&Frame::data(0, reply).encode())
+                .await
+                .unwrap();
+        }
+    });
+    let (r, w) = tokio::io::split(client_side);
+    Client::open(Box::pin(r), Box::pin(w), None).await.unwrap()
+}
+
+#[tokio::test]
+async fn stage_hollywood_and_handoff_agy_launches_trust_work_area() {
+    use backlot_model::hollywood::HOLLYWOOD_TERMINAL;
+    use serde_json::Value;
+
+    let dir = tmp("stage-hw-trust");
+    let cfg_home = dir.join("cfg");
+    fs::create_dir_all(cfg_home.join("backlot")).unwrap();
+    fs::write(
+        cfg_home.join("backlot/config.toml"),
+        "[hollywood]\nrunner = \"agy\"\nmodel = \"gemini-4-neon-high\"\neffort = \"high\"\n",
+    )
+    .unwrap();
+
+    let client = fake_stage_client().await;
+
+    let mut stage = crate::daemon::Stage::for_test(client);
+    stage.base = dir.path().to_path_buf();
+    stage.state_dir = dir.path().to_string_lossy().into_owned();
+    stage.env_vars.insert(
+        "XDG_CONFIG_HOME".into(),
+        cfg_home.to_string_lossy().into_owned(),
+    );
+
+    let hdir = crate::store::hollywood_dir(dir.path());
+    let mut slot = true;
+    stage.hollywood(&[], &[], &mut slot, 1000).await.unwrap();
+
+    let settings_path = hdir.join(".agy-settings.json");
+    let canon_hdir = fs::canonicalize(&hdir)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let v: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(
+        v["trustedWorkspaces"],
+        serde_json::json!([canon_hdir]),
+        "hollywood: {v}"
+    );
+
+    // Handoff candidate launch also writes trustedWorkspaces.
+    fs::remove_file(&settings_path).unwrap();
+    crate::handoff::stage_handoff_request(
+        &hdir,
+        "agy",
+        "gemini-4-neon-high",
+        Some("high"),
+        20_000,
+        false,
+        "test",
+        None,
+        2000,
+    )
+    .unwrap();
+    let live = vec![crate::reconcile::LiveTerminal {
+        address: "t-1".into(),
+        name: HOLLYWOOD_TERMINAL.into(),
+        labels: BTreeMap::from([("backlot.role".into(), "hollywood".into())]),
+        cwd: canon_hdir.clone(),
+        ..Default::default()
+    }];
+    let mut slot = true;
+    stage.hollywood(&live, &[], &mut slot, 2100).await.unwrap();
+    let v_handoff: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(
+        v_handoff["trustedWorkspaces"],
+        serde_json::json!([canon_hdir]),
+        "handoff: {v_handoff}"
+    );
+
+    // answer_trust = false leaves Hollywood's settings without trustedWorkspaces.
+    fs::remove_file(&settings_path).unwrap();
+    stage.stage_cfg.set(crate::config::StageCfg {
+        answer_trust: false,
+    });
+    let mut slot = true;
+    crate::handoff::request_cancel(&hdir).unwrap();
+    stage.hollywood(&live, &[], &mut slot, 2200).await.unwrap();
+    let v_off: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert!(
+        v_off.get("trustedWorkspaces").is_none(),
+        "answer_trust = false must omit trustedWorkspaces: {v_off}"
+    );
+}
+
+#[test]
+fn settings_splices_trusted_workspaces_and_respects_answer_trust() {
+    let cwd = "/home/user/acme-shop";
+
+    // Fresh launch with answer_trust on vs off.
+    let on: serde_json::Value =
+        serde_json::from_slice(&settings_content(None, Some(cwd)).unwrap()).unwrap();
+    assert_eq!(on["trustedWorkspaces"], serde_json::json!([cwd]));
+
+    let off: serde_json::Value =
+        serde_json::from_slice(&settings_content(None, None).unwrap()).unwrap();
+    assert!(off.get("trustedWorkspaces").is_none(), "{off}");
+
+    // Existing list is kept byte-preservingly around other members, cwd added once.
+    let existing =
+        b"{\n  \"model\": \"gemini-4-neon\",\n  \"trustedWorkspaces\": [\"/home/user/other\"],\n  \"verbosity\": \"low\"\n}\n";
+    let spliced = settings_content(Some(existing), Some(cwd)).unwrap();
+    let text = String::from_utf8(spliced.clone()).unwrap();
+    assert!(text.contains("\"model\": \"gemini-4-neon\""), "{text}");
+    assert!(text.contains("\"verbosity\": \"low\""), "{text}");
+    let v: serde_json::Value = serde_json::from_slice(&spliced).unwrap();
+    assert_eq!(
+        v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/other", cwd])
+    );
+
+    // Re-running when cwd is already listed does not duplicate it.
+    let again = settings_content(Some(&spliced), Some(cwd)).unwrap();
+    let v2: serde_json::Value = serde_json::from_slice(&again).unwrap();
+    assert_eq!(
+        v2["trustedWorkspaces"],
+        serde_json::json!(["/home/user/other", cwd])
+    );
+
+    // answer_trust = false leaves existing settings without modifying or adding trustedWorkspaces.
+    let existing_no_tw = b"{\n  \"model\": \"gemini-4-neon\",\n  \"verbosity\": \"low\"\n}\n";
+    let untouched = settings_content(Some(existing_no_tw), None).unwrap();
+    let untouched_v: serde_json::Value = serde_json::from_slice(&untouched).unwrap();
+    assert!(
+        untouched_v.get("trustedWorkspaces").is_none(),
+        "{untouched_v}"
+    );
+    let kept = settings_content(Some(existing), None).unwrap();
+    let kept_v: serde_json::Value = serde_json::from_slice(&kept).unwrap();
+    assert_eq!(
+        kept_v["trustedWorkspaces"],
+        serde_json::json!(["/home/user/other"])
+    );
+
+    // `plan` sets trusted_workspace for fresh and resume when answer_trust = true, None when false.
+    let env = BTreeMap::new();
+    for resume in [None, Some("0373977e-3d0c-4628-9218-13ba9695cd55")] {
+        let mut c = ctx(&env, cwd);
+        c.resume = resume;
+        let Prep::Agy(on_prep) = plan(&ident(Some("high")), &c).unwrap().prep.unwrap() else {
+            panic!("expected AgyPrep");
+        };
+        assert_eq!(
+            on_prep.trusted_workspace.as_deref(),
+            Some(Path::new(cwd)),
+            "resume={resume:?}"
+        );
+        c.answer_trust = false;
+        let Prep::Agy(off_prep) = plan(&ident(Some("high")), &c).unwrap().prep.unwrap() else {
+            panic!("expected AgyPrep");
+        };
+        assert_eq!(off_prep.trusted_workspace, None, "resume={resume:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn prepare_canonicalizes_symlinked_work_area_and_respects_none() {
+    let dir = tmp("trust-canon");
+    let real = dir.join("real-work");
+    let link = dir.join("link-work");
+    fs::create_dir_all(&real).unwrap();
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let canon = fs::canonicalize(&real)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let env = BTreeMap::new();
+
+    let l = plan(&ident(Some("high")), &ctx(&env, link.to_str().unwrap())).unwrap();
+    let Some(Prep::Agy(p)) = l.prep else {
+        panic!("expected AgyPrep");
+    };
+    assert_eq!(prepare(&p).unwrap(), None);
+    let v: serde_json::Value =
+        serde_json::from_slice(&fs::read(real.join(".agy-settings.json")).unwrap()).unwrap();
+    assert_eq!(v["trustedWorkspaces"], serde_json::json!([canon]));
+
+    // With answer_trust = false, prepare omits trustedWorkspaces.
+    fs::remove_file(real.join(".agy-settings.json")).unwrap();
+    let mut off_ctx = ctx(&env, link.to_str().unwrap());
+    off_ctx.answer_trust = false;
+    let Prep::Agy(off_p) = plan(&ident(Some("high")), &off_ctx).unwrap().prep.unwrap() else {
+        panic!("expected AgyPrep");
+    };
+    assert_eq!(prepare(&off_p).unwrap(), None);
+    let v_off: serde_json::Value =
+        serde_json::from_slice(&fs::read(real.join(".agy-settings.json")).unwrap()).unwrap();
+    assert!(v_off.get("trustedWorkspaces").is_none(), "{v_off}");
+}
+
+#[tokio::test]
+async fn stage_studio_launches_fresh_resume_and_recast_trust_work_area() {
+    use backlot_model::event::{Candidate, EventKind, RoleConfigs, StudioMode};
+    use backlot_model::{EventBy, NewEvent};
+    use serde_json::{Value, json};
+
+    let dir = tmp("stage-studio-trust");
+    let repo = dir.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let sdir = crate::store::studio_dir(dir.path(), "acme-shop");
+    let agy_actor = ident(Some("high"));
+    let created = EventKind::StudioCreated {
+        title: "acme-shop".into(),
+        repo: repo.to_string_lossy().into_owned(),
+        members: Vec::new(),
+        no_git: true,
+        mode: StudioMode::Standard,
+        roles: Box::new(RoleConfigs {
+            producer: agy_actor.clone(),
+            director: agy_actor.clone(),
+            writer: agy_actor.clone(),
+        }),
+        candidates: vec![Candidate {
+            name: "actor-a".into(),
+            runner: agy_actor.runner.clone(),
+            runner_version: None,
+            model: agy_actor.model.clone(),
+            effort: agy_actor.effort.clone(),
+            permission_profile: agy_actor.permission_profile.clone(),
+        }],
+        rework_cap: 2,
+        stall_limit_s: 600,
+        nudge_after_s: 180,
+        escalate_after_s: 600,
+        check_env: Vec::new(),
+        checks: Vec::new(),
+        task_budget_s: None,
+        limits: Default::default(),
+        max_actors: backlot_model::event::default_max_actors(),
+        push: Default::default(),
+    };
+    for (role, kind) in [
+        ("user", created),
+        (
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        (
+            "director",
+            backlot_model::testkit::task_created("t1", "feature", 1),
+        ),
+        (
+            "director",
+            EventKind::TaskCast {
+                task: "t1".into(),
+                candidate: "actor-a".into(),
+                actor: agy_actor.clone(),
+                reason: "picked".into(),
+                priority: None,
+            },
+        ),
+    ] {
+        crate::store::append(&sdir, |_, _| {
+            Ok::<_, std::convert::Infallible>(crate::store::Pending {
+                event: NewEvent::new(EventBy::role(role), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
+
+    let client = fake_stage_client().await;
+
+    let mut stage = crate::daemon::Stage::for_test(client);
+    stage.base = dir.path().to_path_buf();
+    stage.state_dir = dir.path().to_string_lossy().into_owned();
+    stage.exe_dir = dir.join("exe").to_string_lossy().into_owned();
+    stage.path_env = "/usr/bin".into();
+
+    let canon_repo = fs::canonicalize(&repo)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let settings_path = repo.join(".agy-settings.json");
+
+    let make_start = |resume: Option<crate::reconcile::Resume>| {
+        crate::reconcile::Action::Start(crate::reconcile::Start {
+            role: "actor-t1-c1".into(),
+            kind: crate::reconcile::RoleKind::Actor,
+            task: Some("t1".into()),
+            terminal: "bl-acme-shop-actor-t1-c1".into(),
+            repo: repo.to_string_lossy().into_owned(),
+            members: Vec::new(),
+            no_git: true,
+            actor: agy_actor.clone(),
+            resume,
+        })
+    };
+
+    // Fresh launch.
+    let state = crate::store::load_state(&sdir).unwrap();
+    stage
+        .act(
+            "acme-shop",
+            &sdir,
+            &state,
+            &make_start(None),
+            &mut true,
+            &std::collections::BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+    let v_fresh: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(v_fresh["trustedWorkspaces"], json!([canon_repo]));
+
+    // Resume (--conversation) launch.
+    fs::remove_file(&settings_path).unwrap();
+    let state = crate::store::load_state(&sdir).unwrap();
+    stage
+        .act(
+            "acme-shop",
+            &sdir,
+            &state,
+            &make_start(Some(crate::reconcile::Resume {
+                session: "conv-123".into(),
+                reason: "recovered",
+            })),
+            &mut true,
+            &std::collections::BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+    let v_resume: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(v_resume["trustedWorkspaces"], json!([canon_repo]));
+
+    // Replacement / recast fresh launch (with existing file: no duplication).
+    let state = crate::store::load_state(&sdir).unwrap();
+    stage
+        .act(
+            "acme-shop",
+            &sdir,
+            &state,
+            &make_start(None),
+            &mut true,
+            &std::collections::BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+    let v_recast: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert_eq!(v_recast["trustedWorkspaces"], json!([canon_repo]));
+
+    // answer_trust = false leaves fresh settings without trustedWorkspaces.
+    fs::remove_file(&settings_path).unwrap();
+    stage.stage_cfg.set(crate::config::StageCfg {
+        answer_trust: false,
+    });
+    let state = crate::store::load_state(&sdir).unwrap();
+    stage
+        .act(
+            "acme-shop",
+            &sdir,
+            &state,
+            &make_start(None),
+            &mut true,
+            &std::collections::BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+    let v_off: Value = serde_json::from_slice(&fs::read(&settings_path).unwrap()).unwrap();
+    assert!(v_off.get("trustedWorkspaces").is_none(), "{v_off}");
 }

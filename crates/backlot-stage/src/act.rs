@@ -620,6 +620,7 @@ impl Stage {
                         .as_ref()
                         .map(|s| s.checks.as_slice())
                         .unwrap_or(&[]),
+                    answer_trust: self.stage_cfg.get().answer_trust,
                 };
                 match runners::decide_start(
                     runners::plan(&start.actor, &ctx),
