@@ -235,7 +235,10 @@ fn the_band_draws_sprockets_title_and_counts() {
     // The headline, the card rows and the hints follow the frames.
     assert!(text.contains("acme-shop needs a look"), "{text}");
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
-    assert!(text.contains("apply a"), "{text}");
+    assert!(
+        !text.contains("apply a"),
+        "chips belong to the selected row only: {text}"
+    );
     // No row is selected: the footer names the sheet's own keys and
     // the fixed right block — no row keys, and the old bare
     // all-keys tier is gone.
@@ -1334,15 +1337,9 @@ fn the_stage_and_ready_rows_compact_like_the_others() {
             .unwrap_or("");
         let ready = text.lines().find(|l| l.contains("READY")).unwrap_or("");
         assert!(
-            stage.contains("[s]"),
-            "stage row at {width}: {stage}\n{text}"
+            !stage.contains("[s]") && !ready.contains("[f]") && !ready.contains("[↵]"),
+            "unselected rows carry no chips at {width}: {stage} / {ready}\n{text}"
         );
-        assert!(
-            ready.contains("[f]") && ready.contains("[↵]"),
-            "ready row at {width}: {ready}\n{text}"
-        );
-        assert!(!ready.contains("finish f"), "{ready}");
-        assert!(!stage.contains("start s"), "{stage}");
     }
 }
 
@@ -2240,4 +2237,38 @@ fn card_view_inline_compose_states_render_band_and_never_overflow_80x24() {
         sren.area.bottom() - 4,
     );
     assert!(sline.contains("■ sending to director…"), "{sline}");
+}
+
+/// The ASKS row is the person-inbox row: exact shape, age, folded
+/// sibling count, and reply/acknowledge chips on its selected row.
+#[test]
+fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][0]["asks"] =
+        serde_json::json!("What should we build? Start small.");
+    value["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 10, "who": "producer", "to": "user", "kind": "tell", "ask": true,
+          "ts_ms": 1, "text": "What should we build? Start small." }
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 120, 45);
+    let target = Target::Role(
+        crate::studio::StudioKey::local("acme-shop"),
+        "producer".into(),
+    );
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, target),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("? ASKS acme-shop · producer · "), "{text}");
+    assert!(text.contains("— What should we build?"), "{text}");
+    assert!(text.contains("· +1"), "{text}");
+    assert!(text.contains(" reply r "), "{text}");
+    assert!(text.contains(" ack x "), "{text}");
 }

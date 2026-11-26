@@ -186,7 +186,7 @@ fn ask_answered_drops_asks_and_waiting_count_while_exchange_keeps_question() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));

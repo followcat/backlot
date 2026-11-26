@@ -186,6 +186,34 @@ impl App {
         self.hollywood_card_cancel_on(machine, id);
     }
 
+    /// Newest explicit question seq a role opened, projected in the studio exchange.
+    fn ask_target(&self, studio: &StudioKey, role: &str) -> Option<u64> {
+        let machines = self.panel_summaries();
+        crate::panel::data::studio(&machines, studio)?
+            .studio
+            .exchange
+            .iter()
+            .filter(|e| e.ask && e.who == role)
+            .map(|e| e.seq)
+            .max()
+    }
+
+    /// `x` on an ASKS row: acknowledge the question without answering it.
+    fn hollywood_ack(&mut self, studio: &StudioKey, role: &str) {
+        match self.ask_target(studio, role) {
+            Some(target) => self.run_action(studio_cmds::ask_acknowledge(studio, role, target)),
+            None => self.show_notice("Hollywood", "that question was already answered elsewhere"),
+        }
+    }
+
+    /// `r` on an ASKS row: compose the person's reply in the sheet's own
+    /// compose line, not in a dialog away from the question.
+    fn hollywood_reply(&mut self, studio: &StudioKey, role: &str) {
+        self.hollywood.reply_to = Some((studio.clone(), role.to_string()));
+        self.hollywood_select(crate::hollywood::Target::Input);
+        self.hollywood.editing = true;
+    }
+
     /// A plain key on the selected row — the Call Sheet's own
     /// dispatch (S1 §5). Returns true when the key was the row's;
     /// the footer's slot mask is tested against this answer.
@@ -224,6 +252,12 @@ impl App {
             // no-requirement studio peeks its producer.
             (Some(Target::Role(studio, role)), KeyCode::Char('p')) => {
                 self.hollywood_peek(&studio, &role);
+            }
+            (Some(Target::Role(studio, role)), KeyCode::Char('r')) => {
+                self.hollywood_reply(&studio, &role);
+            }
+            (Some(Target::Role(studio, role)), KeyCode::Char('x')) => {
+                self.hollywood_ack(&studio, &role);
             }
             (Some(Target::Tell(key)), KeyCode::Char('p')) => {
                 self.hollywood_peek(&key, "producer");
@@ -321,6 +355,10 @@ impl App {
         self.sync_hollywood_history();
         self.hollywood.history.record_send(&line);
         self.hollywood.input.clear();
-        self.run_action(studio_cmds::tell_hollywood(&line));
+        if let Some((studio, role)) = self.hollywood.reply_to.take() {
+            self.run_action(studio_cmds::tell(&studio, &role, &line));
+        } else {
+            self.run_action(studio_cmds::tell_hollywood(&line));
+        }
     }
 }

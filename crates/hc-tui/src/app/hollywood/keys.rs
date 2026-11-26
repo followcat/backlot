@@ -79,6 +79,7 @@ impl App {
                 // One Esc out of Compose rests on `›` — draft (even
                 // empty) intact. The second Esc in Resting collapses.
                 self.hollywood.editing = false;
+                self.hollywood.reply_to = None;
                 self.hollywood.history.reset_nav();
                 return;
             }
