@@ -71,6 +71,8 @@ pub(crate) enum ConfirmFor {
         key: StudioKey,
         token: Option<String>,
     },
+    /// `design sign [--skip]` — confirms whether to approve or skip and freeze `design/v<N>-final.md`.
+    DesignSign { key: StudioKey, suggest_skip: bool },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab

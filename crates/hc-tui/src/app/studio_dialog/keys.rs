@@ -142,6 +142,9 @@ impl App {
             ConfirmFor::Prune { key, token } => {
                 self.run_action(studio_cmds::prune(key, token.as_deref()));
             }
+            ConfirmFor::DesignSign { key, suggest_skip } => {
+                self.run_action(studio_cmds::design_sign(key, *suggest_skip));
+            }
         }
     }
 

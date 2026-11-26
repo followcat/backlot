@@ -40,6 +40,7 @@ pub(super) fn has_active_or_alert(studio: &StudioSummary) -> bool {
     studio.error.is_some()
         || studio.needs_upgrade
         || !studio.outward_cards.is_empty()
+        || super::draw_design::active_design(studio).is_some()
         || studio.roles.iter().any(is_active_or_alert_role)
 }
 

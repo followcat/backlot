@@ -1,0 +1,460 @@
+//! PR 7 App-level end-to-end fail-first & regression tests:
+//! Pill `?N` + Call Sheet `DECISION` card + Lot Dock expanded & 16-col strip at 200x44 & 100x40,
+//! interactive `a` confirm/cancel (`sign off` vs `skip`, frozen file), `r` reply/`design open`,
+//! `o` `design show` Reader, and zero-design invariance.
+//! Neutral fixtures only (`acme-shop`, `beta-api`, `producer`).
+
+use std::sync::{Arc, Mutex};
+
+use hc_proto::watch::Document;
+
+use super::*;
+use crate::hollywood::LayerMode;
+use crate::panel::PanelMode;
+use crate::studio::StudioKey;
+
+type Recorded = Arc<Mutex<Vec<(Option<String>, Vec<String>)>>>;
+
+fn ns_recorder(show_body: &'static str) -> (Recorded, crate::app::new_studio::NsRun) {
+    let calls: Recorded = Default::default();
+    let sink = calls.clone();
+    let runner: crate::app::new_studio::NsRun = Arc::new(move |machine, argv, _stdin| {
+        sink.lock().unwrap().push((machine, argv.clone()));
+        let is_show = argv.windows(2).any(|w| w == ["design", "show"]);
+        Box::pin(async move {
+            if is_show {
+                Ok(show_body.to_owned())
+            } else {
+                Ok(String::new())
+            }
+        })
+    });
+    (calls, runner)
+}
+
+fn design_app(suggest_skip: bool, include_design: bool) -> App {
+    let mut app = app_with_hollywood();
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = crate::app::pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut doc = summary_json();
+    doc["hollywood"]["cards"] = serde_json::json!([]);
+    doc["studios"][0]["id"] = serde_json::json!("beta");
+    doc["studios"][0]["title"] = serde_json::json!("Beta");
+    doc["studios"][0]["waiting"] = serde_json::json!(0);
+    doc["studios"][0]["roles"] = serde_json::json!([
+        { "role": "producer", "name": "producer", "terminal": "t1",
+          "state": "live", "work": "waiting" }
+    ]);
+    if include_design {
+        doc["studios"][0]["design"] = if suggest_skip {
+            serde_json::json!({
+                "version": 1,
+                "round": 0,
+                "phase": "suggest_skip",
+                "waiting_user": true,
+                "suggest_skip": true,
+                "skip_reason": "config flag only; no architecture tradeoffs",
+                "doc_file": "design/v1.md",
+                "questions": [],
+                "waiting_since_ms": 940_000
+            })
+        } else {
+            serde_json::json!({
+                "version": 1,
+                "round": 2,
+                "phase": "waiting_user",
+                "waiting_user": true,
+                "suggest_skip": false,
+                "doc_file": "design/v1.md",
+                "summary": "Keep single binary with SQLite WAL or split worker crate",
+                "questions": [
+                    {
+                        "id": "Q1",
+                        "prompt": "Separate job worker crate?",
+                        "recommendation": "single crate",
+                        "section_ref": "§R2.W"
+                    },
+                    {
+                        "id": "Q2",
+                        "prompt": "Storage backend?",
+                        "recommendation": "SQLite WAL",
+                        "section_ref": "§R2.D"
+                    }
+                ],
+                "waiting_since_ms": 940_000
+            })
+        };
+    }
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.studio.current = Some(StudioKey::local("beta"));
+    app.panel.mode = PanelMode::Expanded;
+    app.shell_state.sidebar_collapsed = true;
+    app.panel.sidebar_collapsed = true;
+    app.reconcile_published_view();
+    app
+}
+
+fn select_decision_in_sheet(app: &mut App) {
+    app.area = (200, 44);
+    if app.hollywood.mode != LayerMode::Expanded {
+        alt_y(app);
+    }
+    draw_to(app, 200, 44);
+    if !app
+        .hollywood
+        .selected
+        .as_ref()
+        .is_some_and(|t| format!("{t:?}").contains("Decision"))
+    {
+        key(app, hc_vt::Key::Tab);
+    }
+    assert!(
+        app.hollywood
+            .selected
+            .as_ref()
+            .is_some_and(|t| format!("{t:?}").contains("Decision")),
+        "expected Call Sheet Decision target, got {:?}",
+        app.hollywood.selected
+    );
+}
+
+fn select_design_in_dock(app: &mut App) {
+    app.area = (200, 44);
+    app.hollywood.mode = LayerMode::Collapsed;
+    app.panel.mode = PanelMode::Expanded;
+    app.panel.focused = true;
+    draw_to(app, 200, 44);
+    let idx = app
+        .panel_targets()
+        .into_iter()
+        .position(|t| format!("{t:?}").contains("Design"))
+        .expect("Lot Dock missing Target::Design");
+    let target = app.panel_targets()[idx].clone();
+    app.panel.selected = Some(target);
+    app.panel.selected_row = Some(idx);
+}
+
+#[tokio::test]
+async fn callsheet_and_dock_200x44_and_100x40_render_pill_decision_card_and_strip() {
+    for (cols, rows) in [(200u16, 44u16), (100u16, 40u16)] {
+        let mut app = design_app(false, true);
+        app.area = (cols, rows);
+        app.panel.mode = PanelMode::Expanded;
+        app.hollywood.mode = LayerMode::Collapsed;
+        let dock_buf = draw_to(&mut app, cols, rows);
+        let dock_screen = screen_lines(&dock_buf).join("\n");
+        let top_bar = dock_screen.lines().next().unwrap_or_default();
+        assert!(
+            top_bar.contains("?1"),
+            "{cols}x{rows} missing ?1 pill:\n{top_bar}"
+        );
+        assert!(
+            !top_bar.contains("!1"),
+            "{cols}x{rows} must not show !1:\n{top_bar}"
+        );
+        let pill = app.hit_map.lot_pill;
+        let q_x = (pill.x..pill.right())
+            .find(|&x| dock_buf.buffer()[(x, pill.y)].symbol() == "?")
+            .expect("? pill cell inside lot_pill");
+        assert_eq!(
+            dock_buf.buffer()[(q_x, pill.y)].fg,
+            app.shell.palette.peach,
+            "{cols}x{rows} ?1 pill must use warm peach"
+        );
+        assert_ne!(
+            dock_buf.buffer()[(pill.x + 1, pill.y)].bg,
+            app.shell.palette.red,
+            "{cols}x{rows} pill must never turn red without blocking alerts"
+        );
+        assert!(
+            dock_screen.contains("◆ design · R2 · you"),
+            "{cols}x{rows} Lot Dock missing design header:\n{dock_screen}"
+        );
+        assert!(
+            dock_screen.contains("r reply   o read   a sign"),
+            "{cols}x{rows} Lot Dock missing footer:\n{dock_screen}"
+        );
+
+        // Collapsed 16-col strip
+        app.panel.mode = PanelMode::Collapsed;
+        let strip_buf = draw_to(&mut app, cols, rows);
+        let strip_screen = screen_lines(&strip_buf).join("\n");
+        assert!(
+            strip_screen.contains("◆R2 ?") || strip_screen.contains("◆?"),
+            "{cols}x{rows} collapsed strip missing `◆R2 ?`:\n{strip_screen}"
+        );
+
+        // Expanded Call Sheet with Decision selected
+        app.panel.mode = PanelMode::Expanded;
+        app.hollywood.mode = LayerMode::Collapsed;
+        alt_y(&mut app);
+        draw_to(&mut app, cols, rows);
+        key(&mut app, hc_vt::Key::Tab);
+        let sheet_buf = draw_to(&mut app, cols, rows);
+        let sheet_screen = screen_lines(&sheet_buf).join("\n");
+        if std::env::var_os("DESIGN_CARD_DUMP").is_some() {
+            eprintln!("=== DOCK {cols}x{rows} ===\n{dock_screen}\n=== END DOCK {cols}x{rows} ===");
+            eprintln!(
+                "=== STRIP {cols}x{rows} ===\n{strip_screen}\n=== END STRIP {cols}x{rows} ==="
+            );
+            eprintln!(
+                "=== SHEET {cols}x{rows} ===\n{sheet_screen}\n=== END SHEET {cols}x{rows} ==="
+            );
+        }
+        assert!(
+            sheet_screen.contains("DECISION"),
+            "{cols}x{rows} Call Sheet missing DECISION:\n{sheet_screen}"
+        );
+        assert!(
+            sheet_screen.contains("Q1") && sheet_screen.contains("§R2.W"),
+            "{cols}x{rows} Call Sheet missing Q1 / §R2.W:\n{sheet_screen}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn zero_design_invariance_at_200x44_and_100x40() {
+    for (cols, rows) in [(200u16, 44u16), (100u16, 40u16)] {
+        let mut a = design_app(false, false);
+        let mut b = design_app(false, false);
+        a.area = (cols, rows);
+        b.area = (cols, rows);
+        assert_eq!(
+            draw_to(&mut a, cols, rows).buffer(),
+            draw_to(&mut b, cols, rows).buffer()
+        );
+    }
+}
+
+#[tokio::test]
+async fn callsheet_decision_keys_a_confirm_cancel_r_reply_suggest_skip_open_and_o_read() {
+    let mut app = design_app(false, true);
+    let (calls, runner) = ns_recorder("# Design discussion · req v1\n\n## R2\nProposed monolith.");
+    app.set_ns_run(runner);
+    select_decision_in_sheet(&mut app);
+
+    // 1. `a` arms confirmation showing `sign off` + file without sending anything yet.
+    key(&mut app, hc_vt::Key::Char('a'));
+    assert!(calls.lock().unwrap().is_empty(), "`a` must confirm first");
+    assert!(
+        app.studio_dialog.is_some(),
+        "expected confirm dialog on `a`"
+    );
+    let dialog_text = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    assert!(
+        dialog_text.contains("sign off") && dialog_text.contains("design/v1-final.md"),
+        "confirm dialog must show mode and file:\n{dialog_text}"
+    );
+    // Cancel sends nothing.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.studio_dialog.is_none());
+    assert!(calls.lock().unwrap().is_empty(), "cancel must send nothing");
+
+    // Re-arm and confirm (`y`) runs `design sign`.
+    key(&mut app, hc_vt::Key::Char('a'));
+    key(&mut app, hc_vt::Key::Char('y'));
+    let sign_reply = app.action_rx.recv().await.expect("sign reply");
+    app.on_action_reply(sign_reply);
+
+    // 2. `r` on WaitingUser focuses compose reply to producer.
+    key(&mut app, hc_vt::Key::Char('r'));
+    assert!(app.hollywood.editing);
+    assert_eq!(
+        app.hollywood.reply_to,
+        Some((StudioKey::local("beta"), "producer".to_string()))
+    );
+    for ch in "use wal".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    let tell_reply = app.action_rx.recv().await.expect("tell reply");
+    app.on_action_reply(tell_reply);
+
+    // 3. `o` runs `design show` and opens Reader with the design markdown.
+    select_decision_in_sheet(&mut app);
+    key(&mut app, hc_vt::Key::Char('o'));
+    let show_reply = app.action_rx.recv().await.expect("show reply");
+    app.on_action_reply(show_reply);
+    let view = app.hollywood.view.as_ref().expect("`o` must open Reader");
+    assert!(view.raw_body.contains("Proposed monolith."), "{view:?}");
+
+    // 4. On `SuggestSkip`: `a` shows `skip` and runs `design sign --skip`, `r` runs `design open`.
+    let mut skip_app = design_app(true, true);
+    let (skip_calls, skip_runner) = ns_recorder("# Design discussion · req v1\n");
+    skip_app.set_ns_run(skip_runner);
+    select_decision_in_sheet(&mut skip_app);
+    key(&mut skip_app, hc_vt::Key::Char('a'));
+    let skip_dialog = screen_lines(&draw_to(&mut skip_app, 200, 44)).join("\n");
+    assert!(
+        skip_dialog.contains("skip") && skip_dialog.contains("design/v1-final.md"),
+        "skip confirm must show mode + file:\n{skip_dialog}"
+    );
+    key(&mut skip_app, hc_vt::Key::Enter);
+    let s1 = skip_app.action_rx.recv().await.expect("skip reply");
+    skip_app.on_action_reply(s1);
+    select_decision_in_sheet(&mut skip_app);
+    key(&mut skip_app, hc_vt::Key::Char('r'));
+    let s2 = skip_app.action_rx.recv().await.expect("open reply");
+    skip_app.on_action_reply(s2);
+
+    assert_eq!(
+        calls.lock().unwrap().as_slice(),
+        &[
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "sign".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+            (
+                None,
+                vec![
+                    "tell".into(),
+                    "producer".into(),
+                    "--text".into(),
+                    "use wal".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "show".into(),
+                    "--version".into(),
+                    "1".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+        ]
+    );
+    assert_eq!(
+        skip_calls.lock().unwrap().as_slice(),
+        &[
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "sign".into(),
+                    "--skip".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "open".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn dock_decision_keys_r_o_a_and_focused_footer_hints() {
+    let mut app = design_app(false, true);
+    let (calls, runner) = ns_recorder("# Design discussion · req v1\n\n## R2");
+    app.set_ns_run(runner);
+    select_design_in_dock(&mut app);
+
+    let focused = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    assert!(
+        focused.contains("o read") && focused.contains("a sign") && focused.contains("r reply"),
+        "focused dock footer missing design hints:\n{focused}"
+    );
+
+    key(&mut app, hc_vt::Key::Char('a'));
+    assert!(app.studio_dialog.is_some());
+    key(&mut app, hc_vt::Key::Char('n'));
+    assert!(app.studio_dialog.is_none());
+    assert!(calls.lock().unwrap().is_empty());
+
+    key(&mut app, hc_vt::Key::Char('a'));
+    key(&mut app, hc_vt::Key::Char('y'));
+    let r1 = app.action_rx.recv().await.expect("dock sign");
+    app.on_action_reply(r1);
+
+    key(&mut app, hc_vt::Key::Char('o'));
+    let r2 = app.action_rx.recv().await.expect("dock show");
+    app.on_action_reply(r2);
+    assert!(app.hollywood.view.is_some(), "dock `o` opens Reader");
+    key(&mut app, hc_vt::Key::Escape);
+
+    key(&mut app, hc_vt::Key::Char('r'));
+    assert!(app.panel.editing, "dock `r` focuses studio compose");
+    for ch in "prefer sqlite".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    let r3 = app.action_rx.recv().await.expect("dock tell");
+    app.on_action_reply(r3);
+
+    assert_eq!(
+        calls.lock().unwrap().as_slice(),
+        &[
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "sign".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+            (
+                None,
+                vec![
+                    "design".into(),
+                    "show".into(),
+                    "--version".into(),
+                    "1".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+            (
+                None,
+                vec![
+                    "tell".into(),
+                    "producer".into(),
+                    "--text".into(),
+                    "prefer sqlite".into(),
+                    "--studio".into(),
+                    "beta".into(),
+                    "--as".into(),
+                    "user".into()
+                ]
+            ),
+        ]
+    );
+}

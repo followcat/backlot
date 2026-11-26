@@ -36,7 +36,7 @@ impl WaitBucket {
                     Self::Asks
                 }
             }
-            Wait::NoRequirement(_) => Self::Asks,
+            Wait::Decision(_) | Wait::NoRequirement(_) => Self::Asks,
             Wait::Card(_) | Wait::Outward(_) => Self::Cards,
             Wait::Ready(_) => Self::Ready,
         }
@@ -238,6 +238,7 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             key: "↵",
             primary: true,
         }],
+        Wait::Decision(item) => super::decision::chips(item.design.suggest_skip),
         Wait::Ready(_) => vec![
             Chip {
                 label: "finish",
@@ -369,6 +370,7 @@ pub(crate) fn glyph_colour(
         }
         Wait::Hollywood(_) => palette.peach,
         Wait::Upgrade(_) => palette.peach,
+        Wait::Decision(_) => palette.peach,
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
         Wait::Stage(_) => palette.peach,
@@ -499,6 +501,7 @@ pub(crate) fn wait_parts(wait: &Wait<'_>, local: &str, multi: bool) -> WaitParts
                 rest: format!("{machine} · {reason}"),
             }
         }
+        Wait::Decision(item) => super::decision::wait_parts(item, local, multi),
         Wait::NoRequirement(StudioItem { machine, studio }) => {
             let machine = machine_label(*machine, local, multi);
             let machine = if machine.is_empty() {
@@ -642,6 +645,7 @@ pub(crate) fn detail_text(wait: &Wait<'_>) -> Option<String> {
                 Some("blocked on a person — open its terminal".into())
             }
         }
+        Wait::Decision(item) => super::decision::detail_lines(item).into_iter().next(),
         Wait::NoRequirement(item) => Some(format!(
             "next: {}",
             crate::panel::data::next_step(item.studio).unwrap_or("tell the producer what to build")
@@ -657,6 +661,7 @@ pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
         Wait::Role(item) => &item.role.role,
         Wait::Hollywood(_) => "hollywood",
         Wait::NoRequirement(item) | Wait::Upgrade(item) => &item.studio.id,
+        Wait::Decision(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
         Wait::Outward(item) => &item.card.id,
@@ -677,6 +682,13 @@ pub(crate) fn ultra_head(wait: &Wait<'_>, _local: &str, _multi: bool) -> String 
         Wait::Role(item) => format!("needs {}", item.role.name),
         Wait::Hollywood(_) => "hollywood".into(),
         Wait::NoRequirement(item) | Wait::Upgrade(item) => item.studio.id.clone(),
+        Wait::Decision(item) => {
+            format!(
+                "{} {}",
+                item.studio.id,
+                super::decision::badge_label(item.design)
+            )
+        }
         _ => String::new(),
     }
 }

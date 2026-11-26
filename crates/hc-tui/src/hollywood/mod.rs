@@ -11,6 +11,7 @@
 
 mod band;
 mod chips;
+mod decision;
 mod draw;
 mod frames;
 mod handoff_ui;
@@ -32,6 +33,7 @@ mod title;
 mod view;
 mod zone;
 
+pub(crate) use decision::confirm_dialog as design_confirm_dialog;
 pub(crate) use draw::{HollywoodRender, render};
 pub(crate) use handoff_ui::{
     PillSwitchState, handoff_phase, handoff_target_short, is_handoff_active, is_quota_or_error,

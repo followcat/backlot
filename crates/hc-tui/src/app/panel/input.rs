@@ -100,6 +100,20 @@ impl App {
         self.panel.editing = true;
     }
 
+    /// Focus the `›` producer compose line for a specific studio (e.g. `r` reply on a design row).
+    pub(in crate::app) fn panel_input_focus_studio(&mut self, key: &StudioKey) {
+        let Some(row) = self
+            .panel_targets()
+            .iter()
+            .position(|t| matches!(t, Target::Input(k) if k == key))
+        else {
+            return;
+        };
+        self.panel.selected = Some(Target::Input(key.clone()));
+        self.panel.selected_row = Some(row);
+        self.panel.editing = true;
+    }
+
     /// `⏎` on the `›` line: a plain line is a `tell` to the
     /// producer, a `/`-line is the verb parser, an empty line just
     /// rests. A send clears the studio's draft — a rejected

@@ -40,7 +40,9 @@ focused jumps back to the last row and never closes the dock.
 | `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
 | `i` / `/` | Compose on the selected studio's `›` tell input (`/` seeds `/`, `Tab` completes `/verb`). While composing: `↑`/`↓` step per-studio `user` message history (`StudioSummary.exchange` + session submits, saving/restoring any draft, consecutive repeats collapsed), `Enter` sends and rests, `Esc` rests keeping the draft |
 | `Space` | Open or close the three-line drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold line; on a studio header, fold/unfold the whole block |
-| `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
+| `o` | On an opening-design row: read the design doc (`backlot design show`) in Reader. Otherwise: reopen a closed resumable person (`backlot reopen … --as user`) |
+| `r` | On an opening-design row or studio awaiting user design reply: focus the studio's `›` producer tell line (or run `backlot design open` when `SuggestSkip`) |
+| `a` | On an opening-design row: open the confirm modal (`sign off` vs `skip` + frozen file) and send `backlot design sign [--skip]` on confirm |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
 | `p` | Peek the person's terminal |
 | `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
@@ -137,6 +139,13 @@ honest about focus (hidden when unfocused). Every border cell of the **selected 
 from `rows_fold::selected_studio`) draws in `palette.accent` whether or not the lot owns the keys;
 every other studio keeps `surface1`.
 
+- **Opening-design rows & 16-col strip badge:** when a studio has an active pre-signed
+  `StudioSummary.design`, its expanded block (and active folded card) shows `◆ design · R<r> · you`
+  (`proposal` / `review` / `summary`, or `◆ design · skip suggested · you`), up to 3 `Q1..Q3`
+  question previews (or `skip_reason` / `summary`), and the action footer `r reply   o read   a sign`
+  (`r discuss  o read  a skip` on `SuggestSkip`). In the 16-col collapsed strip, active design
+  discussions render a single-line warm-peach `◆R<r> ?` (or `◆?` on `SuggestSkip` / tight widths)
+  without wrapping. Non-active (`Idle` / `Signed`) studios render zero extra rows.
 - **Selected-studio folding and compact rows:** in a lot with two or more studios, only the
   selected studio draws in full (the studio holding the `▌` cursor, else the `▸` current studio,
   else the first studio). Any non-current **ready**, **calm**, **finished**, **stage-down**, or

@@ -644,6 +644,60 @@ pub(crate) fn finish_force(key: &StudioKey) -> Action {
     a
 }
 
+/// `design sign [--skip] --studio <id> --as user` — sign off or skip opening design.
+pub(crate) fn design_sign(key: &StudioKey, skip: bool) -> Action {
+    let verb = if skip { "skipping" } else { "signing" };
+    let done = if skip { "skipped" } else { "signed" };
+    let mut a = action(
+        format!("{verb} design {}", key.id),
+        format!("{done} design {}", key.id),
+        format!("design sign {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    let mut cmd = vec!["design".into(), "sign".into()];
+    if skip {
+        cmd.push("--skip".into());
+    }
+    a.argv = studio_argv(&cmd, key);
+    a
+}
+
+/// `design open --studio <id> --as user` — move from `SuggestSkip` into Round 1.
+pub(crate) fn design_open(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("opening design {}", key.id),
+        format!("opened design {}", key.id),
+        format!("design open {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&["design".into(), "open".into()], key);
+    a
+}
+
+/// `design show --version <v> --studio <id> --as user` — read the opening design doc.
+pub(crate) fn design_show(key: &StudioKey, doc_file: &str, version: u32) -> Action {
+    let mut a = action(
+        format!("reading {doc_file}"),
+        format!("read {doc_file}"),
+        format!("{} · {doc_file}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(
+        &[
+            "design".into(),
+            "show".into(),
+            "--version".into(),
+            version.to_string(),
+        ],
+        key,
+    );
+    a.view = true;
+    a
+}
+
 /// `studio restore <archived> --name <name> [--dry-run]` (M3) — the
 /// archived ledger comes back as a finished studio.
 pub(crate) fn restore(
