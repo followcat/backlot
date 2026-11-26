@@ -1,11 +1,30 @@
 //! Append-time validation rules for `design.opened`, `design.entry`, and `design.signed`.
 
-use crate::design::{DesignPhase, DesignQuestion, DesignSlot, EntrySource, SignMode};
+use crate::design::{DesignGate, DesignPhase, DesignQuestion, DesignSlot, EntrySource, SignMode};
 use crate::event::{EventKind, NewEvent};
 use crate::refusal::Refusal;
-use crate::state::StudioState;
+use crate::state::{StudioConfig, StudioState};
 
 const MAX_QUESTIONS: usize = 3;
+
+/// Enforce `design_gate = required` before planning, dispatching, creating, or casting tasks.
+pub(crate) fn require_signed(studio: &StudioConfig, state: &StudioState) -> Result<(), Refusal> {
+    if studio.design_gate == DesignGate::Required && state.design_phase() != DesignPhase::Signed {
+        return Err(Refusal::DesignNotSigned(state.requirement_version));
+    }
+    Ok(())
+}
+
+fn ref_exists(state: &StudioState, seq: u64) -> bool {
+    state.messages.iter().any(|m| m.seq == seq)
+        || state
+            .design
+            .iter()
+            .chain(state.design_history.values())
+            .flat_map(|d| d.rounds.iter())
+            .flat_map(|r| r.entries.iter())
+            .any(|e| e.seq == seq)
+}
 
 fn check_version(state: &StudioState, version: u32) -> Result<(), Refusal> {
     if version == 0 || version > state.requirement_version {
@@ -146,8 +165,8 @@ pub(crate) fn validate_design(state: &StudioState, new: &NewEvent) -> Result<(),
             slot,
             file,
             source,
+            refs,
             questions,
-            ..
         } => {
             check_version(state, *version)?;
             let d = state
@@ -200,6 +219,20 @@ pub(crate) fn validate_design(state: &StudioState, new: &NewEvent) -> Result<(),
                     return Err(Refusal::InvalidDesign(
                         "only summary entries may carry questions".into(),
                     ));
+                }
+                if *slot == DesignSlot::Supplement {
+                    if refs.is_empty() {
+                        return Err(Refusal::InvalidDesign(
+                            "design supplement requires at least one --refs seq".into(),
+                        ));
+                    }
+                    for &seq in refs {
+                        if !ref_exists(state, seq) {
+                            return Err(Refusal::InvalidDesign(format!(
+                                "design supplement ref #{seq} does not name an existing message or design entry"
+                            )));
+                        }
+                    }
                 }
             }
             Ok(())

@@ -480,36 +480,44 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             body,
         });
     }
-    for req in &state.requirements {
-        if sent.contains(&req.seq) || req.version <= 1 {
-            continue;
+    let gate_on = state
+        .studio
+        .as_ref()
+        .is_some_and(|s| s.design_gate == backlot_model::design::DesignGate::Required);
+    if gate_on {
+        crate::design_notices::append(state, dir, &sent, &mut out);
+    } else {
+        for req in &state.requirements {
+            if sent.contains(&req.seq) || req.version <= 1 {
+                continue;
+            }
+            let behind: Vec<&str> = state
+                .tasks
+                .values()
+                .filter(|t| t.is_behind(state.requirement_version))
+                .map(|t| t.id.as_str())
+                .collect();
+            out.push(Notice {
+                source_seq: req.seq,
+                to: "director".into(),
+                label: "req",
+                body: format!(
+                    "# requirement v{}\n\nThe requirement was revised to v{}: `{}` — {}\n\n{}\n",
+                    req.version,
+                    req.version,
+                    dir.join(&req.file).display(),
+                    req.summary,
+                    if behind.is_empty() {
+                        "No task is behind.".to_string()
+                    } else {
+                        format!(
+                            "Tasks now behind: {} (dispatched under an older version).",
+                            behind.join(", ")
+                        )
+                    },
+                ),
+            });
         }
-        let behind: Vec<&str> = state
-            .tasks
-            .values()
-            .filter(|t| t.is_behind(state.requirement_version))
-            .map(|t| t.id.as_str())
-            .collect();
-        out.push(Notice {
-            source_seq: req.seq,
-            to: "director".into(),
-            label: "req",
-            body: format!(
-                "# requirement v{}\n\nThe requirement was revised to v{}: `{}` — {}\n\n{}\n",
-                req.version,
-                req.version,
-                dir.join(&req.file).display(),
-                req.summary,
-                if behind.is_empty() {
-                    "No task is behind.".to_string()
-                } else {
-                    format!(
-                        "Tasks now behind: {} (dispatched under an older version).",
-                        behind.join(", ")
-                    )
-                },
-            ),
-        });
     }
     out
 }

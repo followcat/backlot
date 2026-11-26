@@ -7,6 +7,8 @@
 //! `dispatch`, the `plan` request) and reports are never checked —
 //! a person wrote them and the words stand.
 
+use backlot_model::design::{DesignGate, DesignPhase, DesignSlot, SignMode};
+use backlot_model::design_steps::{has_version_plan, last_call_after};
 use backlot_model::state::{DeliveryRecord, Message, StudioState, Task, TaskStatus};
 use backlot_model::steps::next_steps;
 
@@ -92,7 +94,93 @@ pub(crate) fn stale_reason(state: &StudioState, m: &Message) -> Option<&'static 
             let t = change_at(state, seq)?;
             t.status.is_terminal().then_some("task closed")
         }
-        "nudge" => (!next_steps(state).iter().any(|s| s.key == seq)).then_some("step done"),
+        "nudge" => (!next_steps(state)
+            .iter()
+            .any(|s| s.key == seq && s.owner == m.to))
+        .then_some("step done"),
+        "design-open" => {
+            let gate_on = state
+                .studio
+                .as_ref()
+                .is_some_and(|s| s.design_gate == DesignGate::Required);
+            let same_req = state
+                .requirements
+                .iter()
+                .rfind(|r| r.version == state.requirement_version)
+                .is_some_and(|r| r.seq == seq);
+            (!gate_on || !same_req || state.design_phase() != DesignPhase::Idle)
+                .then_some("design moved on")
+        }
+        "design-proposal" => {
+            let matches_round = state.design_phase() == DesignPhase::WaitingProposal
+                && state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .and_then(|d| d.current_round())
+                    .is_some_and(|r| r.opened_seq == seq);
+            (!matches_round).then_some("design moved on")
+        }
+        "design-buildability" => {
+            let matches_entry = state.design_phase() == DesignPhase::WaitingBuildability
+                && state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .and_then(|d| d.current_round())
+                    .is_some_and(|r| {
+                        r.entries
+                            .iter()
+                            .any(|e| e.seq == seq && e.slot == DesignSlot::Proposal)
+                    });
+            (!matches_entry).then_some("design moved on")
+        }
+        "design-summary" => {
+            let matches_entry = state.design_phase() == DesignPhase::WaitingSummary
+                && state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .and_then(|d| d.current_round())
+                    .is_some_and(|r| {
+                        r.entries
+                            .iter()
+                            .any(|e| e.seq == seq && e.slot == DesignSlot::Buildability)
+                    });
+            (!matches_entry).then_some("design moved on")
+        }
+        "design-supplement" => {
+            let matches_entry = state.design_phase() == DesignPhase::WaitingUser
+                && state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .and_then(|d| d.current_round())
+                    .is_some_and(|r| {
+                        r.entries
+                            .iter()
+                            .any(|e| e.seq == seq && e.slot == DesignSlot::Supplement)
+                    });
+            (!matches_entry).then_some("design moved on")
+        }
+        "design-signed" => {
+            let still_owed = state.design_phase() == DesignPhase::Signed
+                && state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .is_some_and(|d| {
+                        d.signed_seq == Some(seq)
+                            && last_call_after(state, seq).is_none()
+                            && !state
+                                .tasks
+                                .values()
+                                .any(|t| t.created_seq > seq || t.requirement_version == d.version)
+                            && (d.sign_mode != Some(SignMode::Approved)
+                                || !has_version_plan(state, d.version))
+                    });
+            (!still_owed).then_some("design moved on")
+        }
         // `recovered`, `denied`, `req` and unlabelled sources keep.
         _ => None,
     }
