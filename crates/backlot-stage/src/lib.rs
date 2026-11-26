@@ -57,6 +57,7 @@ mod hcard_outward;
 mod hcard_outward_env;
 mod hcard_outward_exec;
 mod hcard_outward_git;
+mod hcard_snapshot;
 mod hdeliver;
 mod hdeliver_fmt;
 mod hfinished;
@@ -151,6 +152,10 @@ mod ask_answer_tests;
 mod ask_tests;
 #[cfg(test)]
 mod budget_cmd_tests;
+#[cfg(test)]
+mod cards_hardening_steps_tests;
+#[cfg(test)]
+mod cards_hardening_tests;
 #[cfg(test)]
 mod cast_card_tests;
 #[cfg(test)]

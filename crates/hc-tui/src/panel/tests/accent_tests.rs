@@ -71,10 +71,17 @@ fn assert_border_fg(
     label: &str,
 ) {
     for y in (top_y + 1)..bot_y {
-        assert_eq!(buf[(area.x, y)].symbol(), "│", "{label} left y={y}");
+        // A role-group divider joins the border with `├ … ┤`.
+        assert!(
+            matches!(buf[(area.x, y)].symbol(), "│" | "├"),
+            "{label} left y={y}"
+        );
         assert_eq!(buf[(area.x, y)].fg, expected_fg, "{label} left fg y={y}");
         let rx = area.x + area.width - 1;
-        assert_eq!(buf[(rx, y)].symbol(), "│", "{label} right y={y}");
+        assert!(
+            matches!(buf[(rx, y)].symbol(), "│" | "┤"),
+            "{label} right y={y}"
+        );
         assert_eq!(buf[(rx, y)].fg, expected_fg, "{label} right fg y={y}");
     }
     for x in area.x..area.x + area.width {

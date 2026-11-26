@@ -18,6 +18,10 @@ pub enum CardState {
     Open,
     Applied,
     Cancelled,
+    /// Hollywood took back its own card before anyone applied it.
+    Withdrawn,
+    /// A newer card replaced this one — they targeted the same fact.
+    Superseded,
     Done,
     Failed,
     Stale,
@@ -29,6 +33,8 @@ impl CardState {
             CardState::Open => "open",
             CardState::Applied => "applied",
             CardState::Cancelled => "cancelled",
+            CardState::Withdrawn => "withdrawn",
+            CardState::Superseded => "superseded",
             CardState::Done => "done",
             CardState::Failed => "failed",
             CardState::Stale => "stale",
@@ -197,6 +203,17 @@ impl HollywoodState {
     pub fn approval_after(&self, seq: u64) -> Option<&HApproval> {
         self.approvals.iter().rev().find(|a| a.seq > seq)
     }
+
+    /// The open cards a new `action` would supersede — each targets the
+    /// same single fact the action changes, so a batch apply cannot run
+    /// both. Only kinds with one obvious target conflict (see
+    /// [`crate::hollywood::supersedes`]).
+    pub fn open_cards_superseded_by(&self, action: &CardAction) -> Vec<u64> {
+        self.open_cards()
+            .filter(|c| crate::hollywood::supersedes(action, &c.action))
+            .map(|c| c.seq)
+            .collect()
+    }
 }
 
 /// Fold one stamped event into the state — permissive: whatever the
@@ -229,6 +246,21 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
         }
         HollywoodKind::CardCancelled { card, reason } => {
             close(state, *card, CardState::Cancelled, reason, e.seq)
+        }
+        HollywoodKind::CardWithdrawn { card, reason } => {
+            close(state, *card, CardState::Withdrawn, reason, e.seq)
+        }
+        HollywoodKind::CardSuperseded {
+            card,
+            by_card,
+            reason,
+        } => {
+            let detail = if reason.is_empty() {
+                format!("superseded by c{by_card}")
+            } else {
+                format!("superseded by c{by_card} — {reason}")
+            };
+            close(state, *card, CardState::Superseded, &detail, e.seq)
         }
         HollywoodKind::CardDone { card, note } => close(state, *card, CardState::Done, note, e.seq),
         HollywoodKind::CardFailed { card, reason } => {

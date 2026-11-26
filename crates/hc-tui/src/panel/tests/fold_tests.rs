@@ -145,6 +145,7 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
             Row::Person { .. } => "Person",
             Row::BlockBottom(_) => "BlockBottom",
             Row::PersonLine { .. } => "PersonLine",
+            Row::Divider { .. } => "Divider",
             Row::Owed { .. } => "Owed",
             Row::Usage { .. } => "Usage",
             Row::Task { .. } => "Task",
@@ -159,8 +160,11 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
         vec![
             "BlockTop",
             "Person",
+            "Divider",
             "Person",
+            "Divider",
             "Person",
+            "Divider",
             "Person",
             "BlockBottom"
         ],
@@ -207,13 +211,22 @@ fn moving_cursor_to_second_studio_folds_first_and_unfolds_second() {
         .map(|r| match r {
             Row::BlockTop { .. } => "BlockTop",
             Row::Person { .. } => "Person",
+            Row::Divider { .. } => "Divider",
             Row::BlockBottom(_) => "BlockBottom",
             _ => "Other",
         })
         .collect();
     assert_eq!(
         acme_tags,
-        vec!["BlockTop", "Person", "Person", "Person", "BlockBottom"],
+        vec![
+            "BlockTop",
+            "Person",
+            "Divider",
+            "Person",
+            "Divider",
+            "Person",
+            "BlockBottom"
+        ],
         "acme-shop must fold when cursor is in blog: {acme:?}"
     );
     let blog = studio_rows(&all, "blog");

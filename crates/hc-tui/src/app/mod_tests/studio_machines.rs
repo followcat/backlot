@@ -168,8 +168,8 @@ async fn the_endpoint_sidebar_keeps_the_cast_under_the_machine_tree() {
     // R3-N2: no `cast · ` prefix under a studio label — the label
     // gets the full width (`id · machine` fits at 26 columns).
     assert!(sidebar.contains("acme-shop · Local"), "{sidebar}");
-    assert!(sidebar.contains("producer"), "{sidebar}");
-    assert!(sidebar.contains("director"), "{sidebar}");
+    assert!(sidebar.contains("Ⓟ"), "{sidebar}");
+    assert!(sidebar.contains("Ⓓ"), "{sidebar}");
     assert!(sidebar.contains("alice task-1"), "{sidebar}");
     assert!(sidebar.contains("others 1"), "{sidebar}");
     assert!(!sidebar.contains("agents"), "{sidebar}");

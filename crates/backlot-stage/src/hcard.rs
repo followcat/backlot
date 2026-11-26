@@ -97,6 +97,11 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
             let marker = format!("c{}", card.seq);
             s.cast_card.as_deref() == Some(marker.as_str())
         }
+        // A reopen's marker is the card id on the newest `studio.reopened`.
+        CardAction::ReopenStudio { .. } => {
+            let marker = format!("c{}", card.seq);
+            s.reopened.as_ref().and_then(|r| r.card.as_deref()) == Some(marker.as_str())
+        }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
         CardAction::Setup { .. } => false,
         CardAction::Outward { .. } => s.has_outward_completion(card.seq),
@@ -359,6 +364,10 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
             role: person.clone(),
             fresh: *fresh,
             reason: Some(marker(card.seq, &card.why)),
+        }),
+        CardAction::ReopenStudio { .. } => Ok(EventKind::StudioReopened {
+            reason: card.why.clone(),
+            card: Some(format!("c{}", card.seq)),
         }),
         // The cast change reads its file in `cast_step`, not here.
         CardAction::Cast { .. } => Err("cast is handled apart".into()),

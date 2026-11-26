@@ -235,6 +235,30 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
     Ok((std::mem::take(common), Cmd::StudioFinish { reason, force }))
 }
 
+/// `studio reopen [--reason <r>]`: the person brings a finished studio
+/// back — recasts, cast changes and new tasks work again. Refused from
+/// a role terminal and by Hollywood's own command; Hollywood may ask
+/// with a `reopen-studio` card.
+pub(crate) fn studio_reopen(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut reason = String::new();
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--reason" => reason = it.value("--reason", U_STUDIO)?,
+            _ if eq(&arg, "--reason").is_some() => {
+                reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::StudioReopen { reason }))
+}
+
 /// `studio prune [<studio> | --all-finished] [--dry-run] [--force]`:
 /// one finished studio, or every finished one. The scope rules are the
 /// runner's — this only collects the flags.

@@ -52,7 +52,8 @@ pub(super) fn hollywood_exchange_meta(
             meta.kind = ReaderKind::Tell;
         } else if entry.kind.as_deref() == Some("card") {
             // A card line reads as the card it names: its open summary
-            // carries the studio, the action and the open status.
+            // carries the studio, the action and the open status; a card
+            // no longer open carries its own state from the ledger.
             meta.kind = ReaderKind::Card;
             let id = format!("c{seq}");
             if let Some(card) = h.cards.iter().find(|c| c.id == id) {
@@ -60,6 +61,8 @@ pub(super) fn hollywood_exchange_meta(
                 meta.card_action = Some(card.action.clone());
                 meta.card_status = Some("open".into());
                 meta.ts_ms = card.ts_ms;
+            } else {
+                meta.card_status = entry.card_state.clone();
             }
         } else {
             meta.kind = ReaderKind::Report;
@@ -97,6 +100,16 @@ pub(super) fn card_meta(machines: &[MachineSummary], id: &str) -> ReaderMeta {
         meta.card_action = Some(card.action.clone());
         meta.nav_index = Some(idx + 1);
         meta.nav_total = Some(h.cards.len());
+    } else if let Some(seq) = id.strip_prefix('c').and_then(|s| s.parse::<u64>().ok())
+        && let Some(line) = h
+            .exchange
+            .iter()
+            .find(|e| e.seq == seq && e.kind.as_deref() == Some("card"))
+    {
+        // A card no longer open still reads: its state comes from the
+        // ledger line, so a withdrawn card shows as withdrawn.
+        meta.card_status = line.card_state.clone();
+        meta.ts_ms = line.ts_ms;
     }
     meta
 }

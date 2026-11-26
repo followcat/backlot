@@ -802,6 +802,26 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
+        Cmd::StudioReopen { reason } => {
+            // Reopening is the person's: a role terminal cannot do it,
+            // and Hollywood's own ledger has no say — it may only ask
+            // with a `reopen-studio` card the person applies.
+            if caller.role != "user" {
+                return Err(Fail::refused(
+                    "reopening the studio is the person's call — hollywood may propose a reopen-studio card",
+                ));
+            }
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::StudioReopened {
+                        reason,
+                        card: None,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Deliver {
             commits,
             report,
