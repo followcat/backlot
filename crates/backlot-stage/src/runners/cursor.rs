@@ -114,13 +114,15 @@ pub fn slug(path: &str) -> String {
 /// command with arguments (the bundle's matcher accepts
 /// `cmd == pat || cmd starts with pat + ' ' || base matches`), so
 /// one rule per command is the narrow form; unlike claude there is
-/// no starred variant. The base is `backlot`; an actor gets the git
-/// commands its loop drives, the director the read-only set it
-/// reviews with plus `git merge` — never `git branch`, whose prefix
-/// form would also allow `git branch -D` — and both get every
-/// declared check's `run`. A `run` holding `()` `,` `*?[]{}:`
-/// or `\` is not expressible — `,` splits rules, the rest are glob
-/// or syntax characters — and is simply never pre-allowed.
+/// no starred variant. The base is `backlot`, plus the shared
+/// read-only set ([`super::READ_ONLY`]) for **every** role; an
+/// actor adds `git add`/`git commit`, the director `git merge`. Only
+/// `git branch`'s two listing forms are allowed — never the bare
+/// family, whose prefix form would also reach `git branch -D` — and
+/// both roles get every declared check's `run`. A `run` holding `()`
+/// `,` `*?[]{}:` or `\` is not expressible — `,` splits rules, the
+/// rest are glob or syntax characters — and is simply never
+/// pre-allowed.
 pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
@@ -133,29 +135,26 @@ pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             "backlot hollywood propose",
             "backlot hollywood report",
             "backlot studio new --dry-run",
+            // Read-only, compiled into the binary: the docs, no disk
+            // search.
+            "backlot guide",
         ]
         .iter()
         .map(|c| format!("Shell({c})"))
         .collect();
     }
     let mut rules = vec!["Shell(backlot)".to_string()];
+    for cmd in super::READ_ONLY {
+        rules.push(format!("Shell({cmd})"));
+    }
     let is_actor = actor_task(role).is_some();
     if is_actor {
-        for cmd in [
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-        ] {
+        for cmd in ["git add", "git commit"] {
             rules.push(format!("Shell({cmd})"));
         }
     }
     if role == "director" {
-        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
-            rules.push(format!("Shell({cmd})"));
-        }
+        rules.push("Shell(git merge)".to_string());
     }
     if is_actor || role == "director" {
         for check in checks {

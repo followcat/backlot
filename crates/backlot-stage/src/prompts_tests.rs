@@ -384,6 +384,9 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
                 "backlot hollywood propose pause --studio s --task t1 --why x"
             }
             "backlot hollywood report" => "backlot hollywood report \"h\"",
+            // The guide's own reading forms: the listing, a topic and
+            // a grep.
+            "backlot guide" => "backlot guide guide --grep permission",
             _ => prefix,
         };
         let (_, cmd) = args::parse(&shell_words(
@@ -394,6 +397,7 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
             args::Cmd::Status { .. }
             | args::Cmd::Records { .. }
             | args::Cmd::Hollywood(_)
+            | args::Cmd::Guide { .. }
             | args::Cmd::Progress { .. } => {}
             args::Cmd::Tell { role, .. } => assert_eq!(role, "producer"),
             args::Cmd::StudioNew { dry_run, .. } => {
@@ -407,6 +411,8 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
             "backlot tell" => "backlot tell producer",
             "backlot progress" => "backlot progress",
             "backlot studio new" => "backlot studio new --dry-run",
+            // `guide` is pre-allowed by its prefix, either form.
+            "backlot guide" => "backlot guide",
             _ => concrete,
         };
         for (runner, rules) in [
@@ -843,4 +849,118 @@ fn prompts_and_runners_cover_backlot_progress() {
         crate::guard_rules::refused_command_line("backlot progress \"working\""),
         None
     );
+}
+
+/// Field notes 1126 §4: every role prompt — the four studio roles and
+/// Hollywood — says backlot's own docs come from `backlot guide` and
+/// never from a disk search. The guide verb is pre-allowed for every
+/// role on the runners that carry a command allow list.
+#[test]
+fn every_prompt_reads_its_docs_from_the_guide() {
+    for (kind, name) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Writer, "writer"),
+        (RoleKind::Director, "director"),
+        (RoleKind::Actor, "actor"),
+    ] {
+        let text = template(kind);
+        assert!(
+            text.contains("backlot guide <topic>"),
+            "{name}.md does not point at the guide"
+        );
+        assert!(
+            text.contains("Never search the"),
+            "{name}.md does not forbid a disk search"
+        );
+        assert!(text.contains("disk for them"), "{name}.md");
+    }
+    assert!(HOLLYWOOD.contains("backlot guide <topic>"), "hollywood.md");
+    assert!(
+        HOLLYWOOD.to_lowercase().contains("search the disk"),
+        "hollywood.md does not forbid a disk search"
+    );
+
+    // `backlot guide` is pre-allowed for each role on each runner that
+    // has an allow list — a prompt that teaches it must not prompt.
+    // Studio roles carry the `backlot *` family; Hollywood names it.
+    for role in ["producer", "director", "writer", "actor-t1-c1", "hollywood"] {
+        let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", role, &[]);
+        assert!(
+            claude.contains("Bash(backlot guide *)") || claude.contains("Bash(backlot *)"),
+            "claude {role}: {claude}"
+        );
+        assert!(
+            crate::runners::cursor::allow_rules(role, &[])
+                .iter()
+                .any(|r| r == "Shell(backlot guide)" || r == "Shell(backlot)"),
+            "cursor {role}"
+        );
+        assert!(
+            crate::runners::cmd::allow_rules(role, &[])
+                .iter()
+                .any(|r| r == "Shell(backlot guide:*)" || r == "Shell(backlot)"),
+            "cmd {role}"
+        );
+        assert!(
+            crate::runners::cline::allow_commands(role, &[])
+                .iter()
+                .any(|r| r == "backlot guide" || r == "backlot"),
+            "cline {role}"
+        );
+    }
+}
+
+/// Field notes 1126 §5: the shared read-only set reaches **every**
+/// role on **every** runner with an allow list — the producer's and
+/// writer's included — so a role's `git log` never asks a person.
+#[test]
+fn every_runner_pre_allows_the_read_only_set_for_every_role() {
+    for role in ["producer", "director", "writer", "actor-t1-c1"] {
+        let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", role, &[]);
+        let cursor = crate::runners::cursor::allow_rules(role, &[]);
+        let cmd = crate::runners::cmd::allow_rules(role, &[]);
+        let cline = crate::runners::cline::allow_commands(role, &[]);
+        for cmd_name in crate::runners::READ_ONLY {
+            assert!(
+                claude.contains(&format!("Bash({cmd_name} *)")),
+                "claude {role} misses `{cmd_name}`"
+            );
+            assert!(
+                cursor.iter().any(|r| r == &format!("Shell({cmd_name})")),
+                "cursor {role} misses `{cmd_name}`"
+            );
+            assert!(
+                cmd.iter().any(|r| r == &format!("Shell({cmd_name}:*)")),
+                "cmd {role} misses `{cmd_name}`"
+            );
+            assert!(
+                cline.iter().any(|r| r == cmd_name),
+                "cline {role} misses `{cmd_name}`"
+            );
+        }
+    }
+}
+
+/// Nothing that writes is in the shared read-only set: no `git add`,
+/// `git commit`, `git push`, `git merge`, and no bare `git branch`
+/// family whose prefix would also reach `git branch -D`.
+#[test]
+fn the_read_only_set_holds_no_writes() {
+    for bad in [
+        "git add",
+        "git commit",
+        "git push",
+        "git merge",
+        "git branch",
+        "git reset",
+        "git checkout",
+        "rm",
+    ] {
+        assert!(
+            !crate::runners::READ_ONLY.contains(&bad),
+            "the read-only set holds `{bad}`"
+        );
+    }
+    assert!(crate::runners::READ_ONLY.contains(&"git branch --list"));
+    assert!(crate::runners::READ_ONLY.contains(&"git branch --show-current"));
 }

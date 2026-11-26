@@ -9,6 +9,24 @@ inside `backlot` shows who is doing what.
 This guide walks one studio end to end. [limits.md](limits.md) says plainly what has and has not
 been verified; read it before trusting a studio with real work.
 
+## Reading backlot's own docs
+
+These files ship inside the binary. `backlot guide` lists the topics — one per file in
+`docs/studio/` — and `backlot guide <topic>` prints one whole; `--grep <word>` narrows either to
+the matching lines, over every topic when no topic is named:
+
+```sh
+backlot guide
+backlot guide guide
+backlot guide runners --grep permission
+```
+
+The topics are `design`, `guide`, `hollywood`, `ledger`, `limits`, `panel`, `plan`, `progress`,
+`requests`, `requirements`, `runners`, `server` and `testing`. A role is told to read them from
+here, never to search the disk: `docs/studio/` is not in its work area, and a search only stops at
+a permission prompt. Nothing is read from disk at run time — the text is compiled in — and the
+command needs no studio, ledger or core.
+
 ## What you need
 
 - **`hc` installed and a core running.** `backlot` (the TUI) starts a local core itself when
@@ -627,6 +645,11 @@ in the state directory.
 - A prompt reaching for **the role-identity variables or environment-clearing flags**
   — `BACKLOT_*`, `env -i`, `--ignore-environment` — is yours outright: the stage marks it
   `needs the user`, the director gets no notice and its `backlot approve` refuses.
+
+Read-only commands do not prompt at all: `git status`, `git log`, `git show`, `git diff`,
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for
+every role on every runner that has an allow list (`runners.md` says which). One plain command per
+shell call: a `cd x && git log`, a pipe or `git -C` does not match the rule and prompts.
 
 Answer with `backlot approve`, naming the role's key — `producer`, `director`, `writer` or
 `actor-<task>-c<n>` (the panel and `backlot status` show it):

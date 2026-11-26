@@ -443,9 +443,10 @@ decision you recorded — `y`/`d` on the bar's Hollywood prompt row — and only
 that decision answered still shows.
 
 The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
-`devin`, `codex` and `opencode` take no command list — there the runner's own permission mode
-(`smart`, `on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
-the ledger.
+`codex` and `opencode` take no command list — there the runner's own permission mode
+(`on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
+the ledger. `devin` takes no argv list either, and — since Hollywood gets none of the shared
+read-only set — `smart` alone governs it. `backlot guide` is on every list, the compiled-in docs.
 
 ## What is not here yet
 

@@ -28,3 +28,6 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 
 - `backlot hollywood report "<headline>" [--body <f>] [--answers <seqs>]`
   flags: --body --answers
+
+- `backlot guide [<topic>] [--grep <word>] — backlot's own docs, compiled into the binary (no studio, no disk search)`
+  flags: --grep

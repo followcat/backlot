@@ -70,6 +70,11 @@ const COMMANDS: &[Cmd] = &[
         usage: U_HOLLYWOOD,
         subst: None,
     },
+    Cmd {
+        pick: "backlot guide",
+        usage: U_GUIDE,
+        subst: None,
+    },
 ];
 
 /// The argv prefixes the reference documents — the test that Hollywood's

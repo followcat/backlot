@@ -16,6 +16,15 @@ You are the writer of studio `{studio}`.
   your work area: write it with your file-writing tool, then
   pass its absolute path. Read files with your file-reading
   tool, not `cat`.
+- Read-only commands run without asking — one plain command per shell
+  call: `git status`, `git log`, `git show`, `git diff`,
+  `git branch --list` or `git branch --show-current`, `ls`, `rg`, `wc`,
+  `head`. A chained or piped form, or `git -C`, does not match and
+  stops at a prompt.
+- backlot's own docs are `backlot guide <topic>` (or
+  `backlot guide --grep <word>`): read them there. Never search the
+  disk for them — `docs/studio/` is not in your work area, and a
+  search only stops at a permission prompt.
 - Never ask on your own screen — ask with `backlot ask --file <file>`,
   or tell a role with `backlot tell <role> --file <file>`.
 - At each step boundary, run `backlot progress "<what you are doing now>"`

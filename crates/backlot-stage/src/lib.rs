@@ -49,6 +49,7 @@ mod guard_prep;
 mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
+mod guide;
 mod hcard;
 mod hcard_cast;
 mod hcard_new;
@@ -231,6 +232,8 @@ mod guard_git_tests;
 mod guard_line_tests;
 #[cfg(test)]
 mod guard_tests;
+#[cfg(test)]
+mod guide_tests;
 
 #[cfg(test)]
 mod hcard_tests;

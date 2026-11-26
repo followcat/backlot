@@ -252,6 +252,12 @@ pub enum Cmd {
         /// `--write` instead of the default `--print`.
         write: bool,
     },
+    /// `backlot guide [<topic>] [--grep <word>]` — backlot's own docs,
+    /// compiled into the binary, read-only (never a disk search).
+    Guide {
+        topic: Option<String>,
+        grep: Option<String>,
+    },
     /// `backlot runners [--json]` — the detector's table (U5) or the
     /// G4 document, read-only.
     Runners {
@@ -621,6 +627,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 )),
             }
         }
+        "guide" => args_studio::guide(&mut common, &mut it),
         "runners" => args_studio::runners(&mut common, &mut it),
         "repos" => args_studio::repos(&mut common, &mut it),
         other => Err(usage(format!("unknown command '{other}'"), U_STATUS)),

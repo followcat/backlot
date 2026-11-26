@@ -492,6 +492,32 @@ pub(crate) fn plan_publish(common: &mut Common, it: &mut It) -> Result<(Common, 
     ))
 }
 
+/// `backlot guide [<topic>] [--grep <word>]` — one optional topic
+/// positional and one optional flag, either alone or together. No
+/// studio is needed: the docs are compiled into the binary.
+pub(crate) fn guide(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut topic = None;
+    let mut grep = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_GUIDE)));
+        }
+        if common_flag(it, common, &arg, U_GUIDE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--grep" => grep = Some(it.value("--grep", U_GUIDE)?),
+            _ if eq(&arg, "--grep").is_some() => grep = eq(&arg, "--grep").map(String::from),
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_GUIDE));
+            }
+            _ if topic.is_none() => topic = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_GUIDE)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::Guide { topic, grep }))
+}
+
 /// Commands taking only common flags (`stage start`, `stage run`).
 pub(crate) fn common_only(
     common: &mut Common,

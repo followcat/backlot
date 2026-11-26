@@ -52,6 +52,7 @@ const COMMANDS: &[&str] = &[
     "perms",
     "runners",
     "repos",
+    "guide",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.

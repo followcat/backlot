@@ -389,9 +389,11 @@ re-raise one `stall_limit_s` later.
   than proven in a full studio run, whereas `agy` was live-checked end-to-end); and
   `curl`/`wget` piped into `sh` or `bash` is not covered by a `PATH` shim (checking `/proc`
   races pipeline `execve`).
-- **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `devin`,
-  `codex` and `opencode` the runner's own permission mode is the gate — the ledger's role rules
-  still refuse what they must, but nothing trims the prompt set at launch.
+- **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `codex`
+  and `opencode` the runner's own permission mode is the gate — the ledger's role rules still refuse
+  what they must, but nothing trims the prompt set at launch. `devin` takes no argv list either, but
+  its per-work-area `permissions.allow` carries the shared read-only set (the same one every role on
+  `claude`, `cursor`, `cmd` and `cline` gets); whether `smart` honours that member is unverified.
 - **A cursor role's `cli-config.json` holds the account's `authInfo`** once the agent has run —
   the agent writes it into the role's isolated `roles/<role>/cursor/config/`. The studio state
   directory is private: do not share or publish it.

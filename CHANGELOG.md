@@ -10,6 +10,13 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+Roles find backlot's own docs and run read-only commands without a prompt.
+
+### Added
+
+- **`backlot guide [<topic>] [--grep <word>]`.** Backlot's own documentation — every file in `docs/studio/` — is compiled into the binary and printed here: no topic lists them, a topic prints one, and `--grep` narrows either to the matching lines (over every topic when none is named). It needs no studio, ledger or core and never searches the disk. Every role prompt and Hollywood's now say their docs come from `backlot guide` and never from a disk search — the `find /`/glob-for-`guide.md` detours that only stopped at a permission prompt are gone — and the command is pre-allowed for every role on every runner that carries an allow list (`docs/studio/guide.md`, `docs/studio/design.md`, `docs/studio/runners.md`).
+- **A read-only allow list for every role, on every runner.** `git status`, `git log`, `git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for the producer, director, writer and actors alike, so a role's forensic reads never ask a person — previously only actors and the director got git reads, and only on `claude`, so a producer's `git log --stat` prompted. `claude` (argv), `cursor` and `cmd` (the role's `cli-config.json` / `.commandcode/settings.json`) and `cline` (its `PreToolUse.sh`) carry the set; `devin` now writes it into its per-work-area `permissions.allow` (unverified under `smart`); `codex` and `opencode` take no list. Only `git branch`'s two listing forms are rules — never the bare family, whose prefix would also reach `git branch -D`. The role prompts now name the set and say one plain command per shell call, since a `cd … && git log`, a pipe or `git -C` does not match (`docs/studio/runners.md`, `docs/studio/guide.md`, `docs/studio/limits.md`).
+
 ## 0.4.9 — 2026-11-26
 
 A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.
