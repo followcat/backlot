@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.11 — 2026-11-26
+
 ### Added
 
 - **Reopen a finished studio.** `backlot studio reopen --studio <s> --as user` records the reopening (`studio.reopened`), and recasting a role, `studio cast set`, adding tasks and answering permission prompts work again. Only you may reopen — a role or Hollywood is refused — and Hollywood may propose it as a `reopen-studio` card. The guide says when to reopen and when to start a new studio (`docs/studio/guide.md`, `docs/studio/hollywood.md`).
