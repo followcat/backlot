@@ -97,6 +97,19 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
         ReqAction::StudioFinish { .. } => {
             crate::studio_fmt::studio_finish(&parse_res::<StudioFinishResult>(&ack)?)
         }
+        ReqAction::StudioCastShow { json: want, .. } => {
+            let res: backlot_model::req_results::StudioCastShowResult = parse_res(&ack)?;
+            if *want || json {
+                serde_json::to_string_pretty(&res.settings)
+                    .map_err(|e| Fail::refused(format!("cast show: {e}")))?
+            } else {
+                res.cast
+            }
+        }
+        ReqAction::StudioCastSet { json: want, .. } => {
+            let res: backlot_model::req_results::StudioCastSetResult = parse_res(&ack)?;
+            verbs_fmt::format_cast_set_result(&res, *want || json)
+        }
         ReqAction::StudioPrune { dry_run, .. } => {
             let r: PruneReport = report(&ack, *dry_run)?;
             crate::prune_render::format_report(&r, json)?

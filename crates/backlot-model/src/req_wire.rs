@@ -272,6 +272,25 @@ pub enum ReqAction {
         #[serde(default, skip_serializing_if = "crate::event::is_false")]
         force: bool,
     },
+    /// `studio cast show`: the effective cast as a cast file (or the
+    /// settings as JSON). Read-only; answered from the hub.
+    StudioCastShow {
+        studio: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        json: bool,
+    },
+    /// `studio cast set`: the cast file travels as **content**, never as a
+    /// client path — the hub writes it to a temp file and parses it with
+    /// `studio new`'s own rules. `dry_run` returns the diff and records
+    /// nothing.
+    StudioCastSet {
+        studio: String,
+        cast: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        dry_run: bool,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        json: bool,
+    },
     StudioPrune {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         studio: Option<String>,

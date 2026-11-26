@@ -187,18 +187,16 @@ fn studio_logs(base: &Path, names: &[String]) -> Result<Vec<backlot_model::Studi
 /// as their newest recast has them, the rest as the newest
 /// `studio.cast` or `studio.created` recorded. The plain form is a cast
 /// file that `studio new --cast` reads back; `--json` is the same
-/// settings structured.
+/// settings structured. The read is `verbs::cast_show`, the same one the
+/// server queue answers, so the two agree.
 fn cast_show(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
     let base = crate::cli::resolve_base(env, common, base, &name)?;
-    let dir = store::studio_dir(&base, &name);
-    let state = store::load_state(&dir).map_err(store_fail)?;
-    let cast = backlot_model::cast::CastSettings::of(&state)
-        .ok_or_else(|| Fail::refused(format!("no studio '{name}'")))?;
+    let res = crate::verbs::cast_show(&base, &name, json)?;
     Ok(if json {
-        serde_json::to_string_pretty(&cast).map_err(|e| Fail::refused(e.to_string()))?
+        serde_json::to_string_pretty(&res.settings).map_err(|e| Fail::refused(e.to_string()))?
     } else {
-        backlot_model::cast::to_toml(&cast)
+        res.cast
     })
 }
 
