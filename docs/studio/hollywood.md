@@ -18,14 +18,15 @@ layout, so toggling it resizes nothing.
 - **Hidden** draws nothing and consumes no key. In studio mode the bar exists whether or not a
   `[hollywood]` table does (U7); without one it is the no-agent bar, and `backlot --plain` has
   no bar at all, so its screen is exactly the herdr screen.
-- **Collapsed** is the **lot pill** in the chrome row — a reserved, clickable segment at the
-  right end of the tab bar, or of the one-row studio header on a studio workspace. Its urgent
-  count is the length of the one needs-you list — user prompts, roles with a needs-you attention
-  or an unanswered question, blocked Hollywood, studios with no requirement, stopped stages,
-  open cards and studios ready to finish — so it can never disagree with the sheet or the calm
-  row; it also counts the studios (`✦`) and, while collapsed, new Hollywood replies. Urgent
-  counts turn it red, and narrow widths shrink it through shorter texts. A click or the toggle
-  key expands the band.
+- **Collapsed** is the **bucketed lot pill** at the right end of the chrome row (`HeaderKind::Role`
+  also shows `<studio> › <badge> <mark>  <runner> · <model> (<effort>)` beside it on the left):
+  a reserved clickable segment displaying studio count plus semantically bucketed waits derived
+  from the single needs-you list (`✦ <S> · !<B> · ?<A> · <C>c · ✓<R> ready · alt+y`, shrinking
+  through `Medium` and priority `Tiny` tiers when narrow). The pill paints red **only** when
+  `blocking > 0` (`!B`: user prompts, needs-you/blocked roles, stopped stages, unreachable machines,
+  missing requirements); otherwise it uses `elevation.raised_row` with `teal`/`peach`/`accent`
+  segments. Clicking a bucket segment jumps straight to that `WaitBucket` (`Blocking`, `Asks`,
+  `Cards`, `Ready`) in the expanded Call Sheet.
 - **Expanded** is the **Call Sheet** — the film-strip band dropped from the top over the
   whole width, at most half the height (sixteen rows on a mobile width) over `elevation.surface`
   with an external 1-row `elevation.shadow` below the bottom sprocket (unless `[ui] popup_shadow = false`
@@ -70,11 +71,13 @@ draws before that first read settles (two seconds at most), so a client with stu
 flashes the welcome card.
 
 The key is **`alt+y`**, a direct key with no prefix, plus the `Ctrl+B i` chord tail. From Hidden
-or Collapsed it expands straight into Compose (`›`) when `[hollywood]` is set (waiting items stay
-visible above; unconfigured keeps wait/frame landing), and from Expanded it collapses keeping any
-draft; `Esc` in Compose rests on `›` keeping the draft, and a second `Esc` in Resting collapses
-it. Toast jumps (`Ctrl+B o` or click) still land on their named target in Resting. `[keys]
-call_sheet` rebinds the direct key and `[keys] prefix_call_sheet` the
+or Collapsed it lands directly on the first blocking wait (`Resting`) whenever any blocking item
+waits (`!B > 0`), and opens straight into Compose (`›`) when `blocking == 0` and `[hollywood]` is
+set (or wait/frame landing when unconfigured); from Expanded it collapses keeping any
+draft. Waiting rows always remain visible above Compose, `Esc` in Compose rests on `›` keeping the
+draft, and a second `Esc` in Resting collapses it. Toast jumps (`Ctrl+B o` or click) still land on
+their named target in Resting, and clicking a pill bucket jumps directly to that bucket's first item.
+`[keys] call_sheet` rebinds the direct key and `[keys] prefix_call_sheet` the
 chord tail — an empty string unbinds that slot; `[hollywood] key` fills whichever slot `[keys]`
 leaves unset (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
 bound in studio mode with or without a `[hollywood]` table; under `--plain` it is not bound, so
@@ -92,8 +95,8 @@ notice that names the file and never echoes the value. Known costs, said plainly
 
 The studio panel keeps `prefix+y` to toggle, and **`alt+l`** (`[keys] focus_lot`, `""` unbinds)
 focuses the right-hand lot (`lot · N`) on its last selectable row — opening it if hidden or
-collapsed without starting compose or toggling closed (shown beside `alt+y / ctrl+b i` in the lot
-header, `?`, and the launcher; falls through under `--plain`).
+collapsed without starting compose or toggling closed (shown in the lot header, `?`, and the
+launcher; falls through under `--plain`).
 
 Inside the expanded bar: `Tab` / `Shift+Tab` cycles the three zones — `Compose (›)` →
 `Waiting/Exchange` (first waiting item, or newest exchange row) → `Studios` (upper frames) —
