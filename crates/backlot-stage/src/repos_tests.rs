@@ -54,10 +54,7 @@ fn repos_json_classifies_entries() {
     fs::write(code.join("README"), "not a dir\n").unwrap();
 
     let doc = json(&env, &format!("repos --json --from {}", code.display()));
-    assert_eq!(
-        doc["cwd"],
-        code.canonicalize().unwrap().to_string_lossy().as_ref()
-    );
+    crate::test_support::assert_same_path(doc["cwd"].as_str().unwrap_or(""), &code);
     // git_ready, then git_empty, then plain dirs — each by name.
     let names: Vec<&str> = doc["entries"]
         .as_array()
@@ -87,19 +84,9 @@ fn repos_default_and_tilde_are_home() {
     let (_scratch, env, home) = home_env();
     fs::create_dir_all(home.join("code")).unwrap();
     let doc = json(&env, "repos --json");
-    assert_eq!(
-        doc["cwd"],
-        home.canonicalize().unwrap().to_string_lossy().as_ref()
-    );
+    crate::test_support::assert_same_path(doc["cwd"].as_str().unwrap_or(""), &home);
     let tilde = json(&env, "repos --json --from ~/code");
-    assert_eq!(
-        tilde["cwd"],
-        home.join("code")
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .as_ref()
-    );
+    crate::test_support::assert_same_path(tilde["cwd"].as_str().unwrap_or(""), home.join("code"));
 }
 
 #[test]
@@ -111,14 +98,9 @@ fn repos_from_stays_inside_home() {
         &env,
         &format!("repos --json --from {}/a/../a/b", home.display()),
     );
-    assert_eq!(
-        doc["cwd"],
-        home.join("a")
-            .join("b")
-            .canonicalize()
-            .unwrap()
-            .to_string_lossy()
-            .as_ref()
+    crate::test_support::assert_same_path(
+        doc["cwd"].as_str().unwrap_or(""),
+        home.join("a").join("b"),
     );
     // `..` escaping $HOME is refused — another user's tree never lists.
     let err = refused(

@@ -20,7 +20,9 @@ use crate::server_cfg::{self, SERVER_ENV, ServerTarget};
 mod remote_doc_fmt;
 
 pub(crate) use remote_doc_fmt::format_ack_json;
-pub use remote_doc_fmt::{format_ack, format_hollywood_setup};
+pub use remote_doc_fmt::{
+    format_ack, format_hollywood_setup, format_hollywood_switch, format_hollywood_switch_status,
+};
 
 /// Exact user-facing refusal for commands not yet supported in B1a.
 pub const ERR_NOT_AVAILABLE: &str = "not available through the server yet";
@@ -148,7 +150,10 @@ pub fn wants_json(cmd: &Cmd) -> bool {
         | Cmd::Repos { json, .. }
         | Cmd::Runners { json } => *json,
         Cmd::StudioCast(crate::args::CastCmd::Show { json })
-        | Cmd::StudioCast(crate::args::CastCmd::Set { json, .. }) => *json,
+        | Cmd::StudioCast(crate::args::CastCmd::Set { json, .. })
+        | Cmd::Hollywood(crate::args::HollywoodCmd::Switch { json, .. })
+        | Cmd::Hollywood(crate::args::HollywoodCmd::SwitchCancel { json })
+        | Cmd::Hollywood(crate::args::HollywoodCmd::SwitchStatus { json }) => *json,
         _ => false,
     }
 }
@@ -207,8 +212,92 @@ pub(crate) fn run(
             MappedCmd::NeedsStudio(make) => make(resolve_remote_studio(&client).await?),
             MappedCmd::Unsupported => unreachable!(),
         };
+        if let crate::args::Cmd::Hollywood(crate::args::HollywoodCmd::Switch {
+            no_wait: false,
+            timeout_s,
+            ..
+        }) = cmd
+        {
+            return wait_remote_switch(&client, Some(&endpoint), &action, *timeout_s, json).await;
+        }
         execute_client_with(&client, Some(&endpoint), &action, DEFAULT_ACK_TIMEOUT, json).await
     })
+}
+
+async fn wait_remote_switch(
+    client: &Client,
+    endpoint: Option<&Endpoint>,
+    action: &ReqAction,
+    timeout_s: Option<u64>,
+    json: bool,
+) -> Result<String, Fail> {
+    let raw = execute_client_with(client, endpoint, action, DEFAULT_ACK_TIMEOUT, true).await?;
+    let queued: backlot_model::req_results::HollywoodSwitchResult = serde_json::from_str(&raw)
+        .map_err(|e| Fail::core(format!("malformed switch reply: {e}")))?;
+    let Some(mut last) = queued.handoff else {
+        return Ok(raw);
+    };
+    let handoff_id = last.id.clone();
+    if !json {
+        eprintln!(
+            "[hollywood] switch {} -> {}/{} ({})",
+            handoff_id, last.target_runner, last.target_model, last.phase
+        );
+    }
+    let timeout_ms = timeout_s
+        .map_or(crate::handoff::DEFAULT_TIMEOUT_MS, |s| {
+            s.saturating_mul(1_000)
+        })
+        .saturating_add(30_000);
+    let started = crate::live::now_ms();
+    loop {
+        match last.phase.as_str() {
+            "committed" => {
+                let res = backlot_model::req_results::HollywoodSwitchResult {
+                    action: "committed".into(),
+                    handoff: Some(last),
+                };
+                return if json {
+                    serde_json::to_string_pretty(&res).map_err(|e| Fail::refused(e.to_string()))
+                } else {
+                    Ok(format_hollywood_switch(&res))
+                };
+            }
+            "rolled_back" => {
+                let err = last
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "hollywood handoff rolled back".into());
+                return Err(Fail::refused(err));
+            }
+            _ => {}
+        }
+        if crate::live::now_ms().saturating_sub(started) >= timeout_ms {
+            return Err(Fail::refused(
+                "timed out waiting for remote hollywood handoff",
+            ));
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let status_raw = execute_client_with(
+            client,
+            endpoint,
+            &ReqAction::HollywoodSwitchStatus,
+            DEFAULT_ACK_TIMEOUT,
+            true,
+        )
+        .await?;
+        let st: backlot_model::req_results::HollywoodSwitchStatusResult =
+            serde_json::from_str(&status_raw)
+                .map_err(|e| Fail::core(format!("malformed switch status: {e}")))?;
+        if let Some(cur) = st.handoff
+            && cur.id == handoff_id
+        {
+            if cur.phase != last.phase && !json {
+                eprintln!("[hollywood] switch: {}", cur.phase);
+            }
+            last = cur;
+        }
+    }
 }
 
 /// Intercept CLI invocation when `--server`, `BACKLOT_SERVER`, or `[client]`

@@ -51,10 +51,10 @@ pub(super) fn accepted_fold_ids(studio: &StudioSummary) -> Vec<&str> {
         .collect()
 }
 
-/// A folded block's height: `BlockTop`, one row per live role, and
-/// `BlockBottom`.
+/// A folded block's height: `BlockTop`, one row per live role, the
+/// thin rules between non-empty role groups, and `BlockBottom`.
 pub(super) fn folded_block_height(studio: &StudioSummary) -> usize {
-    2 + live_roles(studio).len()
+    2 + live_roles(studio).len() + super::rows_fit::divider_count(studio)
 }
 
 /// The rendered shape of a studio block in `Expanded` mode.

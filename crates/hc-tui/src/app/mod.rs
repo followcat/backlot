@@ -28,7 +28,7 @@ mod help_launcher_keys;
 mod help_picker;
 mod hollywood;
 mod host;
-mod hw_setup;
+mod hw_switch;
 mod image_paste;
 mod init;
 pub(crate) mod input;
@@ -376,14 +376,16 @@ pub struct App {
     /// The first detected runner — fills `<r>` in the overseer row's
     /// setup hint; `None` leaves the placeholder.
     setup_runner_hint: Option<String>,
-    /// The in-TUI Hollywood setup dialog — `Some` while its modal is
-    /// open; it owns keys, mouse and IME text like New Studio does.
-    hw_setup: Option<crate::hw_setup::HwSetup>,
+    /// The unified in-TUI Hollywood switch / setup dialog — `Some`
+    /// while its modal is open; it owns keys, mouse and IME text.
+    hw_switch: Option<crate::hw_switch::HwSwitch>,
     /// Last frame's dialog hit rectangles (`HwHits`).
-    hw_hits: crate::hw_setup::HwHits,
+    hw_hits: crate::hw_switch::HwHits,
     /// The cfg an in-flight `hollywood setup` is writing — its `Ok`
     /// reply flips the bar to the agent form.
     hw_setup_pending: Option<backlot_stage::config::HollywoodCfg>,
+    /// `(id, phase)` of the newest handoff state already toasted.
+    last_handoff_seen: Option<(String, String)>,
     /// Last frame's layer hit rectangles (`HollywoodRender`).
     hollywood_hits: crate::hollywood::HollywoodRender,
     /// `(label, result, view)` — `view` opens the "Show me" read on Ok.
@@ -638,6 +640,9 @@ pub struct App {
     reaped_exited: Arc<std::sync::Mutex<std::collections::HashSet<(String, u64)>>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
+    monotonic_clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    tab_status_clock: Arc<dyn Fn() -> Option<i64> + Send + Sync>,
+    pane_tick_epoch: tokio::time::Instant,
 }
 
 #[cfg(test)]

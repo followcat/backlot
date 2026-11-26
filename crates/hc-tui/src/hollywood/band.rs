@@ -16,7 +16,7 @@ use super::rows::{HollywoodActivity, Live, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 
 /// The space the band keeps at each side.
@@ -112,16 +112,23 @@ pub(crate) fn draw_row(
         }
         Row::Fold { .. } => {}
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
-        Row::Input => draw_input(
-            buf,
-            rect,
-            hollywood,
-            selected,
-            suppress_highlights,
-            activity,
-            palette,
-            hits,
-        ),
+        Row::Input => {
+            let handoff_active = waits.iter().any(|w| match w {
+                Wait::Hollywood(hw) => super::handoff_ui::is_handoff_active(hw),
+                _ => false,
+            });
+            draw_input(
+                buf,
+                rect,
+                hollywood,
+                selected,
+                suppress_highlights,
+                activity,
+                handoff_active,
+                palette,
+                hits,
+            );
+        }
         Row::Setup => draw_setup(buf, rect, palette),
     }
     hits.rows.push((rect, target));
@@ -270,7 +277,7 @@ fn draw_wait(
                 Style::default().fg(palette.subtext0).bg(bg),
             ),
         ];
-        paint_head_segs(buf, head_x, rect.y, head_room, &segs)
+        paint_head_segs(buf, head_x, rect.y, head_room, &segs, palette)
     };
     if let Some(pending) = hollywood.pending.as_deref()
         && pending.contains(target_label(wait))
@@ -306,7 +313,14 @@ fn draw_wait(
     );
 }
 
-fn paint_head_segs(buf: &mut Buffer, mut x: u16, y: u16, room: u16, segs: &[(&str, Style)]) -> u16 {
+fn paint_head_segs(
+    buf: &mut Buffer,
+    mut x: u16,
+    y: u16,
+    room: u16,
+    segs: &[(&str, Style)],
+    palette: &Palette,
+) -> u16 {
     let mut used = 0u16;
     for (seg, style) in segs {
         let rem = room.saturating_sub(used);
@@ -318,7 +332,7 @@ fn paint_head_segs(buf: &mut Buffer, mut x: u16, y: u16, room: u16, segs: &[(&st
         }
         let clipped = truncate_end(seg, rem as usize);
         let w = (display_width(&clipped) as u16).min(rem);
-        put_text(buf, x, y, w, &clipped, *style);
+        put_role_badged_text(buf, x, y, w, &clipped, *style, palette);
         x += w;
         used += w;
         if display_width(seg) > rem as usize {
@@ -464,6 +478,7 @@ fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, pale
     let (text, glyph) = live_head(live);
     let (colour, bold) = match live {
         Live::Pending => (elev.muted_surface, false),
+        Live::HandoffQueued { .. } | Live::BlockedQueue(_) => (palette.peach, false),
         Live::Working(_) => (palette.yellow, false),
         Live::Prompt(_) => (palette.red, true),
         Live::Idle => (elev.muted_surface, false),
@@ -519,6 +534,7 @@ fn draw_input(
     selected: bool,
     suppress_highlights: bool,
     activity: HollywoodActivity,
+    handoff_active: bool,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -592,6 +608,7 @@ fn draw_input(
     );
     let placeholder = match hollywood.reply_to.as_ref() {
         Some((_, role)) => format!("reply to {role}…"),
+        None if handoff_active => "tell hollywood  (draft kept across switch)".to_owned(),
         None => "tell hollywood…".to_owned(),
     };
     if editing {

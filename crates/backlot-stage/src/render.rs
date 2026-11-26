@@ -36,7 +36,7 @@ fn fmt_ms(ms: u64) -> String {
 
 /// `14:02` — a ledger millisecond stamp as the local wall clock's
 /// hour and minute, the same shape the panel's clock keeps.
-fn hh_mm(ms: u64) -> String {
+pub(crate) fn hh_mm(ms: u64) -> String {
     let timestamp: libc::time_t = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
     let mut local: libc::tm = unsafe { std::mem::zeroed() };
     if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {

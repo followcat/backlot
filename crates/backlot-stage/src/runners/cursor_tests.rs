@@ -43,46 +43,56 @@ fn slug_is_the_bundles() {
     );
 }
 
-/// `allow` rules per role: the base `Shell(backlot)`; an actor's
-/// six git commands; the director's read-only set and `git merge`,
-/// never `git branch`; the declared checks verbatim — and a `run`
-/// the rule syntax cannot express is simply never there.
+/// `allow` rules per role: the base `Shell(backlot)` plus the shared
+/// read-only set for everyone; an actor's `git add`/`git commit`, the
+/// director's `git merge`; the declared checks verbatim — and a `run`
+/// the rule syntax cannot express is simply never there. `git branch`
+/// is only ever its two listing forms.
 #[test]
 fn rules_per_role() {
     let checks = [
         check("unit", "cargo test --lib"),
         check("lint", "cargo clippy"),
     ];
-    assert_eq!(
-        allow_rules("director", &checks),
-        [
-            "Shell(backlot)",
-            "Shell(git status)",
-            "Shell(git diff)",
-            "Shell(git log)",
-            "Shell(git show)",
-            "Shell(git merge)",
-            "Shell(cargo test --lib)",
-            "Shell(cargo clippy)"
-        ]
-    );
-    assert_eq!(
-        allow_rules("actor-t1-c1", &checks),
-        [
-            "Shell(backlot)",
-            "Shell(git add)",
-            "Shell(git commit)",
-            "Shell(git status)",
-            "Shell(git diff)",
-            "Shell(git log)",
-            "Shell(git show)",
-            "Shell(cargo test --lib)",
-            "Shell(cargo clippy)"
-        ]
-    );
-    // Producer and writer keep the base rule only.
+    let read_only = [
+        "Shell(git status)",
+        "Shell(git log)",
+        "Shell(git show)",
+        "Shell(git diff)",
+        "Shell(git branch --list)",
+        "Shell(git branch --show-current)",
+        "Shell(ls)",
+        "Shell(rg)",
+        "Shell(wc)",
+        "Shell(head)",
+    ];
+    let director: Vec<String> = std::iter::once("Shell(backlot)".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain([
+            "Shell(git merge)".to_string(),
+            "Shell(cargo test --lib)".to_string(),
+            "Shell(cargo clippy)".to_string(),
+        ])
+        .collect();
+    assert_eq!(allow_rules("director", &checks), director);
+    let actor: Vec<String> = std::iter::once("Shell(backlot)".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain([
+            "Shell(git add)".to_string(),
+            "Shell(git commit)".to_string(),
+            "Shell(cargo test --lib)".to_string(),
+            "Shell(cargo clippy)".to_string(),
+        ])
+        .collect();
+    assert_eq!(allow_rules("actor-t1-c1", &checks), actor);
+    // Producer and writer keep the base rule plus the read-only set.
     for role in ["producer", "writer"] {
-        assert_eq!(allow_rules(role, &checks), ["Shell(backlot)"], "{role}");
+        let rules = allow_rules(role, &checks);
+        assert_eq!(rules.first().map(String::as_str), Some("Shell(backlot)"));
+        assert!(
+            read_only.iter().all(|r| rules.iter().any(|x| x == r)),
+            "{role} misses a read-only rule: {rules:?}"
+        );
     }
     assert!(
         allow_rules("hollywood", &[]).contains(&"Shell(backlot progress)".to_string()),
@@ -208,17 +218,13 @@ fn prepare_writes_the_isolated_tree() {
         assert_eq!(mode, 0o600, "{}", f.display());
     }
     let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    let allow = allow_rules("director", &[]);
     assert_eq!(
         v["permissions"]["allow"],
-        serde_json::json!([
-            "Shell(backlot)",
-            "Shell(git status)",
-            "Shell(git diff)",
-            "Shell(git log)",
-            "Shell(git show)",
-            "Shell(git merge)"
-        ])
+        serde_json::to_value(&allow).unwrap()
     );
+    assert!(allow.contains(&"Shell(git merge)".to_string()), "{allow:?}");
+    assert!(allow.contains(&"Shell(git log)".to_string()), "{allow:?}");
     let names: Vec<String> = serde_json::from_str(&fs::read_to_string(&disabled).unwrap()).unwrap();
     assert_eq!(names, ["other", "web-tools"], "sorted server names");
 }
@@ -518,17 +524,7 @@ fn plan_carries_its_prep() {
         Path::new("/home/user/state/studios/acme-shop/roles/director/cursor")
     );
     assert_eq!(p.project, "home-user-acme-shop");
-    assert_eq!(
-        p.allow,
-        [
-            "Shell(backlot)",
-            "Shell(git status)",
-            "Shell(git diff)",
-            "Shell(git log)",
-            "Shell(git show)",
-            "Shell(git merge)"
-        ]
-    );
+    assert_eq!(p.allow, allow_rules("director", &[]));
     assert_eq!(p.global_mcp, Path::new("/home/user/.cursor/mcp.json"));
 }
 

@@ -17,7 +17,7 @@ use super::new_frame::draw_new;
 use super::rows::{Frame, on_set};
 use super::sheet::{Conn, Status};
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::truncate_end;
 use crate::panel::data::{StudioLabel, StudioRef, studio_label};
 
@@ -306,17 +306,18 @@ fn draw_studio(
             );
         }
     }
-    // Row 2: the role on set now.
+    // Row 2: the role on set now — its badge (and task for an actor).
     let who = on_set(studio.studio)
-        .map(|r| r.name.as_str())
-        .unwrap_or("—");
-    put_text(
+        .map(crate::studio::glyphs::role_label)
+        .unwrap_or_else(|| "—".to_string());
+    put_role_badged_text(
         buf,
         rect.x + 2,
         rect.y + 2,
         inner,
-        &format!(" {}", truncate_end(who, inner.saturating_sub(1) as usize)),
+        &format!(" {}", truncate_end(&who, inner.saturating_sub(1) as usize)),
         on(elev.muted_surface, bg),
+        palette,
     );
     // Row 3: what it is doing — or the ledger's error, in red.
     let (what, colour) = match studio.studio.error.as_deref() {

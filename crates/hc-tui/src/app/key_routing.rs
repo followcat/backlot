@@ -266,7 +266,7 @@ impl App {
         let text_input_modal = self.dialog.is_some()
             || self.studio_dialog.is_some()
             || self.new_studio.is_some()
-            || self.hw_setup.is_some()
+            || self.hw_switch.is_some()
             || self.settings.is_some()
             || self.update_modal.is_some();
         if !text_input_modal
@@ -283,9 +283,10 @@ impl App {
                 self.mode = Mode::Normal;
                 self.navigate_target = None;
             }
-            self.nav_leave_overlays();
             self.prefix.reset();
             self.prefix.swallow(&press);
+            // `studio_nav` releases the overlays itself so a studio step
+            // can keep the dock or the tree in charge of the keyboard.
             self.studio_nav(nav);
             return None;
         }

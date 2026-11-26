@@ -143,6 +143,7 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
             effort,
             key,
             default_cast,
+            force_offline,
         } => {
             let cfg = HollywoodCfg {
                 runner,
@@ -151,9 +152,27 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
                 key,
                 default_cast,
             };
-            let (res, _) = verbs_hwood::hollywood_setup(env, &cfg)?;
+            let (res, _) =
+                verbs_hwood::hollywood_setup_checked(Some(base), env, &cfg, force_offline)?;
             to_json(res)
         }
+        ReqAction::HollywoodSwitch {
+            runner,
+            model,
+            effort,
+            timeout_s,
+            force,
+        } => to_json(crate::hswitch_verbs::rpc_switch(
+            base,
+            env,
+            &runner,
+            &model,
+            effort.as_deref(),
+            timeout_s,
+            force,
+        )?),
+        ReqAction::HollywoodSwitchCancel => to_json(crate::hswitch_verbs::rpc_cancel(base, env)?),
+        ReqAction::HollywoodSwitchStatus => to_json(crate::hswitch_verbs::rpc_status(base, env)?),
         // `studio cast show|set`: the cast file `set` carries is content,
         // staged into a temp file the hub parses with `studio new`'s own
         // rules — the same `verbs::cast_set` the local CLI runs.

@@ -217,4 +217,28 @@ fn card_ids_accept_c_prefix_or_numeric_and_prompt_reasons_refused() {
         ..cat.clone()
     };
     assert!(cat.content_eq(&same_diff_ts));
+
+    let sw: ReqAction = serde_json::from_value(json!({
+        "kind": "hollywood-switch",
+        "runner": "codex",
+        "model": "gpt-6-sol",
+        "effort": "high",
+        "timeout_s": 120
+    }))
+    .unwrap();
+    assert_eq!(
+        sw,
+        ReqAction::HollywoodSwitch {
+            runner: "codex".into(),
+            model: "gpt-6-sol".into(),
+            effort: Some("high".into()),
+            timeout_s: Some(120),
+            force: false,
+        }
+    );
+    let cancel: ReqAction =
+        serde_json::from_value(json!({"kind": "hollywood-switch-cancel"})).unwrap();
+    assert_eq!(cancel, ReqAction::HollywoodSwitchCancel);
+    let st: ReqAction = serde_json::from_value(json!({"kind": "hollywood-switch-status"})).unwrap();
+    assert_eq!(st, ReqAction::HollywoodSwitchStatus);
 }

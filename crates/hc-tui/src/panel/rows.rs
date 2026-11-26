@@ -192,6 +192,10 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
     },
+    /// `├───┤` — the thin rule between two non-empty role groups.
+    Divider {
+        studio: StudioRef<'a>,
+    },
     /// A person's attention-cue/failed/confirm/hint extra line.
     PersonLine {
         studio: StudioRef<'a>,
@@ -303,6 +307,7 @@ impl Row<'_> {
             | Row::Usage { .. }
             | Row::InputDivider { .. }
             | Row::BlockBottom(_)
+            | Row::Divider { .. }
             | Row::Drawer { .. }
             | Row::Update { .. } => Target::None,
             // R22: the hint is the dialog's button — actionable like
@@ -431,8 +436,31 @@ fn block_rows<'a>(
             }
         }
     };
-    for role in live_roles(studio.studio) {
-        emit_person(out, role);
+    // The people, split into the producer / director / writer / actors
+    // groups by a thin rule between each pair of non-empty groups.
+    let live: Vec<&RoleSummary> = live_roles(studio.studio);
+    let mut first = true;
+    for group in [
+        RoleGroup::Producer,
+        RoleGroup::Director,
+        RoleGroup::Writer,
+        RoleGroup::Actors,
+    ] {
+        let roles: Vec<&RoleSummary> = live
+            .iter()
+            .copied()
+            .filter(|role| role_group(&role.role) == group)
+            .collect();
+        if roles.is_empty() {
+            continue;
+        }
+        if !first {
+            out.push(Row::Divider { studio });
+        }
+        first = false;
+        for role in roles {
+            emit_person(out, role);
+        }
     }
     for card in &studio.studio.outward_cards {
         out.push(Row::OutwardCard { studio, card });
@@ -498,8 +526,29 @@ fn folded_block_rows<'a>(
 ) {
     let health = health_of(studio.studio, stage, reachable);
     out.push(Row::BlockTop { studio, health });
-    for role in live_roles(studio.studio) {
-        out.push(Row::Person { studio, role });
+    let live = live_roles(studio.studio);
+    let mut first = true;
+    for group in [
+        RoleGroup::Producer,
+        RoleGroup::Director,
+        RoleGroup::Writer,
+        RoleGroup::Actors,
+    ] {
+        let roles: Vec<&RoleSummary> = live
+            .iter()
+            .copied()
+            .filter(|role| role_group(&role.role) == group)
+            .collect();
+        if roles.is_empty() {
+            continue;
+        }
+        if !first {
+            out.push(Row::Divider { studio });
+        }
+        first = false;
+        for role in roles {
+            out.push(Row::Person { studio, role });
+        }
     }
     out.push(Row::BlockBottom(studio));
 }

@@ -250,7 +250,24 @@ pub enum ReqAction {
         key: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default_cast: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        force_offline: bool,
     },
+    /// Switch Hollywood's agent by make-before-break handoff.
+    HollywoodSwitch {
+        runner: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_s: Option<u64>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        force: bool,
+    },
+    /// Cancel an active Hollywood switch handoff.
+    HollywoodSwitchCancel,
+    /// Query active or recent Hollywood switch handoff status.
+    HollywoodSwitchStatus,
     /// `studio new`: the cast and the first message travel as content,
     /// never as client paths — the hub validates and canonicalizes
     /// `repo` against its own filesystem.
@@ -276,6 +293,12 @@ pub enum ReqAction {
         reason: String,
         #[serde(default, skip_serializing_if = "crate::event::is_false")]
         force: bool,
+    },
+    /// `studio reopen`: the person brings a finished studio back.
+    StudioReopen {
+        studio: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
     },
     /// `studio cast show`: the effective cast as a cast file (or the
     /// settings as JSON). Read-only; answered from the hub.

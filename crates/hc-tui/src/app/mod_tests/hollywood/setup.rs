@@ -65,7 +65,7 @@ async fn the_setup_row_opens_the_dialog_and_apply_writes_the_table() {
     app.hollywood.selected = Some(Target::Setup);
     key(&mut app, hc_vt::Key::Enter);
     assert!(
-        app.hw_setup.is_some(),
+        app.hw_switch.is_some(),
         "Enter on the setup row opens the dialog"
     );
     drain_ns(&mut app).await;
@@ -83,7 +83,7 @@ async fn the_setup_row_opens_the_dialog_and_apply_writes_the_table() {
     down(&mut app);
     down(&mut app);
     key(&mut app, hc_vt::Key::Enter);
-    assert!(app.hw_setup.is_none(), "Apply closes the dialog");
+    assert!(app.hw_switch.is_none(), "Apply closes the dialog");
     assert_eq!(
         recorded.lock().unwrap().last().unwrap(),
         &vec![
@@ -121,14 +121,14 @@ async fn c_is_inert_and_the_settings_path_reopens_the_dialog_prefilled() {
     // Sheet; Hollywood settings live on the pill menu and `Ctrl+B s
     // → studio → overseer → ⏎`.
     key(&mut app, hc_vt::Key::Char('c'));
-    assert!(app.hw_setup.is_none(), "c is inert on the Call Sheet");
+    assert!(app.hw_switch.is_none(), "c is inert on the Call Sheet");
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     app.hw_setup_open();
-    assert!(app.hw_setup.is_some(), "the settings path opened it");
+    assert!(app.hw_switch.is_some(), "the settings path opened it");
     drain_ns(&mut app).await;
     // The cfg's own values are seated: runner fake (found index 0),
     // model model-h verbatim, effort high (index 1 of low/high).
-    let d = app.hw_setup.as_ref().unwrap();
+    let d = app.hw_switch.as_ref().unwrap();
     assert_eq!(d.model, "model-h");
     assert_eq!(d.effort, 1, "high is the second effort");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
@@ -158,7 +158,7 @@ async fn the_model_row_offers_the_catalog_auto_first_and_free_text() {
     key(&mut app, hc_vt::Key::Char('e'));
     key(&mut app, hc_vt::Key::Char('z'));
     key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(app.hw_setup.as_ref().unwrap().model, "autoz");
+    assert_eq!(app.hw_switch.as_ref().unwrap().model, "autoz");
 }
 
 #[tokio::test]
@@ -198,7 +198,7 @@ async fn the_panels_setup_hint_opens_the_dialog() {
     app.panel.selected = Some(crate::panel::Target::Setup);
     key(&mut app, hc_vt::Key::Enter);
     assert!(
-        app.hw_setup.is_some(),
+        app.hw_switch.is_some(),
         "Enter on the panel's setup hint opens the dialog"
     );
     drain_ns(&mut app).await;
@@ -214,7 +214,7 @@ async fn the_settings_overseer_row_opens_the_dialog() {
     app.select_settings_choice(crate::chrome::settings::STUDIO_OVERSEER);
     app.apply_settings_choice();
     assert!(
-        app.hw_setup.is_some(),
+        app.hw_switch.is_some(),
         "Enter on the overseer row opens the dialog"
     );
 }
@@ -230,7 +230,7 @@ async fn esc_closes_the_dialog_without_writing() {
     key(&mut app, hc_vt::Key::Enter);
     drain_ns(&mut app).await;
     key(&mut app, hc_vt::Key::Escape);
-    assert!(app.hw_setup.is_none());
+    assert!(app.hw_switch.is_none());
     assert_eq!(
         recorded.lock().unwrap().len(),
         1,

@@ -96,9 +96,9 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
         100,
     );
     assert_eq!(t.first(), Some(&Target::None));
-    // The top border is the only `Studio` row — the title and the
-    // bottom border are the `Target::None` rows (A2.2); S2 dropped
-    // the group dividers.
+    // The top border is the only `Studio` row — the title, the three
+    // role-group dividers and the bottom border are the `Target::None`
+    // rows (A2.2).
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
@@ -108,8 +108,8 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     );
     assert_eq!(
         t.iter().filter(|x| **x == Target::None).count(),
-        3,
-        "title + input-divider + bottom: {t:?}"
+        6,
+        "title + three dividers + input-divider + bottom: {t:?}"
     );
     assert_eq!(
         people(&t),

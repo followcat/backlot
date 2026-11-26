@@ -94,6 +94,67 @@ fn slots(
     }
 }
 
+/// Footer variant used by `draw.rs`: enriches `for_row` with active switch
+/// handoff and quota-switch shortcuts without altering `for_row`'s contract.
+pub(crate) fn for_row_with_handoff(
+    selected: Option<&Target>,
+    editing: bool,
+    waits: &[Wait<'_>],
+    agent: bool,
+    hollywood_asking: bool,
+    width: usize,
+) -> String {
+    if !editing {
+        let hw = waits.iter().find_map(|w| match w {
+            Wait::Hollywood(h) => Some(*h),
+            _ => None,
+        });
+        if let Some(hw) = hw
+            && super::handoff_ui::is_handoff_active(hw)
+        {
+            let candidates: &[&str] = match super::handoff_ui::handoff_phase(hw) {
+                Some("verifying") => &[
+                    "↑↓ row  ←→ chip  Tab zone  p peek candidate  x cancel switch  w switch agent  Esc close",
+                    "p peek candidate   x cancel switch   w switch   esc",
+                    "p peek   x cancel   esc",
+                ],
+                Some("needs_approval") => &[
+                    "y/d answer   p peek   x cancel switch   w switch agent   esc",
+                    "y/d answer   p peek   x cancel   esc",
+                ],
+                _ => &[
+                    "↑↓ row  ←→ chip  Tab zone  x cancel switch  w switch agent  Esc close",
+                    "x cancel switch   w switch   esc",
+                    "x cancel   esc",
+                ],
+            };
+            if let Some(fit) = candidates.iter().find(|tier| display_width(tier) <= width) {
+                return (*fit).to_owned();
+            }
+        }
+        if matches!(selected, Some(Target::Hollywood | Target::HollywoodLive))
+            && hw.is_some_and(super::handoff_ui::is_quota_or_error)
+        {
+            let candidates = [
+                "w switch agent   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
+                "w switch   p peek   i tell   tab ↑↓ ⏎   esc",
+            ];
+            if let Some(fit) = candidates.iter().find(|t| display_width(t) <= width) {
+                return (*fit).to_owned();
+            }
+        }
+        if matches!(selected, Some(Target::Title)) && agent {
+            let base = for_row(selected, editing, waits, agent, hollywood_asking, width);
+            let with_w = format!("w switch agent   {base}");
+            if display_width(&with_w) <= width {
+                return with_w;
+            }
+            return base;
+        }
+    }
+    for_row(selected, editing, waits, agent, hollywood_asking, width)
+}
+
 /// The footer for the selected row: the longest tier that fits
 /// `width` — full words, then bare keys, then the block alone; `""`
 /// when even the block is too wide. `agent` is the `[hollywood]`

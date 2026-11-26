@@ -67,6 +67,49 @@ pub(crate) fn health_of(
     }
 }
 
+/// The role groups a block separates with a thin rule, in order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RoleGroup {
+    Producer,
+    Director,
+    Writer,
+    Actors,
+}
+
+impl RoleGroup {
+    fn index(self) -> usize {
+        match self {
+            RoleGroup::Producer => 0,
+            RoleGroup::Director => 1,
+            RoleGroup::Writer => 2,
+            RoleGroup::Actors => 3,
+        }
+    }
+}
+
+/// A role key's group — fixed seats by name, every `actor…` together.
+pub(super) fn role_group(role: &str) -> RoleGroup {
+    match role {
+        "producer" => RoleGroup::Producer,
+        "director" => RoleGroup::Director,
+        "writer" => RoleGroup::Writer,
+        _ => RoleGroup::Actors,
+    }
+}
+
+/// How many thin rules a block draws: one between each pair of
+/// adjacent non-empty role groups, so an empty group leaves no rule.
+pub(super) fn divider_count(studio: &StudioSummary) -> usize {
+    let mut seen = [false; 4];
+    for role in live_roles(studio) {
+        seen[role_group(&role.role).index()] = true;
+    }
+    seen.iter()
+        .filter(|present| **present)
+        .count()
+        .saturating_sub(1)
+}
+
 /// The studio's non-closed roles in display order: `producer`,
 /// `director`, `writer` first when present, then the actors in the
 /// summary's order. Closed roles come after (S2 §2).
@@ -201,6 +244,7 @@ pub(super) fn block_height(
     for role in live_roles(studio.studio) {
         height += person_height(studio, role, panel);
     }
+    height += divider_count(studio.studio);
     height += tasks_height(studio, panel, accepted_open);
     height += closed_height(studio, panel, closed_open);
     height

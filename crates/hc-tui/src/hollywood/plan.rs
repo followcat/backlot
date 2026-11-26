@@ -204,8 +204,8 @@ impl Plan {
 /// 3. unselected waiting details (`keep` keeps its detail)
 /// 4. oldest visible `Row::Talk` lines (bumps `earlier` count on `HOLLYWOOD` rule)
 /// 5. zone label rules (`HOLLYWOOD` -> `WAITING ON YOU` -> `STUDIOS`)
-/// 6. non-duplicate `Row::Headline`, then `Row::Live`
-/// 7. 7-row frames -> 1-row chip strip
+/// 6. non-duplicate `Row::Headline`
+/// 7. 7-row frames -> 1-row chip strip, then `Row::Live`
 /// 8. hint row
 /// 9. waiting scroll window down to `1`
 /// 10. external shadow -> top sprocket -> bottom sprocket -> chip strip (`0`) -> title
@@ -245,10 +245,10 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
             plan.studios_rule = false;
         } else if plan.headline {
             plan.headline = false;
-        } else if plan.live {
-            plan.live = false;
         } else if plan.frames_h > 1 {
             plan.frames_h = 1;
+        } else if plan.live {
+            plan.live = false;
         } else if plan.hints {
             plan.hints = false;
         } else if plan.shown > usize::from(!plan.details.is_empty()) {

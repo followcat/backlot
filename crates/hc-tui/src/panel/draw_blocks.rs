@@ -282,8 +282,9 @@ pub(super) fn word_style(mark: Person, palette: &Palette) -> Style {
 }
 
 /// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
-/// — no model, no runner, no `doing` line. The mark, the state word
-/// and the priority flag all read the shared vocabulary.
+/// — no model and no runner (the cast already shows them), so the name,
+/// task, flag and state word get the row's width. The mark, the state
+/// word and the priority flag all read the shared vocabulary.
 pub(super) fn draw_person(
     buf: &mut Buffer,
     rect: Rect,
@@ -304,25 +305,27 @@ pub(super) fn draw_person(
         mark.glyph(spin),
         mark.style(palette),
     );
-    // `name · task ↑` left — the state word keeps the right edge,
-    // with the dim runner tag before it and the short model before
-    // that only in cells the whole name leaves spare (L4).
+    // `name · task ↑` left — the state word keeps the right edge, and
+    // the name may run up to it: no runner tag and no model spend cells.
     let state = mark.role_word(role, now_ms);
     let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
     let state_width = display_width(&state) as u16 + u16::from(badge) * 2;
     let flag = role.priority.and_then(PriorityMark::of);
     let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
-    let mut name = role.name.clone();
-    if let Some(task) = &role.task {
-        name.push_str(" · ");
-        name.push_str(task);
+    let mut label = glyphs::role_label(role);
+    if let Some(task) = &role.task
+        && !matches!(
+            glyphs::RoleBadge::of_role(&role.role),
+            Some(glyphs::RoleBadge::Actor)
+        )
+    {
+        label.push_str(" · ");
+        label.push_str(task);
     }
-    let name_need = display_width(&name) as u16 + flag_width;
-    let tail = super::badge::tail(role, name_need, state_width, rect.width);
-    let name_width = tail.name_width;
-    let name_text = truncate_end(&name, name_width.saturating_sub(flag_width) as usize);
+    let name_width = rect.width.saturating_sub(5 + state_width);
+    let name_text = truncate_end(&label, name_width.saturating_sub(flag_width) as usize);
     let drawn_name_width = display_width(&name_text) as u16;
-    put_text(
+    crate::chrome::render::put_role_badged_text(
         buf,
         rect.x + 4,
         rect.y,
@@ -333,6 +336,7 @@ pub(super) fn draw_person(
         } else {
             palette.text
         }),
+        palette,
     );
     if let Some(flag) = flag {
         put_text(
@@ -342,37 +346,6 @@ pub(super) fn draw_person(
             1,
             flag.glyph(),
             Style::default().fg(flag.color(palette)),
-        );
-    }
-    // The dim tail: the runner tag nearest the state, the short model
-    // left of it. Their cells were reserved before the name was cut,
-    // so neither ever reaches under the state word.
-    let mut end = rect
-        .x
-        .saturating_add(rect.width.saturating_sub(1 + state_width))
-        .saturating_sub(1);
-    if let Some(runner) = &tail.runner {
-        let width = tail.runner_width();
-        let x = end.saturating_sub(width);
-        put_text(
-            buf,
-            x,
-            rect.y,
-            width,
-            runner,
-            Style::default().fg(palette.overlay0),
-        );
-        end = x.saturating_sub(1);
-    }
-    if let Some(model) = &tail.model {
-        let width = tail.model_width();
-        put_text(
-            buf,
-            end.saturating_sub(width),
-            rect.y,
-            width,
-            model,
-            Style::default().fg(palette.overlay0),
         );
     }
     let (word, word_x) = if badge {

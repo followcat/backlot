@@ -47,6 +47,18 @@ pub struct CardCancelResult {
     pub reason: String,
 }
 
+/// Result of `hollywood withdraw <card> --reason <text>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardWithdrawResult {
+    /// The card's `c<seq>` id.
+    pub id: String,
+    /// The card's own seq.
+    pub seq: u64,
+    /// The `card.withdrawn` event's seq.
+    pub outcome_seq: u64,
+    pub reason: String,
+}
+
 /// Old -> new actor identity pair for `recast` and `setup` cards.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdentityChange {
@@ -99,6 +111,10 @@ pub struct CardShowResult {
     /// is proposed against a studio that exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cast_diff: Option<crate::cast::CastDiff>,
+    /// The roles a cast or studio-new card carries, read from the
+    /// card's own snapshot — `producer=claude/opus-5-5 …`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roles_summary: Option<String>,
 }
 
 /// Result of `ask-acknowledge`.
@@ -209,6 +225,14 @@ pub struct StudioFinishResult {
     pub reason: String,
 }
 
+/// Result of `studio reopen`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StudioReopenResult {
+    pub studio: String,
+    pub seq: u64,
+    pub reason: String,
+}
+
 /// Result of `studio cast show`: the effective cast as a cast file
 /// (`cast`), or the same settings structured (`settings`, when `--json`).
 /// `cast` is always the printable form — the CLI prints `cast` verbatim
@@ -266,4 +290,20 @@ pub struct HollywoodSetupResult {
     pub action: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restarted: bool,
+}
+
+/// Result of `hollywood-switch` / `hollywood-switch-cancel`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HollywoodSwitchResult {
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<crate::hollywood_summary::HandoffSummary>,
+}
+
+/// Result of `hollywood-switch-status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HollywoodSwitchStatusResult {
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<crate::hollywood_summary::HandoffSummary>,
 }

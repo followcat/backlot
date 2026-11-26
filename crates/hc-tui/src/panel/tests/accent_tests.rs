@@ -74,6 +74,7 @@ fn assert_border_fg(
     let bx = area.x + 1;
     let rx = area.x + area.width - 1;
     for y in (top_y + 1)..bot_y {
+        // A role-group or input divider joins the border with `├ … ┤`.
         let lsym = buf[(bx, y)].symbol();
         let rsym = buf[(rx, y)].symbol();
         assert!(

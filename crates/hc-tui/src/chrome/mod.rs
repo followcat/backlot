@@ -55,6 +55,7 @@ pub(crate) mod studio_rows;
 pub(crate) mod studio_tree;
 pub mod tabs;
 pub mod text;
+mod text_draw;
 pub(crate) mod text_editor;
 pub(crate) mod title_text;
 pub mod tokens;

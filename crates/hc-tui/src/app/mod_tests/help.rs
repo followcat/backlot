@@ -81,7 +81,7 @@ async fn an_unshadowed_studio_key_carries_no_note() {
     assert!(!text.contains("shadows"), "{text}");
 }
 
-/// R3-N6: both pinned glyph-legend lines stay ≤ 66 cells — inside
+/// R3-N6: every pinned glyph-legend line stays ≤ 66 cells — inside
 /// the 80×24 overlay's 74 inner columns `✓ closed` never clips.
 #[tokio::test]
 async fn the_glyph_legend_fits_inside_eighty_columns() {
@@ -90,6 +90,12 @@ async fn the_glyph_legend_fits_inside_eighty_columns() {
     let text = screen_lines(&draw_to(&mut app, 80, 24)).join("\n");
     assert!(text.contains("◐ work"), "{text}");
     assert!(text.contains("✓ closed"), "{text}");
+    assert!(
+        app.help_legend()
+            .iter()
+            .any(|(key, label)| key == "roles" && label.contains("Ⓟ producer")),
+        "the role legend line is pinned"
+    );
     // The renderer's ` {key:<7} {label}` at ≤66 cells each.
     for (key, label) in app.help_legend() {
         let line = format!(" {key:<7} {label}");

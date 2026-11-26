@@ -146,64 +146,170 @@ fn the_header_names_the_studio_and_its_position() {
 }
 
 #[test]
-fn a_person_draws_two_rows_mark_name_task_runner_title_model() {
+fn a_person_draws_its_first_row_then_the_wrapped_state_and_model() {
     let summary = summary();
     let view = cast_view(&summary, vec![], false, None);
     for width in [26u16, 20] {
-        let (buf, ..) = draw(&view, width, 20);
-        let text = lines(&buf, Rect::new(0, 0, width, 20)).join("\n");
-        // Alice: mark, `alice task-1` (cut at 20), the runner kept.
-        assert!(text.contains("alice ta"), "w{width}: {text}");
+        let (buf, ..) = draw(&view, width, 24);
+        let text = lines(&buf, Rect::new(0, 0, width, 24)).join("\n");
+        // Alice: mark, `alice task-1` with the runner kept on row one.
+        assert!(text.contains("alice"), "w{width}: {text}");
         assert!(text.contains("agent-a"), "w{width}: {text}");
-        // Row 2: the title (cut at 20) and the short model.
-        assert!(text.contains("featu"), "w{width}: {text}");
-        assert!(text.contains("sonnet"), "w{width}: {text}");
-        // The producer's model drops the provider and `claude-`.
+        // The rest carries the state (the title stands in for a bare
+        // `working`) and the full model, unabbreviated.
+        assert!(text.contains("feature"), "w{width}: {text}");
+        assert!(text.contains("claude-sonnet-4-5"), "w{width}: {text}");
+        // The producer's full model is wider than a line of its own at
+        // 26, so its short form stands in.
         assert!(text.contains("opus-4-7"), "w{width}: {text}");
         assert!(!text.contains("anthropic/"), "w{width}: {text}");
-        assert!(!text.contains("claude-sonnet"), "w{width}: {text}");
         // Closed people stay listed, after the live ones.
         assert!(text.contains("dave"), "w{width}: {text}");
     }
-    // At 26 the full task and title survive.
-    let (buf, ..) = draw(&view, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
+    // At 26 the full task survives.
+    let (buf, ..) = draw(&view, 26, 24);
+    let text = lines(&buf, Rect::new(0, 0, 26, 24)).join("\n");
     assert!(text.contains("alice task-1"), "{text}");
-    assert!(text.contains("feature"), "{text}");
 }
 
 #[test]
-fn the_model_short_form_cuts_to_ten_cells() {
-    // Producer: `anthropic/claude-opus-4-7` → `opus-4-7` (8 cells).
-    // Give alice a long one: `claude-verylongmodelname` → 10 cells `…`.
+fn the_model_shows_unabbreviated_when_its_line_has_room() {
     let mut value = summary_json();
     value["studios"][0]["roles"][1]["model"] = serde_json::json!("claude-verylongmodelname");
+    value["studios"][0]["roles"][1]["effort"] = serde_json::json!("high");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let view = cast_view(&summary, vec![], false, None);
-    let (buf, ..) = draw(&view, 40, 20);
-    let text = lines(&buf, Rect::new(0, 0, 40, 20)).join("\n");
-    assert!(text.contains("verylongm…"), "{text}");
-    assert!(!text.contains("verylongmodelname"), "{text}");
+    let (buf, ..) = draw(&view, 40, 24);
+    let text = lines(&buf, Rect::new(0, 0, 40, 24)).join("\n");
+    assert!(text.contains("claude-verylongmodelname high"), "{text}");
+}
+
+#[test]
+fn the_model_falls_back_to_its_short_form_when_the_full_one_cannot_fit() {
+    // Producer: `anthropic/claude-opus-4-7` cannot fit a line of its
+    // own at the default width, so the short form stands in.
+    let summary = summary();
+    let view = cast_view(&summary, vec![], false, None);
+    let (buf, ..) = draw(&view, 26, 24);
+    let text = lines(&buf, Rect::new(0, 0, 26, 24)).join("\n");
+    assert!(text.contains("opus-4-7"), "{text}");
+    assert!(!text.contains("claude-opus-4-7"), "{text}");
 }
 
 #[test]
 fn the_title_falls_back_to_doing_then_the_state_word() {
-    let summary = summary();
-    let mut view = cast_view(&summary, vec![], false, None);
-    // bob has no title entry → his `doing` when present, else his
-    // state word; the fixture gives him neither, so `dir`.
-    view.titles.remove("t5");
-    let (buf, ..) = draw(&view, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("dir"), "{text}");
-    // With a `doing` it wins over the state word.
     let mut value = summary_json();
-    value["studios"][0]["roles"][2]["doing"] = serde_json::json!("mends tests");
+    value["studios"][0]["roles"][1]["doing"] = serde_json::json!("mends tests");
+    let with_doing: Summary = serde_json::from_value(value).unwrap();
+    let mut view = cast_view(&with_doing, vec![], false, None);
+    // No title for alice → the `doing` text joins the state word.
+    view.titles.remove("t4");
+    let (buf, ..) = draw(&view, 26, 24);
+    let text = lines(&buf, Rect::new(0, 0, 26, 24)).join("\n");
+    assert!(text.contains("working · mends tests"), "{text}");
+    // With neither, the bare state word shows.
+    let plain = summary();
+    let mut view = cast_view(&plain, vec![], false, None);
+    view.titles.remove("t4");
+    let (buf, ..) = draw(&view, 26, 24);
+    let text = lines(&buf, Rect::new(0, 0, 26, 24)).join("\n");
+    assert!(text.contains("working"), "{text}");
+}
+
+#[test]
+fn a_cjk_question_wraps_whole_at_the_default_width() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][1]["asks"] = serde_json::json!("已记录 memory 的反馈吗");
     let summary: Summary = serde_json::from_value(value).unwrap();
-    let view2 = cast_view(&summary, vec![], false, None);
-    let (buf, ..) = draw(&view2, 26, 20);
-    let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("mends tests"), "{text}");
+    let view = cast_view(&summary, vec![], false, None);
+    let (buf, hits, ..) = draw(&view, 26, 24);
+    let alice = hits
+        .agents
+        .iter()
+        .find(|(_, terminal)| terminal == "t4")
+        .map(|(rect, _)| *rect)
+        .expect("alice's hit rows");
+    // The wrapped rows together carry the whole question — no `…`. Wide
+    // characters leave spacer cells behind, so compare without spaces.
+    let text = (alice.y..alice.y + alice.height)
+        .map(|y| lines(&buf, Rect::new(0, 0, 26, 24))[y as usize].clone())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(' ', "");
+    assert!(text.contains("asksyou·已记录"), "{text}");
+    assert!(text.contains("的反馈吗"), "{text}");
+    assert!(!text.contains('…'), "{text}");
+}
+
+#[test]
+fn role_labels_are_coloured_badges_with_the_state_glyph_kept() {
+    let summary = summary();
+    let view = cast_view(&summary, vec![], false, None);
+    let (buf, ..) = draw(&view, 40, 24);
+    let rows = lines(&buf, Rect::new(0, 0, 40, 24));
+    let text = rows.join("\n");
+    assert!(text.contains("Ⓟ"), "{text}");
+    assert!(text.contains("Ⓐ alice"), "the actor keeps its name: {text}");
+    let palette = Palette::from_name("catppuccin").unwrap();
+    let col = |row: &str, needle: &str| row[..row.find(needle).unwrap()].chars().count() as u16;
+    let producer = rows.iter().position(|l| l.contains("Ⓟ")).unwrap() as u16;
+    assert_eq!(
+        buf[(col(&rows[producer as usize], "Ⓟ"), producer)].fg,
+        palette.mauve
+    );
+    // The state glyph keeps its column and meaning (`working`).
+    assert_eq!(
+        buf[(1, producer)].symbol(),
+        crate::studio::glyphs::Person::Working.glyph(0)
+    );
+    let alice = rows.iter().position(|l| l.contains("Ⓐ alice")).unwrap() as u16;
+    assert_eq!(
+        buf[(col(&rows[alice as usize], "Ⓐ"), alice)].fg,
+        palette.peach
+    );
+}
+
+#[test]
+fn more_roles_than_the_height_shrink_the_unselected_roles_first() {
+    let summary = summary();
+    // The full heights (10) overflow the nine-row body; the focused
+    // producer keeps its three rows, the others fall back to two.
+    let view = cast_view(&summary, vec![], false, Some("t1"));
+    let (buf, hits, ..) = draw(&view, 26, 12);
+    let text = lines(&buf, Rect::new(0, 0, 26, 12)).join("\n");
+    assert!(text.contains("opus-4-7"), "{text}");
+    // Alice falls back: the short model rides row two, no full line.
+    assert!(!text.contains("claude-sonnet-4-5"), "{text}");
+    assert!(text.contains("sonnet-4-5"), "{text}");
+    assert_eq!(hits.agent_max_scroll, 0, "the collapsed rows fit the body");
+}
+
+#[test]
+fn a_click_on_a_wrapped_roles_third_line_hits_that_role() {
+    let summary = summary();
+    let view = cast_view(&summary, vec![], false, None);
+    let (_, hits, ..) = draw(&view, 26, 24);
+    let producer = hits
+        .agents
+        .iter()
+        .find(|(_, terminal)| terminal == "t1")
+        .map(|(rect, _)| *rect)
+        .expect("the producer's hit rows");
+    assert!(producer.height >= 3, "wrapped: {producer:?}");
+    // The point on the third line resolves to the producer's terminal,
+    // exactly as `mouse_press` finds the hit.
+    let point = (producer.x + 1, producer.y + 2);
+    let hit = hits
+        .agents
+        .iter()
+        .find(|(rect, _)| {
+            point.0 >= rect.x
+                && point.0 < rect.x + rect.width
+                && point.1 >= rect.y
+                && point.1 < rect.y + rect.height
+        })
+        .map(|(_, terminal)| terminal.as_str());
+    assert_eq!(hit, Some("t1"));
 }
 
 #[test]
@@ -244,16 +350,16 @@ fn an_alert_takes_the_whole_second_row_at_the_default_width() {
     let alice = below("alice");
     assert!(alice.contains("needs you"), "{alice}");
     assert!(!alice.contains("sonnet"), "{alice}");
-    let producer = below("producer");
+    let producer = below("Ⓟ");
     assert!(producer.contains("last turn failed"), "{producer}");
     assert!(!producer.contains("opus"), "{producer}");
-    // Without an alert the model keeps its place.
+    // Without an alert the model keeps its own wrapped line.
     let plain = summary();
     let view = cast_view(&plain, vec![], false, None);
     let (buf, ..) = draw(&view, 26, 20);
     let rows = lines(&buf, Rect::new(0, 0, 26, 20));
-    let alice = rows[rows.iter().position(|l| l.contains("alice")).unwrap() + 1].clone();
-    assert!(alice.contains("sonnet-4-5"), "{alice}");
+    let text = rows.join("\n");
+    assert!(text.contains("claude-sonnet-4-5"), "{text}");
 }
 
 #[test]
@@ -336,7 +442,7 @@ fn the_rows_scroll_and_the_track_draws_on_overflow() {
         &mut hits,
     );
     let text = lines(&buf, Rect::new(0, 0, 26, 10)).join("\n");
-    assert!(!text.contains("producer"), "{text}");
+    assert!(!text.contains("Ⓟ"), "{text}");
     assert!(text.contains("alice"), "{text}");
 }
 
@@ -364,7 +470,7 @@ fn a_focus_change_scrolls_the_focused_person_into_view() {
     assert_eq!(scroll, 1, "the list moved to alice's row");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("alice"), "{text}");
-    assert!(!text.contains("producer"), "{text}");
+    assert!(!text.contains("Ⓟ"), "{text}");
 
     // Without an armed reveal the manual offset holds.
     let mut buf = Buffer::empty(area);
@@ -381,7 +487,7 @@ fn a_focus_change_scrolls_the_focused_person_into_view() {
         &mut hits,
     );
     assert_eq!(scroll, 0, "no focus change, no scroll");
-    assert!(lines(&buf, area).join("\n").contains("producer"));
+    assert!(lines(&buf, area).join("\n").contains("Ⓟ"));
 }
 
 #[test]

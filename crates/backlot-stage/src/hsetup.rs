@@ -135,10 +135,19 @@ pub(crate) fn write_config(env: &Env, cfg: &HollywoodCfg) -> Result<std::path::P
 }
 
 /// `hollywood setup --runner <r> --model <m> [--effort <e>] [--key
-/// <k>]` — the user's, never a role terminal's: the table steers the
-/// overseer itself (D17a's gate's shape).
-pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<String, Fail> {
-    let (_, path) = crate::verbs_hwood::hollywood_setup(env, cfg)?;
+/// <k>] [--force-offline]` — the user's, never a role terminal's.
+pub(crate) fn hsetup(
+    common: &Common,
+    env: &Env,
+    cfg: &HollywoodCfg,
+    force_offline: bool,
+) -> Result<String, Fail> {
+    crate::hswitch_verbs::check_user_control(common, env)?;
+    let base = (!force_offline)
+        .then(|| crate::hwood::base_of(common, env).ok())
+        .flatten();
+    let (_, path) =
+        crate::verbs_hwood::hollywood_setup_checked(base.as_deref(), env, cfg, force_offline)?;
     Ok(format!(
         "[hollywood] written to {} — a running stage sees it on its next tick; restart the TUI for the layer",
         path.display()

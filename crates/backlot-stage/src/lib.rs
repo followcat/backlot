@@ -49,6 +49,13 @@ mod guard_prep;
 mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
+mod guide;
+mod handoff;
+mod handoff_commit;
+mod handoff_pkg;
+mod handoff_run;
+mod handoff_term;
+mod handoff_verify;
 mod hcard;
 mod hcard_cast;
 mod hcard_new;
@@ -56,6 +63,7 @@ mod hcard_outward;
 mod hcard_outward_env;
 mod hcard_outward_exec;
 mod hcard_outward_git;
+mod hcard_snapshot;
 mod hdeliver;
 mod hdeliver_fmt;
 mod hfinished;
@@ -66,6 +74,7 @@ pub mod hook;
 mod hrender;
 mod hsetup;
 mod hstage;
+mod hswitch_verbs;
 mod hwatch;
 mod hwcli;
 mod hwood;
@@ -108,6 +117,7 @@ mod relabel;
 pub mod render;
 mod repos;
 mod restore;
+mod route;
 mod runners;
 mod sample;
 mod sendfail;
@@ -127,6 +137,9 @@ mod studio_cast;
 mod studio_fmt;
 mod studio_list;
 mod supervise;
+mod transcript;
+mod transcript_ext;
+mod transcript_runners;
 mod verbs;
 mod verbs_card_show;
 mod verbs_fmt;
@@ -149,6 +162,10 @@ mod ask_answer_tests;
 mod ask_tests;
 #[cfg(test)]
 mod budget_cmd_tests;
+#[cfg(test)]
+mod cards_hardening_steps_tests;
+#[cfg(test)]
+mod cards_hardening_tests;
 #[cfg(test)]
 mod cast_card_tests;
 #[cfg(test)]
@@ -231,6 +248,8 @@ mod guard_git_tests;
 mod guard_line_tests;
 #[cfg(test)]
 mod guard_tests;
+#[cfg(test)]
+mod guide_tests;
 
 #[cfg(test)]
 mod hcard_tests;
@@ -317,6 +336,8 @@ mod restore_tests;
 #[cfg(test)]
 mod role_cmd_tests;
 #[cfg(test)]
+mod route_tests;
+#[cfg(test)]
 mod sample_tests;
 
 #[cfg(test)]
@@ -347,13 +368,23 @@ mod studio_cast_tests;
 mod trust_tests;
 
 #[cfg(test)]
+mod handoff_extra_tests;
+#[cfg(test)]
+mod handoff_pkg_tests;
+#[cfg(test)]
+mod handoff_tests;
+#[cfg(test)]
 mod hcard_setup_tests;
+#[cfg(test)]
+mod hswitch_cli_tests;
 #[cfg(test)]
 mod hwood_setup_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod text_src_tests;
+#[cfg(test)]
+mod transcript_tests;
 #[cfg(test)]
 mod usage_tests;
 #[cfg(test)]

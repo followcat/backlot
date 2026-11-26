@@ -152,6 +152,14 @@ pub(crate) fn run_stdin_with_host(
                 false => crate::runners::detect::report(env),
             };
         }
+        // `guide` prints backlot's own docs, compiled into the binary
+        // — no studio, no ledger, no disk search.
+        Cmd::Guide {
+            ref topic,
+            ref grep,
+        } => {
+            return crate::guide::run(topic.as_deref(), grep.as_deref());
+        }
         // `repos` reads the directory itself; `in_use_studio` needs
         // the ledger base, which `repos::run` resolves best-effort.
         Cmd::Repos {

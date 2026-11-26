@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use ratatui::{buffer::Buffer, layout::Rect, style::Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::navigate::WorkspaceNavigationTarget;
 use super::palette::Palette;
@@ -477,41 +476,8 @@ pub(crate) fn render_shell(
     hits
 }
 
-pub(crate) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
-    let width = display_width(text).min(area.width);
-    put_text(
-        buffer,
-        area.right().saturating_sub(width),
-        y,
-        width,
-        text,
-        style,
-    );
-}
-
-pub(crate) fn put_segment(
-    buffer: &mut Buffer,
-    x: u16,
-    y: u16,
-    right: u16,
-    text: &str,
-    style: Style,
-) -> u16 {
-    let width = display_width(text).min(right.saturating_sub(x));
-    put_text(buffer, x, y, width, text, style);
-    x.saturating_add(width)
-}
-
-pub(crate) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
-    if width == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
-        return;
-    }
-    buffer.set_stringn(x, y, text, width as usize, style);
-}
-
-pub(super) fn display_width(text: &str) -> u16 {
-    UnicodeWidthStr::width(text).min(u16::MAX as usize) as u16
-}
+pub(super) use super::text_draw::display_width;
+pub(crate) use super::text_draw::{put_right_text, put_role_badged_text, put_segment, put_text};
 
 pub(crate) use super::badge::UpdateBadge;
 pub(super) use super::badge::{

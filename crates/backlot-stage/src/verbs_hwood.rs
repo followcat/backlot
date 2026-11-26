@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use backlot_model::EventBy;
 use backlot_model::hollywood::{self, CardAction, HollywoodKind, NewHollywoodEvent};
 use backlot_model::req_results::{
-    CardApplyResult, CardCancelResult, HollywoodSetupResult, RestartResult, TellHollywoodResult,
+    CardApplyResult, CardCancelResult, CardWithdrawResult, HollywoodSetupResult, RestartResult,
+    TellHollywoodResult,
 };
 
 use crate::cli::{Env, Fail};
@@ -126,9 +127,11 @@ pub(crate) fn card_apply(
         }
         _ => {
             let sstate = studio_state(base, card.action.studio())?;
-            hollywood::stale(&card.action, &card.base, sstate.as_ref()).or_else(|| {
-                crate::hcard_outward::outward_stale(&card.action, &card.base, sstate.as_ref())
-            })
+            hollywood::stale(&card.action, &card.base, sstate.as_ref())
+                .or_else(|| {
+                    crate::hcard_outward::outward_stale(&card.action, &card.base, sstate.as_ref())
+                })
+                .or_else(|| crate::hcard_snapshot::stale(&card.action))
         }
     };
     let kind = match &stale {
@@ -196,6 +199,55 @@ pub(crate) fn format_card_cancel(res: &CardCancelResult) -> String {
     format!("event {}: card.cancelled {}", res.outcome_seq, res.id)
 }
 
+/// `hollywood withdraw <card> --reason <text>` — Hollywood takes back
+/// its own open card. The model refuses a card anyone else proposed
+/// and one no longer open; the reason is required, since a withdrawn
+/// card the person saw needs a word for why it went.
+pub(crate) fn card_withdraw(
+    base: &Path,
+    by: EventBy,
+    id: u64,
+    reason: &str,
+) -> Result<CardWithdrawResult, Fail> {
+    if by.role != backlot_model::hollywood::HOLLYWOOD {
+        return Err(Fail::refused(format!(
+            "role '{}' cannot do this; the hollywood role can",
+            by.role
+        )));
+    }
+    if reason.trim().is_empty() {
+        return Err(Fail::usage("hollywood withdraw needs --reason"));
+    }
+    let hdir = store::hollywood_dir(base);
+    let reason_owned = reason.to_string();
+    let event = store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, Fail>(HPending {
+            event: NewHollywoodEvent::new(
+                by,
+                HollywoodKind::CardWithdrawn {
+                    card: id,
+                    reason: reason_owned,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .map_err(store_fail)?;
+    Ok(CardWithdrawResult {
+        id: format!("c{id}"),
+        seq: id,
+        outcome_seq: event.seq,
+        reason: reason.to_string(),
+    })
+}
+
+pub(crate) fn format_card_withdraw(res: &CardWithdrawResult) -> String {
+    format!(
+        "event {}: card.withdrawn {} — {}",
+        res.outcome_seq, res.id, res.reason
+    )
+}
+
 /// `restart --person hollywood [--fresh] [--reason <r>]`.
 pub(crate) fn restart_hollywood(
     base: &Path,
@@ -243,13 +295,36 @@ pub(crate) fn restart_hollywood(
 
 /// `hollywood setup`: validates, writes `[hollywood]` to `config.toml`, and returns
 /// `(HollywoodSetupResult, written_path)`.
+#[allow(dead_code)]
 pub(crate) fn hollywood_setup(
     env: &Env,
     cfg: &HollywoodCfg,
 ) -> Result<(HollywoodSetupResult, PathBuf), Fail> {
+    hollywood_setup_checked(None, env, cfg, false)
+}
+
+/// `hollywood setup` with optional live-stage guard (`force_offline` bypasses
+/// the live-Hollywood check so offline repair stays possible).
+pub(crate) fn hollywood_setup_checked(
+    base: Option<&Path>,
+    env: &Env,
+    cfg: &HollywoodCfg,
+    force_offline: bool,
+) -> Result<(HollywoodSetupResult, PathBuf), Fail> {
     if env.get("BACKLOT_ROLE").is_some() {
         return Err(Fail::refused(
             "hollywood setup is the user's — BACKLOT_ROLE is set",
+        ));
+    }
+    if !force_offline
+        && let Some(b) = base
+        && crate::live::LiveView::read(b, crate::live::now_ms()).running
+        && store::load_hstate(&store::hollywood_dir(b))
+            .ok()
+            .is_some_and(|h| h.role.live)
+    {
+        return Err(Fail::refused(
+            "hollywood is live on a running stage — use 'backlot hollywood switch' for a make-before-break handoff (or pass '--force-offline' to edit config.toml anyway)",
         ));
     }
     let was_configured = config::hollywood(&env.vars).ok().flatten().is_some();

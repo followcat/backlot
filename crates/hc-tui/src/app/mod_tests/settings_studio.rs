@@ -187,5 +187,5 @@ async fn the_overseer_row_re_reads_the_table_and_opens_setup() {
         key(&mut app, Key::Char('j'));
     }
     key(&mut app, Key::Enter);
-    assert!(app.hw_setup.is_some(), "overseer Enter opens hw_setup");
+    assert!(app.hw_switch.is_some(), "overseer Enter opens hw_switch");
 }

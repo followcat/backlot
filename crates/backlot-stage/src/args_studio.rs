@@ -235,6 +235,30 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
     Ok((std::mem::take(common), Cmd::StudioFinish { reason, force }))
 }
 
+/// `studio reopen [--reason <r>]`: the person brings a finished studio
+/// back — recasts, cast changes and new tasks work again. Refused from
+/// a role terminal and by Hollywood's own command; Hollywood may ask
+/// with a `reopen-studio` card.
+pub(crate) fn studio_reopen(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut reason = String::new();
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--reason" => reason = it.value("--reason", U_STUDIO)?,
+            _ if eq(&arg, "--reason").is_some() => {
+                reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::StudioReopen { reason }))
+}
+
 /// `studio prune [<studio> | --all-finished] [--dry-run] [--force]`:
 /// one finished studio, or every finished one. The scope rules are the
 /// runner's — this only collects the flags.
@@ -490,6 +514,32 @@ pub(crate) fn plan_publish(common: &mut Common, it: &mut It) -> Result<(Common, 
             file: file.ok_or_else(|| usage("missing --file", U_PLAN))?,
         },
     ))
+}
+
+/// `backlot guide [<topic>] [--grep <word>]` — one optional topic
+/// positional and one optional flag, either alone or together. No
+/// studio is needed: the docs are compiled into the binary.
+pub(crate) fn guide(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut topic = None;
+    let mut grep = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_GUIDE)));
+        }
+        if common_flag(it, common, &arg, U_GUIDE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--grep" => grep = Some(it.value("--grep", U_GUIDE)?),
+            _ if eq(&arg, "--grep").is_some() => grep = eq(&arg, "--grep").map(String::from),
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_GUIDE));
+            }
+            _ if topic.is_none() => topic = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_GUIDE)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::Guide { topic, grep }))
 }
 
 /// Commands taking only common flags (`stage start`, `stage run`).

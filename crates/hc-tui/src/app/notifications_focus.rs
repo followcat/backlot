@@ -136,18 +136,9 @@ impl App {
         })
     }
 
-    /// This core's live `bl-hollywood` address.
+    /// This core's active live Hollywood terminal address.
     pub(super) fn hollywood_live_terminal(&self) -> Option<String> {
-        self.view
-            .inventory
-            .terminals()
-            .values()
-            .find(|t| {
-                t.state == "live"
-                    && !t.address.contains('/')
-                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
-            })
-            .map(|t| t.address.clone())
+        self.hollywood_terminal()
     }
 
     /// Collapse the expanded Call Sheet before a jump focuses a pane —

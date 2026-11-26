@@ -123,7 +123,15 @@ impl Wait<'_> {
     pub fn can_answer(&self) -> bool {
         match self {
             Wait::Prompt(item) => item.role.can_answer_prompt,
-            Wait::Hollywood(hollywood) => hollywood.can_answer_prompt,
+            Wait::Hollywood(hollywood) => {
+                if let Some(hf) = &hollywood.handoff
+                    && hf.phase == "needs_approval"
+                {
+                    return backlot_model::caps::get(&hf.target_runner)
+                        .is_some_and(|c| c.can_answer());
+                }
+                hollywood.can_answer_prompt
+            }
             _ => false,
         }
     }
@@ -230,11 +238,14 @@ pub(crate) fn waiting_items<'a>(
             }
         }
     }
-    // Hollywood's own state is this core's: a user-owned prompt or a
-    // blocked screen waits on a person.
+    // Hollywood's own state is this core's: an active or rolled-back
+    // switch handoff, a user-owned prompt, quota/auth error, or blocked screen.
     if let Some(hw) = super::rows::local_summary(machines).and_then(|s| s.hollywood.as_ref())
-        && hw.state == "live"
-        && (hw.attention_user || hw.work == Some(backlot_model::summary::Work::Blocked))
+        && (super::handoff_ui::is_handoff_waiting_visible(hw)
+            || (hw.state == "live"
+                && (hw.attention_user
+                    || hw.work == Some(backlot_model::summary::Work::Blocked)
+                    || super::handoff_ui::is_quota_or_error(hw))))
     {
         out.push(Wait::Hollywood(hw));
     }

@@ -180,6 +180,12 @@ pub enum Cmd {
         /// tasks anyway (L5).
         force: bool,
     },
+    /// `studio reopen --reason <r>`: the person brings a finished
+    /// studio back. The name comes from `--studio`/`BACKLOT_STUDIO`
+    /// like every studio command.
+    StudioReopen {
+        reason: String,
+    },
     /// `studio prune`: remove a finished studio's worktrees and
     /// `backlot/<studio>/*` branches — never its ledger.
     StudioPrune {
@@ -257,6 +263,12 @@ pub enum Cmd {
     StageService {
         /// `--write` instead of the default `--print`.
         write: bool,
+    },
+    /// `backlot guide [<topic>] [--grep <word>]` — backlot's own docs,
+    /// compiled into the binary, read-only (never a disk search).
+    Guide {
+        topic: Option<String>,
+        grep: Option<String>,
     },
     /// `backlot runners [--json]` — the detector's table (U5) or the
     /// G4 document, read-only.
@@ -460,6 +472,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "new" => args_studio::studio_new(&mut common, &mut it),
                 "cast" => args_studio::studio_cast(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
+                "reopen" => args_studio::studio_reopen(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),
                 "delete" => args_studio::studio_delete(&mut common, &mut it),
                 "migrate" => args_studio::studio_migrate(&mut common, &mut it),
@@ -627,6 +640,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 )),
             }
         }
+        "guide" => args_studio::guide(&mut common, &mut it),
         "runners" => args_studio::runners(&mut common, &mut it),
         "repos" => args_studio::repos(&mut common, &mut it),
         other => Err(usage(format!("unknown command '{other}'"), U_STATUS)),

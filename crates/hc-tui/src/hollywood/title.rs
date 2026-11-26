@@ -92,13 +92,17 @@ pub(crate) fn draw_title(
     // hollywood, or a down/offline stage. Cards and ready studios alone are peach.
     let user_urgent = super::items::any_user_urgent(waits);
     let summary = rows::local_summary(machines);
-    let state = summary
-        .and_then(|s| s.hollywood.as_ref())
-        .map(|h| h.state.as_str());
+    let hw = summary.and_then(|s| s.hollywood.as_ref());
+    let state = hw.map(|h| h.state.as_str());
     // The agent's words: the full line when it fits, the state alone
     // when it does not. If even that is squeezed, the counts step
     // aside — the state is what the row must say.
-    let (agent_line, short_line) = if agent {
+    let (agent_line, short_line) = if let Some(hw) = hw
+        && let Some(over) =
+            super::handoff_ui::title_override(hw, activity, crate::update_state::now_ms())
+    {
+        over
+    } else if agent {
         let state = state.unwrap_or("down");
         let suffix = match activity {
             rows::HollywoodActivity::Working => " · thinking…",
@@ -150,17 +154,28 @@ pub(crate) fn draw_title(
         text = pick(room);
     }
     if agent {
-        let (glyph, colour) = match activity {
-            rows::HollywoodActivity::Working => (
-                crate::studio::glyphs::Person::Working.glyph(spin),
-                palette.accent,
-            ),
-            rows::HollywoodActivity::Queued => (
-                crate::studio::glyphs::Person::Working.glyph(spin),
-                palette.peach,
-            ),
-            rows::HollywoodActivity::Idle => {
-                ("●", rows::state_color(state.unwrap_or("down"), palette))
+        let (glyph, colour) = if let Some(hw) = hw
+            && super::handoff_ui::handoff_phase(hw) == Some("needs_approval")
+        {
+            ("⚠", palette.red)
+        } else if let Some(hw) = hw
+            && super::handoff_ui::is_quota_or_error(hw)
+            && !super::handoff_ui::is_handoff_active(hw)
+        {
+            ("●", palette.red)
+        } else {
+            match activity {
+                rows::HollywoodActivity::Working => (
+                    crate::studio::glyphs::Person::Working.glyph(spin),
+                    palette.accent,
+                ),
+                rows::HollywoodActivity::Queued => (
+                    crate::studio::glyphs::Person::Working.glyph(spin),
+                    palette.peach,
+                ),
+                rows::HollywoodActivity::Idle => {
+                    ("●", rows::state_color(state.unwrap_or("down"), palette))
+                }
             }
         };
         put_text(buf, x, y, 1, glyph, base.fg(colour));

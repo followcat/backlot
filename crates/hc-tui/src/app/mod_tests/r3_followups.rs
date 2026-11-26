@@ -50,55 +50,9 @@ async fn studio_focus_separates_sidebar_highlight_from_cast_and_pane_typing() {
     );
     draw_to(&mut app, 120, 24);
 
-    // Alt+Right switches StudioFocus to Studio(night-owl) without moving
-    // the attached typing pane (t1).
-    alt(&mut app, hc_vt::Key::ArrowRight);
-    assert_eq!(
-        app.studio.focus,
-        Some(StudioFocus::Studio(StudioKey::local("night-owl")))
-    );
-    assert_eq!(app.focused.as_deref(), Some("t1"));
-
-    // No role in Cast paints the `▌` focus bar while StudioFocus::Studio
-    // owns focus, while the sidebar row for night-owl shows the studio focus.
-    let backend = draw_to(&mut app, 120, 24);
-    let buf = backend.buffer();
-    for (rect, _) in &app.hit_map.agents {
-        assert_ne!(buf[(rect.x, rect.y)].symbol(), "▌", "no role highlighted");
-    }
-    let night_row = app
-        .hit_map
-        .workspaces
-        .iter()
-        .find(|w| w.workspace_id.ends_with("night-owl"))
-        .map(|w| w.rect)
-        .unwrap_or_default();
-    if night_row.width > 0 {
-        assert_eq!(buf[(night_row.x, night_row.y)].symbol(), "▌");
-    }
-
-    // Typing still goes to self.pane (`t1`).
-    let before = app.pane.input_backlog().0;
-    send_key(&mut app, hc_vt::Key::Char('x'), hc_vt::Mods::NONE);
-    assert!(app.pane.input_backlog().0 > before);
-
-    // Ctrl+B m opens the Studio menu (with title line) for night-owl.
-    ctrl_b_m(&mut app);
-    let (title, item_count) = {
-        let menu = app.menu.as_ref().expect("studio menu opened");
-        (menu.title(), menu.items().len())
-    };
-    assert_eq!(title.as_deref(), Some("Studio · night-owl"));
-    draw_to(&mut app, 120, 24);
-    assert_eq!(
-        app.hit_map.context_menu_rows.len(),
-        item_count,
-        "title row is non-selectable and excluded from hit rows"
-    );
-
-    // Alt+Down enters night-owl's remembered role (t7) and opens Role menu.
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    // Alt+PgDn steps to night-owl and lands its remembered member —
+    // its producer — in the main pane.
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(
         app.studio.focus,
         Some(StudioFocus::Role(
@@ -106,12 +60,39 @@ async fn studio_focus_separates_sidebar_highlight_from_cast_and_pane_typing() {
             "t7".into()
         ))
     );
+    assert_eq!(app.focused.as_deref(), Some("t7"));
+
+    // The cast highlights the landed member and typing reaches it.
+    draw_to(&mut app, 120, 24);
+    let cast_row = app
+        .hit_map
+        .agents
+        .iter()
+        .find(|(_, terminal)| terminal == "t7")
+        .map(|(rect, _)| *rect)
+        .expect("the landed member's cast row");
+    let backend = draw_to(&mut app, 120, 24);
+    assert_eq!(
+        backend.buffer()[(cast_row.x, cast_row.y)].symbol(),
+        "▎",
+        "the landed member carries the cast indicator"
+    );
+    let before = app.pane.input_backlog().0;
+    send_key(&mut app, hc_vt::Key::Char('x'), hc_vt::Mods::NONE);
+    assert!(app.pane.input_backlog().0 > before);
+
+    // Ctrl+B m opens the role menu for the landed member.
     ctrl_b_m(&mut app);
     let menu = app.menu.as_ref().expect("role menu opened");
     assert_eq!(
         menu.title().as_deref(),
         Some("Role · owl-producer (night-owl)")
     );
+    app.menu = None;
+
+    // Alt+Down then walks night-owl's own cast from the landed member.
+    alt(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.focused.as_deref(), Some("t8"));
 }
 
 #[tokio::test]
@@ -188,7 +169,7 @@ async fn alt_arrows_work_across_all_non_text_contexts_and_yield_to_modals() {
     ] {
         let mut app = two_studio_app();
         setup(&mut app);
-        alt(&mut app, hc_vt::Key::ArrowRight);
+        alt(&mut app, hc_vt::Key::PageDown);
         assert_eq!(app.studio.current, Some("night-owl".into()));
         assert!(!app.help && app.menu.is_none() && app.navigator.is_none());
         assert!(app.sheet.is_none() && app.peek.is_none());
@@ -200,7 +181,7 @@ async fn alt_arrows_work_across_all_non_text_contexts_and_yield_to_modals() {
     let mut app = alt_app();
     for start in ["t20", "t9", "t40", "t30"] {
         app.focus_pane(start.into());
-        alt(&mut app, hc_vt::Key::ArrowRight);
+        alt(&mut app, hc_vt::Key::PageDown);
         assert!(app.studio.current.is_some());
         alt(&mut app, hc_vt::Key::ArrowUp);
         assert!(matches!(app.studio.focus, Some(StudioFocus::Role(..))));
@@ -217,18 +198,18 @@ async fn alt_arrows_work_across_all_non_text_contexts_and_yield_to_modals() {
             verb: "pause",
         },
     ));
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert!(app.studio_dialog.is_some());
 
     let mut app = two_studio_app();
     app.mode = crate::app::Mode::Resize;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
 
     let mut app = two_studio_app();
     app.mode = crate::app::Mode::Copy;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
 }
 
@@ -268,12 +249,10 @@ async fn single_studio_single_role_toggles_studio_focus_with_alt_arrows() {
             "t1".into()
         ))
     );
-    alt(&mut app, hc_vt::Key::ArrowLeft);
-    assert_eq!(
-        app.studio.focus,
-        Some(StudioFocus::Studio(StudioKey::local("acme-shop")))
-    );
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    // One studio wraps onto itself: the step lands its one member in
+    // the pane rather than parking a bare studio row.
+    alt(&mut app, hc_vt::Key::PageUp);
+    assert_eq!(app.studio.current, Some(StudioKey::local("acme-shop")));
     assert_eq!(
         app.studio.focus,
         Some(StudioFocus::Role(
@@ -281,4 +260,5 @@ async fn single_studio_single_role_toggles_studio_focus_with_alt_arrows() {
             "t1".into()
         ))
     );
+    assert_eq!(app.focused.as_deref(), Some("t1"));
 }

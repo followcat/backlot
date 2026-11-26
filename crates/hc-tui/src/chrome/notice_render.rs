@@ -281,7 +281,7 @@ pub(crate) fn render_action_toast(
         Span::styled("●", Style::default().fg(dot)),
         Span::raw(" "),
         Span::styled(
-            truncate_end(title, inner.width.saturating_sub(2) as usize),
+            truncate_end(title, inner.width.saturating_sub(4) as usize),
             Style::default()
                 .fg(palette.text)
                 .add_modifier(Modifier::BOLD),
@@ -292,14 +292,14 @@ pub(crate) fn render_action_toast(
     if let Some(body) = body {
         if inner.height > 1 {
             Paragraph::new(Line::from(Span::styled(
-                truncate_end(body, inner.width.saturating_sub(2) as usize),
+                truncate_end(body, inner.width.saturating_sub(4) as usize),
                 Style::default().fg(palette.overlay0),
             )))
             .render(
                 Rect::new(
                     inner.x.saturating_add(2),
                     inner.y + 1,
-                    inner.width.saturating_sub(2),
+                    inner.width.saturating_sub(4),
                     1,
                 ),
                 buffer,
@@ -366,6 +366,37 @@ mod tests {
                     "see-through release card cell at {x},{y}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn action_toast_preserves_right_border_and_padding_when_clamped_to_area() {
+        let area = Rect::new(4, 11, 96, 7);
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 100, 18));
+        let body = "switch to codex/gpt-6-sol/high failed: candidate codex/gpt-6-sol hit quota limit — kept claude/sonnet-5-5/high live";
+        let (rect, _chip) = render_action_toast(
+            &mut buffer,
+            area,
+            "hollywood switch failed",
+            Some(body),
+            Some(ToastChip::CopyCmd),
+            0,
+            &Palette::backlot(),
+        );
+        assert_eq!(rect.right(), 100);
+        for dy in 1..rect.height.saturating_sub(1) {
+            let y = rect.y + dy;
+            assert_eq!(buffer[(rect.x, y)].symbol(), "│", "left border row {y}");
+            assert_eq!(
+                buffer[(rect.right() - 1, y)].symbol(),
+                "│",
+                "right border row {y}"
+            );
+            assert_eq!(
+                buffer[(rect.right() - 2, y)].symbol(),
+                " ",
+                "right inner margin row {y}"
+            );
         }
     }
 }
