@@ -120,45 +120,53 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
 
     // The plan/dispatch phase, decided by the latest `plan` or
     // `dispatch` command message — the same rule the writer's
-    // wanted set uses.
-    match last_call(state) {
-        Some(m) if m.purpose.as_deref() == Some("plan") => {
-            let plan = first_plan_after(state, PlanKind::Plan, m.seq);
-            let acceptance = first_plan_after(state, PlanKind::Acceptance, m.seq);
-            match (plan, acceptance) {
-                // Both published after the request: the producer
-                // owes the dispatch — owed from the second publish.
-                (Some((s1, t1)), Some((s2, t2))) => out.push(Step {
-                    key: s1.max(s2),
-                    label: "dispatch".into(),
-                    owner: "producer".into(),
-                    command: "backlot dispatch --file <file>".into(),
-                    since_ms: t1.max(t2),
-                }),
-                _ => out.push(Step {
-                    key: m.seq,
-                    label: "plan and acceptance list".into(),
-                    owner: "writer".into(),
-                    command:
-                        "backlot plan publish --kind plan --file <file> (and --kind acceptance)"
-                            .into(),
-                    since_ms: m.ts_ms,
-                }),
+    // wanted set uses. When `design_gate = required` is active, the
+    // opening design state machine owns this phase instead.
+    if crate::design_steps::design_gate_active(state) {
+        if let Some(step) = crate::design_steps::opening_step(state) {
+            out.push(step);
+        }
+    } else {
+        match last_call(state) {
+            Some(m) if m.purpose.as_deref() == Some("plan") => {
+                let plan = first_plan_after(state, PlanKind::Plan, m.seq);
+                let acceptance = first_plan_after(state, PlanKind::Acceptance, m.seq);
+                match (plan, acceptance) {
+                    // Both published after the request: the producer
+                    // owes the dispatch — owed from the second publish.
+                    (Some((s1, t1)), Some((s2, t2))) => out.push(Step {
+                        key: s1.max(s2),
+                        label: "dispatch".into(),
+                        owner: "producer".into(),
+                        command: "backlot dispatch --file <file>".into(),
+                        since_ms: t1.max(t2),
+                    }),
+                    _ => out.push(Step {
+                        key: m.seq,
+                        label: "plan and acceptance list".into(),
+                        owner: "writer".into(),
+                        command:
+                            "backlot plan publish --kind plan --file <file> (and --kind acceptance)"
+                                .into(),
+                        since_ms: m.ts_ms,
+                    }),
+                }
             }
+            // A dispatch handed to the director, not yet answered by a
+            // task: the director owes the split.
+            Some(m) if m.delivered && !state.tasks.values().any(|t| t.created_seq > m.seq) => {
+                out.push(Step {
+                    key: m.seq,
+                    label: "tasks".into(),
+                    owner: "director".into(),
+                    command:
+                        "backlot task new --title <title> --kind <kind> --acceptance-file <file>"
+                            .into(),
+                    since_ms: m.delivered_ms.unwrap_or(m.ts_ms),
+                });
+            }
+            _ => {}
         }
-        // A dispatch handed to the director, not yet answered by a
-        // task: the director owes the split.
-        Some(m) if m.delivered && !state.tasks.values().any(|t| t.created_seq > m.seq) => {
-            out.push(Step {
-                key: m.seq,
-                label: "tasks".into(),
-                owner: "director".into(),
-                command: "backlot task new --title <title> --kind <kind> --acceptance-file <file>"
-                    .into(),
-                since_ms: m.delivered_ms.unwrap_or(m.ts_ms),
-            });
-        }
-        _ => {}
     }
 
     for t in state.tasks.values() {
@@ -168,10 +176,13 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
         // Created and never cast: whoever created it casts it — the
         // director on the split path, the producer when it made the
         // task itself. Old logs carry no `by`: the director is the
-        // usual hand. A task whose dependencies are still open owes
-        // no cast step — nobody is nudged for a cast they may not do.
+        // usual hand. A task whose dependencies are still open — or
+        // blocked by an unsigned design gate — owes no cast step.
         if t.casts.is_empty() {
-            if !t.open_dependencies(state).is_empty() {
+            if !t.open_dependencies(state).is_empty()
+                || (crate::design_steps::design_gate_active(state)
+                    && state.design_phase() != crate::design::DesignPhase::Signed)
+            {
                 continue;
             }
             out.push(Step {
