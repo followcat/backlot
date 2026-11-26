@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::event::StudioMode;
-use backlot_model::req_results::{StudioFinishResult, StudioNewResult, StudioPlan};
+use backlot_model::req_results::{
+    StudioFinishResult, StudioNewResult, StudioPlan, StudioReopenResult,
+};
 use backlot_model::req_wire::ReqAction;
 use serde_json::Value;
 
@@ -23,6 +25,7 @@ pub(crate) fn handles(action: &ReqAction) -> bool {
         action,
         ReqAction::StudioNew { .. }
             | ReqAction::StudioFinish { .. }
+            | ReqAction::StudioReopen { .. }
             | ReqAction::StudioPrune { .. }
             | ReqAction::StudioDelete { .. }
             | ReqAction::StudioRestore { .. }
@@ -68,6 +71,9 @@ pub(crate) async fn dispatch(
             reason,
             force,
         } => studio_finish(&stage.base, env, studio, reason, force),
+        ReqAction::StudioReopen { studio, reason } => {
+            studio_reopen(&stage.base, env, studio, reason)
+        }
         ReqAction::StudioPrune {
             studio,
             all_finished,
@@ -186,6 +192,25 @@ fn studio_finish(
     )?;
     let event = store::append(&store::studio_dir(base, &id), built)?;
     to_json(StudioFinishResult {
+        studio: id,
+        seq: event.seq,
+        reason,
+    })
+}
+
+fn studio_reopen(base: &Path, env: &Env, studio: String, reason: String) -> Result<Value, Fail> {
+    let id = check_studio_name(&studio)?;
+    let caller = Caller::doc_user(&id);
+    let built = commands::build(
+        &caller,
+        Cmd::StudioReopen {
+            reason: reason.clone(),
+        },
+        env,
+        base,
+    )?;
+    let event = store::append(&store::studio_dir(base, &id), built)?;
+    to_json(StudioReopenResult {
         studio: id,
         seq: event.seq,
         reason,

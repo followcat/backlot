@@ -105,6 +105,11 @@ pub struct Exchange {
     /// Hollywood wrote itself (additive on `backlot/1`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// A card line's state — `open`, `withdrawn`, `cancelled`, … — so
+    /// a card Hollywood took back shows as withdrawn (additive on
+    /// `backlot/1`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card_state: Option<String>,
     /// Reserved for schema parity with studio exchange entries; omitted on wire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
@@ -310,14 +315,20 @@ fn card_action_label(c: &crate::hollywood::Card) -> String {
 }
 
 /// A `card.proposed` line's text — the same words the Call Sheet's
-/// CARD row uses (`proposed card c3 · acme-shop · pause t1`).
+/// CARD row uses (`proposed card c3 · acme-shop · pause t1`), plus the
+/// state when the card no longer stands open (`· withdrawn`).
 fn card_line(c: &crate::hollywood::Card) -> String {
-    format!(
+    let mut line = format!(
         "proposed card c{} · {} · {}",
         c.seq,
         c.action.studio(),
         card_action_label(c)
-    )
+    );
+    if c.state != crate::hollywood::CardState::Open {
+        line.push_str(" · ");
+        line.push_str(c.state.as_str());
+    }
+    line
 }
 
 /// The conversation lines: each `message.sent` `to` Hollywood that
@@ -336,6 +347,7 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
                 who: cap(&m.from),
                 to: Some(cap(&m.to)),
                 kind: Some("tell".into()),
+                card_state: None,
                 task: None,
                 ts_ms: (m.ts_ms > 0).then_some(m.ts_ms),
                 text: cap_headline(text),
@@ -347,6 +359,7 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
             who: "hollywood".into(),
             to: Some("user".into()),
             kind: Some("report".into()),
+            card_state: None,
             task: None,
             ts_ms: (r.ts_ms > 0).then_some(r.ts_ms),
             text: cap_headline(&r.headline),
@@ -362,6 +375,7 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
                     who: "hollywood".into(),
                     to: Some("user".into()),
                     kind: Some("card".into()),
+                    card_state: Some(c.state.as_str().into()),
                     task: None,
                     ts_ms: (c.ts_ms > 0).then_some(c.ts_ms),
                     text: cap_headline(&card_line(c)),

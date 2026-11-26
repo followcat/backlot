@@ -10,12 +10,23 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Reopen a finished studio.** `backlot studio reopen --studio <s> --as user` records the reopening (`studio.reopened`), and recasting a role, `studio cast set`, adding tasks and answering permission prompts work again. Only you may reopen — a role or Hollywood is refused — and Hollywood may propose it as a `reopen-studio` card. The guide says when to reopen and when to start a new studio (`docs/studio/guide.md`, `docs/studio/hollywood.md`).
+- **Hollywood can withdraw its own cards.** `backlot hollywood withdraw <card> --reason <text>` takes back an open card Hollywood proposed, recording who withdrew it and why (`card.withdrawn`); the client shows it as `withdrawn`. Only Hollywood's own cards, never yours or the stage's, and never one already applied, cancelled or stale (`docs/studio/hollywood.md`).
+- **A newer card supersedes the older one it conflicts with.** When a new card targets the same single fact an open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a studio's cast (`cast`), its finished state (`reopen-studio`), a studio name (`studio-new`), or Hollywood's identity (`setup`) — the older card is marked `superseded by c<n>` in the same append, so a batch apply can never run both (`docs/studio/hollywood.md`).
+
 ### Changed
 
 - **The cast shows each role in full.** A role's state text and full model (with effort) wrap over up to four rows instead of being cut to the sidebar width; when the people do not all fit, the focused role keeps its height and the rest fall back to two rows.
 - **The lot's person rows drop the runner and the model.** The cast already names them, so the row gives those cells to the name, task and state.
 - **Roles read as one-cell badges.** `Ⓟ producer`, `Ⓓ director`, `Ⓦ writer` and `Ⓐ actor` (with its task) replace the role words in the cast, the lot, the Call Sheet and the Hollywood frames and band, each in its own theme colour; the state glyph is unchanged.
 - **Group rules inside each studio block.** The producer, director, writer and actor groups are separated by a thin `├──┤` rule; an empty group draws none and the cursor steps over the rules.
+
+### Fixed
+
+- **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
+- **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
 
 ## 0.4.10 — 2026-11-26
 

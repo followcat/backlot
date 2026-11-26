@@ -277,6 +277,12 @@ pub enum ReqAction {
         #[serde(default, skip_serializing_if = "crate::event::is_false")]
         force: bool,
     },
+    /// `studio reopen`: the person brings a finished studio back.
+    StudioReopen {
+        studio: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
     /// `studio cast show`: the effective cast as a cast file (or the
     /// settings as JSON). Read-only; answered from the hub.
     StudioCastShow {

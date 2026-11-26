@@ -24,7 +24,7 @@ impl Stage {
         card: &Card,
         sstate: Option<StudioState>,
     ) -> Step {
-        let CardAction::Cast { studio, cast } = &card.action else {
+        let CardAction::Cast { studio, cast, .. } = &card.action else {
             return Step::Fail("not a cast card".into());
         };
         let Some(s) = sstate else {
@@ -36,6 +36,11 @@ impl Stage {
         }
         // The base: the settings event the card was proposed against.
         if let Some(reason) = hollywood::stale(&card.action, &card.base, Some(&s)) {
+            return Step::Stale(reason);
+        }
+        // The copy the card carries, not the proposer's file it came
+        // from: an edit since makes the card stale.
+        if let Some(reason) = crate::hcard_snapshot::stale(&card.action) {
             return Step::Stale(reason);
         }
         let path = crate::hcard_new::resolve_draft(hdir, cast);
