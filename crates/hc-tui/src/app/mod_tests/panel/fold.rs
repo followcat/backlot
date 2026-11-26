@@ -183,9 +183,9 @@ async fn space_and_enter_toggle_closed_fold_and_o_reopens_opened_seat() {
 #[tokio::test]
 async fn moving_cursor_across_studios_unfolds_target_keeps_same_target_and_scrolls() {
     let mut app = app_with_two_folded_studios();
-    app.area = (120, 22);
+    app.area = (120, 24);
     open_panel(&mut app);
-    draw_to(&mut app, 120, 22);
+    draw_to(&mut app, 120, 24);
 
     // Move to acme-shop's Input row (blog is folded below it).
     app.panel.selected = Some(Target::Input("acme-shop".into()));
@@ -216,7 +216,7 @@ async fn moving_cursor_across_studios_unfolds_target_keeps_same_target_and_scrol
             .any(|t| *t == Target::Input("acme-shop".into())),
         "acme-shop folded"
     );
-    draw_to(&mut app, 120, 22);
+    draw_to(&mut app, 120, 24);
     assert!(
         app.panel_hits
             .rows
@@ -228,10 +228,12 @@ async fn moving_cursor_across_studios_unfolds_target_keeps_same_target_and_scrol
 
     // Step back up into folded acme-shop's last live role: acme unfolds, blog folds,
     // cursor keeps exact Target::Person(acme-shop, actor-t4-c1) and stays visible.
+    let before_up = app.panel_targets();
     key(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(
         app.panel.selected,
-        Some(Target::Person("acme-shop".into(), "actor-t4-c1".into()))
+        Some(Target::Person("acme-shop".into(), "actor-t4-c1".into())),
+        "targets before up: {before_up:?}"
     );
     assert!(
         app.panel_targets()
@@ -239,7 +241,7 @@ async fn moving_cursor_across_studios_unfolds_target_keeps_same_target_and_scrol
             .any(|t| *t == Target::Input("acme-shop".into())),
         "acme-shop unfolded"
     );
-    draw_to(&mut app, 120, 22);
+    draw_to(&mut app, 120, 24);
     assert!(
         app.panel_hits
             .rows
@@ -306,14 +308,14 @@ async fn ctrl_jk_studio_stepping_unfolds_active_studio_even_after_prior_dock_vis
 #[tokio::test]
 async fn clicking_folded_studio_header_or_role_unfolds_it_and_keeps_row_visible() {
     let mut app = app_with_two_folded_studios();
-    app.area = (120, 18);
+    app.area = (120, 30);
     open_panel(&mut app);
     // Scroll down to bottom of acme-shop so folded blog is visible near the bottom.
     app.panel.selected = Some(Target::Input("acme-shop".into()));
-    draw_to(&mut app, 120, 18);
+    draw_to(&mut app, 120, 30);
     let max = app.panel_hits.metrics.unwrap().max_offset_from_bottom;
     app.panel.scroll = max;
-    draw_to(&mut app, 120, 18);
+    draw_to(&mut app, 120, 30);
 
     // Right-click a live role in folded blog -> blog unfolds, acme folds, target stays
     // on that role and stays visible inside the scrolled viewport.
@@ -321,9 +323,9 @@ async fn clicking_folded_studio_header_or_role_unfolds_it_and_keeps_row_visible(
         .panel_hits
         .rows
         .iter()
-        .find(|(_, t)| *t == Target::Person("blog".into(), "director".into()))
+        .find(|(_, t)| *t == Target::Person("blog".into(), "actor-t1-c1".into()))
         .cloned()
-        .expect("folded blog director hit");
+        .expect("folded blog actor hit");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Right),
         rect.x + 2,
@@ -337,7 +339,7 @@ async fn clicking_folded_studio_header_or_role_unfolds_it_and_keeps_row_visible(
         "right-clicking folded role unfolded blog"
     );
     app.menu = None;
-    draw_to(&mut app, 120, 18);
+    draw_to(&mut app, 120, 30);
     assert!(
         app.panel_hits.rows.iter().any(|(_, t)| *t == target),
         "clicked role stays visible in viewport after unfolding: {:?}",

@@ -165,14 +165,14 @@ every other studio keeps `surface1`.
   field already has its brief queued as the producer's first `tell`, so it moves past this state
   on its own. Any other state draws nothing. The Hollywood frame carries the same line on its
   blank row.
+- Role groups are split by a thin `├──┤` rule in the frame's colour — the producer, then
+  the director, then the writer, then all actors together; an empty group draws no rule,
+  and a folded or stacked block follows the same grouping.
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
-  prompt, and the state word right-aligned. Before the state word sit the dim runner tag
-  (`claude`, `cmd`, `agy`, `codex`, `devin`, `cursor`, `cline`, `opencode`, `fake`) and,
-  while the frame has room, the short model form the cast uses — the same truncation with
-  `…`. The state word keeps the right edge, and the name and task keep their cells: the
-  badge spends only spare space, dropping the model first, then the runner tag. The name
-  truncates only when it alone overflows. A user-owned
+  prompt, and the state word right-aligned. The row carries no runner and no model — the
+  cast shows both — so the name, task and flag may use every cell up to the state word.
+  The name truncates only when it alone overflows. A user-owned
   prompt adds a cue line
   `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
   has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a

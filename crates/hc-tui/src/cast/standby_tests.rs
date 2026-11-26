@@ -128,18 +128,20 @@ fn standby_writer_in_cast_renders_dim_blank_mark_and_plan_hint() {
     let rows: Vec<String> = (0..area.height).map(|y| row_text(&buf, area, y)).collect();
     let y = rows
         .iter()
-        .position(|l| l.contains("writer"))
+        .position(|l| l.contains("Ⓦ"))
         .expect("writer row") as u16;
     assert_eq!(buf[(1, y)].symbol(), " ");
-    let name_x = rows[y as usize].find("writer").unwrap() as u16;
-    assert_eq!(buf[(name_x, y)].fg, palette.overlay0);
+    let row = &rows[y as usize];
+    let name_x = row[..row.find("Ⓦ").unwrap()].chars().count() as u16;
+    // The role badge keeps its role colour even on a dim standby row.
+    assert_eq!(buf[(name_x, y)].fg, palette.teal);
 
     let line2 = &rows[y as usize + 1];
     assert!(
         line2.contains("starts when the director plans"),
         "expected plan hint on row 2, got: {line2:?}"
     );
-    let hint_x = line2.find("starts").unwrap() as u16;
+    let hint_x = line2[..line2.find("starts").unwrap()].chars().count() as u16;
     assert_eq!(buf[(hint_x, y + 1)].fg, palette.overlay0);
 }
 
@@ -151,7 +153,7 @@ fn standby_producer_in_cast_renders_studio_start_hint() {
     let rows: Vec<String> = (0..area.height).map(|y| row_text(&buf, area, y)).collect();
     let y = rows
         .iter()
-        .position(|l| l.contains("producer"))
+        .position(|l| l.contains("Ⓟ"))
         .expect("producer row");
     assert!(
         rows[y + 1].contains("starts with the studio"),

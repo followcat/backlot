@@ -1,10 +1,12 @@
 //! The studio cast (U1): in studio mode the sidebar's agents section
-//! becomes the current studio's people — two rows each, the focused
-//! person marked, closed people last — and an `others` row that
-//! expands into herdr's own agent rows. Everything the renderer needs
-//! is a borrow of the summaries plus the terminal inventory's titles.
+//! becomes the current studio's people — a first row each, the rest
+//! wrapped as needed, the focused person marked, closed people last —
+//! and an `others` row that expands into herdr's own agent rows.
+//! Everything the renderer needs is a borrow of the summaries plus the
+//! terminal inventory's titles.
 
 mod draw;
+mod person;
 pub(crate) mod rows;
 mod simple;
 
