@@ -45,6 +45,7 @@ rework_cap = 2
 stall_limit_s = 60
 nudge_after_s = 30
 escalate_after_s = 120
+design_gate = "off"
 
 [limits]
 # 3 seats the fixed pair and either the writer or one actor.

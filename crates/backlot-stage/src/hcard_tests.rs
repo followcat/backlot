@@ -350,7 +350,12 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
         hevents(&hdir)
     );
     match &sev[0].kind {
-        EventKind::StudioCreated { title, .. } => assert_eq!(title, "acme-beta"),
+        EventKind::StudioCreated {
+            title, design_gate, ..
+        } => {
+            assert_eq!(title, "acme-beta");
+            assert_eq!(*design_gate, backlot_model::design::DesignGate::Required);
+        }
         k => panic!("expected studio.created, got {k:?}"),
     }
     match &sev[1].kind {

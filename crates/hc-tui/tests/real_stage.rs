@@ -2328,6 +2328,8 @@ async fn real_stage_runner_limit_holds_and_releases() {
 /// the real cursor-agent never runs; `tools/cursor-stub.sh` stands
 /// in on `PATH`.
 const CURSOR_CAST_TOML: &str = r#"
+design_gate = "off"
+
 [producer]
 runner = "fake"
 model = "model-p"

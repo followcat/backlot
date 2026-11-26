@@ -40,7 +40,11 @@ pub(crate) fn hwood_env(env: &Env) -> Env {
 /// acme-shop with requirement v1 and task `t1` running under
 /// actor-a — the state a `pause t1` card proposes against.
 pub(crate) fn running(scratch: &Scratch, env: &Env) {
-    let cast = fixture(scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

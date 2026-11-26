@@ -17,7 +17,11 @@ use crate::cli_testkit::*;
 use crate::store::{self, studio_dir};
 
 fn studio(scratch: &Scratch, env: &Env) {
-    let cast = fixture(scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

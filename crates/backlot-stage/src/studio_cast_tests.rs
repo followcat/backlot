@@ -295,7 +295,27 @@ fn design_gate_parses_validates_and_diffs_in_cast_toml() {
     let (scratch, env) = scratch();
     studio(&scratch, &env);
     let shown = ok(&env, "studio cast show");
-    assert!(shown.contains("design_gate = \"off\""), "{shown}");
+    assert!(shown.contains("design_gate = \"required\""), "{shown}");
+
+    let off_toml = fixture(
+        &scratch,
+        "off.toml",
+        &format!("design_gate = \"off\"\n{REAL_CAST}"),
+    );
+    let parsed_off = crate::commands::read_cast(std::path::Path::new(&off_toml)).unwrap();
+    assert_eq!(
+        parsed_off.design_gate,
+        Some(backlot_model::event::DesignGate::Off)
+    );
+    let dry_off = ok(
+        &env,
+        &format!("studio cast set --file {off_toml} --dry-run"),
+    );
+    assert!(dry_off.contains("design_gate required → off"), "{dry_off}");
+    let out_off = ok(&env, &format!("studio cast set --file {off_toml}"));
+    assert!(out_off.contains("design_gate required → off"), "{out_off}");
+    let shown_off = ok(&env, "studio cast show");
+    assert!(shown_off.contains("design_gate = \"off\""), "{shown_off}");
 
     let required_toml = fixture(
         &scratch,
@@ -320,6 +340,15 @@ fn design_gate_parses_validates_and_diffs_in_cast_toml() {
     assert!(
         shown_after.contains("design_gate = \"required\""),
         "{shown_after}"
+    );
+
+    // Omitting `design_gate` in `studio cast set` defaults to `required`.
+    ok(&env, &format!("studio cast set --file {off_toml}"));
+    let bare_toml = fixture(&scratch, "bare.toml", REAL_CAST);
+    let bare_out = ok(&env, &format!("studio cast set --file {bare_toml}"));
+    assert!(
+        bare_out.contains("design_gate off → required"),
+        "{bare_out}"
     );
 
     let invalid = fixture(

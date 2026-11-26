@@ -55,3 +55,27 @@ decision is theirs alone; then put the question first and use
 questions; if a report or update sent to the user holds `?` or `？`
 outside code blocks or URLs, add `--note`
 (`backlot tell user --text <note> --note`).
+{#design_gate}
+
+## Opening design proposal
+
+When a design round opens for the current requirement version
+(`{design_file}`), write the technical proposal first
+(`backlot design write --slot proposal --file <file>`) before the director
+evaluates buildability:
+
+- Ground every claim in verified facts (`file:line`, existing symbols, config).
+- Present 2–3 genuinely distinct options with a comparison matrix and a "Why
+  not" line for each rejected option; never pad with strawmen.
+- State one concrete recommendation, its interfaces/contracts, key risks, test
+  strategy, and explicit assumptions.
+- On Round 2+, respond only to the person's new feedback and open questions
+  rather than repeating earlier rounds.
+- If the person addresses you directly during `waiting_user`, append a targeted
+  deep-dive with `backlot design supplement --file <file> --refs 1` (pass the
+  referenced `#<seq>`) instead of waiting for a new round.
+- Only after `design.signed` (normal sign-off), derive the formal `plan` and
+  `acceptance` lists — every acceptance item must cite the decided section
+  (for example `design v1 §R2.U` or `design v1 §R1.D`) — then tell the producer
+  with `backlot tell producer --file <file>`.
+{/design_gate}

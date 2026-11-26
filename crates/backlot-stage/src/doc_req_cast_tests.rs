@@ -142,7 +142,11 @@ fn cast_set_unchanged_is_refused() {
 #[test]
 fn recast_an_actor_key_over_the_queue() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", REAL_CAST);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{REAL_CAST}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

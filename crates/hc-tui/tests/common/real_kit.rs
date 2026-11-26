@@ -461,6 +461,8 @@ pub fn wait_checked(state: &Path, studio: &str) -> Value {
 /// The all-fake cast every real-core test drives — the producer is a
 /// `trust` model so the stage's dialog exchange is covered too.
 pub const CAST_TOML: &str = r#"
+design_gate = "off"
+
 [producer]
 runner = "fake"
 model = "trust"

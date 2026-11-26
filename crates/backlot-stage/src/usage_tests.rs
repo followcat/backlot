@@ -10,7 +10,11 @@ use crate::cli_testkit::*;
 /// Studio + cast + one commit, ready for `deliver` on `t1`.
 fn ready() -> (Scratch, crate::cli::Env, String, String) {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

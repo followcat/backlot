@@ -36,10 +36,41 @@ pub fn template(kind: RoleKind) -> &'static str {
     }
 }
 
+/// Keep or strip `{#design_gate}...{/design_gate}` blocks before field
+/// substitution so `design_gate = off` renders stay byte-identical to
+/// templates without the section.
+fn apply_design_gate_block(template: &str, required: bool) -> String {
+    const OPEN: &str = "{#design_gate}";
+    const CLOSE: &str = "{/design_gate}";
+    if !template.contains(OPEN) {
+        return template.to_string();
+    }
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find(OPEN) {
+        out.push_str(&rest[..start]);
+        let after_open = &rest[start + OPEN.len()..];
+        let Some(end) = after_open.find(CLOSE) else {
+            out.push_str(OPEN);
+            out.push_str(after_open);
+            return out;
+        };
+        let body = &after_open[..end];
+        let after_close = &after_open[end + CLOSE.len()..];
+        if required {
+            out.push_str(body.strip_prefix('\n').unwrap_or(body));
+        }
+        rest = after_close.strip_prefix('\n').unwrap_or(after_close);
+    }
+    out.push_str(rest);
+    out
+}
+
 /// `{name}` → the field's value. An unknown placeholder stays
 /// literal so a template typo is visible, not silently dropped.
 pub fn render(template: &str, fields: &BTreeMap<String, String>) -> String {
-    let mut out = template.to_string();
+    let required = fields.get("design_gate").map(String::as_str) == Some("required");
+    let mut out = apply_design_gate_block(template, required);
     for (k, v) in fields {
         out = out.replace(&format!("{{{k}}}"), v);
     }
@@ -62,6 +93,17 @@ fn fields(
         String::new()
     } else {
         dir.join(format!("req/v{}.md", state.requirement_version))
+            .to_string_lossy()
+            .into_owned()
+    };
+    let design_gate = match state.studio.as_ref().map(|s| s.design_gate) {
+        Some(backlot_model::design::DesignGate::Required) => "required",
+        _ => "off",
+    };
+    let design_file = if state.requirement_version == 0 {
+        dir.join("design").to_string_lossy().into_owned()
+    } else {
+        dir.join(format!("design/v{}.md", state.requirement_version))
             .to_string_lossy()
             .into_owned()
     };
@@ -134,6 +176,8 @@ fn fields(
         ("acceptance".into(), acceptance),
         ("req_file".into(), req),
         ("req_version".into(), state.requirement_version.to_string()),
+        ("design_gate".into(), design_gate.into()),
+        ("design_file".into(), design_file),
         ("work".into(), work),
         ("branch".into(), branch),
         ("checks".into(), checks),

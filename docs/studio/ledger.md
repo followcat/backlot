@@ -274,8 +274,10 @@ every open `tell user`: a role's `asks` projection reads a `studio.finished` aft
 the answering event, so a finished studio shows no open question (L6).
 
 `design.opened`, `design.entry`, and `design.signed` record the opening design discussion per
-requirement version when `design_gate` is `required` (`off` by default on existing and current
-studios). `design.opened` (`producer` or `user`) starts Round 1, posts a skip suggestion, or opens
+requirement version when `design_gate` is `required` (`required` by default for new studios;
+existing studios without `design_gate` on `studio.created` stay `off`, and `design_gate = "off"`
+disables it per studio). `design.opened` (`producer` or `user`) starts Round 1, posts a skip
+suggestion, or opens
 Round `N+1` once `user_input` follows the previous round's summary; `design.entry` writes one slot
 in order (`proposal` by `writer`, `buildability` by `director`, `summary` with 0–3 questions by
 `producer`, `user_input` by `user`/`producer`/`stage`, and `supplement` by `writer`/`director`);
