@@ -139,8 +139,10 @@ fn migrate_log(t: &Target, dry_run: bool) -> Result<String, Fail> {
             .map_err(|e| Fail::refused(format!("{}: events.jsonl line {}: {e}", t.name, i + 1)))?;
         if ch {
             changed += 1;
+            lines.push(serde_json::to_string(&val).map_err(|e| Fail::refused(e.to_string()))?);
+        } else {
+            lines.push(line.to_string());
         }
-        lines.push(serde_json::to_string(&val).map_err(|e| Fail::refused(e.to_string()))?);
     }
 
     let ver = backlot_model::event::LEDGER_VERSION;
