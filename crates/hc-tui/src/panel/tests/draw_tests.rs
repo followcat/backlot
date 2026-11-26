@@ -132,14 +132,14 @@ fn expanded_block_draws_frame_people_and_state_words() {
         // rule, not a clip.
         assert!(text.contains("acme"), "w{width}: {text}");
         assert!(text.contains("working"), "w{width}: {text}");
-        assert!(text.contains("alice"), "w{width}: {text}");
+        assert!(text.contains("Ⓐ task-1"), "w{width}: {text}");
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
-        // S2 dropped the `├──┤` group dividers — the people list is
-        // one run under the owed subheader.
+        // The three role-group rules separate producer / director /
+        // writer / actors.
         let divider_rows = (area.y..area.y + area.height)
             .filter(|&y| buf[(area.x, y)].symbol() == "├")
             .count();
-        assert_eq!(divider_rows, 0, "w{width}");
+        assert_eq!(divider_rows, 3, "w{width}");
     }
 }
 
@@ -219,9 +219,13 @@ fn the_usage_line_shows_only_with_figures() {
     assert!(!text.contains("$0.08"), "cost elides at w22: {text}");
 }
 
+/// L4: the lot's person row carries no runner and no model — the cast
+/// already shows both — so the name, task and state word get the cells.
 #[test]
-fn a_person_draws_one_line_with_the_state_word_right() {
-    let summary = summary();
+fn a_person_row_shows_no_runner_and_no_model() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["model"] = serde_json::json!("unmistakable-model");
+    let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 40, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
@@ -234,19 +238,38 @@ fn a_person_draws_one_line_with_the_state_word_right() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("alice · task-1"), "{line}");
+    assert!(line.contains("Ⓐ task-1"), "{line}");
     assert!(line.trim_end().ends_with("working│"), "{line}");
-    // L4: the dim runner tag and short model ride before the state;
-    // the `doing` text stays off the row.
-    assert!(line.contains("agent-a"), "{line}");
-    assert!(line.contains(" m "), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
+    assert!(!line.contains("unmistakable-model"), "{line}");
     assert!(!line.contains("writes code"), "{line}");
 }
 
-/// L4: a narrow row keeps the state word and gives up the runner tag
-/// first — the tag never pushes the state off the line.
+/// The space the runner/model badge used to take now belongs to the
+/// name: a task that needed one more cell shows whole.
 #[test]
-fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
+fn a_long_name_uses_the_cells_the_badge_used_to_take() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["task"] = serde_json::json!("t1234567890123456789");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("Ⓐ t1234567890123456789"), "{line}");
+}
+
+/// L4: a narrow row keeps the state word at the right edge.
+#[test]
+fn a_narrow_row_keeps_the_state() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 22, 30);
@@ -261,13 +284,98 @@ fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
     assert!(line.trim_end().ends_with("working│"), "{line}");
-    assert!(!line.contains("agent-a"), "{line}");
 }
 
-/// L4: the badge uses only spare cells — at a 36-column dock a long
-/// task keeps every cell and the runner tag drops.
+/// Every role label is its one-cell badge, coloured by the role's
+/// theme token; the state glyph keeps its column and meaning.
 #[test]
-fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
+fn lot_person_rows_use_coloured_role_badges() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let palette = palette();
+    let cases = [
+        ("producer", "Ⓟ", palette.mauve),
+        ("director", "Ⓓ", palette.blue),
+        ("writer", "Ⓦ", palette.teal),
+        ("actor-alice", "Ⓐ", palette.peach),
+    ];
+    for (role_key, badge, color) in cases {
+        let rect = hits
+            .rows
+            .iter()
+            .find(|(_, t)| matches!(t, Target::Person(_, r) if r == role_key))
+            .map(|(rect, _)| *rect)
+            .unwrap_or_else(|| panic!("{role_key} row"));
+        let line = (area.x..area.x + area.width)
+            .map(|x| buf[(x, rect.y)].symbol())
+            .collect::<String>();
+        assert!(line.contains(badge), "{role_key}: {line}");
+        let x = line[..line.find(badge).unwrap()].chars().count() as u16;
+        assert_eq!(buf[(rect.x + x, rect.y)].fg, color, "{role_key}");
+        let role = summary.studios[0]
+            .roles
+            .iter()
+            .find(|r| r.role == role_key)
+            .unwrap();
+        assert_eq!(
+            buf[(rect.x + 2, rect.y)].symbol(),
+            Person::of(role).glyph(0),
+            "{role_key}"
+        );
+    }
+}
+
+/// The role groups are split by a thin `├──┤` rule; an empty group
+/// draws none.
+#[test]
+fn role_groups_are_split_by_thin_rules() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rows = lines(&buf, area);
+    let rules: Vec<&String> = rows.iter().filter(|l| l.starts_with('├')).collect();
+    assert_eq!(rules.len(), 3, "producer / director / writer / actors");
+    for rule in rules {
+        assert!(rule.ends_with('┤'), "{rule}");
+    }
+
+    // No director and no writer: producer then actors, one rule.
+    let mut value = summary_json();
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|r| {
+            let role = r["role"].as_str().unwrap();
+            role == "producer" || role.starts_with("actor")
+        });
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rules = lines(&buf, area)
+        .iter()
+        .filter(|l| l.starts_with('├'))
+        .count();
+    assert_eq!(rules, 1, "producer | actors");
+
+    // One group alone draws no rule.
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|r| r["role"] == "producer");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rules = lines(&buf, area)
+        .iter()
+        .filter(|l| l.starts_with('├'))
+        .count();
+    assert_eq!(rules, 0);
+}
+
+/// A long task keeps every cell it needs and never shoves the state off.
+#[test]
+fn a_long_task_keeps_its_cells() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
     let summary: Summary = serde_json::from_value(value).unwrap();
@@ -283,7 +391,7 @@ fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("alice · task-1234567890"), "{line}");
+    assert!(line.contains("Ⓐ task-1234567890"), "{line}");
     assert!(!line.contains("agent-a"), "{line}");
     assert!(line.trim_end().ends_with("working│"), "{line}");
 }

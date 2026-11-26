@@ -263,6 +263,77 @@ impl Person {
     }
 }
 
+/// A role's one-cell circled badge. The glyph is the same everywhere
+/// the TUI labels a role; the colour is the role's fixed theme token.
+/// The characters are East-Asian-ambiguous: a terminal that draws
+/// ambiguous characters wide will shift the cells after them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RoleBadge {
+    Producer,
+    Director,
+    Writer,
+    Actor,
+}
+
+impl RoleBadge {
+    /// The ledger role key's badge — `producer`, `director`, `writer`
+    /// and anything under `actor`.
+    pub(crate) fn of_role(role: &str) -> Option<RoleBadge> {
+        match role {
+            "producer" => Some(RoleBadge::Producer),
+            "director" => Some(RoleBadge::Director),
+            "writer" => Some(RoleBadge::Writer),
+            _ if role.starts_with("actor") => Some(RoleBadge::Actor),
+            _ => None,
+        }
+    }
+
+    /// The badge a glyph stands for — the drawing helper reads a label
+    /// back to the role it colours.
+    pub(crate) fn of_glyph(glyph: char) -> Option<RoleBadge> {
+        match glyph {
+            'Ⓟ' => Some(RoleBadge::Producer),
+            'Ⓓ' => Some(RoleBadge::Director),
+            'Ⓦ' => Some(RoleBadge::Writer),
+            'Ⓐ' => Some(RoleBadge::Actor),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn glyph(self) -> &'static str {
+        match self {
+            RoleBadge::Producer => "Ⓟ",
+            RoleBadge::Director => "Ⓓ",
+            RoleBadge::Writer => "Ⓦ",
+            RoleBadge::Actor => "Ⓐ",
+        }
+    }
+
+    /// The role's fixed theme token: producer `mauve`, director `blue`,
+    /// writer `teal`, actor `peach`.
+    pub(crate) fn color(self, palette: &Palette) -> Color {
+        match self {
+            RoleBadge::Producer => palette.mauve,
+            RoleBadge::Director => palette.blue,
+            RoleBadge::Writer => palette.teal,
+            RoleBadge::Actor => palette.peach,
+        }
+    }
+}
+
+/// A role's compact label: the badge for a fixed role, `Ⓐ <task>` for
+/// an actor, and the role's own name when it is neither. Plain-text
+/// CLI output never uses this.
+pub(crate) fn role_label(role: &RoleSummary) -> String {
+    let Some(badge) = RoleBadge::of_role(&role.role) else {
+        return role.name.clone();
+    };
+    match (badge, role.task.as_deref()) {
+        (RoleBadge::Actor, Some(task)) => format!("{} {task}", badge.glyph()),
+        _ => badge.glyph().to_string(),
+    }
+}
+
 /// The short model form the cast and the lot share: drop a
 /// `<provider>/` prefix and a leading `claude-`, cut to at most 10
 /// cells with `…`.

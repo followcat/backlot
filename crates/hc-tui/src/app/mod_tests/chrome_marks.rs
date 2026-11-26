@@ -177,7 +177,7 @@ async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
     let (sidebar, dock) = regions(&mut app, 120, 40);
     assert!(dock.contains('▸'), "in-studio mark: {dock}");
     assert!(sidebar.contains("acme-shop · Local"), "cast: {sidebar}");
-    assert!(sidebar.contains("producer"), "cast row: {sidebar}");
+    assert!(sidebar.contains("Ⓟ"), "cast row: {sidebar}");
 
     // The stray `backlot` agent is no studio workspace: the blocks
     // stay, `▸` goes — and the cast keeps naming the remembered
@@ -196,5 +196,5 @@ async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
         sidebar.contains("acme-shop · Local"),
         "the remembered current studio's cast stays: {sidebar}"
     );
-    assert!(sidebar.contains("producer"), "cast row stays: {sidebar}");
+    assert!(sidebar.contains("Ⓟ"), "cast row stays: {sidebar}");
 }
