@@ -327,6 +327,14 @@ fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fa
     Ok(Some(path))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Bodies staged on this thread, so a test checks only the files its own runs staged:
+    /// other tests stage bodies in the same temp dir at the same time.
+    pub(crate) static STAGED_BODIES: std::cell::RefCell<Vec<PathBuf>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// The unique temp file a `--text`/`--stdin` body is staged in.
 fn body_file(body: &str) -> Result<PathBuf, Fail> {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -338,5 +346,7 @@ fn body_file(body: &str) -> Result<PathBuf, Fail> {
     ));
     std::fs::write(&path, body)
         .map_err(|e| Fail::refused(format!("cannot stage the message body: {e}")))?;
+    #[cfg(test)]
+    STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
     Ok(path)
 }

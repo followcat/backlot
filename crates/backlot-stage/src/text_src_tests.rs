@@ -23,20 +23,15 @@ fn studio(env: &Env, scratch: &crate::cli_testkit::Scratch) {
     );
 }
 
-/// The staged temp file's telltale: nothing `backlot-body-*` may
-/// outlive `run`, whatever the outcome.
+/// This thread's staged bodies that still exist: nothing a test's own `run` staged may outlive it.
+/// Other tests stage `backlot-body-*` files in the same temp dir concurrently, so only this thread's count.
 fn staged_left() -> Vec<std::path::PathBuf> {
-    std::fs::read_dir(std::env::temp_dir())
-        .unwrap()
-        .filter_map(|e| {
-            let p = e.unwrap().path();
-            let keep = p
-                .file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("backlot-body-"));
-            keep.then_some(p)
-        })
-        .collect()
+    crate::cli_run::STAGED_BODIES
+        .with(|s| s.borrow().iter().filter(|p| p.exists()).cloned().collect())
+}
+
+fn staged_any() -> bool {
+    crate::cli_run::STAGED_BODIES.with(|s| !s.borrow().is_empty())
 }
 
 /// The only file under `messages/`, read.
@@ -58,6 +53,7 @@ fn tell_text_queues_the_inline_message() {
     let out = run_in(&env, "tell actor-a --text hello-there --as user", None).unwrap();
     assert!(out.contains("message.queued"), "{out}");
     assert_eq!(message_body(&scratch), "hello-there");
+    assert!(staged_any(), "the inline body is staged on this thread");
     assert!(staged_left().is_empty(), "{:?}", staged_left());
 }
 
@@ -175,4 +171,20 @@ fn stage_stop_parses_with_the_targeting_flags() {
             assert_eq!(common.session.as_deref(), Some("s1"));
         }
     }
+}
+
+#[test]
+fn a_body_another_test_is_staging_is_not_this_tests_leak() {
+    // Another test's `--text` body sits in the shared temp dir while this one checks for leaks.
+    let other = std::env::temp_dir().join(format!(
+        "backlot-body-{}-other-thread.txt",
+        std::process::id()
+    ));
+    let path = other.clone();
+    std::thread::spawn(move || std::fs::write(&path, "in flight").unwrap())
+        .join()
+        .unwrap();
+    let left = staged_left();
+    let _ = std::fs::remove_file(&other);
+    assert!(left.is_empty(), "{left:?}");
 }
