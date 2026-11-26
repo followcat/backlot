@@ -344,7 +344,8 @@ fn draw_studio(
         );
     }
     // Row 5: the cast, one glyph each; `◈ <open> rev` in blue when
-    // reviews wait, else `<N> cast`.
+    // reviews wait, `actors <live>/<cap>` once the document carries a
+    // cap, else `<N> cast`.
     let live_roles = studio
         .studio
         .roles
@@ -353,6 +354,11 @@ fn draw_studio(
         .count();
     let cast_label = if studio.studio.open_reviews > 0 {
         format!("◈ {} rev", studio.studio.open_reviews)
+    } else if studio.studio.actors_cap > 0 {
+        format!(
+            "actors {}/{}",
+            studio.studio.actors_live, studio.studio.actors_cap
+        )
     } else {
         format!("{live_roles} cast")
     };
