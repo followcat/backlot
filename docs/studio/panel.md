@@ -269,7 +269,8 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `hooks unavailable` | info | the role's details only, dimmed |
 
 A `stuck` episode that escalates — `rate limited` or `connection error` after its auto-retries,
-or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you`. A reason
+or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you` through
+`attention.escalated` on the same attention, so one stall stays one row and Hollywood hears once. A reason
 the table does not list is `needs you`, so nothing important is hidden. Stage bookkeeping never
 changes a person's state and never counts as flagged.
 
@@ -289,10 +290,12 @@ A person shows exactly one state, in this priority:
 
 1. `needs you · <what>` — a user or director prompt as before (the prompt row keeps `y`/`d`/`p`
    and a non-actor's word is `USER`), or a `needs you` attention that is not a prompt (`■` red).
-2. `asks you · <question>` — the role's newest `tell user` the user has not answered (`?`
-   peach). The answer is a `tell` back to that role or any later ledger action the role records
+2. `asks you · <question>` — the role's newest explicit `tell user --ask` the user has not
+   answered (`?` peach). A plain `tell user` is a report in the conversation, never a question.
+   The answer is a `tell` back to that role or any later ledger action the role records
    itself — a revised requirement, a report, a delivery, a cast, a review, a new tell — because
-   the person often answers in the role's terminal. Stage-written events never answer it; the
+   the person often answers in the role's terminal. `ask.acknowledged` is the user's explicit
+   receipt without an answer. Stage-written events never answer it; the
    Dock records no read state, so merely opening the message does not either.
 3. `stuck · <plain reason>` — a `stuck` attention (`!` peach).
 4. `working · <doing>` — the watch pass reads the screen working.
@@ -317,6 +320,15 @@ with no requirement; stopped stages and unreachable machines with live studios; 
 studios ready to finish. The Call Sheet's waiting rows, the lot pill's urgent count and the band's
 calm row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is
 no separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
+
+The band projects that list as **one row per studio**: a READY row absorbs the studio's asks,
+otherwise the most urgent item leads and the studio's other decisions fold into `· +n`. The
+header count still counts decisions, not rows. An ASKS row reads
+`? ASKS <studio> · <role> · <age> — <first sentence>` (truncated to width; peek/read shows the
+whole turn), offers `r` reply / `x` acknowledge / `p` peek / Enter, and paints action chips only
+on the selected row. `r` composes a tell back to the role; `x` records `ask.acknowledged`.
+Refusals caused by a race — already answered, already cleared, no longer waiting — are plain
+fading text rather than raw sequence-number errors.
 
 ## Notifications
 
