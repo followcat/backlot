@@ -293,42 +293,7 @@ pub(crate) fn panel(
     c: ratatui::style::Color,
     bg: ratatui::style::Color,
 ) -> Option<Rect> {
-    if a.width < 2 || a.height < 2 {
-        return None;
-    }
-    let background = Style::default().bg(bg).remove_modifier(Modifier::DIM);
-    let border = Style::default().fg(c).bg(bg).remove_modifier(Modifier::DIM);
-    for y in a.y..a.bottom() {
-        for x in a.x..a.right() {
-            b[(x, y)].set_symbol(" ").set_style(background);
-        }
-    }
-    for x in a.x..a.right() {
-        b[(x, a.y)]
-            .set_symbol(if x == a.x {
-                "┌"
-            } else if x + 1 == a.right() {
-                "┐"
-            } else {
-                "─"
-            })
-            .set_style(border);
-        let y = a.bottom() - 1;
-        b[(x, y)]
-            .set_symbol(if x == a.x {
-                "└"
-            } else if x + 1 == a.right() {
-                "┘"
-            } else {
-                "─"
-            })
-            .set_style(border);
-    }
-    for y in a.y + 1..a.bottom() - 1 {
-        b[(a.x, y)].set_symbol("│").set_style(border);
-        b[(a.right() - 1, y)].set_symbol("│").set_style(border);
-    }
-    Some(Rect::new(a.x + 1, a.y + 1, a.width - 2, a.height - 2))
+    super::dialogs::panel(b, a, c, bg)
 }
 fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
     popup_with_width_cap(a, w, h, 4)

@@ -9,7 +9,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::help::{self, HelpRender, HelpState};
 use super::palette::Palette;
@@ -89,7 +88,7 @@ pub(crate) fn render_launcher(
     // Clear before the panel's patch-style fill — covered cells
     // (the sheet's italic `› tell hollywood` row, for one) must not
     // keep their modifiers under the overlay.
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = help::panel(b, q, p.accent, p.panel_bg)?;
     if i.width < 20 || i.height < 6 {
         return None;

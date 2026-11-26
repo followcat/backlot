@@ -5,7 +5,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::help::{self, HelpRender};
 use super::palette::Palette;
@@ -35,7 +34,7 @@ pub(crate) fn render_picker(
         height,
     );
     // Same clear-before-panel as the launcher's frame (R2 follow-up).
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let Some(i) = help::panel(b, q, p.accent, p.panel_bg) else {
         return;
     };

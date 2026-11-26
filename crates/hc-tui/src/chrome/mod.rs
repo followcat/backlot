@@ -53,6 +53,7 @@ pub(crate) mod title_text;
 pub mod tokens;
 pub(crate) mod update_modal;
 pub(crate) mod update_status;
+pub(crate) mod wide;
 pub mod workspace;
 
 use std::path::PathBuf;

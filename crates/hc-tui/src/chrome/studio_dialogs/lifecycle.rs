@@ -4,7 +4,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::super::dialogs::{panel, row};
 use super::super::palette::Palette;
@@ -23,7 +22,7 @@ pub(super) fn render_restart(
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let q = centered(band, width, 9)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     dim_line(
@@ -87,7 +86,7 @@ pub(super) fn render_recast(
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let q = centered(band, width, 16)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     let step_label = match d.step {
@@ -248,7 +247,7 @@ pub(super) fn render_cast_edit(
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let q = centered(band, width, 16)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     let step = match d.step {

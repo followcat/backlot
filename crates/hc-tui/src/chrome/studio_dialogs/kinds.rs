@@ -4,7 +4,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::super::dialogs::{button, contrast, panel};
 use super::super::palette::Palette;
@@ -22,7 +21,7 @@ pub(super) fn render_reason(
     palette: &Palette,
 ) -> Option<DialogHits> {
     let q = centered(band, dialog_width(band.width), 8)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     let input = Rect::new(i.x, i.y + 2, i.width.saturating_sub(1), 1);
@@ -117,7 +116,7 @@ pub(super) fn render_confirm(
         .saturating_add(6)
         .min(band.height.saturating_sub(2));
     let q = centered(band, width, height)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     put_text(
         b,
@@ -215,7 +214,7 @@ pub(super) fn render_tell(
     palette: &Palette,
 ) -> Option<DialogHits> {
     let q = centered(band, dialog_width(band.width), 9)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     let body = Rect::new(i.x, i.y + 1, i.width, 4);
@@ -280,7 +279,7 @@ pub(super) fn render_revise(
         width,
         height.min(band.height.saturating_sub(2)).max(9),
     )?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title, palette);
     let body = Rect::new(

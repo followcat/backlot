@@ -7,7 +7,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::lines::{Row, lines_for};
 use super::{Sheet, SheetTab};
@@ -85,7 +84,7 @@ pub(crate) fn render(
     // backdrop is the caller's; the dead panes' frozen screens
     // behind must not keep their modifiers under the panel's patch
     // fill — clear the sheet's own rect before the frame.
-    Clear.render(frame, buf);
+    crate::chrome::wide::clear_overlay(buf, frame);
     let Some(_inner) = crate::chrome::dialogs::panel(buf, frame, palette.accent, palette.panel_bg)
     else {
         return SheetRender {

@@ -170,6 +170,7 @@ pub(crate) fn render_view_with_compose(
         return hits;
     }
 
+    crate::chrome::wide::blank_wide_edges(buf, area, false);
     for y in area.y..area.bottom() {
         for x in area.x..area.right() {
             buf[(x, y)].reset();

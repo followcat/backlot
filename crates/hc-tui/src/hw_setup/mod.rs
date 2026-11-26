@@ -13,7 +13,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use backlot_stage::config::HollywoodCfg;
 
@@ -303,7 +302,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSetup, p: &Palette, band: Rect) -> Hw
     // The dimmed backdrop is the caller's; the dead panes' frozen
     // screens behind must not keep their modifiers under the panel's
     // patch fill — clear the dialog's own rect before the frame.
-    Clear.render(outer, b);
+    crate::chrome::wide::clear_overlay(b, outer);
     let Some(inner) = crate::chrome::dialogs::panel(b, outer, p.accent, p.panel_bg) else {
         return hits;
     };

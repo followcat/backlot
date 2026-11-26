@@ -4,7 +4,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::super::dialogs::{button, contrast, panel, row};
 use super::super::palette::Palette;
@@ -27,7 +26,7 @@ pub(super) fn render_restore(
         RestoreStep::Confirm => 18,
     };
     let q = centered(band, width, height)?;
-    Clear.render(q, b);
+    crate::chrome::wide::clear_overlay(b, q);
     let i = panel(b, q, palette.accent, palette.panel_bg)?;
     title_line(b, i, &d.title(), palette);
     let mut cursor = None;

@@ -28,7 +28,6 @@ pub(crate) use model::{
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use crate::chrome::help::CursorState;
 use crate::chrome::palette::Palette;
@@ -452,7 +451,7 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
     // The dimmed backdrop is the caller's; the dead panes' frozen
     // screens behind must not keep their modifiers under the panel's
     // patch fill — clear the dialog's own rect before the frame.
-    Clear.render(outer, b);
+    crate::chrome::wide::clear_overlay(b, outer);
     let tiers: &[&str] = match d.step {
         Step::MachineRepo => &[
             "tab pane  ↑↓ move  →/← dir  type to filter  ⏎ pick  ^R re-check  esc cancel",

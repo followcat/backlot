@@ -4,7 +4,7 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
-    widgets::{Clear, Paragraph, Widget},
+    widgets::{Paragraph, Widget},
 };
 
 use super::mobile::MOBILE_BUTTON_WIDTH;
@@ -31,7 +31,7 @@ pub(crate) fn render_mobile_switcher(
         return;
     }
     let palette = &config.palette;
-    Clear.render(area, buffer);
+    super::wide::clear_overlay(buffer, area);
     buffer.set_style(area, Style::default().bg(palette.panel_bg));
     hits.mobile_switch = Rect::default();
     if area.height <= 2 {

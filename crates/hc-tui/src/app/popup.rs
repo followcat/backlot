@@ -605,7 +605,7 @@ impl App {
     /// host cursor while open; a peek never gets one (observe-only).
     pub(super) fn draw_popups(&mut self, buf: &mut ratatui::buffer::Buffer, now: Instant) {
         use ratatui::style::{Modifier, Style};
-        use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+        use ratatui::widgets::{Block, Borders, Paragraph, Widget};
         self.hit_map.popup = None;
         if self.popup.is_none() && self.peek.is_none() {
             return;
@@ -625,7 +625,7 @@ impl App {
         if let Some(outer) = self.peek_outer()
             && let Some(peek) = self.peek.as_mut()
         {
-            Clear.render(outer, buf);
+            crate::chrome::wide::clear_overlay(buf, outer);
             let title = self
                 .view
                 .inventory
@@ -667,7 +667,7 @@ impl App {
                         .add_modifier(Modifier::BOLD),
                 )
                 .render(header, buf);
-            Clear.render(surface, buf);
+            crate::chrome::wide::clear_overlay(buf, surface);
             super::draw::draw_terminal(&mut peek.pane, surface, buf, now, true);
             // A default-background cell must not open a window onto the
             // terminal behind the popup in backlot's own look.
@@ -692,7 +692,7 @@ impl App {
             self.dim_float_backdrop(buf);
             self.draw_float_shadow(buf, geometry.outer);
         }
-        Clear.render(geometry.outer, buf);
+        crate::chrome::wide::clear_overlay(buf, geometry.outer);
         let block = if persistent {
             self.float_block(geometry.outer)
         } else {
@@ -729,7 +729,7 @@ impl App {
         // leaves the covered cells on the terminal default background
         // (`blit_pane_surface` only paints terminal cells), so reset
         // exactly the surface area and keep the panel fill outside it.
-        Clear.render(surface, buf);
+        crate::chrome::wide::clear_overlay(buf, surface);
         let wish = super::draw::draw_terminal(&mut popup.pane, surface, buf, now, false);
         // The popup's terminal cells keep their real backgrounds; the
         // default-background ones are filled in backlot's own look, so

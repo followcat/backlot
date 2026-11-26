@@ -41,6 +41,12 @@ impl App {
     /// sidebar and status chrome never sit under it.
     pub(super) fn draw_float_shadow(&self, buf: &mut Buffer, outer: Rect) {
         let clip = self.frame_area();
+        let right_strip =
+            Rect::new(outer.right(), outer.top() + 1, 1, outer.height).intersection(clip);
+        let bottom_strip =
+            Rect::new(outer.left(), outer.bottom(), outer.width + 1, 1).intersection(clip);
+        crate::chrome::wide::blank_wide_edges(buf, right_strip, true);
+        crate::chrome::wide::blank_wide_edges(buf, bottom_strip, true);
         let color = self.shell.palette.surface_dim;
         let mut shade = |x: u16, y: u16| {
             if clip.contains(Position::new(x, y)) {
