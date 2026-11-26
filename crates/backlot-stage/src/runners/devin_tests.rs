@@ -122,13 +122,13 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
     let dir = tmp("prep");
     let sig = dir.join("signals.jsonl");
     let existing =
-        "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(echo *)\"\n    ]\n  }\n}\n";
+        "{\n  \"permissions\": {\n    \"allow\": [\n      \"Exec(echo)\"\n    ]\n  }\n}\n";
     // With no allow list, an existing `permissions.allow` keeps its
     // bytes — the hook splice touches nothing else.
     let spliced = String::from_utf8(config_content(Some(existing.as_bytes()), &sig, &[])).unwrap();
     assert!(
         spliced.starts_with(
-            "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(echo *)\"\n    ]\n  }"
+            "{\n  \"permissions\": {\n    \"allow\": [\n      \"Exec(echo)\"\n    ]\n  }"
         ),
         "{spliced}"
     );
