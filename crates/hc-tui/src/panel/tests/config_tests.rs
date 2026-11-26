@@ -173,6 +173,19 @@ fn old_layout_override_restores_arrows_and_hints() {
 }
 
 #[test]
+fn page_keys_on_both_pairs_read_with_one_slash_each() {
+    let dir = TestDir::new("panel-page-pairs");
+    let (config, _) = load(&write(
+        &dir,
+        "[keys]\nprevious_studio = \"alt+up\"\nnext_studio = \"alt+down\"\nprevious_role = \"alt+pageup\"\nnext_role = \"alt+pagedown\"\n",
+    ));
+    assert_eq!(
+        config.keys.shortcut_parts(),
+        ("alt ↑↓ studio".into(), "PgUp/PgDn role".into())
+    );
+}
+
+#[test]
 fn the_key_overrides_and_an_empty_one_keeps_the_default() {
     let dir = TestDir::new("panel-k");
     let (config, _) = load(&write(&dir, "[panel]\nkey = \"u\"\n"));

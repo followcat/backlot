@@ -183,7 +183,7 @@ impl StudioKeys {
         {
             return (
                 format!("{} {}{}{} studio", mods_label(mods), ps.0, ps.1, ns.0),
-                format!("{}{}{}{} role", pr.0, pr.1, nr.0, nr.1),
+                format!("{}{}{} role", pr.0, pr.1, nr.0),
             );
         }
         let pair = |a: Option<KeyCombo>, b: Option<KeyCombo>| {
