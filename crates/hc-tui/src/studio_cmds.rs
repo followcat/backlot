@@ -693,3 +693,62 @@ pub(crate) fn delete_studio(key: &StudioKey, force: bool, token: Option<&str>) -
     push_token(&mut a.argv, token);
     a
 }
+
+/// `backlot design sign [--skip [--reason <r>]] [--note <t>] --studio <id> --as user`.
+pub(crate) fn design_sign(
+    key: &StudioKey,
+    skip: bool,
+    reason: Option<&str>,
+    note: Option<&str>,
+) -> Action {
+    let verb = if skip { "skipping" } else { "signing off" };
+    let done = if skip {
+        "skipped design"
+    } else {
+        "signed off design"
+    };
+    let label = if skip {
+        "design skip"
+    } else {
+        "design sign off"
+    };
+    let mut a = action(
+        format!("{verb} design ({})", key.id),
+        format!("{done} ({})", key.id),
+        label.to_string(),
+        key,
+        mark::studio(key),
+    );
+    let mut cmd = vec!["design".to_string(), "sign".to_string()];
+    if skip {
+        cmd.push("--skip".into());
+        if let Some(r) = reason {
+            cmd.push("--reason".into());
+            cmd.push(r.into());
+        }
+    }
+    if let Some(n) = note {
+        cmd.push("--note".into());
+        cmd.push(n.into());
+    }
+    a.argv = studio_argv(&cmd, key);
+    a
+}
+
+/// Read `design/v<N>.md`, `design/v<N>-final.md`, `design/v<N>/r*.md`, or `plan/*.md` into Reader.
+#[cfg(test)]
+pub(crate) fn design_show(key: &StudioKey, file: &str) -> Action {
+    let mut a = action(
+        format!("reading {file}"),
+        format!("read {file}"),
+        format!("design {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(
+        &["report".into(), "show".into(), "--file".into(), file.into()],
+        key,
+    );
+    a.view = true;
+    a
+}

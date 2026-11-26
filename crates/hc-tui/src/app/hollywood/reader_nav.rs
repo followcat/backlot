@@ -5,8 +5,8 @@ use backlot_model::summary::StudioExchange;
 
 use super::App;
 use super::reader_meta_from::{
-    card_meta, hollywood_base_meta, hollywood_exchange_meta, hollywood_summary, records_meta,
-    studio_exchange_meta,
+    card_meta, design_meta, hollywood_base_meta, hollywood_exchange_meta, hollywood_summary,
+    plan_meta, records_meta, studio_exchange_meta,
 };
 use crate::action::Action;
 use crate::hollywood::{CardView, ReaderKind, ReaderMeta, ReaderOrigin, Target};
@@ -31,6 +31,11 @@ impl App {
             },
         };
         let meta = self.reader_meta_for_action(action);
+        let title = if meta.kind == crate::hollywood::ReaderKind::Design && card.is_none() {
+            "Design".to_owned()
+        } else {
+            title
+        };
         if self
             .hollywood
             .view
@@ -95,6 +100,31 @@ impl App {
                 .find(|w| w[0] == "--file")
                 .map(|w| w[1].clone());
             return studio_exchange_meta(&machines, key, seq, arg_file.as_deref(), hw_term);
+        }
+        if let Some(file) = action
+            .argv
+            .windows(2)
+            .find(|w| w[0] == "--file")
+            .map(|w| w[1].as_str())
+        {
+            let studio_id = action
+                .argv
+                .windows(2)
+                .find(|w| w[0] == "--studio")
+                .map(|w| w[1].clone())
+                .or_else(|| action.name.strip_prefix("design ").map(str::to_string));
+            if let Some(id) = studio_id {
+                let key = StudioKey {
+                    machine: action.machine.clone(),
+                    id,
+                };
+                if file.starts_with("design/") {
+                    return design_meta(&machines, key, file);
+                }
+                if file.starts_with("plan/") {
+                    return plan_meta(key, file);
+                }
+            }
         }
         ReaderMeta::default()
     }
@@ -191,6 +221,7 @@ impl App {
                 self.set_reader_loading(next.id.clone(), next_origin);
                 self.run_action(studio_cmds::card_show_on(None, &next.id));
             }
+            ReaderOrigin::Design(_) => self.reader_design_step(delta),
             ReaderOrigin::Records(_) | ReaderOrigin::SheetDeliveries(_, _) | ReaderOrigin::None => {
             }
         }

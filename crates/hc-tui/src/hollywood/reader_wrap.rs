@@ -4,7 +4,9 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::reader_md::{MdBlock, MdInline, inline_width, normalize_line, parse_markdown};
+use super::reader_md::{
+    MdBlock, MdInline, design_section_for_heading, inline_width, normalize_line, parse_markdown,
+};
 use crate::chrome::palette::Palette;
 
 /// Body rendering mode chosen by entry kind.
@@ -59,15 +61,23 @@ pub(crate) fn natural_body_width(lines: &[String], mode: BodyMode) -> usize {
 }
 
 /// Wrap `lines` at `content_w` cells using `mode` and theme `palette`.
-pub(crate) fn render_body_lines(
+pub(crate) fn render_body_lines_with_sections(
+    lines: &[String],
+    content_w: usize,
+) -> Vec<(String, usize)> {
+    let palette = Palette::catppuccin();
+    render_body_with_sections(lines, BodyMode::Markdown, content_w, &palette).1
+}
+
+pub(super) fn render_body_with_sections(
     lines: &[String],
     mode: BodyMode,
     content_w: usize,
     palette: &Palette,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Vec<(String, usize)>) {
     let content_w = content_w.max(1);
     match mode {
-        BodyMode::PlainLog => render_plain_log(lines, content_w, palette),
+        BodyMode::PlainLog => (render_plain_log(lines, content_w, palette), Vec::new()),
         BodyMode::Markdown => render_markdown(lines, content_w, palette),
     }
 }
@@ -103,9 +113,14 @@ fn render_plain_log(lines: &[String], content_w: usize, palette: &Palette) -> Ve
     out
 }
 
-fn render_markdown(lines: &[String], content_w: usize, palette: &Palette) -> Vec<Line<'static>> {
+fn render_markdown(
+    lines: &[String],
+    content_w: usize,
+    palette: &Palette,
+) -> (Vec<Line<'static>>, Vec<(String, usize)>) {
     let blocks = parse_markdown(lines);
     let mut out = Vec::new();
+    let mut sections = Vec::new();
     let indent_2 = [
         cell_of(' ', Style::default()),
         cell_of(' ', Style::default()),
@@ -114,6 +129,9 @@ fn render_markdown(lines: &[String], content_w: usize, palette: &Palette) -> Vec
         match block {
             MdBlock::Blank => out.push(Line::raw("")),
             MdBlock::Heading(h) => {
+                if let Some((_anchor, label)) = design_section_for_heading(&h) {
+                    sections.push((label, out.len()));
+                }
                 let style = Style::default()
                     .fg(palette.accent)
                     .add_modifier(Modifier::BOLD);
@@ -159,7 +177,7 @@ fn render_markdown(lines: &[String], content_w: usize, palette: &Palette) -> Vec
             }
         }
     }
-    out
+    (out, sections)
 }
 
 fn push_inline_cells(spans: &[MdInline], palette: &Palette, out: &mut Vec<Cell>) {
