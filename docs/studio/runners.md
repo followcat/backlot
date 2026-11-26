@@ -175,12 +175,17 @@ producer's and director's prompts reach the user.
 
 Per role, on top of the base pair, and only in the argv — nothing is written to any settings file:
 
-- An **actor** gets the git commands its loop drives — `git add`, `git commit`, `git status`,
-  `git diff`, `git log`, `git show`, each bare (`Bash(git add)`) and with arguments
-  (`Bash(git add *)`) — plus every declared check's `run` verbatim as `Bash(<run>)`.
-- The **director** gets the read-only set it reviews with — `git status`, `git diff`, `git log`,
-  `git show`, bare and starred — plus `git merge` and the declared checks.
-- The **producer** and **writer** keep the base pair; anything else still prompts and D9 answers it.
+- **Every role** gets the shared read-only set — `git status`, `git log`, `git show`, `git diff`,
+  `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`, each bare
+  (`Bash(git log)`) and with arguments (`Bash(git log *)`). These are the forensics a role needs to
+  understand a repo, a delivery or its own state, so a `git log` never asks a person (field notes
+  1126 §5). `git branch` is never a bare rule — only its two listing forms, which git refuses to
+  combine with a delete (measured: `git branch --list -D x` is a usage error).
+- An **actor** adds the two writes its loop drives — `git add` and `git commit`, bare and starred —
+  plus every declared check's `run` verbatim as `Bash(<run>)`.
+- The **director** adds `git merge` and the declared checks.
+- The **producer** and **writer** keep the base pair plus the read-only set; anything else still
+  prompts and D9 answers it.
 
 Nothing broader is pre-allowed: no `Bash(*)`, no bypass flag or mode, no `--add-dir`, no
 `Edit`/`Write`, and the permission mode is unchanged. A `run` the rule syntax cannot hold — a
@@ -188,6 +193,17 @@ parenthesis or a comma — is never pre-allowed, though `studio new` accepts the
 reaching for `BACKLOT_*`, `env -i` or `--ignore-environment` is refused there outright. Whether
 Claude Code actually matches these rules — and whether a wrapped `X=y git commit …` slips past them —
 is not yet verified; `limits.md` keeps it for the S9f real-session run.
+
+**A prefix rule sees the command, not its flags — this is a seatbelt, not a sandbox.** Every runner
+here matches an allow rule on the leading words of one plain command, so a rule that names a
+read-only command also permits that command's *write-capable* flags: `rg --pre <cmd>` runs `<cmd>`
+for every file it searches, and `git diff --output=<file>`, `git log --output=<file>` and `git show
+--output=<file>` write to `<file>` (measured: `git log --output=x` creates `x`). The read-only set is
+sized to keep honest forensic commands off the prompts, not to stop a hostile role — the ledger's
+role rules, the guard shims and `git` hooks are the layers that refuse outward writes, and they too
+are a seatbelt over a cooperative agent, not an OS sandbox. `rg` stays in the set because its
+`--pre` misuse is a read tool invoked oddly, not a foothold a role gains over the repo it already
+edits; the honest limit is recorded here so nobody mistakes the allow list for containment.
 
 In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
 command line anchors at the primary working directory per the permissions documentation — it is not
@@ -235,11 +251,11 @@ matches only the command equal to it or starting with it plus a space, the comma
 its executable's basename — so `Shell(backlot)` covers `backlot status`, `Shell(git merge)`
 reaches `git merge …` alone, and there is no starred variant. An existing file keeps every other
 key byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base
-rule is `Shell(backlot)`; an actor adds `git add`, `git commit`, `git status`, `git diff`,
-`git log`, `git show`, the director the read-only set it reviews with — `git status`,
-`git diff`, `git log`, `git show` — plus `git merge`, and both add every declared check's `run`
-verbatim. `git branch` stays out: the matcher's prefix form would also allow `git branch -D`.
-Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no
+rule is `Shell(backlot)`; **every** role adds the shared read-only set — `git status`, `git log`,
+`git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`
+— an actor also `git add` and `git commit`, the director also `git merge`, and both every declared
+check's `run` verbatim. Only `git branch`'s two listing forms are rules; the bare family stays out
+because the matcher's prefix form would also allow `git branch -D`. Nothing broader is written — no `Shell(*)`, no
 `--force`, `--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not
 expressible (`,` splits rules, `:` splits a command from its argument pattern, the rest are glob
 or syntax characters), so it is simply never pre-allowed.
@@ -273,10 +289,12 @@ directory under `~/.commandcode/projects/` that `--trust` creates.
 The file carries `{"permissions":{"allow":..,"deny":..}}`; an existing file keeps every other
 byte — only the `permissions` value is spliced (the same byte-exact splice as cursor's
 `cli-config.json`). `allow` holds `Shell(...)` rules in the bundle's prefix form — the base
-`Shell(backlot)` covers `backlot status`; an actor adds `Shell(git add:*)`, `git commit`,
-`git status`, `git diff`, `git log`, `git show`; the director the read-only set plus
-`git merge`; and both add every declared check's `run` verbatim as `Shell(<run>:*)`. `git branch`
-stays out — the prefix form would also allow `git branch -D`. Every `&&`/`||`/`;`/pipe subcommand
+`Shell(backlot)` covers `backlot status`; **every** role adds the shared read-only set
+(`Shell(git status:*)`, `git log`, `git show`, `git diff`, `git branch --list`,
+`git branch --show-current`, `ls`, `rg`, `wc`, `head`); an actor also `Shell(git add:*)` and
+`git commit`, the director also `git merge`, and both every declared check's `run` verbatim as
+`Shell(<run>:*)`. Only `git branch`'s two listing forms are rules — the bare prefix would also
+allow `git branch -D`. Every `&&`/`||`/`;`/pipe subcommand
 must match an allow rule and an env-assignment prefix breaks the match (measured), so a declared
 check stays a single plain command — the same constraint the cursor rules document. A `run`
 holding `()` `\` `*?[]{}` `:` or `,` is not expressible — the first groups are glob or syntax,
@@ -347,6 +365,19 @@ stdout + exit 0 lets prompts proceed. `PermissionRequest` includes `tool_name` (
 `devin::prepare` skips writing it, logs `hooks unavailable`, and raises an Info `hooks unavailable`
 attention.
 
+Devin takes no argv allow list; `--permission-mode smart` stays the gate. The role's shared
+read-only set is written instead into the same per-work-area `permissions.allow` (the member the
+file already carries), as one `Exec(<cmd>)` per command in Devin's own rule syntax — `Exec(git
+status)`, `Exec(git log)`, `Exec(git show)`, `Exec(git diff)`, `Exec(git branch --list)`, `Exec(git
+branch --show-current)`, `Exec(ls)`, `Exec(rg)`, `Exec(wc)`, `Exec(head)`. Devin's rules are prefix
+matches (`Exec(ls)` permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single entry per
+command is the whole rule — there is no ` *` form and no `Bash(...)`, unlike claude. The splice
+replaces only `allow`; any other `permissions` member (`deny` and the rest) keeps its bytes, and
+Hollywood, the overseer, gets none. Nothing a role's job adds (an actor's commits, the director's
+merge, a check's `run`) is pre-allowed here. This rule set is measured only as far as the file
+format; whether Devin honours `permissions.allow` under `smart` is not yet verified (see
+`limits.md`).
+
 ## Per-session files (cline)
 
 Cline shares the user's login, settings and session store — no per-role config, data or auth tree, the
@@ -362,9 +393,11 @@ mask file for MCP. Both are rewritten at every start and resume.
     become a command separator, and `\b`, `\f` and `\uXXXX` refuse the whole call — so an escaped
     quote, a backtick between escaped quotes or an escaped newline cannot slip a second command past
     a prefix match;
-  - allowed: `run_commands` whose every segment is one of the role's rules — `backlot`; an actor's
-    `git add`/`commit`/`status`/`diff`/`log`/`show`; the director's read-only set and `git merge`, never
-    `git branch`; each declared check verbatim. A command is split on `;`, `&&`, `||`, `|` and a
+  - allowed: `run_commands` whose every segment is one of the role's rules — `backlot` plus the
+    shared read-only set (`git status`, `git log`, `git show`, `git diff`, `git branch --list`,
+    `git branch --show-current`, `ls`, `rg`, `wc`, `head`) for **every** role; an actor's `git add`
+    and `git commit`; the director's `git merge`; each declared check verbatim. Only `git branch`'s
+    two listing forms are rules, never the bare family. A command is split on `;`, `&&`, `||`, `|` and a
     decoded newline, and every part must match on its own; `$`, a backtick, a redirection, or `(` `)`
     `{` `}` in a segment refuses it, so nothing reaches past the prefix that matched;
   - allowed: `read_files` for any path but the secret ones (`.ssh`, `.aws`, `.gnupg`, `.netrc`,

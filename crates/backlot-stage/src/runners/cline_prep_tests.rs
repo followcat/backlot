@@ -21,40 +21,42 @@ fn check(name: &str, run: &str) -> CheckDecl {
     }
 }
 
-/// The commands per role: `backlot` for everyone; an actor's six git
-/// commands; the director's read-only set and `git merge`, never
-/// `git branch`; each declared check verbatim for both — and a rule
-/// a single-quoted shell string cannot hold is dropped, never
-/// mangled.
+/// The commands per role: `backlot` for everyone plus the shared
+/// read-only set; an actor's `git add`/`git commit`, the director's
+/// `git merge`; each declared check verbatim for both — and a rule a
+/// single-quoted shell string cannot hold is dropped, never mangled.
+/// `git branch` is only ever its two listing forms.
 #[test]
 fn allowed_commands_per_role() {
     let checks = [check("unit", "cargo test --lib")];
-    assert_eq!(allow_commands("producer", &checks), ["backlot"]);
-    assert_eq!(
-        allow_commands("actor-t1-c1", &checks),
-        [
-            "backlot",
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-            "cargo test --lib"
-        ]
-    );
-    assert_eq!(
-        allow_commands("director", &checks),
-        [
-            "backlot",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-            "git merge",
-            "cargo test --lib"
-        ]
-    );
+    let read_only = [
+        "git status",
+        "git log",
+        "git show",
+        "git diff",
+        "git branch --list",
+        "git branch --show-current",
+        "ls",
+        "rg",
+        "wc",
+        "head",
+    ];
+    let producer: Vec<String> = std::iter::once("backlot".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .collect();
+    assert_eq!(allow_commands("producer", &checks), producer);
+    let actor: Vec<String> = std::iter::once("backlot".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain(["git add".to_string(), "git commit".to_string()])
+        .chain(["cargo test --lib".to_string()])
+        .collect();
+    assert_eq!(allow_commands("actor-t1-c1", &checks), actor);
+    let director: Vec<String> = std::iter::once("backlot".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain(["git merge".to_string()])
+        .chain(["cargo test --lib".to_string()])
+        .collect();
+    assert_eq!(allow_commands("director", &checks), director);
     for rules in [
         allow_commands("actor-t1-c1", &checks),
         allow_commands("director", &checks),
@@ -64,23 +66,17 @@ fn allowed_commands_per_role() {
     }
     // A check with a quote cannot sit in the script's quoted list.
     let odd = [check("odd", "echo 'x'")];
-    assert_eq!(
-        allow_commands("actor-t1-c1", &odd),
-        [
-            "backlot",
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show"
-        ]
-    );
+    let actor_odd: Vec<String> = std::iter::once("backlot".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain(["git add".to_string(), "git commit".to_string()])
+        .collect();
+    assert_eq!(allow_commands("actor-t1-c1", &odd), actor_odd);
     // Hollywood: exactly the overseer's set + `backlot progress`.
     let h = allow_commands("hollywood", &[]);
-    assert_eq!(h.len(), 7, "{h:?}");
+    assert_eq!(h.len(), 8, "{h:?}");
     assert!(h.contains(&"backlot progress".to_string()));
     assert!(h.contains(&"backlot hollywood report".to_string()));
+    assert!(h.contains(&"backlot guide".to_string()));
     assert!(!h.contains(&"backlot".to_string()));
 }
 

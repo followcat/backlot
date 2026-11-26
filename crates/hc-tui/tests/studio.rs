@@ -238,3 +238,33 @@ fn hook_leaves_tui_args_alone() {
     assert_eq!(o.status.code(), Some(2));
     assert!(stderr(&o).contains("studio"), "{}", stderr(&o));
 }
+
+/// `backlot guide` prints backlot's own docs from the binary: the
+/// listing, one topic, a grep, and a mistyped topic's refusal — no
+/// state dir, no core, no disk read.
+#[test]
+fn guide_prints_docs_from_the_binary() {
+    let s = Scratch::new();
+    let listing = ok(&s, &["guide"]);
+    assert!(listing.contains("guide"), "{listing}");
+    assert!(listing.contains("topic"), "{listing}");
+
+    let topic = ok(&s, &["guide", "guide"]);
+    assert!(topic.starts_with("# Running a studio"), "{topic}");
+
+    let grepped = ok(&s, &["guide", "guide", "--grep", "permission"]);
+    assert!(grepped.lines().count() > 1, "{grepped}");
+
+    let o = run(&s, &["guide", "nope"]);
+    assert!(!o.status.success());
+    assert!(stderr(&o).contains("no such guide topic"), "{}", stderr(&o));
+}
+
+/// The guide verb is in the TUI's help, so a person knows it exists.
+#[test]
+fn help_mentions_the_guide() {
+    let s = Scratch::new();
+    let o = run(&s, &["--help"]);
+    assert!(o.status.success());
+    assert!(stdout(&o).contains("backlot guide"), "{}", stdout(&o));
+}

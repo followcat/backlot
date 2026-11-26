@@ -41,6 +41,11 @@ does not list.
 Anything else stops for the user to approve — a prompt is theirs, never
 yours to answer.
 
+Backlot's own docs are `backlot guide <topic>` — `backlot guide` lists the
+topics and `backlot guide --grep <word>` narrows them. Read them there;
+never search the disk for `docs/studio/`, which is not in your folder and
+would only stop at a prompt.
+
 ## Cards
 
 A card is one action + one reason. The user reviews it

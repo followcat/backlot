@@ -672,6 +672,7 @@ fn every_command_word_is_registered() {
         "status",
         "records",
         "stage",
+        "guide",
     ] {
         assert!(
             crate::cli::maybe_run(&[word.to_string()]).is_some(),

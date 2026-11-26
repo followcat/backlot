@@ -49,6 +49,7 @@ mod guard_prep;
 mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
+mod guide;
 mod hcard;
 mod hcard_cast;
 mod hcard_new;
@@ -109,6 +110,7 @@ mod relabel;
 pub mod render;
 mod repos;
 mod restore;
+mod route;
 mod runners;
 mod sample;
 mod sendfail;
@@ -236,6 +238,8 @@ mod guard_git_tests;
 mod guard_line_tests;
 #[cfg(test)]
 mod guard_tests;
+#[cfg(test)]
+mod guide_tests;
 
 #[cfg(test)]
 mod hcard_tests;
@@ -321,6 +325,8 @@ mod restart_cmd_tests;
 mod restore_tests;
 #[cfg(test)]
 mod role_cmd_tests;
+#[cfg(test)]
+mod route_tests;
 #[cfg(test)]
 mod sample_tests;
 

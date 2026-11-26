@@ -347,6 +347,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StageWatch { .. }
         | Cmd::StageService { .. }
         | Cmd::Runners { .. }
+        | Cmd::Guide { .. }
         | Cmd::Repos { .. }
         | Cmd::StudioPrune { .. }
         | Cmd::StudioDelete { .. }
