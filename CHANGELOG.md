@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **Persistent floats keep their configured size across restarts and config reloads.** Adopted floats look up `hc-tui.command` in `[[keys.command]]` on adoption, show, hide, and host resize (falling back to the stored or default size only when no binding matches), so an `80%` float stays `80%` instead of collapsing to half the pane.
+
 ## 0.4.14 — 2026-11-26
 
 ### Added
