@@ -1,6 +1,7 @@
 //! Additional per-runner read-only transcript extractors (`cmd`, `cline`,
 //! `agy`, `cursor`, `devin`, `opencode`).
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -9,7 +10,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::discover::{Exec, ExecCall};
-use crate::transcript::{MAX_TURNS, TranscriptTarget, Turn};
+use crate::transcript::{MAX_TURNS, TranscriptTarget, Turn, collapse_tool};
 use crate::transcript_runners::{extract_content_blocks, push_turn, turns_from_message_array};
 
 pub(crate) fn read_other_turns(
@@ -124,35 +125,135 @@ fn read_devin(
     exec: &Exec,
     deadline: Instant,
 ) -> Option<(String, Vec<Turn>)> {
-    let db = [
-        home.join(".local/share/devin/sessions.db"),
-        home.join(".devin/sessions.db"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())?;
-    let timeout = remaining(deadline)?;
-    if !is_safe_id(sid) {
+    let db = home.join(".local/share/devin/cli/sessions.db");
+    if !db.is_file() || !is_safe_id(sid) {
         return None;
     }
+    let db_str = db.to_string_lossy().into_owned();
+    let exec_cwd = if Path::new(cwd).is_dir() {
+        cwd.to_string()
+    } else {
+        db.parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| ".".to_string())
+    };
+    let timeout = remaining(deadline)?;
+    // Index-backed single-session lookup on message_nodes(session_id) — never scan the 8 GB DB.
+    let limit = MAX_TURNS * 4;
     let query = format!(
-        "SELECT role, content FROM messages WHERE session_id = '{sid}' ORDER BY rowid DESC LIMIT {MAX_TURNS};"
+        "SELECT node_id, parent_node_id, chat_message FROM message_nodes WHERE session_id = '{sid}' ORDER BY node_id DESC LIMIT {limit};"
     );
-    let call = ExecCall {
+    let sqlite_call = ExecCall {
         argv: vec![
             "sqlite3".into(),
             "-readonly".into(),
             "-json".into(),
-            db.to_string_lossy().into_owned(),
+            db_str.clone(),
             query,
         ],
-        cwd: cwd.to_string(),
+        cwd: exec_cwd.clone(),
         timeout,
     };
-    let out = exec(&call).ok()?;
-    let mut arr: Vec<Value> = serde_json::from_str(&out).ok()?;
-    arr.reverse();
-    let turns = turns_from_message_array(&arr);
-    (!turns.is_empty()).then(|| (format!("devin sessions.db ({})", db.display()), turns))
+    let out = match exec(&sqlite_call) {
+        Ok(s) => s,
+        Err(_) => {
+            // Headless hosts without `sqlite3` CLI still open the SQLite file read-only via python3.
+            let py_timeout = remaining(deadline)?;
+            let script = format!(
+                "import json, sqlite3, sys, urllib.parse; \
+                 uri = 'file:' + urllib.parse.quote(sys.argv[1], safe='/') + '?mode=ro'; \
+                 con = sqlite3.connect(uri, uri=True, timeout=1.0); \
+                 cur = con.execute('SELECT node_id, parent_node_id, chat_message FROM message_nodes WHERE session_id = ? ORDER BY node_id DESC LIMIT {limit}', (sys.argv[2],)); \
+                 print(json.dumps([{{'node_id': r[0], 'parent_node_id': r[1], 'chat_message': r[2]}} for r in cur.fetchall()]))"
+            );
+            exec(&ExecCall {
+                argv: vec!["python3".into(), "-c".into(), script, db_str, sid.into()],
+                cwd: exec_cwd,
+                timeout: py_timeout,
+            })
+            .ok()?
+        }
+    };
+    if out.trim().is_empty() {
+        return None;
+    }
+    let mut rows: Vec<Value> = serde_json::from_str(&out).ok()?;
+    rows.sort_by_key(|r| std::cmp::Reverse(r["node_id"].as_i64().unwrap_or(0)));
+    let chain = walk_devin_chain(&rows);
+    let mut turns = Vec::new();
+    for row in chain {
+        if let Some((who, text)) = parse_devin_chat_message(&row["chat_message"]) {
+            push_turn(&mut turns, who, text);
+        }
+    }
+    (!turns.is_empty()).then(|| (format!("devin cli/sessions.db ({})", db.display()), turns))
+}
+
+fn walk_devin_chain(rows: &[Value]) -> Vec<&Value> {
+    let by_id: HashMap<i64, &Value> = rows
+        .iter()
+        .filter_map(|r| r["node_id"].as_i64().map(|id| (id, r)))
+        .collect();
+    let Some(mut cur_id) = rows.first().and_then(|r| r["node_id"].as_i64()) else {
+        return Vec::new();
+    };
+    let mut visited = HashSet::new();
+    let mut chain = Vec::new();
+    while visited.insert(cur_id)
+        && let Some(node) = by_id.get(&cur_id).copied()
+    {
+        chain.push(node);
+        let Some(parent) = node["parent_node_id"].as_i64() else {
+            break;
+        };
+        cur_id = parent;
+    }
+    chain.reverse();
+    chain
+}
+
+fn parse_devin_chat_message(raw: &Value) -> Option<(&'static str, String)> {
+    let owned;
+    let cm = match raw {
+        Value::String(s) => {
+            owned = serde_json::from_str::<Value>(s).ok()?;
+            &owned
+        }
+        Value::Object(_) => raw,
+        _ => return None,
+    };
+    let role = cm["role"].as_str()?;
+    match role {
+        "user" | "assistant" => {
+            let who = if role == "user" { "user" } else { "assistant" };
+            let mut parts = Vec::new();
+            // Explicitly skip `thinking` and `images` (`base64_data` must never enter the brief).
+            if let Some(text) = cm
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                parts.push(text.to_string());
+            }
+            if let Some(calls) = cm.get("tool_calls").and_then(|v| v.as_array()) {
+                for call in calls {
+                    let name = call["name"].as_str().unwrap_or("tool");
+                    parts.push(format!("[tool: {name}]"));
+                }
+            }
+            (!parts.is_empty()).then(|| (who, parts.join("\n")))
+        }
+        "tool" => {
+            let text = cm
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())?;
+            Some(("assistant", collapse_tool("result", text)))
+        }
+        _ => None,
+    }
 }
 
 fn read_opencode(

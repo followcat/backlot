@@ -283,3 +283,156 @@ fn universal_fallback_strips_ansi_redacts_secrets_and_reports_provenance() {
     assert!(fb.markdown.contains("pause beta-api"));
     assert!(Path::new("x").extension().is_none());
 }
+
+#[test]
+fn extracts_devin_cli_sqlite_schema_follows_parent_chain_and_skips_thinking_images() {
+    let tmp = TestDir::new("bl-transcript-devin");
+    let home = tmp.path().join("home");
+    let role_dir = tmp.path().join("hollywood/roles/hollywood");
+    let db_dir = home.join(".local/share/devin/cli");
+    fs::create_dir_all(&role_dir).unwrap();
+    fs::create_dir_all(&db_dir).unwrap();
+    let db_path = db_dir.join("sessions.db");
+
+    let sys_msg = serde_json::json!({
+        "role": "system",
+        "content": "INTERNAL_SYSTEM_PROMPT_SKIP"
+    })
+    .to_string();
+    let u1 = serde_json::json!({
+        "role": "user",
+        "content": "Check acme-shop failing tests."
+    })
+    .to_string();
+    let branch_dead = serde_json::json!({
+        "role": "assistant",
+        "content": "DEAD_BRANCH_MESSAGE_SKIP"
+    })
+    .to_string();
+    let a1 = serde_json::json!({
+        "role": "assistant",
+        "thinking": "SECRET_THINKING_DO_NOT_COPY",
+        "content": "Inspecting cargo output.",
+        "images": [{"media_type": "image/png", "base64_data": "BASE64_IMAGE_PAYLOAD_SKIP"}],
+        "tool_calls": [{"id": "tc-1", "name": "read_file", "arguments": "{\"path\":\"Cargo.toml\"}"}]
+    })
+    .to_string();
+    let t1 = serde_json::json!({
+        "role": "tool",
+        "tool_call_id": "tc-1",
+        "content": "3 failed in auth module"
+    })
+    .to_string();
+    let a2 = serde_json::json!({
+        "role": "assistant",
+        "content": "Proposed pause card for acme-shop."
+    })
+    .to_string();
+
+    // Populate SQLite fixture using python3 built-in sqlite3 (works with or without sqlite3 CLI).
+    let py = r#"
+import sqlite3, sys
+db = sys.argv[1]
+con = sqlite3.connect(db)
+con.execute("""CREATE TABLE sessions(
+    id TEXT PRIMARY KEY,
+    working_directory TEXT,
+    backend_type TEXT,
+    model TEXT,
+    agent_mode TEXT,
+    created_at INTEGER,
+    last_activity_at INTEGER
+)""")
+con.execute("""CREATE TABLE message_nodes(
+    row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    node_id INTEGER,
+    parent_node_id INTEGER NULL,
+    chat_message TEXT,
+    created_at INTEGER,
+    metadata TEXT,
+    UNIQUE(session_id, node_id)
+)""")
+con.execute("CREATE INDEX idx_message_nodes_session ON message_nodes(session_id)")
+con.execute("INSERT INTO sessions VALUES('sid_devin_1', '/home/user/hollywood', 'cli', 'swe-2-max', 'default', 1, 2)")
+rows = [
+    ('sid_devin_1', 1, None, sys.argv[2], 1, '{}'),
+    ('sid_devin_1', 2, 1, sys.argv[3], 2, '{}'),
+    ('sid_devin_1', 3, 2, sys.argv[4], 3, '{}'),  # orphaned branch
+    ('sid_devin_1', 4, 2, sys.argv[5], 4, '{}'),  # active chain: a1
+    ('sid_devin_1', 5, 4, sys.argv[6], 5, '{}'),  # active chain: t1
+    ('sid_devin_1', 6, 5, sys.argv[7], 6, '{}'),  # active chain: a2
+]
+con.executemany("INSERT INTO message_nodes(session_id, node_id, parent_node_id, chat_message, created_at, metadata) VALUES(?,?,?,?,?,?)", rows)
+con.commit()
+"#;
+    let status = std::process::Command::new("python3")
+        .arg("-c")
+        .arg(py)
+        .arg(&db_path)
+        .arg(&sys_msg)
+        .arg(&u1)
+        .arg(&branch_dead)
+        .arg(&a1)
+        .arg(&t1)
+        .arg(&a2)
+        .status()
+        .expect("python3 sqlite3 fixture");
+    assert!(status.success());
+
+    // First verify real_exec path extracts from real cli/sessions.db.
+    let tail = extract_runner_tail(
+        &TranscriptTarget {
+            cwd: "/home/user/hollywood",
+            runner: "devin",
+            session_id: Some("sid_devin_1"),
+            role_dir: &role_dir,
+            home: Some(&home),
+        },
+        &crate::discover::real_exec,
+    )
+    .expect("devin tail");
+    assert!(tail.provenance.contains("cli/sessions.db"), "{tail:?}");
+    assert!(tail.markdown.contains("Check acme-shop failing tests."));
+    assert!(tail.markdown.contains("Inspecting cargo output."));
+    assert!(tail.markdown.contains("[tool: read_file]"));
+    assert!(tail.markdown.contains("Proposed pause card for acme-shop."));
+    assert!(tail.markdown.contains("3 failed in auth module"));
+    assert!(!tail.markdown.contains("INTERNAL_SYSTEM_PROMPT_SKIP"));
+    assert!(!tail.markdown.contains("DEAD_BRANCH_MESSAGE_SKIP"));
+    assert!(!tail.markdown.contains("SECRET_THINKING_DO_NOT_COPY"));
+    assert!(!tail.markdown.contains("BASE64_IMAGE_PAYLOAD_SKIP"));
+
+    // Also verify the exact sqlite3 -readonly -json indexed query issued to Exec.
+    let seen_call = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let seen_clone = seen_call.clone();
+    let u1_copy = u1.clone();
+    let a2_copy = a2.clone();
+    let spy_exec = move |call: &ExecCall| -> Result<String, String> {
+        *seen_clone.lock().unwrap() = Some(call.argv.clone());
+        Ok(serde_json::json!([
+            {"node_id": 2, "parent_node_id": 1, "chat_message": a2_copy},
+            {"node_id": 1, "parent_node_id": null, "chat_message": u1_copy}
+        ])
+        .to_string())
+    };
+    let spy_tail = extract_runner_tail(
+        &TranscriptTarget {
+            cwd: "/home/user/hollywood",
+            runner: "devin",
+            session_id: Some("sid_devin_1"),
+            role_dir: &role_dir,
+            home: Some(&home),
+        },
+        &spy_exec,
+    )
+    .expect("spy devin tail");
+    assert!(spy_tail.markdown.contains("Proposed pause card"));
+    let argv = seen_call.lock().unwrap().clone().unwrap();
+    assert_eq!(argv[0], "sqlite3");
+    assert_eq!(argv[1], "-readonly");
+    assert_eq!(argv[2], "-json");
+    assert!(argv[3].ends_with(".local/share/devin/cli/sessions.db"));
+    assert!(argv[4].contains("WHERE session_id = 'sid_devin_1'"));
+    assert!(argv[4].contains("ORDER BY node_id DESC"));
+}
