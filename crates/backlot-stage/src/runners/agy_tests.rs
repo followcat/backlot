@@ -776,6 +776,7 @@ async fn stage_studio_launches_fresh_resume_and_recast_trust_work_area() {
         limits: Default::default(),
         max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
+        design_gate: backlot_model::event::DesignGate::Off,
     };
     for (role, kind) in [
         ("user", created),
