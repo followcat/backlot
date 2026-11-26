@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.12 — 2026-11-26
+
 ### Changed
 
 - **Studio switching moves to `Alt+PageUp`/`Alt+PageDown`, and `Alt+Left`/`Alt+Right` go back to the terminal.** Studios are a vertical list, so the studio step now lives on the page keys; the old arrow chords were word movement in shells and agent input boxes. `Alt+Up`/`Alt+Down` still move between a studio's people (`docs/keys.md`, `docs/studio/guide.md`, `docs/studio/panel.md`).
