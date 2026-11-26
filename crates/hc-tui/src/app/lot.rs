@@ -65,10 +65,8 @@ impl super::App {
         }
     }
 
-    /// U = the one needs-you list's length — prompts, roles that need
-    /// the user, blocked Hollywood, new studios, stage issues, cards
-    /// and ready studios. The list is the count, so the pill cannot
-    /// disagree with the sheet or the calm row.
+    /// Compute the four Call Sheet urgency buckets from `waiting_items`, keeping
+    /// the Lot Pill counts in sync with the sheet rows.
     fn lot_counts(&self, machines: &[MachineSummary], counts: &mut LotCounts) {
         let studios = data::studios(machines);
         counts.studios = studios.len();
@@ -82,15 +80,21 @@ impl super::App {
             let hw = crate::hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref());
             counts.unread = crate::hollywood::hollywood_unread_count(hw, seen);
         }
-        // The calm row, the sheet and the pill read the same list.
         let status = crate::hollywood::status_of(&self.view);
-        counts.urgent = crate::hollywood::waiting_items(machines, &status).len();
+        for wait in &crate::hollywood::waiting_items(machines, &status) {
+            match crate::hollywood::WaitBucket::of(wait) {
+                crate::hollywood::WaitBucket::Blocking => counts.blocking += 1,
+                crate::hollywood::WaitBucket::Asks => counts.asks += 1,
+                crate::hollywood::WaitBucket::Cards => counts.cards += 1,
+                crate::hollywood::WaitBucket::Ready => counts.ready += 1,
+            }
+        }
     }
 
     /// The start policy, applied once the first summary lands, plus
     /// the `when_waiting` rising edge while the bar sits collapsed.
     fn lot_start_policy(&mut self, lot: &mut Lot, was_urgent: bool) {
-        let urgent = lot.counts.urgent > 0;
+        let urgent = lot.counts.any_waiting() > 0;
         if lot.start_pending {
             if self.opening.ready() {
                 lot.start_pending = false;
@@ -160,10 +164,14 @@ impl super::App {
                 machine,
                 studio_focused,
                 kind: HeaderKind::Role {
+                    role_key: role.role.clone(),
                     name: role.name.clone(),
                     task: role.task.clone(),
                     mark: Some(Person::of(role)),
                     priority: role.priority.and_then(PriorityMark::of),
+                    runner: role.runner.clone(),
+                    model: role.model.clone(),
+                    effort: role.effort.clone(),
                 },
             });
         }
@@ -190,10 +198,14 @@ impl super::App {
         let kind = labels
             .get("backlot.role")
             .map(|name| HeaderKind::Role {
+                role_key: name.clone(),
                 name: name.clone(),
                 task: labels.get("backlot.task").cloned(),
                 mark: None,
                 priority: None,
+                runner: None,
+                model: None,
+                effort: None,
             })
             .unwrap_or(HeaderKind::Bare);
         let studio_focused = self.studio.focused_studio() == Some(&key);

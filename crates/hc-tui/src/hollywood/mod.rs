@@ -35,7 +35,7 @@ pub(crate) use draw::{HollywoodRender, render};
 // The footer's and Reader's own tests inspect these directly.
 #[cfg(test)]
 pub(crate) use hints::for_row;
-pub(crate) use items::{chips_of, default_chip_index};
+pub(crate) use items::{WaitBucket, chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_extent;
 #[cfg(test)]

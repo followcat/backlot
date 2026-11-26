@@ -1,11 +1,14 @@
-//! The Lot Pill and the studio header (S0 — spec §3, User Decision
-//! 5). The pill is a reserved, clickable segment at the right end of
-//! the tab bar — or left of `☰` in the mobile header — replacing the
-//! floating collapsed strip. In a studio workspace the tab bar
-//! becomes a one-row studio header instead: `acme-shop › actor-a t1
-//! ◐ ↑` on the left, the pill on the right. Both surfaces read the
-//! same counts (`U` user-owned waits, `C` open cards + ready
-//! studios) and the same tier ladder.
+//! The Lot Pill and the studio header (S0 — spec §3, User Decision 5).
+//! The pill lives in `lot_pill.rs`; this module owns the studio
+//! workspace header (`id · machine › Ⓟ ○  runner · model (effort)`)
+//! and the `Lot` / `LotFrame` latch structs.
+
+#[path = "lot_pill.rs"]
+mod pill;
+
+pub(crate) use pill::{
+    LotCounts, PillAction, PillTier, pill_tier, pill_width, render_pill_recorded,
+};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -13,395 +16,19 @@ use ratatui::style::{Modifier, Style};
 
 use super::palette::Palette;
 use super::render::{ShellHitMap, display_width, put_text};
-use super::status::panel_contrast_fg;
-use crate::hollywood::HollywoodActivity;
 use crate::studio::StudioKey;
 use crate::studio::glyphs::{Person, PriorityMark};
-
-/// What the pill counts: `S` studios, `U` the one needs-you list
-/// (prompts, roles that need the user, blocked Hollywood, new
-/// studios, stage issues, cards and ready studios — so `C`, its old
-/// ready-work count, stays 0 now that the list covers it), `unread`
-/// new Hollywood replies while collapsed, and `activity` for spinner.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LotCounts {
-    pub studios: usize,
-    pub urgent: usize,
-    pub cards: usize,
-    pub unread: usize,
-    pub activity: HollywoodActivity,
-}
-
-/// Which text ladder a terminal width gets — the spec §3 rows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PillTier {
-    /// `160`-class: ` ✦ 2 studios · !1 you · 1 card ` (31 cols).
-    Full,
-    /// `120`-class: ` ✦ 2 · !1 you · 1c ` (19 cols).
-    Wide,
-    /// `80`-class tab bar: ` ✦2 !1 c1 ` (11 cols).
-    Compact,
-    /// `60`-class mobile header: the compact text (11 cols).
-    Mobile,
-    /// `40`-class mobile header: ` ✦!1 ` (5 cols).
-    Tiny,
-}
-
-impl PillTier {
-    /// The tier's reserved cap from spec §3 — a pill never takes
-    /// more than this from the tab bar.
-    fn cap(self) -> u16 {
-        match self {
-            PillTier::Full => 31,
-            PillTier::Wide => 19,
-            PillTier::Compact | PillTier::Mobile => 11,
-            PillTier::Tiny => 5,
-        }
-    }
-
-    /// The next-narrower form when the text overflows the cap.
-    fn demote(self) -> Option<PillTier> {
-        match self {
-            PillTier::Full => Some(PillTier::Wide),
-            PillTier::Wide => Some(PillTier::Compact),
-            PillTier::Compact | PillTier::Mobile => Some(PillTier::Tiny),
-            PillTier::Tiny => None,
-        }
-    }
-}
-
-/// The tier for `cols` of terminal: desktop widths pick by column
-/// band; under `mobile_threshold` the mobile rows apply, with the
-/// `<= 40` cut for the tiny form.
-pub(crate) fn pill_tier(cols: u16, mobile_threshold: u16) -> PillTier {
-    if cols >= 140 {
-        PillTier::Full
-    } else if cols >= 96 {
-        PillTier::Wide
-    } else if cols > mobile_threshold {
-        PillTier::Compact
-    } else if cols > 40 {
-        PillTier::Mobile
-    } else {
-        PillTier::Tiny
-    }
-}
-
-/// A segment's role — the pill styles each part by kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Seg {
-    /// `✦` (or spinner while active) — the lot mark, accent.
-    Spark,
-    /// Counts and connective text.
-    Body,
-    /// The card/ready segment — peach under the card style.
-    Cards,
-    /// Unread Hollywood replies — bold accent.
-    Unread,
-    /// The all-clear `●`/`live` word — green under the calm style.
-    Live,
-}
-
-fn count(n: usize) -> String {
-    if n > 99 {
-        "9+".to_string()
-    } else {
-        n.to_string()
-    }
-}
-
-/// The pill's styled text segments for `tier` — the `hollywood`
-/// flag is the 0-studios empty form (` ✦ hollywood · idle `).
-fn segments(
-    counts: &LotCounts,
-    tier: PillTier,
-    hollywood: bool,
-    spin: usize,
-) -> Vec<(String, Seg)> {
-    let (s, u, c, n) = (counts.studios, counts.urgent, counts.cards, counts.unread);
-    let spark = if counts.activity.is_active() {
-        Person::Working.glyph(spin)
-    } else {
-        "✦"
-    };
-    if s == 0 && hollywood {
-        let (tail, tail_seg) = if n > 0 {
-            (format!(" · +{} new ", count(n)), Seg::Unread)
-        } else {
-            match counts.activity {
-                HollywoodActivity::Working => (" · thinking ".into(), Seg::Spark),
-                HollywoodActivity::Queued => (" · queued ".into(), Seg::Cards),
-                HollywoodActivity::Idle => (" · idle ".into(), Seg::Live),
-            }
-        };
-        return match tier {
-            PillTier::Full => vec![
-                (format!(" {spark} hollywood"), Seg::Spark),
-                (tail, tail_seg),
-            ],
-            PillTier::Wide => vec![(format!(" {spark} 0"), Seg::Spark), (tail, tail_seg)],
-            PillTier::Compact | PillTier::Mobile => {
-                let tail = if n > 0 {
-                    (format!("+{} ", count(n)), Seg::Unread)
-                } else {
-                    ("● ".into(), Seg::Live)
-                };
-                vec![(format!(" {spark}0 "), Seg::Spark), tail]
-            }
-            PillTier::Tiny => {
-                if n > 0 {
-                    vec![
-                        (format!(" {spark}"), Seg::Spark),
-                        (format!("+{} ", count(n)), Seg::Unread),
-                    ]
-                } else {
-                    vec![(format!(" {spark}0 "), Seg::Spark)]
-                }
-            }
-        };
-    }
-    match tier {
-        PillTier::Full => {
-            let mut out = vec![
-                (format!(" {spark} "), Seg::Spark),
-                (format!("{s} studios"), Seg::Body),
-            ];
-            if u > 0 {
-                out.push((format!(" · !{} you", count(u)), Seg::Body));
-            }
-            if c > 0 {
-                out.push((
-                    if n > 0 {
-                        format!(" · {}c", count(c))
-                    } else {
-                        format!(" · {} card{}", count(c), if c == 1 { "" } else { "s" })
-                    },
-                    Seg::Cards,
-                ));
-            }
-            if n > 0 {
-                out.push((format!(" · +{} new", count(n)), Seg::Unread));
-            }
-            if u == 0 && c == 0 && n == 0 {
-                match counts.activity {
-                    HollywoodActivity::Working => out.push((" · thinking".into(), Seg::Spark)),
-                    HollywoodActivity::Queued => out.push((" · queued".into(), Seg::Cards)),
-                    HollywoodActivity::Idle => out.push((" · live".into(), Seg::Live)),
-                }
-            }
-            out.push((" ".into(), Seg::Body));
-            out
-        }
-        PillTier::Wide => {
-            let mut out = vec![
-                (format!(" {spark} "), Seg::Spark),
-                (format!("{s}"), Seg::Body),
-            ];
-            if u > 0 {
-                out.push((format!(" · !{} you", count(u)), Seg::Body));
-            }
-            if c > 0 {
-                out.push((
-                    if u > 0 || n > 0 {
-                        format!(" · {}c", count(c))
-                    } else {
-                        format!(" · {} card{}", count(c), if c == 1 { "" } else { "s" })
-                    },
-                    Seg::Cards,
-                ));
-            }
-            if n > 0 {
-                out.push((
-                    if u == 0 && c == 0 {
-                        format!(" · +{} new", count(n))
-                    } else {
-                        format!(" · +{}", count(n))
-                    },
-                    Seg::Unread,
-                ));
-            }
-            if u == 0 && c == 0 && n == 0 {
-                match counts.activity {
-                    HollywoodActivity::Working => out.push((" · work".into(), Seg::Spark)),
-                    HollywoodActivity::Queued => out.push((" · queue".into(), Seg::Cards)),
-                    HollywoodActivity::Idle => out.push((" · live".into(), Seg::Live)),
-                }
-            }
-            out.push((" ".into(), Seg::Body));
-            out
-        }
-        PillTier::Compact | PillTier::Mobile => {
-            let mut out = vec![
-                (format!(" {spark}"), Seg::Spark),
-                (format!("{s}"), Seg::Body),
-            ];
-            let dense = u > 0 && c > 0 && n > 0;
-            if u > 0 {
-                out.push((format!(" !{}", count(u)), Seg::Body));
-            }
-            if c > 0 {
-                out.push((
-                    if dense {
-                        format!("c{}", count(c))
-                    } else {
-                        format!(" c{}", count(c))
-                    },
-                    Seg::Cards,
-                ));
-            }
-            if n > 0 {
-                out.push((
-                    if dense {
-                        format!("+{}", count(n))
-                    } else {
-                        format!(" +{}", count(n))
-                    },
-                    Seg::Unread,
-                ));
-            }
-            if u == 0 && c == 0 && n == 0 {
-                out.push((" ●".into(), Seg::Live));
-            }
-            out.push((" ".into(), Seg::Body));
-            out
-        }
-        PillTier::Tiny => {
-            if u > 0 {
-                vec![
-                    (format!(" {spark}"), Seg::Spark),
-                    (format!("!{} ", count(u)), Seg::Body),
-                ]
-            } else if n > 0 {
-                vec![
-                    (format!(" {spark}"), Seg::Spark),
-                    (format!("+{} ", count(n)), Seg::Unread),
-                ]
-            } else if c > 0 {
-                vec![
-                    (format!(" {spark}"), Seg::Spark),
-                    (format!("c{} ", count(c)), Seg::Cards),
-                ]
-            } else {
-                vec![
-                    (format!(" {spark}"), Seg::Spark),
-                    (format!("{s} "), Seg::Body),
-                ]
-            }
-        }
-    }
-}
-
-/// A segment's style under the pill's colour rules (§3):
-/// urgent paints the whole pill `red`, while non-urgent pills (cards,
-/// unread replies, or calm) sit on `elevation.raised_row`.
-fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
-    if counts.urgent > 0 {
-        return Style::default()
-            .fg(panel_contrast_fg(palette))
-            .bg(palette.red)
-            .add_modifier(Modifier::BOLD);
-    }
-    let base = Style::default().bg(palette.elevation().raised_row);
-    if counts.cards > 0 || counts.unread > 0 {
-        match seg {
-            Seg::Spark => base.fg(palette.accent),
-            Seg::Body => base.fg(palette.text),
-            Seg::Cards => base.fg(palette.peach).add_modifier(Modifier::BOLD),
-            Seg::Unread => base.fg(palette.accent).add_modifier(Modifier::BOLD),
-            Seg::Live => base.fg(palette.green),
-        }
-    } else {
-        match seg {
-            Seg::Spark => base.fg(palette.accent),
-            Seg::Body => base.fg(palette.subtext0),
-            Seg::Cards => base.fg(palette.peach).add_modifier(Modifier::BOLD),
-            Seg::Unread => base.fg(palette.accent).add_modifier(Modifier::BOLD),
-            Seg::Live => base.fg(palette.green),
-        }
-    }
-}
-
-/// The pill's drawn width at `tier` — demoting until the text fits
-/// the tier's cap. Returns the segments and the tier used.
-fn pill_fit(
-    counts: &LotCounts,
-    tier: PillTier,
-    hollywood: bool,
-    spin: usize,
-) -> (Vec<(String, Seg)>, PillTier) {
-    let mut tier = tier;
-    loop {
-        let segs = segments(counts, tier, hollywood, spin);
-        let width: u16 = segs.iter().map(|(t, _)| display_width(t)).sum();
-        if width <= tier.cap() {
-            return (segs, tier);
-        }
-        match tier.demote() {
-            Some(next) => tier = next,
-            None => return (segs, tier),
-        }
-    }
-}
-
-/// The width the pill would claim at `tier` — the tab bar reserves
-/// exactly this at its right end.
-pub(crate) fn pill_width(counts: &LotCounts, tier: PillTier, hollywood: bool) -> u16 {
-    let (segs, _) = pill_fit(counts, tier, hollywood, 0);
-    segs.iter().map(|(t, _)| display_width(t)).sum()
-}
-
-/// Draw the pill into `rect` (already sized to `pill_width`) and
-/// return its hit rect.
-pub(crate) fn render_pill(
-    buf: &mut Buffer,
-    rect: Rect,
-    counts: &LotCounts,
-    tier: PillTier,
-    hollywood: bool,
-    spin: usize,
-    palette: &Palette,
-) -> Rect {
-    if rect.width == 0 || rect.height == 0 {
-        return Rect::default();
-    }
-    let (segs, used) = pill_fit(counts, tier, hollywood, spin);
-    let mut x = rect.x;
-    let right = rect.right();
-    for (text, seg) in segs {
-        let _ = used;
-        let room = right.saturating_sub(x);
-        if room == 0 {
-            break;
-        }
-        let width = display_width(&text).min(room);
-        put_text(
-            buf,
-            x,
-            rect.y,
-            width,
-            &text,
-            seg_style(seg, counts, palette),
-        );
-        x = x.saturating_add(width);
-    }
-    // Any slack keeps the pill's own background, never stale cells.
-    if x < right {
-        let base = seg_style(Seg::Body, counts, palette);
-        buf.set_style(Rect::new(x, rect.y, right - x, 1), base);
-    }
-    rect
-}
+use crate::studio::role_row::RoleBadge;
 
 /// The app-side lot latch — rebuilt every `sync_studio`, read by
 /// `render_shell` and the layout. In plain mode it stays all-empty:
 /// no pill, no header, `chrome_layout` sees nothing to force.
 #[derive(Debug, Default)]
 pub(crate) struct Lot {
-    /// U/C/N for the pill.
+    /// Bucketed counts for the pill.
     pub counts: LotCounts,
     /// The focused workspace's studio header — `Some` only while a
-    /// studio role, studio shell or the Hollywood terminal is
-    /// focused.
+    /// studio role, studio shell or the Hollywood terminal is focused.
     pub header: Option<StudioHeader>,
     /// The pill reserves its segment when this holds — studios, or a
     /// configured Hollywood.
@@ -409,7 +36,7 @@ pub(crate) struct Lot {
     /// The focused workspace is a studio role or shell — where the
     /// role keys (`alt+↑/↓` by default) win over herdr's direct bindings.
     pub studio_workspace: bool,
-    /// U > 0 on the last publish — `when_waiting` reads the edge.
+    /// Waiting items > 0 on the last publish — `when_waiting` reads the edge.
     pub was_urgent: bool,
     /// Apply `[hollywood].start` on the first publish.
     pub start_pending: bool,
@@ -433,17 +60,21 @@ pub(crate) struct LotFrame<'a> {
 }
 
 /// What the header shows under the focused terminal (Decision 5):
-/// a role with its S0 glyph, task and priority; a studio shell; the
-/// Hollywood terminal; or the bare studio.
+/// a role with its badge, S0 glyph, priority and runner/model/effort;
+/// a studio shell; the Hollywood terminal; or the bare studio.
 #[derive(Debug, Clone)]
 pub(crate) enum HeaderKind {
     Role {
+        role_key: String,
         name: String,
         task: Option<String>,
         /// `None` while the role is not in the summary — the name
         /// still reads; the glyph simply does not invent a state.
         mark: Option<Person>,
         priority: Option<PriorityMark>,
+        runner: Option<String>,
+        model: Option<String>,
+        effort: Option<String>,
     },
     Shell(u32),
     Hollywood,
@@ -466,7 +97,71 @@ pub(crate) struct StudioHeader {
     pub kind: HeaderKind,
 }
 
-/// The header's left text — `acme-shop › actor-a t1`, also the
+fn role_badge_and_tail(
+    role_key: &str,
+    name: &str,
+    task: Option<&str>,
+) -> (Option<RoleBadge>, Option<String>) {
+    if let Some(badge) = RoleBadge::of_role(role_key) {
+        let tail = if badge == RoleBadge::Actor {
+            Some(task.unwrap_or(name).to_string())
+        } else {
+            None
+        };
+        return (Some(badge), tail);
+    }
+    let text = match task {
+        Some(task) => format!("{name} {task}"),
+        None => name.to_string(),
+    };
+    (None, Some(text))
+}
+
+/// Fit role runtime metadata (`  runner · model (effort)`) into `room`,
+/// degrading `effort` -> `model` -> `runner` -> `None`.
+fn fit_role_meta(
+    runner: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
+    room: usize,
+) -> Option<String> {
+    let runner = runner.map(str::trim).filter(|s| !s.is_empty());
+    let model = model.map(str::trim).filter(|s| !s.is_empty());
+    let effort = effort
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "auto");
+    let mut cands = Vec::with_capacity(3);
+    let fmt = |r: Option<&str>, m: Option<&str>, e: Option<&str>| -> Option<String> {
+        let body = match (r, m) {
+            (Some(r), Some(m)) => format!("{r} · {m}"),
+            (Some(r), None) => r.to_string(),
+            (None, Some(m)) => m.to_string(),
+            (None, None) => return None,
+        };
+        Some(match e {
+            Some(e) => format!("  {body} ({e})"),
+            None => format!("  {body}"),
+        })
+    };
+    if let Some(full) = fmt(runner, model, effort) {
+        cands.push(full);
+    }
+    if let Some(no_eff) = fmt(runner, model, None)
+        && !cands.contains(&no_eff)
+    {
+        cands.push(no_eff);
+    }
+    if let Some(runner_only) = fmt(runner, None, None)
+        && !cands.contains(&runner_only)
+    {
+        cands.push(runner_only);
+    }
+    cands
+        .into_iter()
+        .find(|cand| crate::chrome::text::display_width(cand) <= room)
+}
+
+/// The header's left text — `acme-shop › Ⓟ ○`, also the
 /// mobile header's tab-label replacement.
 pub(crate) fn header_text(header: &StudioHeader) -> String {
     let id = match &header.machine {
@@ -477,10 +172,24 @@ pub(crate) fn header_text(header: &StudioHeader) -> String {
         HeaderKind::Hollywood => "hollywood".to_string(),
         HeaderKind::Bare => id,
         HeaderKind::Shell(n) => format!("{id} › shell {n}"),
-        HeaderKind::Role { name, task, .. } => match task {
-            Some(task) => format!("{id} › {name} {task}"),
-            None => format!("{id} › {name}"),
-        },
+        HeaderKind::Role {
+            role_key,
+            name,
+            task,
+            mark,
+            ..
+        } => {
+            let role_part = match role_badge_and_tail(role_key, name, task.as_deref()) {
+                (Some(badge), Some(tail)) => format!("{} {tail}", badge.glyph()),
+                (Some(badge), None) => badge.glyph().to_string(),
+                (None, Some(text)) => text,
+                (None, None) => String::new(),
+            };
+            match mark {
+                Some(mark) => format!("{id} › {role_part} {}", mark.still()),
+                None => format!("{id} › {role_part}"),
+            }
+        }
     }
 }
 
@@ -493,7 +202,7 @@ pub(crate) fn header_name_width(header: &StudioHeader) -> u16 {
 }
 
 /// The studio header's styled left pieces: ` id · machine › part`
-/// with the person glyph and priority mark in their colours.
+/// with the role badge, person glyph and priority mark in their colours.
 fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)> {
     let header_bg = palette.elevation().surface;
     let text = Style::default().fg(palette.text).bg(header_bg);
@@ -540,17 +249,32 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
             spans.push((format!("shell {n}"), text));
         }
         HeaderKind::Role {
+            role_key,
             name,
             task,
             mark,
             priority,
+            ..
         } => {
-            spans.push((name.clone(), text));
-            if let Some(task) = task {
-                spans.push((
-                    format!(" {task}"),
-                    Style::default().fg(palette.accent).bg(header_bg),
-                ));
+            match role_badge_and_tail(role_key, name, task.as_deref()) {
+                (Some(badge), tail) => {
+                    spans.push((
+                        badge.glyph().to_string(),
+                        Style::default().fg(badge.color(palette)).bg(header_bg),
+                    ));
+                    if let Some(tail) = tail {
+                        spans.push((format!(" {tail}"), text));
+                    }
+                }
+                (None, _) => {
+                    spans.push((name.clone(), text));
+                    if let Some(task) = task {
+                        spans.push((
+                            format!(" {task}"),
+                            Style::default().fg(palette.accent).bg(header_bg),
+                        ));
+                    }
+                }
             }
             if let Some(mark) = mark {
                 spans.push((
@@ -573,7 +297,7 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
 /// Draw the studio header into `area` — the workspace's own row
 /// where the tab bar was — plus the pill at its right end. Returns
 /// the studio-name hit rect in `hits.studio_header` and the pill's
-/// in `hits.lot_pill`.
+/// in `hits.lot_pill` / `hits.lot_pill_segments`.
 pub(crate) fn render_studio_header(
     buf: &mut Buffer,
     area: Rect,
@@ -588,7 +312,8 @@ pub(crate) fn render_studio_header(
     if area.is_empty() {
         return;
     }
-    buf.set_style(area, Style::default().bg(palette.elevation().surface));
+    let header_bg = palette.elevation().surface;
+    buf.set_style(area, Style::default().bg(header_bg));
     let pill_w = pill_width(&lot.counts, tier, lot.agent);
     let name_rows = area.width.saturating_sub(pill_w.saturating_add(1));
     let mut x = area.x;
@@ -604,6 +329,27 @@ pub(crate) fn render_studio_header(
         put_text(buf, x, area.y, width, &clipped, style);
         x = x.saturating_add(width);
     }
+    if let HeaderKind::Role {
+        runner,
+        model,
+        effort,
+        ..
+    } = &header.kind
+    {
+        let room = right.saturating_sub(x) as usize;
+        if let Some(meta) =
+            fit_role_meta(runner.as_deref(), model.as_deref(), effort.as_deref(), room)
+        {
+            put_text(
+                buf,
+                x,
+                area.y,
+                display_width(&meta).min(right.saturating_sub(x)),
+                &meta,
+                Style::default().fg(palette.subtext0).bg(header_bg),
+            );
+        }
+    }
     if let Some(key) = &header.key {
         hits.studio_header = Rect::new(
             area.x,
@@ -613,7 +359,7 @@ pub(crate) fn render_studio_header(
         );
         hits.studio_key = Some(key.clone());
     }
-    hits.lot_pill = render_pill(
+    render_pill_recorded(
         buf,
         Rect::new(area.right().saturating_sub(pill_w), area.y, pill_w, 1),
         &lot.counts,
@@ -621,5 +367,10 @@ pub(crate) fn render_studio_header(
         lot.agent,
         lot.spin,
         palette,
+        hits,
     );
 }
+
+#[cfg(test)]
+#[path = "lot_tests.rs"]
+mod tests;

@@ -191,9 +191,8 @@ async fn lower_section_arrows_walk_hollywood_ask_live_and_input_without_looping(
     app.reconcile_published_view();
     app.area = (120, 30);
     alt_y(&mut app);
-    // `Tab` from Compose lands on the first waiting item (`Wait::Hollywood`).
-    key(&mut app, hc_vt::Key::Tab);
-
+    // Smart Alt+Y lands straight on the blocking `Wait::Hollywood` (`Resting`).
+    assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
     // ↓ walks past Talk(8) -> HollywoodLive -> Input and clamps at Input.
     let mut visited = vec![app.hollywood.selected.clone().unwrap()];

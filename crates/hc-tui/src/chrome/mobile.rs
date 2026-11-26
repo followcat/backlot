@@ -116,7 +116,7 @@ pub(crate) fn render_mobile_header(
     render_header_status(buffer, status, snapshot, config, lot);
     if pill_w > 0 {
         let lot = lot.unwrap();
-        hits.lot_pill = super::lot::render_pill(
+        super::lot::render_pill_recorded(
             buffer,
             Rect::new(
                 status
@@ -131,6 +131,7 @@ pub(crate) fn render_mobile_header(
             lot.agent,
             lot.spin,
             palette,
+            hits,
         );
     }
     render_header_button(buffer, button, snapshot, config);

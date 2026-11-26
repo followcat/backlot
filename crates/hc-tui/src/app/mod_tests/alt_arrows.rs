@@ -441,10 +441,7 @@ async fn the_header_follows_the_switch_wide_and_mobile() {
     assert_eq!(app.focused.as_deref(), Some("t7"));
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(
-        text.contains("night-owl › owl-producer"),
-        "wide header: {text}"
-    );
+    assert!(text.contains("night-owl › Ⓟ"), "wide header: {text}");
     // The mobile header keeps the same `id › part` shape.
     let backend = draw_to(&mut app, 40, 24);
     let text = screen_lines(&backend).join("\n");

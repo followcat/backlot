@@ -220,10 +220,33 @@ impl App {
 
     // ---------- the toggle ----------
 
-    /// Expand the sheet into `Compose` on `Target::Input` when `[hollywood]`
-    /// is set (waiting items remain visible above), or keep wait/frame
-    /// landing when unconfigured. Preserves any parked `input` draft.
-    fn hollywood_enter_expanded(&mut self) {
+    /// First waiting item matching a clicked pill bucket.
+    pub(crate) fn hollywood_bucket_target(
+        &self,
+        action: crate::chrome::lot::PillAction,
+    ) -> Option<Target> {
+        use crate::chrome::lot::PillAction;
+        let bucket = match action {
+            PillAction::Blocking => hollywood::WaitBucket::Blocking,
+            PillAction::Asks => hollywood::WaitBucket::Asks,
+            PillAction::Cards => hollywood::WaitBucket::Cards,
+            PillAction::Ready => hollywood::WaitBucket::Ready,
+            PillAction::Default => return None,
+        };
+        let machines = self.panel_summaries();
+        let status = hollywood::status_of(&self.view);
+        hollywood::waiting_items(&machines, &status)
+            .into_iter()
+            .find(|w| hollywood::WaitBucket::of(w) == bucket)
+            .map(|w| w.target())
+    }
+
+    /// Expand the Call Sheet: bucket clicks jump to the first item of that
+    /// bucket (`Resting`); default openings (`Alt+Y` or non-bucket pill click)
+    /// jump to the first blocking wait when `blocking > 0`, otherwise enter
+    /// `Compose` on `Target::Input` when `[hollywood]` is set.
+    pub(crate) fn hollywood_enter_expanded_at(&mut self, action: crate::chrome::lot::PillAction) {
+        use crate::chrome::lot::PillAction;
         self.hollywood.mode = LayerMode::Expanded;
         self.hollywood.chip_index = None;
         self.hollywood.last_upper = None;
@@ -231,7 +254,19 @@ impl App {
         self.hollywood.frame_scroll = 0;
         self.hollywood.scroll = 0;
         self.hollywood.history.reset_nav();
-        if self.has_hollywood_cfg {
+
+        let jumped = match action {
+            PillAction::Default => self.hollywood_bucket_target(PillAction::Blocking),
+            other => self.hollywood_bucket_target(other),
+        };
+        if let Some(target) = jumped {
+            self.hollywood.selected = Some(target.clone());
+            self.hollywood.editing = false;
+            let band = self.hollywood_band();
+            if let Some(index) = band.iter().position(|t| t == &target) {
+                self.hollywood_reveal_card(&band, index);
+            }
+        } else if self.has_hollywood_cfg {
             self.hollywood.selected = Some(Target::Input);
             self.hollywood.editing = true;
         } else {
@@ -243,6 +278,10 @@ impl App {
         self.hollywood_sync_history_from(&machines);
         self.sync_hollywood_seen(&machines);
         self.studio.lot.counts.unread = 0;
+    }
+
+    fn hollywood_enter_expanded(&mut self) {
+        self.hollywood_enter_expanded_at(crate::chrome::lot::PillAction::Default);
     }
 
     /// Open the bar expanded — the toggle's open arm, the start

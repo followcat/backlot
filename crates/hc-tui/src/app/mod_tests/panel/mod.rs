@@ -497,7 +497,7 @@ async fn mobile_60x20_activates_mobile_header_full_pane_and_full_width_overlay()
     let drawn = draw_to(&mut app, 60, 20);
     let header_row = screen_lines(&drawn)[0].clone();
     assert!(header_row.contains("acme-shop"), "{header_row}");
-    assert!(header_row.contains("producer"), "{header_row}");
+    assert!(header_row.contains("acme-shop › Ⓟ"), "{header_row}");
     assert!(header_row.contains("✦1"), "{header_row}");
     let header_area: String = screen_lines(&drawn)[..2].join("\n");
     assert!(header_area.contains("switch"), "{header_area}");

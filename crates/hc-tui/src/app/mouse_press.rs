@@ -147,9 +147,20 @@ impl App {
             return;
         }
         // The lot pill owns its reserved segment before the tab bar's
-        // own hits — it opens the Hollywood bar like `alt+y`.
+        // own hits — bucket clicks jump straight to that bucket; other
+        // clicks toggle the Call Sheet with smart landing.
         if contains(hits.lot_pill, point) {
-            self.hollywood_toggle();
+            if self.hollywood.mode == crate::hollywood::LayerMode::Expanded {
+                self.hollywood_toggle();
+            } else {
+                let action = hits
+                    .lot_pill_segments
+                    .iter()
+                    .find(|(rect, _)| contains(*rect, point))
+                    .map(|(_, action)| *action)
+                    .unwrap_or(crate::chrome::lot::PillAction::Default);
+                self.hollywood_enter_expanded_at(action);
+            }
             return;
         }
         // The studio header's name focuses the dock and sets `StudioFocus`

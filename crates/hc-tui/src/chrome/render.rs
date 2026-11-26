@@ -155,6 +155,7 @@ pub(crate) struct ShellHitMap {
     /// The lot pill's segment at the bar's right end — clicking it
     /// toggles the Hollywood bar.
     pub lot_pill: Rect,
+    pub lot_pill_segments: Vec<(Rect, super::lot::PillAction)>,
     /// The studio name inside a studio header — clicking it focuses
     /// the dock on that studio.
     pub studio_header: Rect,
@@ -443,7 +444,7 @@ pub(crate) fn render_shell(
                 &mut hits,
             );
             if pill_w > 0 {
-                hits.lot_pill = super::lot::render_pill(
+                super::lot::render_pill_recorded(
                     buffer,
                     Rect::new(layout.tab_bar.right() - pill_w, layout.tab_bar.y, pill_w, 1),
                     &lot.map(|l| l.counts).unwrap_or_default(),
@@ -451,6 +452,7 @@ pub(crate) fn render_shell(
                     lot.is_some_and(|l| l.agent),
                     lot.map_or(0, |l| l.spin),
                     &config.palette,
+                    &mut hits,
                 );
             }
         }
