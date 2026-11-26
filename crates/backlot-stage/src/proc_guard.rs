@@ -50,6 +50,7 @@ pub(crate) enum CliVerb<'a> {
     PermsRevoke,
     ServerControl,
     HollywoodControl,
+    DesignSign,
     Approve { person: &'a str },
 }
 
@@ -231,6 +232,22 @@ pub(crate) fn check_cli_gate_with(
             "switching hollywood is the person's call",
             "; propose a setup card with 'backlot hollywood propose setup ...' instead",
         ),
+        CliVerb::DesignSign => {
+            refuse_role_gate(
+                env_role,
+                anc.as_ref(),
+                "signing off the opening design is the user's call",
+                "",
+            )?;
+            if let Some(flag_role) = common.role.as_deref()
+                && flag_role != "user"
+            {
+                return Err(Fail::refused(format!(
+                    "signing off the opening design is the user's call — cannot run --as '{flag_role}'"
+                )));
+            }
+            Ok(())
+        }
         CliVerb::Approve { person } => {
             if let Some(a) = anc {
                 let anc_role = a.effective_role().ok_or_else(|| {
@@ -412,6 +429,7 @@ fn check_backlot_args(args: &[String], role: Option<&str>) -> Option<String> {
         ["hollywood", "switch" | "setup", ..] => {
             Some("switching hollywood is the person's (backlot hollywood switch|setup)".into())
         }
+        ["design", "sign", ..] => Some("self-approval blocked (backlot design sign)".into()),
         ["approve", ..] => {
             if !matches!(role, Some("producer" | "director")) {
                 return Some("self-approval blocked (backlot approve)".into());

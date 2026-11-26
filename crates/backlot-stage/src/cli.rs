@@ -49,6 +49,7 @@ const COMMANDS: &[&str] = &[
     "guard",
     "hollywood",
     "card",
+    "design",
     "perms",
     "runners",
     "repos",
@@ -383,7 +384,9 @@ pub(crate) fn exec_event(
         // records it (`--as`/`BACKLOT_ROLE` may still override).
         Cmd::StudioNew { .. }
         | Cmd::Recast { .. }
-        | Cmd::StudioCast(crate::args::CastCmd::Set { .. }) => Caller {
+        | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
+        | Cmd::Design(crate::args::DesignCmd::Sign { .. })
+        | Cmd::Design(crate::args::DesignCmd::Note { .. }) => Caller {
             studio: studio_name(&common, env)?,
             role: common
                 .role
@@ -601,6 +604,7 @@ pub(crate) fn exec_event(
                 base, env, &caller, change, reason,
             )?))
         }
+        Cmd::Design(dcmd) => Some(crate::verbs_design::run(base, env, &caller, dcmd)?),
         other => {
             let built = commands::build(&caller, other, env, base)?;
             let recast_note = std::cell::Cell::new(None);

@@ -34,6 +34,13 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             let mut out = std::io::stdout().lock();
             Some(report_show(common, env, base, file, &mut out).map(|()| String::new()))
         }
+        Cmd::Design(crate::args::DesignCmd::Show {
+            version,
+            round,
+            json,
+        }) => Some(crate::verbs_design::design_show(
+            common, env, base, *version, *round, *json,
+        )),
         Cmd::StudioNew {
             dry_run: true,
             interactive: false,

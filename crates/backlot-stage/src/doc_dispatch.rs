@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::cli::{self, Caller, Env, Fail};
 use crate::config::HollywoodCfg;
 use crate::verbs;
+use crate::verbs_design;
 use crate::verbs_hwood;
 
 /// Dispatch one validated [`ReqAction`] as `Caller::doc_user` through the
@@ -197,6 +198,23 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
                 dry_run,
                 json,
             )?)
+        }
+        ReqAction::DesignSign {
+            studio,
+            skip,
+            reason,
+            note,
+        } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(studio);
+            to_json(verbs_design::design_sign(
+                base, &caller, skip, reason, note,
+            )?)
+        }
+        ReqAction::DesignStartRound { studio } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(studio);
+            to_json(verbs_design::design_start_round(base, &caller)?)
         }
         ReqAction::Version => {
             unreachable!("the version probe is dispatched by doc_dispatch_studio")
