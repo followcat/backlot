@@ -46,3 +46,7 @@ are ignored while `source = "herdr"` is set.
 - An unknown theme name falls back to `catppuccin` and says so in the notice line, with the list of valid names.
 - A `[theme]` table that cannot be read (a number where a name belongs, for example) gives the `backlot` theme and one
   notice. A `source` other than `"backlot"` or `"herdr"` is treated as `"backlot"`, with a notice.
+
+## Modal popups and elevation
+
+All bundled RGB themes derive tonal surface, elevated modal overlay, dimmed backdrop, drop-shadow, and subdued divider tokens from their own palette colours using relative luminance and CIE lightness — nothing is hard-coded per theme name, and light themes invert cleanly. Floating popups (`peek`, `Alt+F`, ephemeral popups), dialogs, wizards, navigator, help, settings, Task Sheet, and the Reader share dimmed backdrops, 1-cell outer gutters, rounded borders, internal breathing padding, and 1-cell drop shadows (context menus keep rounded borders, padding, and drop shadows without dimming the full screen). Inside floating VT popups, non-`backlot` Herdr themes still preserve terminal-default translucency. To turn either depth layer off globally, set `[ui] popup_backdrop = "none"` or `[ui] popup_shadow = false` in `~/.config/herdr/config.toml`.

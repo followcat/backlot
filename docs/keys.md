@@ -407,10 +407,7 @@ A locked keyboard sends its keys to the shown float, not to the pane behind it, 
 float. Plain `PageUp` and `PageDown` page the float's scrollback as described under
 [Scrolling a pane](#scrolling-a-pane).
 
-The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
-the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on
-the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent
-while the float is focused and turns muted while the keyboard is locked (`Ctrl+G`).
+Both persistent floats and one-shot popups draw a unified modal frame: the background dims, a 1-cell outer gutter and rounded `╭╮╰╯` border lift the popup onto an elevated surface, and a 1-cell drop shadow sits right and below (Herdr themes still keep terminal-default cells translucent inside the VT area). Persistent floats add a rich title carrying the binding, owning tab, and program, with the hide chord hinted on the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent while focused and turns muted while the keyboard is locked (`Ctrl+G`). You can toggle backdrop dimming and shadows in `~/.config/herdr/config.toml` via `[ui] popup_backdrop` (`"dim"` or `"none"`) and `popup_shadow` (`true` or `false`).
 
 ```text
 ╭ float alt+f — work — zsh          alt+f hide · esc sends to program ╮
@@ -421,8 +418,6 @@ while the float is focused and turns muted while the keyboard is locked (`Ctrl+G
 ╰───────────────────────────────────────────────────────────────────╯
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ```
-
-One-shot popups keep the plain square frame.
 
 ## Pasting text and images
 

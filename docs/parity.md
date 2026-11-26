@@ -983,3 +983,26 @@ Everything else on the compared surfaces still diffs normally.
   covered pane's tails sat under the help/menu/navigator rows (two
   cells at 80 columns, one at 64/40). `wide_tail_slot_reemits_when_head_narrows`
   covers the reveal.
+- **Wide graphemes along popup and shadow edges.** Deliberate: `chrome::wide::blank_wide_edges`
+  walks left and right edges (and 1-column drop shadow edges) before any popup clear or fill,
+  blanking wide heads that straddle into a popup/shadow column, blanking revealed tails and
+  orphaned `CellDiffOption::Skip` slots to the right, and keeping adjacent rounded borders
+  intact instead of skipping or halving multi-cell glyphs.
+- **Modal popup depth, elevation, and chrome.** Deliberate: every modal overlay (`help`,
+  `help_launcher`, `help_picker`, `navigator`, `settings`, `update_modal`, `dialogs`,
+  `studio_dialogs`, `new_studio`, `hw_setup`, `sheet`, `hollywood` reader, `peek`, and
+  ephemeral or persistent `popup` floats) routes through `chrome::popup_frame` instead of
+  `Modifier::DIM`-only dim loops, unpadded `panel_bg` boxes, or plain square frames on
+  ephemeral popups and navigator/peek. Backgrounds outside the popup attenuate via
+  `Palette::elevation()` perceptual `dim_bg` blending (`55%` dark / `50%` light on RGB
+  themes, `Modifier::DIM` on ANSI/16-color `terminal`), frames lift onto an elevated opaque
+  `overlay` surface (`Terminal` popups preserve Herdr-theme VT translucency inside `inner`),
+  rounded `╭╮╰╯` borders pair with a 1-cell outer gutter, interior breathing padding (`2/1`
+  on standard modals; `0/0` border pad on `BorderJoined` panels whose body keeps 2-column
+  horizontal and 1-row vertical margins), and a `(1, 1)` 1-cell translucent drop shadow.
+  Compact context menus (`PopupChrome::Menu`) use rounded borders, `1/0` padding, and drop
+  shadows without full-screen dim or outer gutter. Under tight terminal dimensions, geometry
+  shrinks outer gutter (`1 -> 0`) first, then interior padding (`2 -> 1 -> 0` H, `1 -> 0` V)
+  before clamping content; hit boxes cover gutter plus border while excluding the drop
+  shadow. `[ui] popup_backdrop` (`"dim"` default, or `"none"`) and `[ui] popup_shadow`
+  (`true` default, or `false`) remain configurable.
