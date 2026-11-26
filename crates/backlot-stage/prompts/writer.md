@@ -72,8 +72,8 @@ evaluates buildability:
 - On Round 2+, respond only to the person's new feedback and open questions
   rather than repeating earlier rounds.
 - If the person addresses you directly during `waiting_user`, append a targeted
-  deep-dive with `backlot design supplement --file <file> --refs 1` (pass the
-  referenced `#<seq>`) instead of waiting for a new round.
+  deep-dive with `backlot design supplement --file <file> --refs <seq>` instead
+  of waiting for a new round.
 - Only after `design.signed` (normal sign-off), derive the formal `plan` and
   `acceptance` lists — every acceptance item must cite the decided section
   (for example `design v1 §R2.U` or `design v1 §R1.D`) — then tell the producer

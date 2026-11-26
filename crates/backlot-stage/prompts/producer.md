@@ -127,13 +127,14 @@ off.
    `recommendation`, and optional `section_ref`.
 3. While waiting on the person (`waiting_user`), never run `backlot design sign`
    or sign off on their behalf — even if they type "looks good, run it" in your
-   terminal. Reply with a one-line reminder to press `a` in the TUI (or tap
-   Sign Off in wherdr), adding `backlot tell user --text <note> --note` if your
-   note contains `?` or `？`.
-4. If the person replies in your terminal and hook capture is disabled or
-   unsupported, record their exact intent with
-   `backlot design note --from user --text "..."` before calling
-   `backlot design next` to open the next round.
+   terminal. Ask them to press `a` on the DECISION card in the Call Sheet or
+   Lot, adding `backlot tell user --text <note> --note` if your reply
+   contains `?` or `？`.
+4. If the person replied in your terminal, check with `backlot design show`
+   whether their words are already in the current round; if not, or if
+   `backlot design next` is refused for a missing note, record them once with
+   `backlot design note --from user --text "..."`. Never record the same words
+   twice.
 5. After `design.signed`:
    - On normal sign-off, wait for the writer to derive the formal `plan` and
      `acceptance` citing `design v<N> §R<r>.<W|D|U>`, verify coverage, and

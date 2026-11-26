@@ -270,6 +270,24 @@ fn shell_words(cmd: &str) -> Vec<String> {
     out
 }
 
+/// Neutral stand-ins for placeholder tokens (`<seq>`, `<json>`,
+/// `<file>`, etc.) so readable prompt commands parse through
+/// `args::parse`.
+fn substitute_prompt_placeholder(token: &str) -> String {
+    let mut out = token.to_string();
+    for (needle, val) in [
+        ("<seq>", "1"),
+        ("<n>", "1"),
+        ("<r>", "1"),
+        ("<v>", "1"),
+        ("<json>", "{}"),
+        ("<file>", "/tmp/f"),
+    ] {
+        out = out.replace(needle, val);
+    }
+    out
+}
+
 #[test]
 fn every_command_in_the_prompts_parses() {
     for (kind, name) in [
@@ -285,7 +303,10 @@ fn every_command_in_the_prompts_parses() {
                 continue;
             };
             found += 1;
-            let words = shell_words(cmd);
+            let words: Vec<String> = shell_words(cmd)
+                .into_iter()
+                .map(|w| substitute_prompt_placeholder(&w))
+                .collect();
             assert!(
                 args::parse(&words).is_ok(),
                 "{name}.md: `backlot {cmd}` does not parse"
@@ -1070,14 +1091,18 @@ fn design_gate_required_renders_placeholders_sections_and_commands() {
 
         match kind {
             RoleKind::Producer => {
+                assert!(!text.contains("wherdr"), "producer must not mention wherdr");
                 for want in [
                     "## Opening design discussion (`design_gate = required`)",
                     "`backlot design open`",
                     "`backlot design open --suggest-skip --reason \"<why>\"`",
                     "`backlot design write --slot summary --file <file> --question <json>`",
+                    "`backlot design show`",
                     "`backlot design note --from user --text \"...\"`",
                     "`backlot design next`",
+                    "Never record the same words",
                     "never run `backlot design sign`",
+                    "press `a` on the DECISION card in the Call Sheet or",
                     "`backlot tell user --text <note> --note`",
                 ] {
                     assert!(text.contains(want), "producer misses `{want}`:\n{text}");
@@ -1087,7 +1112,7 @@ fn design_gate_required_renders_placeholders_sections_and_commands() {
                 for want in [
                     "## Opening design proposal",
                     "`backlot design write --slot proposal --file <file>`",
-                    "`backlot design supplement --file <file> --refs 1`",
+                    "`backlot design supplement --file <file> --refs <seq>`",
                 ] {
                     assert!(text.contains(want), "writer misses `{want}`:\n{text}");
                 }
@@ -1096,7 +1121,7 @@ fn design_gate_required_renders_placeholders_sections_and_commands() {
                 for want in [
                     "## Opening buildability review",
                     "`backlot design write --slot buildability --file <file>`",
-                    "`backlot design supplement --file <file> --refs 1`",
+                    "`backlot design supplement --file <file> --refs <seq>`",
                 ] {
                     assert!(text.contains(want), "director misses `{want}`:\n{text}");
                 }

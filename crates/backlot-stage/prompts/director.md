@@ -128,8 +128,7 @@ evaluate buildability and submit
 - Draft a file-disjoint task split and concrete verification plan for the
   recommended option (and note if another option is materially safer to land).
 - If the person addresses you directly during `waiting_user`, answer with
-  `backlot design supplement --file <file> --refs 1` (pass the referenced
-  `#<seq>`).
+  `backlot design supplement --file <file> --refs <seq>`.
 - After `design.signed` and dispatch, execution and delivery review proceed
   unchanged; verify deliveries against the cited design sections in each
   task's acceptance list. If a signed-off assumption proves wrong mid-execution,
