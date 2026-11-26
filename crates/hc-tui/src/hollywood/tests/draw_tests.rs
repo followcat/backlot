@@ -2258,3 +2258,26 @@ fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
     assert!(text.contains(" reply r "), "{text}");
     assert!(text.contains(" ack x "), "{text}");
 }
+
+#[test]
+fn a_studio_needing_upgrade_draws_single_line_in_call_sheet() {
+    let mut value = summary_json();
+    value["studios"][0]["needs_upgrade"] = serde_json::json!(true);
+    value["studios"][0]["unknown_kinds"] = serde_json::json!(["design.opened"]);
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 120, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("! upgrade"), "{text}");
+    assert!(text.contains("! UPGRADE"), "{text}");
+    assert!(text.contains("upgrade backlot"), "{text}");
+}

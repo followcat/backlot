@@ -307,9 +307,10 @@ fn draw_studio(
         on(palette.overlay1, bg),
         palette,
     );
-    // Row 3: what it is doing — or the ledger's error, in red.
+    // Row 3: what it is doing — or the ledger's error / upgrade banner.
     let (what, colour) = match studio.studio.error.as_deref() {
         Some(error) => (error, palette.red),
+        None if studio.studio.needs_upgrade => ("upgrade backlot", palette.peach),
         None => (
             on_set(studio.studio)
                 .and_then(|r| {
@@ -416,6 +417,9 @@ pub(crate) fn studio_line<'a>(
 ) -> (&'static str, &'a str, Color) {
     if studio.error.is_some() {
         return ("×", "error", palette.red);
+    }
+    if studio.needs_upgrade {
+        return ("!", "upgrade", palette.peach);
     }
     if conn == Conn::Offline {
         return ("×", "offline", palette.red);

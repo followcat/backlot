@@ -190,6 +190,7 @@ fn draw_wait(
             palette.accent
         }
         Wait::Hollywood(_) => palette.peach,
+        Wait::Upgrade(_) => palette.peach,
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
         Wait::Stage(_) => palette.peach,

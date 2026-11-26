@@ -148,6 +148,12 @@ impl App {
                     glyph: "✦",
                     launch: Launch::Surface(Surface::CallSheet),
                 }),
+                Wait::Upgrade(item) => rows.push(HelpRow {
+                    label: format!("Upgrade backlot · {}", item.studio.id),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "!",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
                 Wait::Card(card) => {
                     let menu = StudioMenu::card(&card.id);
                     rows.push(HelpRow {

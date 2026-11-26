@@ -265,6 +265,17 @@ pub(super) fn draw_strip_summary(
         );
         return;
     }
+    if studio.studio.needs_upgrade {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("! upgrade", inner_w as usize),
+            Style::default().fg(palette.peach),
+        );
+        return;
+    }
     if studio.studio.ready_to_finish {
         put_text(
             buf,

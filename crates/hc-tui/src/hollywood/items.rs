@@ -195,6 +195,11 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
+        Wait::Upgrade(_) => vec![Chip {
+            label: "open",
+            key: "↵",
+            primary: true,
+        }],
         Wait::Ready(_) => vec![
             Chip {
                 label: "finish",
@@ -357,6 +362,20 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 ("HOLLYWOOD blocked".to_string(), "!")
             }
         }
+        Wait::Upgrade(StudioItem { machine, studio }) => {
+            let machine = machine_label(*machine, local, multi);
+            let machine = if machine.is_empty() {
+                String::new()
+            } else {
+                format!(" · {machine}")
+            };
+            let reason = if studio.unknown_kinds.is_empty() {
+                "upgrade backlot".to_string()
+            } else {
+                format!("upgrade backlot ({})", studio.unknown_kinds.join(", "))
+            };
+            (format!("UPGRADE {}{machine} · {reason}", studio.id), "!")
+        }
         Wait::NoRequirement(StudioItem { machine, studio }) => {
             let machine = machine_label(*machine, local, multi);
             let machine = if machine.is_empty() {
@@ -480,7 +499,7 @@ pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
         Wait::Prompt(item) => &item.role.role,
         Wait::Role(item) => &item.role.role,
         Wait::Hollywood(_) => "hollywood",
-        Wait::NoRequirement(item) => &item.studio.id,
+        Wait::NoRequirement(item) | Wait::Upgrade(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
         Wait::Outward(item) => &item.card.id,
