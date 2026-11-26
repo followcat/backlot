@@ -74,6 +74,7 @@ pub(crate) fn draw_row(
                 Rect::new(rect.x, rect.y, rect.width, 1),
                 rect.height,
                 &waits[*i],
+                waits,
                 hollywood,
                 local,
                 multi,
@@ -135,6 +136,7 @@ fn draw_wait(
     rect: Rect,
     row_height: u16,
     wait: &Wait<'_>,
+    waits: &[Wait<'_>],
     hollywood: &Hollywood,
     local: &str,
     multi: bool,
@@ -151,7 +153,7 @@ fn draw_wait(
     buf.set_style(rect, Style::default().bg(bg));
     let stopped_server = matches!(wait, Wait::Stage(item) if !item.offline && item.machine.is_none())
         && hollywood.server_stopped_cmd.is_some();
-    let (head, glyph) = if stopped_server {
+    let (mut head, glyph) = if stopped_server {
         (
             hollywood.server_stopped_cmd.clone().unwrap_or_default(),
             "◌",
@@ -159,6 +161,10 @@ fn draw_wait(
     } else {
         wait_head(wait, local, multi)
     };
+    let extra = super::rows::group_extra(waits, wait);
+    if extra > 0 {
+        head.push_str(&format!(" · +{extra}"));
+    }
     let glyph_colour = match wait {
         Wait::Prompt(_) => palette.red,
         Wait::Role(item) if item.asks => palette.peach,
@@ -202,7 +208,7 @@ fn draw_wait(
             .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
-    let chips = if stopped_server {
+    let chips = if stopped_server || !selected {
         Vec::new()
     } else {
         chips_of(wait)
@@ -492,7 +498,7 @@ fn draw_input(
             Style::default().fg(palette.accent).bg(palette.surface_dim),
         );
     }
-    let prompt_style = if suppress_highlights {
+    let prompt_style = if suppress_highlights || !selected {
         Style::default().fg(palette.overlay0).bg(field_bg)
     } else {
         Style::default()
@@ -534,12 +540,16 @@ fn draw_input(
             Style::default().fg(palette.text).bg(field_bg),
         );
     } else if hollywood.input.as_str().is_empty() {
+        let placeholder = match hollywood.reply_to.as_ref() {
+            Some((_, role)) => format!("reply to {role}…"),
+            None => "tell hollywood what you need…".to_owned(),
+        };
         put_text(
             buf,
             text.x,
             text.y,
             text.width,
-            &truncate_end("tell hollywood what you need…", text.width as usize),
+            &truncate_end(&placeholder, text.width as usize),
             Style::default()
                 .fg(palette.overlay0)
                 .bg(field_bg)

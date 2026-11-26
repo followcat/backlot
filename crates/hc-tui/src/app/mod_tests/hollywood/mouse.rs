@@ -142,6 +142,7 @@ async fn a_card_apply_chip_runs_apply() {
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
+    app.hollywood.selected = Some(Target::Card("c3".into()));
     draw_to(&mut app, 120, 24);
     let (rect, _, _) = app
         .hollywood_hits
@@ -167,6 +168,7 @@ async fn a_card_cancel_chip_opens_the_reason_dialog() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
+    app.hollywood.selected = Some(Target::Card("c3".into()));
     draw_to(&mut app, 120, 24);
     let (rect, _, _) = app
         .hollywood_hits
@@ -197,6 +199,14 @@ async fn a_prompts_allow_chip_decides_it() {
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
     draw_to(&mut app, 120, 24);
+    app.hollywood.selected = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Prompt(..)))
+        .map(|(_, t)| t.clone());
+    draw_to(&mut app, 120, 24);
+
     let (rect, _, _) = app
         .hollywood_hits
         .chips
@@ -234,6 +244,14 @@ async fn a_stages_start_chip_starts_the_stage() {
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
     draw_to(&mut app, 120, 24);
+    app.hollywood.selected = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Stage(..)))
+        .map(|(_, t)| t.clone());
+    draw_to(&mut app, 120, 24);
+
     let (rect, _, _) = app
         .hollywood_hits
         .chips
@@ -259,6 +277,14 @@ async fn a_ready_rows_finish_chip_runs_finish() {
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
     draw_to(&mut app, 120, 24);
+    app.hollywood.selected = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Ready(..)))
+        .map(|(_, t)| t.clone());
+    draw_to(&mut app, 120, 24);
+
     let (rect, _, _) = app
         .hollywood_hits
         .chips
@@ -430,6 +456,7 @@ async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
     assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     assert_ne!(app.focused.as_deref(), Some("t10"));
+    draw_to(&mut app, 120, 24);
 
     // Clicking the 2nd line directly beneath `[allow y]` hits the chip, not `open`.
     let (chip_rect, _, _) = app

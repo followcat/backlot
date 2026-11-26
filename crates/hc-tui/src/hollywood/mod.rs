@@ -132,6 +132,9 @@ pub(crate) struct Hollywood {
     /// keys (`i` or a click opens it, `Esc` leaves it).
     pub input: TextEditor,
     pub editing: bool,
+    /// `Some((studio, role))` while the compose line is an in-place
+    /// reply to that role's question instead of a line to Hollywood.
+    pub reply_to: Option<(crate::studio::StudioKey, String)>,
     pub history: crate::chrome::history::ComposeHistory,
     /// A card's "Show me" read — `card show <id>` output in a
     /// read-only box over the layer.
@@ -172,6 +175,7 @@ impl Hollywood {
             scroll: 0,
             input: TextEditor::new("", false),
             editing: false,
+            reply_to: None,
             history: Default::default(),
             view: None,
             confirm: None,

@@ -561,3 +561,67 @@ fn hollywood_asking_tracks_the_user_owned_prompt() {
     }))));
     assert!(crate::hollywood::hollywood_asking(&list));
 }
+
+/// One studio contributes one band row: its ask leads the card and
+/// the folded decision count remains in the underlying waits list.
+#[test]
+fn one_studio_rows_asks_fold_the_rest() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][0]["asks"] =
+        serde_json::json!("What should we build? Start small.");
+    value["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 10, "who": "producer", "to": "user", "kind": "tell", "ask": true,
+          "ts_ms": 1, "text": "What should we build? Start small." }
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert_eq!(waits.len(), 3, "ask plus both cards are decisions");
+    let wait_rows: Vec<_> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Wait(i) => Some(waits[*i].target()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        wait_rows,
+        vec![
+            Target::Role(
+                crate::studio::StudioKey::local("acme-shop"),
+                "producer".into()
+            ),
+            Target::Card("c4".into())
+        ]
+    );
+    let acme = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Role(r) if r.asks))
+        .unwrap();
+    assert_eq!(crate::hollywood::rows::group_extra(&waits, acme), 1);
+}
+
+/// READY leads its own studio even though asks sort earlier in the
+/// flat urgency list, absorbing that studio's question row.
+#[test]
+fn ready_absorbs_the_studios_asks() {
+    let mut value = summary_json();
+    value["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    value["studios"][0]["roles"][0]["asks"] = serde_json::json!("Ship it?");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let acme_rows: Vec<_> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Wait(i) => Some(waits[*i].target()),
+            _ => None,
+        })
+        .filter(|t| matches!(t, Target::Ready(k) if k.id == "acme-shop"))
+        .collect();
+    assert_eq!(acme_rows.len(), 1);
+    assert!(!rows.iter().any(|r| matches!(
+        r.target(&waits),
+        Target::Role(k, _) if k.id == "acme-shop"
+    )));
+}

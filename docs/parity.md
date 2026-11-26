@@ -832,7 +832,9 @@ Everything else on the compared surfaces still diffs normally.
   The `● menu` launcher shows its dot while an update
   waits, but its click still does nothing, as before this change; the card is reached through `prefix+u` and the badge.
   When an update and a pending restart are both known, the restart hint wins: the badge shows `↻v`, not `↑v`, because
-  the restart is what blocks the new version.
+  the restart is what blocks the new version. Under width pressure the hint degrades in steps — the full `↑v…` first,
+  then the compact `↑` (or `↻`), still the clickable slice — so a longer running version (e.g. `v0.4.10`) never hides
+  the fact that an update exists; only when even the glyph does not fit does the hint go, then the whole badge.
 - **Waiting status overlay.** Deliberate: the reference has no Waiting
   state. backlot adds `AgentStatus::Waiting` between Working and Idle in
   display priority — `◌`/`waiting`/peach in every status surface — but

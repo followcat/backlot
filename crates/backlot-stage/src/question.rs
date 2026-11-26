@@ -28,6 +28,7 @@ pub(crate) fn in_episode(
     request: Option<&Signal>,
 ) -> bool {
     if combined_work != Work::Blocked
+        || crate::ratelimit::weekly_choice_dialog(screen)
         || trust_dialog(screen)
         || request.is_some()
         || work::recognized_permission(runner, screen)

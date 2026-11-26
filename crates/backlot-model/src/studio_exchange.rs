@@ -27,6 +27,9 @@ pub struct StudioExchange {
     /// Turn kind (`"tell"` for `message.queued`, `"report"` for `report.sent`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// True when this tell carries the explicit person-question mark.
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub ask: bool,
     /// Task id (`t1`, …) for task-bound reports and actor messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
@@ -60,7 +63,7 @@ impl RawTurn<'_> {
 fn is_user_facing_message(m: &Message) -> bool {
     !m.dropped
         && m.source_seq.is_none()
-        && m.purpose.is_none()
+        && (m.purpose.is_none() || m.purpose.as_deref() == Some("ask"))
         && (m.from == "user" || m.to == "user" || m.from == "hollywood")
 }
 
@@ -129,6 +132,7 @@ pub fn studio_exchange(
                     who: cap(&m.from),
                     to: Some(cap(&m.to)),
                     kind: Some("tell".into()),
+                    ask: m.purpose.as_deref() == Some("ask"),
                     task,
                     ts_ms: (m.ts_ms > 0).then_some(m.ts_ms),
                     text,
@@ -151,6 +155,7 @@ pub fn studio_exchange(
                     who: cap(&r.from),
                     to: Some(cap(&r.to)),
                     kind: Some("report".into()),
+                    ask: false,
                     task,
                     ts_ms: (r.ts_ms > 0).then_some(r.ts_ms),
                     text,

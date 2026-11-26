@@ -8,6 +8,9 @@ use backlot_model::event::QUESTION;
 use backlot_model::state::{Attention, Message, replay};
 use backlot_model::testkit::*;
 
+use backlot_model::summary::Work;
+
+use super::in_episode;
 use crate::{notices, stale};
 
 const DIR: &str = "/state/studios/acme-shop";
@@ -111,4 +114,11 @@ fn question_notice_body_and_staleness() {
         stale::stale_reason(&fixed, &pending),
         Some("attention cleared")
     );
+}
+
+/// The weekly quota picker stays out of generic question episodes.
+#[test]
+fn weekly_limit_paid_choice_dialog_is_not_a_question() {
+    let screen = include_str!("../tests/fixtures/claude/weekly-limit.txt");
+    assert!(!in_episode("claude", Work::Blocked, None, screen, None));
 }

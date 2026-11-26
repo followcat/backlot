@@ -10,8 +10,8 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 - `backlot records [--studio <name>] [--all] [--kind <task_kind>] [--json]`
   flags: --studio --all --kind --json
 
-- `backlot tell producer (--file <f> | --text <msg> | --stdin)`
-  flags: --file --text --stdin
+- `backlot tell producer (--file <f> | --text <msg> | --stdin) [--ask]`
+  flags: --file --text --stdin --ask
 
 - `backlot progress (<line> | --file <f> | --text <msg> | --stdin)`
   flags: --file --text --stdin

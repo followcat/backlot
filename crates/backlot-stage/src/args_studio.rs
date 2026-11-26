@@ -733,6 +733,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     let mut role = None;
     let mut src = Source::default();
     let mut text = None;
+    let mut ask = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_TELL)));
@@ -744,6 +745,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             continue;
         }
         match arg.as_str() {
+            "--ask" => ask = true,
             _ if arg.starts_with('-') => {
                 return Err(usage(format!("unexpected argument '{arg}'"), U_TELL));
             }
@@ -782,6 +784,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         Cmd::Tell {
             role: role.ok_or_else(|| usage("missing role", U_TELL))?,
             source: src.one(U_TELL)?,
+            ask,
         },
     ))
 }
@@ -871,6 +874,44 @@ pub(crate) fn repos(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), F
 
 /// `ask --file <f>` or `ask --run [--why <text>] (-- <prog> <args...> | "<cmd>")`.
 pub(crate) fn ask(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    // `ask acknowledged --person <role> --target <seq>` is the user's
+    // receipt for a person question — not the role's `ask --file` flow.
+    if it
+        .peek()
+        .is_some_and(|a| a == "acknowledged" || a == "acknowledge")
+    {
+        it.next();
+        let mut role = None;
+        let mut target = None;
+        while let Some(arg) = it.next() {
+            if common_flag(it, common, &arg, U_ASK)? {
+                continue;
+            }
+            match arg.as_str() {
+                "--person" => role = Some(it.value("--person", U_ASK)?),
+                "--target" => {
+                    target =
+                        Some(it.value("--target", U_ASK)?.parse::<u64>().map_err(|_| {
+                            usage("--target must be a message sequence number", U_ASK)
+                        })?)
+                }
+                _ if eq(&arg, "--person").is_some() => {
+                    role = eq(&arg, "--person").map(String::from)
+                }
+                _ if eq(&arg, "--target").is_some() => {
+                    target = eq(&arg, "--target").and_then(|v| v.parse::<u64>().ok())
+                }
+                _ => return Err(usage(format!("unexpected argument '{arg}'"), U_ASK)),
+            }
+        }
+        return Ok((
+            std::mem::take(common),
+            Cmd::AskAcknowledge {
+                role: role.ok_or_else(|| usage("missing --person", U_ASK))?,
+                target: target.ok_or_else(|| usage("missing or bad --target", U_ASK))?,
+            },
+        ));
+    }
     let mut file = None;
     let mut run = false;
     let mut why = None;

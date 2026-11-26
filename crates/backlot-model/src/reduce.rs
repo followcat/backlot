@@ -635,6 +635,14 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 .targets
                 .insert(seq, SeqTarget::Attention(state.attention.len() - 1));
         }
+        EventKind::AttentionEscalated { target, detail } => {
+            if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
+                && let Some(a) = state.attention.get_mut(*idx)
+            {
+                a.needs_user = true;
+                a.detail = detail.clone();
+            }
+        }
         EventKind::AttentionCleared { target, reason } => {
             let mut touched_role = None;
             if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
@@ -660,7 +668,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             }
             bump_stage_touch(state, role, seq);
         }
-        EventKind::AskAnswered { role, target } => {
+        EventKind::AskAnswered { role, target } | EventKind::AskAcknowledged { role, target } => {
             state.ask_answers.push(AskAnswerRecord {
                 seq,
                 role: role.clone(),

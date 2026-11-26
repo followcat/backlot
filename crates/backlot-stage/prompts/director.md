@@ -81,8 +81,10 @@ A `[backlot]` dispatch from the producer is your cue.
 - Report to the producer at the nodes. Once every task is accepted
   and merged, that is the `integration` node:
   `backlot report --node integration --file <file>`
-- Nobody reads your screen. A question for the producer goes
-  through `backlot tell producer --file <file>`.
+- Nobody reads your screen. A question for the producer goes through
+  `backlot tell producer --file <file>`. Ask the user directly only
+  when the decision is theirs alone; then put the question first and use
+  `backlot tell user --text <question> --ask`. Reports are never questions.
 
 ## Permission prompts (D9)
 

@@ -21,6 +21,18 @@ Roles find backlot's own docs and run read-only commands without a prompt, and a
 
 - **An actor's prompt that waits on an unavailable director is routed to you.** When the director is rate-limited, stalled or gone, an actor's open `permission prompt` — one only the director could answer — is cleared `routed to the user` after a one-minute grace and re-raised `needs the user`, with the reason and the wait in its detail: *the director is rate-limited until 12:10; waiting 14m*. From then the prompt is the person's — the panel and Hollywood's `prompt` notice show it, and the director's `backlot approve` is refused — so a prompt no longer sits for hours behind a stalled director (`docs/studio/guide.md`, `docs/studio/design.md`).
 
+## 0.4.10 — 2026-11-26
+
+### Fixed
+
+- **The update hint survives a narrow sidebar.** When the full `↑v<latest>` doesn't fit the sidebar header — as happens as soon as the running version grows a digit, like `v0.4.10` — the hint now shrinks to a single `↑` (or `↻`) instead of disappearing, and that glyph is still the click that opens the update card. Only when even that doesn't fit does the hint go.
+- **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
+- **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
+
+### Changed
+
+- **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
 ## 0.4.9 — 2026-11-26
 
 A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.

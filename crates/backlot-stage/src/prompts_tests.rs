@@ -645,7 +645,7 @@ fn first_prompt_is_one_line() {
 fn the_producer_records_every_question_as_a_tell() {
     let text = template(RoleKind::Producer);
     assert!(
-        text.contains("`backlot tell user --text <question>`"),
+        text.contains("`backlot tell user --text <question> --ask`"),
         "{text}"
     );
     assert!(
@@ -664,7 +664,7 @@ fn the_producer_records_every_question_as_a_tell() {
     );
     assert!(text.contains("Only when there is no such"), "{text}");
     assert!(
-        text.contains("Every question you put to the user also goes through"),
+        text.contains("Ask the user only when the decision is theirs"),
         "{text}"
     );
 }

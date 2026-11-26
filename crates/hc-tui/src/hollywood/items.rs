@@ -62,6 +62,28 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
+        Wait::Role(item) if item.asks => vec![
+            Chip {
+                label: "reply",
+                key: "r",
+                primary: true,
+            },
+            Chip {
+                label: "ack",
+                key: "x",
+                primary: false,
+            },
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: false,
+            },
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: false,
+            },
+        ],
         Wait::Role(_) => vec![
             Chip {
                 label: "open",
@@ -207,6 +229,25 @@ pub(crate) fn live_head(live: &Live<'_>) -> (String, &'static str) {
     }
 }
 
+fn first_sentence(text: &str) -> &str {
+    let end = text
+        .char_indices()
+        .find(|(_, c)| matches!(c, '.' | '?' | '!' | '\n'))
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(text.len());
+    text[..end].trim()
+}
+
+fn ask_age(studio: &backlot_model::summary::StudioSummary, role: &str) -> Option<String> {
+    let ts = studio
+        .exchange
+        .iter()
+        .filter(|e| e.ask && e.who == role)
+        .filter_map(|e| e.ts_ms)
+        .max()?;
+    super::reader_meta::age_label(Some(ts), crate::update_state::now_ms())
+}
+
 /// The row's glyph and head text.
 pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &'static str) {
     match wait {
@@ -239,11 +280,26 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             } else {
                 format!("{machine} · ")
             };
-            let kind = if *asks { "ASKS" } else { "NEEDS YOU" };
-            (
-                format!("{kind} {} · {machine}{}", studio.id, role.name),
-                if *asks { "?" } else { "×" },
-            )
+            if *asks {
+                let age = ask_age(studio, &role.role)
+                    .map(|a| format!(" · {a}"))
+                    .unwrap_or_default();
+                let question = role.asks.as_deref().unwrap_or("a question");
+                (
+                    format!(
+                        "ASKS {} · {machine}{}{age} — {}",
+                        studio.id,
+                        role.name,
+                        first_sentence(question)
+                    ),
+                    "?",
+                )
+            } else {
+                (
+                    format!("NEEDS YOU {} · {machine}{}", studio.id, role.name),
+                    "×",
+                )
+            }
         }
         Wait::Hollywood(hollywood) if hollywood.attention_user => (
             format!(
