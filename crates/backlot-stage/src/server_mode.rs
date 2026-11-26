@@ -55,6 +55,9 @@ pub(crate) fn daemon_params(
     let mut tenv = BTreeMap::new();
     if spec.set_stage_env {
         tenv.insert("BACKLOT_STAGE".into(), "1".into());
+        if let Some(ms) = env.get("BACKLOT_HOLLYWOOD_PREVIOUS_MS") {
+            tenv.insert("BACKLOT_HOLLYWOOD_PREVIOUS_MS".into(), ms.into());
+        }
     }
     let (argv, line) = match endpoint {
         Endpoint::Local(local) => {

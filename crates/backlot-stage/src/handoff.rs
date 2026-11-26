@@ -14,6 +14,16 @@ pub(crate) const DEFAULT_TIMEOUT_MS: u64 = 90_000;
 pub(crate) const PREVIOUS_RETENTION_MS: u64 = 600_000;
 pub(crate) const COMMITTED_SUMMARY_RETENTION_MS: u64 = 15_000;
 
+/// Retention window for `hollywood-previous` tombstones — defaults to 10 minutes
+/// ([`PREVIOUS_RETENTION_MS`]), overridable via `BACKLOT_HOLLYWOOD_PREVIOUS_MS`
+/// (clamped to `>= 50 ms`) for integration tests.
+pub(crate) fn previous_retention_ms(env: &std::collections::BTreeMap<String, String>) -> u64 {
+    env.get("BACKLOT_HOLLYWOOD_PREVIOUS_MS")
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|ms| ms.max(50))
+        .unwrap_or(PREVIOUS_RETENTION_MS)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum HandoffPhase {

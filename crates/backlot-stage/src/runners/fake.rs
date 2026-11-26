@@ -20,6 +20,9 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     let mut env = std::collections::BTreeMap::new();
     env.insert("FAKE_MODEL".into(), identity.model.clone());
     env.insert("FAKE_SESSION".into(), format!("fake-{}", ctx.terminal));
+    if let Some(prompt) = ctx.prompt {
+        env.insert("FAKE_PROMPT".into(), prompt.to_owned());
+    }
     let hooks = super::claude::hook_setup(ctx);
     env.insert("BACKLOT_HOOK_CMD".into(), hooks.command.clone());
     let override_path = ctx

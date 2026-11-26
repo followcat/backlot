@@ -14,7 +14,7 @@ use crate::cli::{Env, Fail};
 use crate::config::HollywoodCfg;
 use crate::daemon::Stage;
 use crate::discover;
-use crate::handoff::{HandoffPhase, HandoffRecord, PREVIOUS_RETENTION_MS, save_handoff};
+use crate::handoff::{HandoffPhase, HandoffRecord, previous_retention_ms, save_handoff};
 use crate::handoff_term::cleanup_candidate_artifacts;
 use crate::hstage;
 use crate::reconcile::LiveTerminal;
@@ -70,7 +70,7 @@ impl Stage {
         let mut sweep_old_immediately = !self.labels_ok.get();
         if let Some(old) = old_addr.as_deref() {
             if self.labels_ok.get() {
-                let until = now_ms.saturating_add(PREVIOUS_RETENTION_MS);
+                let until = now_ms.saturating_add(previous_retention_ms(&self.env_vars));
                 let prev_labels = BTreeMap::from([
                     ("backlot.role".to_string(), "hollywood-previous".to_string()),
                     ("backlot.previous_until_ms".to_string(), until.to_string()),
@@ -258,10 +258,7 @@ pub(crate) fn hstage_run_params(
     env: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
 ) -> RunParams {
-    RunParams {
-        name: Some(name.to_string()),
-        ..crate::hlife::hrun_params(argv, cwd, env, labels)
-    }
+    crate::hlife::hrun_params_named(argv, cwd, env, labels, name)
 }
 
 pub(crate) fn discover_cand_session(
