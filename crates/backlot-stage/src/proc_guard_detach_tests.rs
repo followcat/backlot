@@ -35,13 +35,22 @@ fn have(tool: &str) -> bool {
 
 /// A process that records its own PID and then lives long enough to be
 /// inspected, exactly as a `backlot card apply` would.
+///
+/// The PID file is the readiness signal: it names a `sleep` child that
+/// is already running, and it appears only after that child exists. The
+/// detach tricks return before their payload has settled (`setsid -f`
+/// forks and exits at once), so a reader that took the wrapper's PID and
+/// inspected it immediately could catch the payload before it was ready.
+/// Writing the sleeping child's PID *after* starting it closes that
+/// window: when the file is there, the process it names is alive, with
+/// the role's environment inherited, and stays alive for a minute.
 fn payload(dir: &TestDir, tag: &str) -> PathBuf {
     let pid_file = dir.join(format!("{tag}.pid"));
     let script = dir.join(format!("{tag}.sh"));
     fs::write(
         &script,
         format!(
-            "#!/bin/sh\nprintf %s \"$$\" > '{}'\nexec sleep 60\n",
+            "#!/bin/sh\nsleep 60 &\nprintf %s \"$!\" > '{}'\nwait\n",
             pid_file.display()
         ),
     )
