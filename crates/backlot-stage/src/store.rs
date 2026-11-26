@@ -403,16 +403,20 @@ where
         }
     }
 
+    // One buffer, one `write_all`: a torn append can land a prefix of
+    // the batch but never interleave or reorder within it, and a single
+    // write before the fsync is the cheapest durable shape.
+    let mut buf = Vec::new();
+    for event in &stamped {
+        serde_json::to_writer(&mut buf, event)
+            .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
+        buf.push(b'\n');
+    }
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&events_path)?;
-    for event in &stamped {
-        let mut line = serde_json::to_string(event)
-            .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
-        line.push('\n');
-        f.write_all(line.as_bytes())?;
-    }
+    f.write_all(&buf)?;
     f.sync_data()?;
     Ok(stamped)
 }

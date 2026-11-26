@@ -116,9 +116,11 @@ fn propose(
     let events = store::append_hollywood_many(&hdir, |state, seq| {
         check_answers(state, answers)?;
         // The older cards this proposal replaces close right after it,
-        // so nothing can apply both; the proposal is the first event and
-        // its seq is the card's id — the one its own file copies are
-        // named under.
+        // so nothing can apply both. The proposal MUST be the first
+        // event: its seq is the card's id (the copies are named under
+        // it), and a torn tail that drops the trailing supersedes leaves
+        // both cards open as before — never an old card superseded by a
+        // card that does not exist.
         let superseded = state.open_cards_superseded_by(&action);
         let card_seq = seq;
         let (stored, copies) =

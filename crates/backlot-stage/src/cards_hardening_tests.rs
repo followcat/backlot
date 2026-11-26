@@ -353,6 +353,46 @@ fn a_newer_recast_supersedes_the_older_one() {
     assert!(list.contains("superseded"), "{list}");
 }
 
+/// The proposal line is appended BEFORE the supersede lines it carries,
+/// so a torn tail can only drop a supersede (both cards stay open, as
+/// before), never record an old card superseded by a card that does not
+/// exist.
+#[test]
+fn the_proposal_precedes_its_supersedes_in_the_ledger() {
+    let (scratch, env) = scratch();
+    fake_studio(&scratch, &env);
+    ok(
+        &env,
+        "hollywood propose recast --studio acme-shop --person director \
+         --runner fake --model model-b --effort high --why first --as hollywood",
+    );
+    ok(
+        &env,
+        "hollywood propose recast --studio acme-shop --person director \
+         --runner fake --model model-c --effort high --why second --as hollywood",
+    );
+    let (events, _) = store::load_hevents(&store::hollywood_dir(&scratch.dir)).unwrap();
+    let proposed = events
+        .iter()
+        .rposition(|e| matches!(e.kind, HollywoodKind::CardProposed { .. }))
+        .expect("a second proposal");
+    let superseded = events
+        .iter()
+        .position(|e| matches!(e.kind, HollywoodKind::CardSuperseded { .. }))
+        .expect("a supersede");
+    assert!(
+        proposed < superseded,
+        "the proposal must land before the supersede"
+    );
+    // And the supersede names the card that now exists.
+    match &events[superseded].kind {
+        HollywoodKind::CardSuperseded { by_card, .. } => {
+            assert_eq!(*by_card, events[proposed].seq, "the proposal's own seq")
+        }
+        other => panic!("expected a supersede, got {other:?}"),
+    }
+}
+
 /// A recast on a different role never supersedes.
 #[test]
 fn a_recast_on_another_role_keeps_both_open() {
