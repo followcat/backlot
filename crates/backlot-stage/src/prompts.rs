@@ -137,6 +137,14 @@ fn fields(
         ("work".into(), work),
         ("branch".into(), branch),
         ("checks".into(), checks),
+        (
+            "actor_cap".into(),
+            state
+                .studio
+                .as_ref()
+                .map_or_else(backlot_model::event::default_max_actors, |s| s.max_actors)
+                .to_string(),
+        ),
     ])
 }
 

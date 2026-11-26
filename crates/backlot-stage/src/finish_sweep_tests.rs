@@ -177,6 +177,7 @@ fn finished_studio(base: &std::path::Path, name: &str) -> PathBuf {
                 checks: Vec::new(),
                 task_budget_s: None,
                 limits: Default::default(),
+                max_actors: backlot_model::event::default_max_actors(),
                 push: Default::default(),
             },
         ),

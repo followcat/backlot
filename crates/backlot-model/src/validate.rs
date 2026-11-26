@@ -74,6 +74,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             checks,
             task_budget_s,
             limits,
+            max_actors,
             push,
             ..
         } => crate::cast::check_runnable(
@@ -89,6 +90,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 checks: checks.clone(),
                 task_budget_s: *task_budget_s,
                 limits: limits.clone(),
+                max_actors: *max_actors,
                 push: push.clone(),
             },
         ),

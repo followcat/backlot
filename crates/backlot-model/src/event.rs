@@ -369,6 +369,11 @@ pub enum EventKind {
         /// Absent on logs that predate the field.
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         limits: BTreeMap<String, u32>,
+        /// The studio-wide actor cap: at most this many actors live at
+        /// once, fixed roles never counting. Absent on logs that
+        /// predate the field reads as [`default_max_actors`].
+        #[serde(default = "default_max_actors")]
+        max_actors: u32,
         /// Studio outward push policy and recorded remote URLs.
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
@@ -402,6 +407,9 @@ pub enum EventKind {
         task_budget_s: Option<u32>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         limits: BTreeMap<String, u32>,
+        /// The studio-wide actor cap; see [`StudioCreated`]'s.
+        #[serde(default = "default_max_actors")]
+        max_actors: u32,
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
         /// The `c<n>` marker when a card carried the change out — the
@@ -782,6 +790,12 @@ pub fn default_nudge_after_s() -> u32 {
 /// attention (S9a).
 pub fn default_escalate_after_s() -> u32 {
     600
+}
+
+/// The studio-wide actor cap when the cast does not set one — actors
+/// playing at once, fixed roles never counting.
+pub fn default_max_actors() -> u32 {
+    4
 }
 
 impl EventKind {

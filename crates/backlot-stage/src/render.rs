@@ -228,6 +228,10 @@ pub fn status(
     }
     let _ = writeln!(out, "  rework cap {}", studio.rework_cap);
     let _ = writeln!(out, "  stall limit {}s", studio.stall_limit_s);
+    // The studio-wide actor cap: how many actors play now of how many
+    // may — fixed roles never count toward it.
+    let live_actors = backlot_model::limits::live_actors(state);
+    let _ = writeln!(out, "  actors {live_actors}/{}", studio.max_actors);
     // P4a: runner-reported usage — a factual line only while a
     // delivery recorded any of the counters.
     if !state.usage.is_empty() {
@@ -271,9 +275,7 @@ pub fn status(
     ] {
         shown.insert(role);
         let life = match role_state {
-            _ if held.contains_key(role) => {
-                format!("waiting for a {} slot", held[role])
-            }
+            _ if held.contains_key(role) => held[role].waiting_text(),
             Some(r) if r.live => "live".into(),
             Some(r) if r.closed => "closed".into(),
             Some(_) => "lost".into(),
@@ -305,7 +307,7 @@ pub fn status(
     }
     let wanted = backlot_model::wanted::wanted_roles(state);
     for w in &wanted {
-        let Some(runner) = held.get(&w.role) else {
+        let Some(why) = held.get(&w.role) else {
             continue;
         };
         if matches!(w.role.as_str(), "producer" | "director" | "writer") {
@@ -314,9 +316,10 @@ pub fn status(
         shown.insert(w.role.as_str());
         let _ = writeln!(
             out,
-            "    {:<9} {} (waiting for a {runner} slot){}",
+            "    {:<9} {} ({}){}",
             w.role,
             actor_short(&w.actor),
+            why.waiting_text(),
             suffix(&w.role),
         );
     }

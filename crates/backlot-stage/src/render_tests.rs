@@ -172,3 +172,48 @@ fn held_roles_show_the_waiting_line() {
         .unwrap_or_else(|| panic!("no actor line:\n{out}"));
     assert!(actor.contains("waiting for a fake slot"), "{actor}");
 }
+
+/// `backlot status` shows the studio-wide actor count `actors
+/// <live>/<cap>` under the studio header; fixed roles never count.
+#[test]
+fn the_status_line_shows_the_actor_count() {
+    let mut cast_kind = cast("t1", "actor-a", "a");
+    let EventKind::TaskCast { actor, .. } = &mut cast_kind else {
+        unreachable!()
+    };
+    actor.runner = "fake".into();
+    let mut kind = limited_kind(10);
+    let EventKind::StudioCreated { max_actors, .. } = &mut kind else {
+        unreachable!()
+    };
+    *max_actors = 4;
+    let events = vec![
+        ev(1, "user", kind),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "s".into(),
+            },
+        ),
+        ev(4, "director", task_created("t1", "feature", 1)),
+        ev(5, "director", cast_kind),
+        started(6, "producer"),
+        started(7, "director"),
+        started(8, "actor-t1-c1"),
+    ];
+    let out = status(
+        "acme-shop",
+        &replay(&events),
+        &Default::default(),
+        10_000,
+        &Default::default(),
+    );
+    let line = out
+        .lines()
+        .find(|l| l.trim_start().starts_with("actors "))
+        .unwrap_or_else(|| panic!("no actors line:\n{out}"));
+    assert!(line.trim() == "actors 1/4", "{line:?}");
+}

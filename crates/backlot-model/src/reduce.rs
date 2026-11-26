@@ -52,6 +52,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             checks,
             task_budget_s,
             limits,
+            max_actors,
             push,
         } => {
             state.studio = Some(StudioConfig {
@@ -70,6 +71,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 checks: checks.clone(),
                 task_budget_s: *task_budget_s,
                 limits: limits.clone(),
+                max_actors: *max_actors,
                 push: push.clone(),
             });
             state.targets.insert(seq, SeqTarget::Studio);
@@ -95,6 +97,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             checks,
             task_budget_s,
             limits,
+            max_actors,
             push,
             card,
         } => {
@@ -109,6 +112,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 cfg.checks = checks.clone();
                 cfg.task_budget_s = *task_budget_s;
                 cfg.limits = limits.clone();
+                cfg.max_actors = *max_actors;
                 // The knobs come from the event; the recorded remote
                 // URLs are facts from the bound repository and stay.
                 let remotes = cfg.push.remotes.clone();

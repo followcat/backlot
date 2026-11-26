@@ -208,3 +208,45 @@ fn a_freed_slot_starts_the_held_role() {
     let actions = reconcile(STUDIO, &state, &live, 11_000);
     assert_eq!(starts(&actions), ["actor-t1-c1"]);
 }
+
+/// The studio-wide actor cap stops a Start the way a runner cap does:
+/// with `max_actors = 1` and one actor live, a second cast gets no
+/// Start.
+#[test]
+fn the_actor_cap_holds_a_start() {
+    let mut kind = limited_kind(10);
+    let EventKind::StudioCreated { max_actors, .. } = &mut kind else {
+        unreachable!()
+    };
+    *max_actors = 1;
+    let events = vec![
+        ev(1, "user", kind),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "s".into(),
+            },
+        ),
+        ev(3, "director", task_created("t1", "feature", 1)),
+        ev(4, "director", task_created("t2", "feature", 1)),
+        ev(5, "director", cast_fake("t1", "actor-a")),
+        ev(6, "director", cast_fake("t2", "actor-b")),
+        started(7, "producer"),
+        started(8, "director"),
+        started(9, "actor-t1-c1"),
+    ];
+    let state = replay(&events);
+    let live = BTreeMap::from([
+        (format!("bl-{STUDIO}-producer"), "a1".to_string()),
+        (format!("bl-{STUDIO}-director"), "a2".to_string()),
+        (format!("bl-{STUDIO}-t1"), "a3".to_string()),
+    ]);
+    let actions = reconcile(STUDIO, &state, &live, 10_000);
+    assert!(
+        starts(&actions).is_empty(),
+        "the second actor waits on the cap: {actions:?}"
+    );
+}

@@ -55,6 +55,7 @@ fn seed_studio(dir: &Path) {
         checks: Vec::new(),
         task_budget_s: None,
         limits: Default::default(),
+        max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
     };
     append::<(), _>(dir, |_, _| {

@@ -256,3 +256,36 @@ fn a_moved_fixed_identity_becomes_a_recast() {
         "{shown}"
     );
 }
+
+/// The actor cap is part of the cast: `show` prints `max_actors`, `set`
+/// records a new value, and a value below one is refused.
+#[test]
+fn the_actor_cap_travels_in_the_cast() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    // The default prints as `max_actors = 4`.
+    let shown = ok(&env, "studio cast show");
+    assert!(shown.contains("max_actors = 4"), "{shown}");
+    let json = ok(&env, "studio cast show --json");
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["max_actors"], 4);
+    // A new value records one `studio.cast` and shows back.
+    let capped = fixture(
+        &scratch,
+        "capped.toml",
+        &format!("max_actors = 2\n{REAL_CAST}"),
+    );
+    let out = ok(&env, &format!("studio cast set --file {capped}"));
+    assert!(out.contains("max_actors 4 → 2"), "{out}");
+    let shown = ok(&env, "studio cast show");
+    assert!(shown.contains("max_actors = 2"), "{shown}");
+    // Below one is a usage error — a studio with no actor slot can
+    // never cast.
+    let zero = fixture(
+        &scratch,
+        "zero-actors.toml",
+        &format!("max_actors = 0\n{REAL_CAST}"),
+    );
+    let msg = usage(&env, &format!("studio cast set --file {zero}"));
+    assert!(msg.contains("max_actors must be at least 1"), "{msg}");
+}

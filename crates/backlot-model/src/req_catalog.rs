@@ -77,6 +77,8 @@ pub struct DefaultCastCatalog {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub limits: BTreeMap<String, u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_actors: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rework_cap: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stall_limit_s: Option<u32>,

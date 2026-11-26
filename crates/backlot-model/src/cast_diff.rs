@@ -281,6 +281,11 @@ fn fields(old: &CastSettings, new: &CastSettings) -> Vec<ValueRow> {
         None => "none".into(),
     };
     row("task_budget_s", budget(old), budget(new));
+    row(
+        "max_actors",
+        old.max_actors.to_string(),
+        new.max_actors.to_string(),
+    );
     row("check_env", list(&old.check_env), list(&new.check_env));
     row(
         "push.protected_branches",
