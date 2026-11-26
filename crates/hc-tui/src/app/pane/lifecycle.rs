@@ -316,8 +316,7 @@ impl Pane {
         self.push_controls();
     }
 
-    /// Test-only: the last layout allocation reported to this pane.
-    #[cfg(test)]
+    /// The last layout allocation reported to this pane.
     pub(crate) fn allocated_size(&self) -> (u16, u16) {
         self.allocated
     }

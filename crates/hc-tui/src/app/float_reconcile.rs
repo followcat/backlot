@@ -9,7 +9,26 @@ use super::float::{FloatEntry, FloatKey};
 use super::popup::{FLOAT_COMMAND_LABEL, FLOAT_OWNER_LABEL, POPUP_LABEL};
 use super::*;
 use crate::chrome::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellEndpoint};
+use crate::config::CustomCommandAction;
 use crate::operations::Action;
+use crate::popup_size::PopupSize;
+
+/// Resolve a persistent float's size from the current `[[keys.command]]`
+/// binding matching `command` (`hc-tui.command`), falling back to the stored
+/// dimensions only when no popup binding matches.
+pub(super) fn resolve_float_size(
+    live: &crate::config::LiveKeybindConfig,
+    command: &str,
+    stored_width: Option<PopupSize>,
+    stored_height: Option<PopupSize>,
+) -> (Option<PopupSize>, Option<PopupSize>) {
+    live.keybinds
+        .custom_commands
+        .iter()
+        .find(|binding| binding.action == CustomCommandAction::Popup && binding.label == command)
+        .map(|binding| (binding.width, binding.height))
+        .unwrap_or((stored_width, stored_height))
+}
 
 impl App {
     /// Split `layout_key(machine, id)` into endpoint + local tab id.
@@ -129,18 +148,21 @@ impl App {
                     created_ms,
                     allow_gone: true,
                 }),
-                None => self.hide_float(
-                    key,
-                    FloatEntry {
-                        terminal,
-                        width: None,
-                        height: None,
-                        restore: false,
-                        created_ms,
-                        seen: true,
-                        kill_sent: false,
-                    },
-                ),
+                None => {
+                    let (width, height) = resolve_float_size(&self.live, &key.command, None, None);
+                    self.hide_float(
+                        key,
+                        FloatEntry {
+                            terminal,
+                            width,
+                            height,
+                            restore: false,
+                            created_ms,
+                            seen: true,
+                            kill_sent: false,
+                        },
+                    );
+                }
             }
         }
     }

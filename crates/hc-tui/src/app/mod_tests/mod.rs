@@ -13,6 +13,8 @@ mod empty_core_workspace;
 mod endpoint_nav;
 mod endpoint_nav_b;
 mod float_draw;
+mod float_size;
+mod float_size_wire;
 mod float_takeover;
 mod floats;
 mod floats_lifecycle;

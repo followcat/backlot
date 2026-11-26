@@ -14,6 +14,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **Forward-compatible read-only unknown ledger events (`EventKind::Unknown`, write guard, stage pause, TUI banner).** Ledgers with valid JSON lines at `v <= LEDGER_VERSION` and an unknown `kind` now load cleanly into `EventKind::Unknown { raw_kind }` (preserving `seq`, `ts_ms`, `by`, counting toward `next_seq`, preserving raw lines byte-for-byte on rewrite or `studio migrate`, and ignoring unknown payloads in state reduction); `store::append_locked` refuses every write with `this ledger has records from a newer backlot (<kinds>); upgrade backlot`; `backlot stage` pauses read-only for that studio while continuing sibling studios and projecting `needs_upgrade: true` + `unknown_kinds` in `plugin.backlot.summary`; and the Lot, Call Sheet, and studio frames display `"upgrade backlot"` (`docs/studio/ledger.md`).
 
+## 0.4.16 — 2026-11-27
+
+### Fixed
+
+- **Persistent floats keep their configured size across restarts and config reloads.** Adopted floats look up `hc-tui.command` in `[[keys.command]]` on adoption, show, hide, and host resize (falling back to the stored or default size only when no binding matches), so an `80%` float stays `80%` instead of collapsing to half the pane.
+
 ## 0.4.15 — 2026-11-27
 
 ### Changed
