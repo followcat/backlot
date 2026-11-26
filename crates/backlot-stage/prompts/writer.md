@@ -51,4 +51,7 @@ producer dispatches to the director.
 
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use
-`backlot tell user --text <question> --ask`. Reports are never questions.
+`backlot tell user --text <question> --ask`. Reports are never
+questions; if a report or update sent to the user holds `?` or `？`
+outside code blocks or URLs, add `--note`
+(`backlot tell user --text <note> --note`).

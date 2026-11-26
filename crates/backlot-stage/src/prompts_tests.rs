@@ -650,6 +650,10 @@ fn the_producer_records_every_question_as_a_tell() {
         "{text}"
     );
     assert!(
+        text.contains("`backlot tell user --text <note> --note`"),
+        "{text}"
+    );
+    assert!(
         text.contains("When no requirement is recorded yet"),
         "{text}"
     );
@@ -668,6 +672,28 @@ fn the_producer_records_every_question_as_a_tell() {
         text.contains("Ask the user only when the decision is theirs"),
         "{text}"
     );
+}
+
+/// Every prompt that instructs `tell user` (producer, director, writer)
+/// shows both `--ask` for questions and `--note` for information that
+/// contains a question mark.
+#[test]
+fn tell_user_prompts_show_both_ask_and_note() {
+    for (kind, name) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Director, "director"),
+        (RoleKind::Writer, "writer"),
+    ] {
+        let text = template(kind);
+        assert!(
+            text.contains("`backlot tell user --text <question> --ask`"),
+            "{name}.md misses --ask form:\n{text}"
+        );
+        assert!(
+            text.contains("`backlot tell user --text <note> --note`"),
+            "{name}.md misses --note form:\n{text}"
+        );
+    }
 }
 
 /// The director is told a candidate is a kind of actor, one candidate
@@ -727,25 +753,41 @@ fn the_producer_never_finishes_the_studio() {
     );
 }
 
-/// `backlot tell user` is in the producer's pre-allowed commands for
-/// every runner with a pre-allow list.
+/// `backlot tell user` (`--ask` and `--note`) is covered by every
+/// studio role's pre-allowed command rules for every runner with a
+/// pre-allow list.
 #[test]
 fn the_producers_tell_user_is_preallowed() {
-    let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", "producer", &[]);
-    assert!(
-        claude.split(',').any(|rule| rule == "Bash(backlot *)"),
-        "{claude}"
-    );
-    for (runner, rules) in [
-        (
-            "cursor",
-            crate::runners::cursor::allow_rules("producer", &[]),
-        ),
-        ("cmd", crate::runners::cmd::allow_rules("producer", &[])),
-    ] {
+    for role in ["producer", "director", "writer", "actor-t1-c1"] {
+        let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", role, &[]);
         assert!(
-            rules.iter().any(|rule| rule == "Shell(backlot)"),
-            "{runner}: {rules:?}"
+            claude.split(',').any(|rule| rule == "Bash(backlot *)"),
+            "{role}: {claude}"
+        );
+        for (runner, rules) in [
+            ("cursor", crate::runners::cursor::allow_rules(role, &[])),
+            ("cmd", crate::runners::cmd::allow_rules(role, &[])),
+        ] {
+            assert!(
+                rules.iter().any(|rule| rule == "Shell(backlot)"),
+                "{runner} {role}: {rules:?}"
+            );
+        }
+        assert!(
+            crate::runners::cline::allow_commands(role, &[])
+                .iter()
+                .any(|cmd| cmd == "backlot"),
+            "cline {role}"
+        );
+    }
+    for line in [
+        "backlot tell user --text \"Should we proceed?\" --ask",
+        "backlot tell user --text \"FYI? fixed\" --note",
+    ] {
+        assert_eq!(
+            crate::guard_rules::refused_command_line(line),
+            None,
+            "{line}"
         );
     }
 }

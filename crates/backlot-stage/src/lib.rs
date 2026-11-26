@@ -138,6 +138,7 @@ mod studio_cast;
 mod studio_fmt;
 mod studio_list;
 mod supervise;
+mod tell_guard;
 mod transcript;
 mod transcript_ext;
 mod transcript_runners;
@@ -369,6 +370,8 @@ mod stall_tests;
 mod store_tests;
 #[cfg(test)]
 mod studio_cast_tests;
+#[cfg(test)]
+mod tell_guard_tests;
 #[cfg(test)]
 mod trust_tests;
 

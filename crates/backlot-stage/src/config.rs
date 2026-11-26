@@ -229,7 +229,8 @@ pub struct HollywoodCfg {
 
 /// The `[stage]` section: the stage daemon's own switches. Today only
 /// `answer_trust` — whether the stage answers Claude Code's first-use
-/// folder-trust dialog itself (the default).
+/// folder-trust dialog and writes agy's per-session `trustedWorkspaces`
+/// (the default).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StageCfg {
     pub answer_trust: bool,

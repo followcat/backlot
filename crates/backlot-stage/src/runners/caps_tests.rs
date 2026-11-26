@@ -168,3 +168,17 @@ fn the_effort_rule_is_the_caps_rule() {
         );
     }
 }
+
+#[test]
+fn agy_caps_and_doc_say_launch_handles_for_folder_trust() {
+    assert_eq!(caps::AGY.folder_trust, caps::FolderTrust::LaunchHandles);
+    let table = super::caps_doc::capabilities_table();
+    let agy_row = table
+        .lines()
+        .find(|line| line.starts_with("| agy |"))
+        .expect("agy row in generated capabilities table");
+    assert!(
+        agy_row.contains("| launch handles |"),
+        "expected launch handles in agy row: {agy_row}"
+    );
+}

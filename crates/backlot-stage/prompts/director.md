@@ -84,7 +84,10 @@ A `[backlot]` dispatch from the producer is your cue.
 - Nobody reads your screen. A question for the producer goes through
   `backlot tell producer --file <file>`. Ask the user directly only
   when the decision is theirs alone; then put the question first and use
-  `backlot tell user --text <question> --ask`. Reports are never questions.
+  `backlot tell user --text <question> --ask`. Reports are never
+  questions; if a report or update sent with `tell user` holds `?` or
+  `？` outside code blocks or URLs, add `--note`
+  (`backlot tell user --text <note> --note`).
 
 ## Permission prompts (D9)
 

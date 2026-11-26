@@ -37,6 +37,7 @@ pub(super) fn ctx<'a>(
         stage_env: env,
         role: "producer",
         checks: &[],
+        answer_trust: true,
     }
 }
 
