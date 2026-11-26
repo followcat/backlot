@@ -113,6 +113,8 @@ pub(crate) struct CastFile {
     pub(crate) checks: Vec<crate::checks::CastCheck>,
     #[serde(default)]
     pub(crate) push: CastPush,
+    #[serde(default)]
+    pub(crate) design_gate: Option<DesignGate>,
 }
 
 /// Read and validate a `--cast` file — the same checks `studio new`
@@ -483,6 +485,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         limits: cast.limits,
                         max_actors: cast.max_actors.unwrap_or_else(default_max_actors),
                         push,
+                        design_gate: cast.design_gate.unwrap_or_default(),
                     },
                     by,
                     Vec::new(),

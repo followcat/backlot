@@ -5,10 +5,11 @@
 
 use std::collections::BTreeMap;
 
+use crate::design::{DesignGate, DesignPhase, DesignQuestion};
 use crate::event::Priority;
 use crate::progress::{RoleProgress, RoleRunning, cap_progress, cap_running};
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
-use crate::summary::{RoleSummary, TaskSummary, Work, cap, steady};
+use crate::summary::{DesignSummary, RoleSummary, TaskSummary, Work, cap, steady};
 
 /// A studio is finished when its ledger carries `studio.finished`,
 /// or — for ledgers that predate the marker — when every task it
@@ -274,6 +275,16 @@ fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
         "writer" if state.plans.iter().any(|p| p.seq > seq) => return true,
         _ => {}
     }
+    if state
+        .design
+        .iter()
+        .chain(state.design_history.values())
+        .flat_map(|d| d.rounds.iter())
+        .flat_map(|r| r.entries.iter())
+        .any(|e| e.by == role && e.seq > seq)
+    {
+        return true;
+    }
     let task_id = crate::state::actor_task(role);
     for task in state.tasks.values() {
         if task.created_by == role && task.created_seq > seq {
@@ -482,5 +493,82 @@ pub(crate) fn role_summary(
         // The stage overlays the live idle stretch on the dock view; a
         // pure summary leaves it out.
         idle_since_ms: None,
+    })
+}
+
+const MAX_DESIGN_QUESTIONS: usize = 3;
+
+fn cap_question(q: &DesignQuestion) -> DesignQuestion {
+    DesignQuestion {
+        id: cap(&q.id),
+        prompt: cap(&q.prompt),
+        recommendation: cap(&q.recommendation),
+        section_ref: q.section_ref.as_deref().map(cap),
+    }
+}
+
+fn tasks_dispatched(state: &StudioState, version: u32) -> bool {
+    let mut tasks = state
+        .tasks
+        .values()
+        .filter(|t| t.requirement_version == version)
+        .peekable();
+    tasks.peek().is_some() && tasks.all(|t| t.cast.is_some())
+}
+
+/// Active or finalized opening design projection for `StudioSummary.design` (§4.1).
+pub(crate) fn design_summary(
+    state: &StudioState,
+    studio_snippets: &BTreeMap<u64, String>,
+) -> Option<DesignSummary> {
+    let cfg = state.studio.as_ref()?;
+    if cfg.design_gate != DesignGate::Required {
+        return None;
+    }
+    let d = state.design.as_ref()?;
+    if d.version != state.requirement_version || d.phase == DesignPhase::Idle {
+        return None;
+    }
+    let slim = d.phase == DesignPhase::Signed && tasks_dispatched(state, d.version);
+    let summary = if slim
+        || matches!(
+            d.phase,
+            DesignPhase::SuggestSkip
+                | DesignPhase::WaitingProposal
+                | DesignPhase::WaitingBuildability
+                | DesignPhase::WaitingSummary
+        ) {
+        None
+    } else {
+        d.latest_summary_seq()
+            .and_then(|seq| studio_snippets.get(&seq))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(cap)
+    };
+    let questions = if d.phase == DesignPhase::WaitingUser {
+        d.open_questions()
+            .iter()
+            .take(MAX_DESIGN_QUESTIONS)
+            .map(cap_question)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(DesignSummary {
+        version: d.version,
+        round: d.round,
+        phase: d.phase,
+        waiting_user: d.phase.is_waiting_user(),
+        suggest_skip: d.suggest_skip,
+        skip_reason: d.skip_reason.as_deref().map(cap),
+        doc_file: cap(&d.doc_file),
+        summary,
+        questions,
+        waiting_since_ms: d
+            .phase
+            .is_waiting_user()
+            .then_some(d.waiting_since_ms)
+            .flatten(),
     })
 }

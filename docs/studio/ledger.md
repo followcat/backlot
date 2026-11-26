@@ -57,8 +57,8 @@ prints `already at ledger v1`.
 
 | Kind | Main fields |
 |---|---|
-| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps, `max_actors` |
-| `studio.cast` | the same cast fields `studio.created` holds — roles, candidates, rework cap, timings, `check_env`, declared `checks`, `task_budget_s`, `[limits]`, `max_actors`, push knobs — plus the optional `card`. The newest `studio.cast` (or `studio.created`) is the settings the stage uses; earlier events keep what they recorded. The binding (`repo`, `members`, `no_git`, `mode`) and `push.remotes` are not cast and never change. A fixed role whose identity moves is also recorded as a `role.recast`, appended first. |
+| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps, `max_actors`, `design_gate` |
+| `studio.cast` | the same cast fields `studio.created` holds — roles, candidates, rework cap, timings, `check_env`, declared `checks`, `task_budget_s`, `[limits]`, `max_actors`, `design_gate`, push knobs — plus the optional `card`. The newest `studio.cast` (or `studio.created`) is the settings the stage uses; earlier events keep what they recorded. The binding (`repo`, `members`, `no_git`, `mode`) and `push.remotes` are not cast and never change. A fixed role whose identity moves is also recorded as a `role.recast`, appended first. |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.restart` | role, `fresh`, optional reason |
@@ -86,6 +86,9 @@ prints `already at ledger v1`.
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
 | `outward.requested` | role, optional task, `command`, `cwd`, `argv`, optional `why` — explicit `backlot ask --run` card request |
 | `outward.completed` | `card`, `source_seq`, `outcome` (`Succeeded`/`Failed`/`TimedOut`/`Denied`/`Stale`), optional `exit_code`, `output_tail`, optional `log_file` — `stage` only |
+| `design.opened` | `version`, `round`, `suggest_skip`, optional `reason`, `doc_file` — `producer` or `user` |
+| `design.entry` | `version`, `round`, `slot` (`proposal` / `buildability` / `summary` / `user_input` / `supplement`), `file`, optional `source` (`tell` / `hook` / `producer_note`), `refs`, `questions` |
+| `design.signed` | `version`, `round`, `mode` (`approved` / `skipped`), `doc_file`, optional `note` — `user` only |
 | `correction` | target event, changed fields, reason |
 
 `role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
@@ -269,6 +272,15 @@ no requirement and no tasks is refused too (`nothing was built yet (no requireme
 accidental finish of a just-made studio is caught before the event lands. The finish also answers
 every open `tell user`: a role's `asks` projection reads a `studio.finished` after the question as
 the answering event, so a finished studio shows no open question (L6).
+
+`design.opened`, `design.entry`, and `design.signed` record the opening design discussion per
+requirement version when `design_gate` is `required` (`off` by default on existing and current
+studios). `design.opened` (`producer` or `user`) starts Round 1, posts a skip suggestion, or opens
+Round `N+1` once `user_input` follows the previous round's summary; `design.entry` writes one slot
+in order (`proposal` by `writer`, `buildability` by `director`, `summary` with 0–3 questions by
+`producer`, `user_input` by `user`/`producer`/`stage`, and `supplement` by `writer`/`director`);
+and `design.signed` (`user` only) closes the version as `approved` or `skipped`. A new
+`req.version` resets any unsigned active design and preserves signed versions in `design_history`.
 
 ## Hollywood's ledger
 

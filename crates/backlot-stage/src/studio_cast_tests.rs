@@ -289,3 +289,44 @@ fn the_actor_cap_travels_in_the_cast() {
     let msg = usage(&env, &format!("studio cast set --file {zero}"));
     assert!(msg.contains("max_actors must be at least 1"), "{msg}");
 }
+
+#[test]
+fn design_gate_parses_validates_and_diffs_in_cast_toml() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    let shown = ok(&env, "studio cast show");
+    assert!(shown.contains("design_gate = \"off\""), "{shown}");
+
+    let required_toml = fixture(
+        &scratch,
+        "required.toml",
+        &format!("design_gate = \"required\"\n{REAL_CAST}"),
+    );
+    let parsed = crate::commands::read_cast(std::path::Path::new(&required_toml)).unwrap();
+    assert_eq!(
+        parsed.design_gate,
+        Some(backlot_model::event::DesignGate::Required)
+    );
+
+    let dry = ok(
+        &env,
+        &format!("studio cast set --file {required_toml} --dry-run"),
+    );
+    assert!(dry.contains("design_gate off → required"), "{dry}");
+
+    let out = ok(&env, &format!("studio cast set --file {required_toml}"));
+    assert!(out.contains("design_gate off → required"), "{out}");
+    let shown_after = ok(&env, "studio cast show");
+    assert!(
+        shown_after.contains("design_gate = \"required\""),
+        "{shown_after}"
+    );
+
+    let invalid = fixture(
+        &scratch,
+        "bad-gate.toml",
+        &format!("design_gate = \"sometimes\"\n{REAL_CAST}"),
+    );
+    let err = usage(&env, &format!("studio cast set --file {invalid}"));
+    assert!(err.contains("unknown variant"), "{err}");
+}

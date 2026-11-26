@@ -57,6 +57,7 @@ fn seed_studio(dir: &Path) {
         limits: Default::default(),
         max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
+        design_gate: DesignGate::Off,
     };
     append::<(), _>(dir, |_, _| {
         Ok(Pending {

@@ -16,6 +16,7 @@
 //!   actor is the user's alone — producer and director do not
 //!   deliver.
 
+use crate::design::DesignSlot;
 use crate::event::{EventKind, NewEvent, TaskStateChange};
 use crate::refusal::Refusal;
 use crate::state::{StudioState, actor_task};
@@ -121,6 +122,10 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             EventKind::PlanPublished { .. }
             | EventKind::RoleRefused { .. }
             | EventKind::OutwardRequested { .. } => true,
+            EventKind::DesignEntry {
+                slot: DesignSlot::Proposal | DesignSlot::Supplement,
+                ..
+            } => true,
             EventKind::MessageQueued { purpose, .. } => {
                 purpose.as_deref().is_none_or(|p| p == "ask")
             }
@@ -190,6 +195,29 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, "the user"))
         };
     }
+    match &new.kind {
+        EventKind::DesignOpened { .. } => {
+            if !matches!(role, "producer" | "user") {
+                return Err(cannot(role, who_can(&new.kind)));
+            }
+        }
+        EventKind::DesignEntry { slot, .. } => {
+            let ok = match slot {
+                DesignSlot::Proposal => role == "writer",
+                DesignSlot::Buildability => role == "director",
+                DesignSlot::Summary => role == "producer",
+                DesignSlot::Supplement => matches!(role, "writer" | "director"),
+                DesignSlot::UserInput => matches!(role, "user" | "producer" | "stage"),
+            };
+            if !ok {
+                return Err(cannot(role, who_can(&new.kind)));
+            }
+        }
+        EventKind::DesignSigned { .. } if role != "user" => {
+            return Err(cannot(role, who_can(&new.kind)));
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -249,5 +277,14 @@ fn who_can(kind: &EventKind) -> &'static str {
         EventKind::RoleProgress { .. } => "a studio role",
         EventKind::StudioFinished { .. } => "the user",
         EventKind::StudioReopened { .. } => "the user",
+        EventKind::DesignOpened { .. } => "the producer or the user",
+        EventKind::DesignEntry { slot, .. } => match slot {
+            crate::design::DesignSlot::Proposal => "the writer",
+            crate::design::DesignSlot::Buildability => "the director",
+            crate::design::DesignSlot::Summary => "the producer",
+            crate::design::DesignSlot::Supplement => "the writer or the director",
+            crate::design::DesignSlot::UserInput => "the user, the producer or the stage",
+        },
+        EventKind::DesignSigned { .. } => "the user",
     }
 }

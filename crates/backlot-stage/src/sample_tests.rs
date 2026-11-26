@@ -227,6 +227,7 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                     limits: Default::default(),
                     max_actors: backlot_model::event::default_max_actors(),
                     push: Default::default(),
+                    design_gate: backlot_model::event::DesignGate::Off,
                 },
             ),
             files: Vec::new(),

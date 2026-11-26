@@ -1355,6 +1355,7 @@ fn summary_exposes_current_requirement_file_when_present() {
         limits: BTreeMap::new(),
         max_actors: crate::event::default_max_actors(),
         push: Default::default(),
+        design_gate: crate::event::DesignGate::Off,
     });
     let s0 = summary(
         &[("acme-shop".into(), no_req)],

@@ -209,6 +209,29 @@ pub enum Refusal {
     BadProgress(String),
     /// An invalid `outward.requested` or `outward.completed` payload.
     InvalidOutward(String),
+    /// A design event targeted a non-current requirement version.
+    DesignWrongVersion {
+        current: u32,
+        got: u32,
+    },
+    /// No active design opened for `version`.
+    NoActiveDesign(u32),
+    /// Design for `version` is already signed off.
+    DesignAlreadySigned(u32),
+    /// Design event does not match the current phase.
+    DesignWrongPhase {
+        action: &'static str,
+        phase: crate::design::DesignPhase,
+    },
+    /// Design event carried an unexpected round number.
+    DesignBadRound {
+        expected: u32,
+        got: u32,
+    },
+    /// Opening the next round requires user input after the last summary.
+    DesignNeedsUserInput,
+    /// Invalid design event payload.
+    InvalidDesign(String),
     /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
     NewerRecords(Vec<String>),
 }
@@ -448,7 +471,29 @@ impl fmt::Display for Refusal {
                 write!(f, "limits.{runner} must be at least 1")
             }
             Refusal::CastBadMaxActors => write!(f, "max_actors must be at least 1"),
-            Refusal::BadProgress(msg) | Refusal::InvalidOutward(msg) => f.write_str(msg),
+            Refusal::BadProgress(msg)
+            | Refusal::InvalidOutward(msg)
+            | Refusal::InvalidDesign(msg) => f.write_str(msg),
+            Refusal::DesignWrongVersion { current, got } => write!(
+                f,
+                "current requirement version is v{current}, got design event for v{got}"
+            ),
+            Refusal::NoActiveDesign(v) => {
+                write!(f, "no active design opened for requirement v{v}")
+            }
+            Refusal::DesignAlreadySigned(v) => {
+                write!(f, "design for requirement v{v} is already signed off")
+            }
+            Refusal::DesignWrongPhase { action, phase } => {
+                write!(f, "cannot {action} while design is in phase '{phase}'")
+            }
+            Refusal::DesignBadRound { expected, got } => {
+                write!(f, "expected design round {expected}, got {got}")
+            }
+            Refusal::DesignNeedsUserInput => write!(
+                f,
+                "cannot open next design round before the user has responded"
+            ),
             Refusal::NewerRecords(kinds) => {
                 f.write_str(&upgrade_required_message(kinds.iter().map(String::as_str)))
             }

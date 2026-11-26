@@ -54,6 +54,7 @@ fn seed_studio(dir: &Path, title: &str) {
         limits: Default::default(),
         max_actors: default_max_actors(),
         push: Default::default(),
+        design_gate: DesignGate::Off,
     };
     store::append::<(), _>(dir, |_, _| {
         Ok(Pending {
@@ -89,7 +90,7 @@ fn unknown_kind_parses_counts_next_seq_refuses_writes_and_keeps_corrupt_errors()
     );
 
     let dir = store::studio_dir(&sc.dir, "acme-shop");
-    let unknown_line = r#"{"v":1,"seq":10,"ts_ms":10000,"by":{"role":"producer"},"kind":"design.opened","topic":"auth"}"#;
+    let unknown_line = r#"{"v":1,"seq":10,"ts_ms":10000,"by":{"role":"producer"},"kind":"future.annotated","topic":"auth"}"#;
     let mut f = OpenOptions::new()
         .append(true)
         .open(dir.join("events.jsonl"))
@@ -104,7 +105,7 @@ fn unknown_kind_parses_counts_next_seq_refuses_writes_and_keeps_corrupt_errors()
     assert_eq!(events[2].ts_ms, 10_000);
     assert_eq!(events[2].by.role, "producer");
     assert_eq!(events[2].kind.name(), "unknown");
-    assert_eq!(events[2].kind.raw_name(), "design.opened");
+    assert_eq!(events[2].kind.raw_name(), "future.annotated");
     let state = store::load_state(&dir).unwrap();
     assert_eq!(state.last_seq, 10);
     let next_seq = events.iter().map(|e| e.seq).max().unwrap_or(0) + 1;
@@ -137,7 +138,7 @@ fn unknown_kind_parses_counts_next_seq_refuses_writes_and_keeps_corrupt_errors()
     };
     assert_eq!(
         err_msg,
-        "this ledger has records from a newer backlot (design.opened); upgrade backlot"
+        "this ledger has records from a newer backlot (future.annotated); upgrade backlot"
     );
 
     // CLI write verb surfaces the exact same error.
@@ -156,7 +157,7 @@ fn unknown_kind_parses_counts_next_seq_refuses_writes_and_keeps_corrupt_errors()
     assert!(matches!(cli_err, Fail::Refused(_)), "{cli_err:?}");
     assert_eq!(
         cli_err.message(),
-        "this ledger has records from a newer backlot (design.opened); upgrade backlot"
+        "this ledger has records from a newer backlot (future.annotated); upgrade backlot"
     );
 
     // Malformed lines and v > LEDGER_VERSION keep today's corrupt error behaviour.
@@ -176,7 +177,7 @@ fn unknown_kind_parses_counts_next_seq_refuses_writes_and_keeps_corrupt_errors()
     let newer_dir = TestDir::new("backlot-newer-v");
     seed_studio(&newer_dir, "newer-shop");
     let newer_v = format!(
-        r#"{{"v":{},"seq":2,"ts_ms":2000,"by":{{"role":"user"}},"kind":"design.opened"}}"#,
+        r#"{{"v":{},"seq":2,"ts_ms":2000,"by":{{"role":"user"}},"kind":"future.annotated"}}"#,
         LEDGER_VERSION + 1
     );
     OpenOptions::new()
@@ -204,7 +205,7 @@ fn migrate_preserves_unknown_line_byte_for_byte() {
         serde_json::from_str(fs::read_to_string(dir.join("events.jsonl")).unwrap().trim()).unwrap();
     first.as_object_mut().unwrap().remove("v");
     let line0 = serde_json::to_string(&first).unwrap();
-    let raw_unknown = r#"{"extra":{"z":1,"a":2},"by":{"role":"producer"},"kind":"design.opened","ts_ms":2000,"seq":2,"v":1}"#;
+    let raw_unknown = r#"{"extra":{"z":1,"a":2},"by":{"role":"producer"},"kind":"future.annotated","ts_ms":2000,"seq":2,"v":1}"#;
     fs::write(
         dir.join("events.jsonl"),
         format!("{line0}\n{raw_unknown}\n"),

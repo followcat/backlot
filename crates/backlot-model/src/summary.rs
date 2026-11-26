@@ -141,6 +141,32 @@ pub struct StudioSummary {
     /// Sorted unique unknown event kind names found in this studio's ledger.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_kinds: Vec<String>,
+    /// Active or finalized opening design projection for the current requirement version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<DesignSummary>,
+}
+
+/// Opening design projection for `backlot/1` (`StudioSummary.design`, §4.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesignSummary {
+    pub version: u32,
+    pub round: u32,
+    pub phase: crate::design::DesignPhase,
+    /// True while waiting on the person (`waiting_user` or `suggest_skip`):
+    /// TUI places the `DECISION` item in the warm `?N` (asks) bucket, never `!N`.
+    #[serde(default)]
+    pub waiting_user: bool,
+    #[serde(default)]
+    pub suggest_skip: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
+    pub doc_file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<crate::event::DesignQuestion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_since_ms: Option<u64>,
 }
 
 /// One task's dock projection — the row the panel draws even when no
@@ -544,6 +570,7 @@ pub fn summary_with_running(
                     outward_cards: Vec::new(),
                     needs_upgrade: false,
                     unknown_kinds: Vec::new(),
+                    design: None,
                 });
             }
             continue;
@@ -678,6 +705,7 @@ pub fn summary_with_running(
             outward_cards: Vec::new(),
             needs_upgrade: !state.unknown_kinds.is_empty(),
             unknown_kinds: state.unknown_kinds.iter().cloned().collect(),
+            design: design_summary(state, &studio_snippets),
         };
         if done {
             finished_studios.push(entry);

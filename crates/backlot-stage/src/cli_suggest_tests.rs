@@ -55,6 +55,7 @@ fn studio_created(repo: &str) -> EventKind {
         limits: BTreeMap::new(),
         max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
+        design_gate: DesignGate::Off,
     }
 }
 

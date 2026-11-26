@@ -10,17 +10,17 @@ use crate::validate::validate;
 
 #[test]
 fn unknown_kind_parses_advances_seq_refuses_writes_and_marks_summary() {
-    let raw = r#"{"v":1,"seq":7,"ts_ms":7000,"by":{"role":"producer"},"kind":"design.opened","topic":"auth"}"#;
+    let raw = r#"{"v":1,"seq":7,"ts_ms":7000,"by":{"role":"producer"},"kind":"future.annotated","topic":"auth"}"#;
     let parsed: Event = serde_json::from_str(raw).expect("unknown kind line should parse");
     assert_eq!(parsed.v, 1);
     assert_eq!(parsed.seq, 7);
     assert_eq!(parsed.ts_ms, 7000);
     assert_eq!(parsed.by.role, "producer");
     assert_eq!(parsed.kind.name(), "unknown");
-    assert_eq!(parsed.kind.raw_name(), "design.opened");
+    assert_eq!(parsed.kind.raw_name(), "future.annotated");
     assert!(matches!(
         &parsed.kind,
-        EventKind::Unknown { raw_kind } if raw_kind == "design.opened"
+        EventKind::Unknown { raw_kind } if raw_kind == "future.annotated"
     ));
     assert!(
         serde_json::to_string(&parsed).is_err(),
@@ -68,7 +68,7 @@ fn unknown_kind_parses_advances_seq_refuses_writes_and_marks_summary() {
     .expect_err("ledger with unknown kinds must refuse appends");
     assert_eq!(
         err.to_string(),
-        "this ledger has records from a newer backlot (design.opened); upgrade backlot"
+        "this ledger has records from a newer backlot (future.annotated); upgrade backlot"
     );
 
     let upgraded = serde_json::to_value(summary(
@@ -83,6 +83,6 @@ fn unknown_kind_parses_advances_seq_refuses_writes_and_marks_summary() {
     assert_eq!(upgraded["studios"][0]["needs_upgrade"], true);
     assert_eq!(
         upgraded["studios"][0]["unknown_kinds"],
-        serde_json::json!(["design.opened"])
+        serde_json::json!(["future.annotated"])
     );
 }

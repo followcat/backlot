@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::event::{
-    ActorIdentity, Candidate, CheckDecl, EventKind, PushPolicy, RoleConfigs,
+    ActorIdentity, Candidate, CheckDecl, DesignGate, EventKind, PushPolicy, RoleConfigs,
     default_escalate_after_s, default_max_actors, default_nudge_after_s, default_rework_cap,
     default_stall_limit_s,
 };
@@ -65,6 +65,9 @@ pub struct CastSettings {
     /// kept from the recorded settings on the way out.
     #[serde(default)]
     pub push: PushPolicy,
+    /// Opening design gate policy (`required` or `off`).
+    #[serde(default, skip_serializing_if = "DesignGate::is_off")]
+    pub design_gate: DesignGate,
 }
 
 impl CastSettings {
@@ -91,6 +94,7 @@ impl CastSettings {
             limits: cfg.limits.clone(),
             max_actors: cfg.max_actors,
             push: cfg.push.clone(),
+            design_gate: cfg.design_gate,
         })
     }
 
@@ -123,6 +127,7 @@ impl CastSettings {
             && self.push.protected_branches == other.push.protected_branches
             && self.push.protect_tags == other.push.protect_tags
             && self.push.protect_default_branch == other.push.protect_default_branch
+            && self.design_gate == other.design_gate
     }
 
     /// The `studio.cast` event that records these settings, with the
@@ -141,6 +146,7 @@ impl CastSettings {
             limits: self.limits.clone(),
             max_actors: self.max_actors,
             push: self.push.clone(),
+            design_gate: self.design_gate,
             card,
         }
     }

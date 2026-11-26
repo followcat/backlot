@@ -229,6 +229,7 @@ fn studio_created_kind(
             .max_actors
             .unwrap_or_else(backlot_model::event::default_max_actors),
         push,
+        design_gate: cast.design_gate.unwrap_or_default(),
     })
 }
 
