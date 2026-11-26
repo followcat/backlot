@@ -230,6 +230,9 @@ pub enum Refusal {
     },
     /// Opening the next round requires user input after the last summary.
     DesignNeedsUserInput,
+    /// `task.created`, `task.cast`, `plan.published`, or `dispatch` while
+    /// `design_gate = required` and the current requirement version is unsigned.
+    DesignNotSigned(u32),
     /// Invalid design event payload.
     InvalidDesign(String),
     /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
@@ -494,6 +497,13 @@ impl fmt::Display for Refusal {
                 f,
                 "cannot open next design round before the user has responded"
             ),
+            Refusal::DesignNotSigned(0) => write!(
+                f,
+                "design gate is required, but no requirement version is recorded or signed off yet"
+            ),
+            Refusal::DesignNotSigned(v) => {
+                write!(f, "design for req v{v} is not signed off yet")
+            }
             Refusal::NewerRecords(kinds) => {
                 f.write_str(&upgrade_required_message(kinds.iter().map(String::as_str)))
             }

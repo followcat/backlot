@@ -40,6 +40,9 @@ fn task_key(state: &StudioState, task: Option<&str>) -> (std::cmp::Reverse<u8>, 
 /// next `purpose: "dispatch"` one. Other purposes — a `nudge`, the
 /// producer's `owed` note — carry no command and change nothing.
 fn writer_wanted(state: &StudioState) -> bool {
+    if crate::design_steps::design_gate_active(state) {
+        return crate::design_steps::writer_wanted_for_design(state);
+    }
     state
         .messages
         .iter()

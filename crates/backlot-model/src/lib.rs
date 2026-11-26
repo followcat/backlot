@@ -23,6 +23,7 @@ pub mod casting;
 pub mod correct;
 pub mod design;
 mod design_reduce;
+pub mod design_steps;
 mod design_validate;
 pub mod event;
 mod event_unknown;
@@ -78,6 +79,10 @@ mod cast_tests;
 mod casting_tests;
 #[cfg(test)]
 mod checks_tests;
+#[cfg(test)]
+mod design_gate_steps_tests;
+#[cfg(test)]
+mod design_gate_validate_tests;
 #[cfg(test)]
 mod design_summary_tests;
 #[cfg(test)]

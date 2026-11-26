@@ -28,6 +28,7 @@ mod delete_ops;
 mod delete_render;
 mod deliver;
 mod design_doc;
+mod design_notices;
 mod digest;
 mod discover;
 mod doc;
@@ -208,6 +209,10 @@ mod dep_cmd_tests;
 mod design_cli_tests;
 #[cfg(test)]
 mod design_doc_tests;
+#[cfg(test)]
+mod design_gate_nudge_tests;
+#[cfg(test)]
+mod design_gate_stage_tests;
 #[cfg(test)]
 mod design_remote_tests;
 #[cfg(test)]
