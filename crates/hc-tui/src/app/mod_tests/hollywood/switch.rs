@@ -324,6 +324,14 @@ async fn switch_lifecycle_states_render_call_sheet_pill_and_toasts() {
     dump("rolled_back", &sheet_rb);
     assert!(sheet_rb.contains("hit quota limit"), "{sheet_rb}");
     assert!(sheet_rb.contains("switch"), "{sheet_rb}");
+    for line in sheet_rb.lines().filter(|l| {
+        l.contains("││") && (l.contains("hollywood switch failed") || l.contains("candidate codex"))
+    }) {
+        assert!(
+            line.ends_with("  │"),
+            "toast right border/pad cut: {line:?}"
+        );
+    }
 
     // 5. `committed`: transitions from active id -> updates cfg and shows success toast.
     doc["hollywood"]["handoff"] = serde_json::json!({
