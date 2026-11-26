@@ -88,7 +88,11 @@ fn a_non_clock_resets_phrase_falls_through_to_auto_continue() {
     let total = (local.tm_hour as u64 * 60 + local.tm_min as u64 + 2) % (24 * 60);
     let hour24 = total / 60;
     let minute = total % 60;
-    let hour12 = if hour24 % 12 == 0 { 12 } else { hour24 % 12 };
+    let hour12 = if hour24.is_multiple_of(12) {
+        12
+    } else {
+        hour24 % 12
+    };
     let suffix = if hour24 >= 12 { "pm" } else { "am" };
     let screen = format!(
         "session limit reached · resets soon\nContinuing automatically at {hour12}:{minute:02}{suffix}"
