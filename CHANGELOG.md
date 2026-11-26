@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.8 — 2026-11-26
+
+Change a studio's cast from the client: `Recast…` now works on actors, and `Edit cast…` on the studio menu opens the cast in your editor, shows what would change, and applies it on confirm. The same commands work over `--server`.
+
 ### Added
 
 - **The cast changes from the client, and over `--server`.** The role menu's `Recast…` now sits on actor rows too, and the studio menu's `Edit cast…` opens the effective cast in `$EDITOR`, checks it with `studio cast set --dry-run`, shows the diff and records it on confirm. `studio cast show`, `studio cast set` (the file travels as content, never a path) and an actor `recast` all travel over the server queue when the client is on another machine. Also fixes a flaky `setsid -f` detach test by having its payload signal readiness (`docs/studio/guide.md`, `docs/keys.md`, `docs/studio/server.md`).
