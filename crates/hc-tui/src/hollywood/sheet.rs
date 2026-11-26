@@ -110,6 +110,7 @@ pub(crate) enum Wait<'a> {
     /// blocked screen with no prompt.
     Hollywood(&'a backlot_model::summary::HollywoodSummary),
     Upgrade(StudioItem<'a>),
+    Decision(super::decision::DecisionItem<'a>),
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
@@ -159,6 +160,10 @@ impl Wait<'_> {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
             }),
+            Wait::Decision(item) => super::Target::Decision(StudioKey {
+                machine: item.machine.map(str::to_string),
+                id: item.studio.id.clone(),
+            }),
             Wait::NoRequirement(item) => super::Target::Tell(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -193,6 +198,7 @@ impl Wait<'_> {
             | Wait::Card(_)
             | Wait::Outward(_)
             | Wait::NoRequirement(_) => true,
+            Wait::Decision(item) => !super::decision::detail_lines(item).is_empty(),
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
             Wait::Stage(_) | Wait::Upgrade(_) => false,
         }
@@ -263,6 +269,17 @@ pub(crate) fn waiting_items<'a>(
                     || super::handoff_ui::is_quota_or_error(hw))))
     {
         out.push(Wait::Hollywood(hw));
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
+            if let Some(design) = super::decision::waiting_design(studio) {
+                out.push(Wait::Decision(super::decision::DecisionItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                    design,
+                }));
+            }
+        }
     }
     for m in machines {
         for studio in &m.summary.studios {

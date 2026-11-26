@@ -20,6 +20,10 @@ impl App {
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
         let (key, role_name) = match targets.get(index).cloned() {
+            Some(Target::Design(key)) => {
+                self.design_read(&key);
+                return;
+            }
             Some(Target::Person(key, role_name)) => (key, role_name),
             // The finished studio's row (or compact finished line) names its one reopenable seat.
             Some(Target::ReopenProducer(key)) => (key, "producer".to_owned()),
@@ -95,12 +99,35 @@ impl App {
         }
     }
 
-    /// `a` on a selected outward card row in the Studio Dock.
+    /// `a` on a selected outward card or active design row in the Studio Dock.
     pub(super) fn panel_card_apply(&mut self) {
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        if let Some(Target::OutwardCard(key, id)) = targets.get(index).cloned() {
-            self.run_action(studio_cmds::card_apply_on(key.machine, &id));
+        match targets.get(index).cloned() {
+            Some(Target::OutwardCard(key, id)) => {
+                self.run_action(studio_cmds::card_apply_on(key.machine, &id));
+            }
+            Some(Target::Design(key)) => {
+                self.design_sign_confirm(&key);
+            }
+            _ => {}
+        }
+    }
+
+    /// `r` on a selected design row (or within a studio awaiting design reply/discussion).
+    pub(super) fn panel_reply_selected(&mut self) {
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let key = match targets.get(index).cloned() {
+            Some(Target::Design(key)) => Some(key),
+            Some(target) => target
+                .studio()
+                .filter(|k| self.waiting_design(k).is_some())
+                .cloned(),
+            None => None,
+        };
+        if let Some(key) = key {
+            self.design_panel_reply_or_open(&key);
         }
     }
 

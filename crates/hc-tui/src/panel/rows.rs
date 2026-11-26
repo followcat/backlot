@@ -37,6 +37,8 @@ pub(crate) enum Target {
     Task(StudioKey, String),
     /// `(studio, card id)` — an open outward push/PR card row.
     OutwardCard(StudioKey, String),
+    /// Active opening-design block (`◆ design · R<r> · ...`) inside a studio card.
+    Design(StudioKey),
     /// The `✓ <n> done · <ids>` fold line — Space/Enter opens it.
     Fold(StudioKey),
     /// The `□ <n> closed · <names>` fold line — Space/Enter opens it.
@@ -72,6 +74,7 @@ impl Target {
             | Target::Person(key, _)
             | Target::Task(key, _)
             | Target::OutwardCard(key, _)
+            | Target::Design(key)
             | Target::Fold(key)
             | Target::ClosedFold(key)
             | Target::Talk(key, _)
@@ -189,6 +192,21 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         card: &'a OutwardCardSummary,
     },
+    /// Active opening-design header (`◆ design · R<r> · you|proposal|review|summary`).
+    DesignHeader {
+        studio: StudioRef<'a>,
+        design: &'a backlot_model::summary::DesignSummary,
+    },
+    /// Up to 3 opening-design question or summary preview rows.
+    DesignPreview {
+        studio: StudioRef<'a>,
+        text: String,
+    },
+    /// Opening-design action footer (`r reply  o read  a sign` or `discuss/skip`).
+    DesignActions {
+        studio: StudioRef<'a>,
+        suggest_skip: bool,
+    },
     /// `✓ <n> done · <ids>` — the fold line when 2+ tasks are done.
     AcceptedFold {
         studio: StudioRef<'a>,
@@ -296,6 +314,9 @@ impl Row<'_> {
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::OutwardCard { studio, card } => Target::OutwardCard(studio.key(), card.id.clone()),
+            Row::DesignHeader { studio, .. }
+            | Row::DesignPreview { studio, .. }
+            | Row::DesignActions { studio, .. } => Target::Design(studio.key()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
@@ -401,6 +422,7 @@ fn block_rows<'a>(
     if studio.studio.usage.is_some() {
         out.push(Row::Usage { studio });
     }
+    super::draw_design::push_block_rows(out, studio);
     let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
         let key = studio.key();
         out.push(Row::Person { studio, role });
@@ -532,6 +554,7 @@ fn folded_block_rows<'a>(
             text: upgrade_text(studio.studio),
         });
     }
+    super::draw_design::push_folded_rows(out, studio);
     let folded = super::rows_fold::folded_roles(studio.studio);
     push_grouped_roles(out, studio, &folded, |out, role| {
         out.push(Row::Person { studio, role });

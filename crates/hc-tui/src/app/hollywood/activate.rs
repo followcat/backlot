@@ -70,7 +70,7 @@ impl App {
                 self.hollywood_prompt_open(&studio, &role);
             }
             Some(Target::Hollywood | Target::HollywoodLive) => self.hollywood_focus_terminal(),
-            Some(Target::Tell(key) | Target::Upgrade(key)) => {
+            Some(Target::Tell(key) | Target::Upgrade(key) | Target::Decision(key)) => {
                 self.focus_studio(&key);
                 self.hollywood_leave();
             }

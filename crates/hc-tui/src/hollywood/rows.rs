@@ -41,6 +41,8 @@ pub(crate) enum Target {
     Tell(StudioKey),
     /// A studio whose ledger holds unknown event kinds from a newer backlot.
     Upgrade(StudioKey),
+    /// A studio waiting for user opening-design review, reply, or sign-off.
+    Decision(StudioKey),
     /// A machine whose stage is down (`offline == false`) or that is
     /// unreachable — `r` restarts the stage.
     Stage(Option<String>, bool),
@@ -169,6 +171,7 @@ pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &
         Wait::Prompt(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Role(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Upgrade(item) => Some((item.machine, item.studio.id.as_str())),
+        Wait::Decision(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::NoRequirement(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Outward(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Ready(item) => Some((item.machine, item.studio.id.as_str())),

@@ -50,7 +50,10 @@ layout, so toggling it resizes nothing.
   urgency: user-owned prompts first (a director-owned prompt never lists), then roles with a
   needs-you attention or an unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`,
   which takes the same `y` allow once / `d` deny / `p` peek / Enter as its live row, or
-  `HOLLYWOOD blocked` without a prompt — studios with no requirement, stopped stages and offline
+  `HOLLYWOOD blocked` without a prompt — opening-design decisions (`Wait::Decision`, `◆ DECISION`,
+  counted under warm peach `?A` asks and never `!B` blocking, with round/`skip suggested`, summary,
+  up to 3 `Q1..Q3` items, and `[o] read` / `[r] reply` (`discuss` on `SuggestSkip`) / `[a] sign`
+  (`skip` on `SuggestSkip`) / `[↵] open`), studios with no requirement, stopped stages and offline
   machines that have live studios, then the local core's open cards, then studios ready to finish.
   Every waiting row carries a persistent col-2 severity `▎` bar, bold colored verb, bold studio id,
   and an aligned detail line; selecting a row paints `▌▸` on `raised_row` with action chips on
@@ -110,7 +113,10 @@ on a **stage** row `s` runs `backlot stage start` on that machine, and an offlin
 `Enter` reports the watcher's last read; on a **card** row `a` applies, `x` cancels and `s`
 shows the card (`backlot card show` in a read-only view); on a **ready** row `f` asks
 `finish studio? y/n` inline, and `y` runs `backlot studio finish` on the studio's own
-machine. `i` opens the `tell hollywood` line, `n` opens the new-studio wizard (the bar
+machine; on a **decision** row `o` opens `design/v<N>.md` in the `Design` Reader (`backlot report show --file …`), `r`
+focuses producer reply (or runs `backlot design open` on `SuggestSkip`), and `a` opens the shared confirm
+dialog naming mode (`sign off` vs `skip`) + frozen file (`design/v<N>-final.md` / `design/v<N>.md`)
+before running `backlot design sign [--skip]`. `i` opens the `tell hollywood` line, `n` opens the new-studio wizard (the bar
 collapses first), `?` opens this help, `Esc` or the toggle collapses the bar. A prompt,
 stage or finish action on a remote machine runs there through the shared RPC connection —
 never SSH, never a local spawn; cards and `tell` run on the local core. The bar owns those

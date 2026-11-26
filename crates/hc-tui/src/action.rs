@@ -258,6 +258,7 @@ pub(crate) mod mark {
             Target::Studio(key)
             | Target::Block(key)
             | Target::Strip(key)
+            | Target::Design(key)
             | Target::Fold(key)
             | Target::ClosedFold(key)
             | Target::ReopenProducer(key)

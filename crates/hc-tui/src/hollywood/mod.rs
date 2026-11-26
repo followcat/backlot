@@ -11,6 +11,7 @@
 
 mod band;
 mod chips;
+mod decision;
 mod draw;
 mod frames;
 mod handoff_ui;

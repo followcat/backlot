@@ -276,6 +276,9 @@ pub(crate) fn render(
                     | Row::Person { .. }
                     | Row::Task { .. }
                     | Row::OutwardCard { .. }
+                    | Row::DesignHeader { .. }
+                    | Row::DesignPreview { .. }
+                    | Row::DesignActions { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Stacked(_)
@@ -293,6 +296,9 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::OutwardCard { .. }
+                    | Row::DesignHeader { .. }
+                    | Row::DesignPreview { .. }
+                    | Row::DesignActions { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }
@@ -454,6 +460,39 @@ pub(crate) fn render(
             Row::OutwardCard { studio, card } => {
                 draw_outward_card(buf, rect, card, frame_of(&studio.key()), palette);
             }
+            Row::DesignHeader { studio, design } => {
+                super::draw_design::draw_header(
+                    buf,
+                    rect,
+                    design,
+                    paints,
+                    frame_of(&studio.key()),
+                    palette,
+                );
+            }
+            Row::DesignPreview { studio, text } => {
+                super::draw_design::draw_preview(
+                    buf,
+                    rect,
+                    text,
+                    paints,
+                    frame_of(&studio.key()),
+                    palette,
+                );
+            }
+            Row::DesignActions {
+                studio,
+                suggest_skip,
+            } => {
+                super::draw_design::draw_actions(
+                    buf,
+                    rect,
+                    *suggest_skip,
+                    paints,
+                    frame_of(&studio.key()),
+                    palette,
+                );
+            }
             Row::AcceptedFold { studio, open } => {
                 draw_fold(buf, rect, *studio, *open, frame_of(&studio.key()), palette);
             }
@@ -602,6 +641,9 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::OutwardCard { .. }
+                    | Row::DesignHeader { .. }
+                    | Row::DesignPreview { .. }
+                    | Row::DesignActions { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
                     | Row::Talk { .. }

@@ -237,7 +237,7 @@ impl App {
 
     /// `r` on an ASKS row: compose the person's reply in the sheet's own
     /// compose line, not in a dialog away from the question.
-    fn hollywood_reply(&mut self, studio: &StudioKey, role: &str) {
+    pub(in crate::app) fn hollywood_reply(&mut self, studio: &StudioKey, role: &str) {
         self.hollywood.reply_to = Some((studio.clone(), role.to_string()));
         self.hollywood_select(crate::hollywood::Target::Input);
         self.hollywood.editing = true;
@@ -341,6 +341,15 @@ impl App {
             // `⏎`, so no card arm names `s` anymore.
             (Some(Target::Ready(key)), KeyCode::Char('f')) => {
                 self.hollywood.confirm = Some(Confirm::Finish(key));
+            }
+            (Some(Target::Decision(key)), KeyCode::Char('o')) => {
+                self.design_read(&key);
+            }
+            (Some(Target::Decision(key)), KeyCode::Char('r')) => {
+                self.design_sheet_reply_or_open(&key);
+            }
+            (Some(Target::Decision(key)), KeyCode::Char('a')) => {
+                self.design_sign_confirm(&key);
             }
             // A studio frame's `f`: arm the same finish the READY row
             // arms, but only on the studio that is `ready_to_finish`.

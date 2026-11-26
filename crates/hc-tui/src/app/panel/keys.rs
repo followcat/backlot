@@ -201,6 +201,7 @@ impl App {
                 self.help_state = crate::chrome::help::HelpState::default();
             }
             KeyCode::Char('s') if plain => self.panel_stage_start(),
+            KeyCode::Char('r') if plain => self.panel_reply_selected(),
             KeyCode::Char('a') if plain => self.panel_card_apply(),
             KeyCode::Char('x') if plain => self.panel_card_cancel(),
             KeyCode::Char('f') if plain => self.panel_finish_selected(),
@@ -253,6 +254,9 @@ impl App {
             }
             Some(Target::OutwardCard(key, id)) => {
                 self.run_action(studio_cmds::card_show_on(key.machine, &id));
+            }
+            Some(Target::Design(key)) => {
+                self.design_read(&key);
             }
             Some(Target::Fold(id)) => {
                 if !self.panel.accepted_folds.remove(&id) {

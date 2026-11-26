@@ -644,6 +644,19 @@ pub(crate) fn finish_force(key: &StudioKey) -> Action {
     a
 }
 
+/// `design open --studio <id> --as user` — move from `SuggestSkip` into Round 1.
+pub(crate) fn design_open(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("opening design {}", key.id),
+        format!("opened design {}", key.id),
+        format!("design open {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&["design".into(), "open".into()], key);
+    a
+}
+
 /// `studio restore <archived> --name <name> [--dry-run]` (M3) — the
 /// archived ledger comes back as a finished studio.
 pub(crate) fn restore(
@@ -736,7 +749,6 @@ pub(crate) fn design_sign(
 }
 
 /// Read `design/v<N>.md`, `design/v<N>-final.md`, `design/v<N>/r*.md`, or `plan/*.md` into Reader.
-#[cfg(test)]
 pub(crate) fn design_show(key: &StudioKey, file: &str) -> Action {
     let mut a = action(
         format!("reading {file}"),

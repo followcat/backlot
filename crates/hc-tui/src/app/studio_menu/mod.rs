@@ -262,6 +262,15 @@ impl App {
                 id,
                 !self.machine_reachable(key.machine.as_deref()),
             )),
+            Target::Design(key) => {
+                let studio = crate::panel::data::studio(machines, key)?;
+                Some(StudioMenu::studio(
+                    key,
+                    studio.studio,
+                    !self.machine_stage_running(studio.machine),
+                    !self.machine_reachable(studio.machine),
+                ))
+            }
             Target::Stage(machine) => {
                 let mut menu = StudioMenu::stage(!self.machine_reachable(machine.as_deref()));
                 menu.machine = machine.clone();
