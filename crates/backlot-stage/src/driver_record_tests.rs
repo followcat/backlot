@@ -88,6 +88,7 @@ fn seed_with(dir: &Path, with_check: bool, no_git: bool) {
         limits: Default::default(),
         max_actors: backlot_model::event::default_max_actors(),
         push: Default::default(),
+        design_gate: backlot_model::event::DesignGate::Off,
     };
     if with_check {
         let EventKind::StudioCreated { checks, .. } = &mut created else {

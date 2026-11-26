@@ -58,6 +58,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             limits,
             max_actors,
             push,
+            design_gate,
         } => {
             state.studio = Some(StudioConfig {
                 title: title.clone(),
@@ -77,6 +78,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 limits: limits.clone(),
                 max_actors: *max_actors,
                 push: push.clone(),
+                design_gate: *design_gate,
             });
             state.targets.insert(seq, SeqTarget::Studio);
         }
@@ -103,6 +105,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             limits,
             max_actors,
             push,
+            design_gate,
             card,
         } => {
             if let Some(cfg) = state.studio.as_mut() {
@@ -122,6 +125,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 let remotes = cfg.push.remotes.clone();
                 cfg.push = push.clone();
                 cfg.push.remotes = remotes;
+                cfg.design_gate = *design_gate;
                 // The cap and the declared checks change what the
                 // tasks' reduced statuses and reviews answer — the
                 // same recompute a `correction` of the cap runs.
@@ -312,6 +316,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             file,
             summary,
         } => {
+            crate::design_reduce::apply_req_version(state);
             state.requirement_version = *version;
             state.requirements.push(ReqRecord {
                 version: *version,
@@ -782,6 +787,9 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             }
             state.targets.insert(seq, SeqTarget::Studio);
         }
+        EventKind::DesignOpened { .. }
+        | EventKind::DesignEntry { .. }
+        | EventKind::DesignSigned { .. } => crate::design_reduce::apply_event(state, event),
         EventKind::Correction {
             target,
             reason,

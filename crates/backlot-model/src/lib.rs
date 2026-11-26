@@ -21,6 +21,9 @@ mod cast_diff;
 mod cast_file;
 pub mod casting;
 pub mod correct;
+pub mod design;
+mod design_reduce;
+mod design_validate;
 pub mod event;
 mod event_unknown;
 pub mod hollywood;
@@ -75,6 +78,12 @@ mod cast_tests;
 mod casting_tests;
 #[cfg(test)]
 mod checks_tests;
+#[cfg(test)]
+mod design_summary_tests;
+#[cfg(test)]
+mod design_tests;
+#[cfg(test)]
+mod design_validate_tests;
 #[cfg(test)]
 mod hollywood_card_tests;
 #[cfg(test)]

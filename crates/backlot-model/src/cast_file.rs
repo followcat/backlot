@@ -17,6 +17,7 @@ pub fn to_toml(s: &CastSettings) -> String {
     let _ = writeln!(out, "nudge_after_s = {}", s.nudge_after_s);
     let _ = writeln!(out, "escalate_after_s = {}", s.escalate_after_s);
     let _ = writeln!(out, "max_actors = {}", s.max_actors);
+    let _ = writeln!(out, "design_gate = {}", string(&s.design_gate.to_string()));
     if let Some(budget) = s.task_budget_s {
         let _ = writeln!(out, "task_budget_s = {budget}");
     }

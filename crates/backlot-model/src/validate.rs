@@ -84,6 +84,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             limits,
             max_actors,
             push,
+            design_gate,
             ..
         } => crate::cast::check_runnable(
             state,
@@ -100,6 +101,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 limits: limits.clone(),
                 max_actors: *max_actors,
                 push: push.clone(),
+                design_gate: *design_gate,
             },
         ),
         EventKind::RoleStarted { .. }
@@ -409,6 +411,12 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 return Err(Refusal::NotFinished);
             }
             Ok(())
+        }
+        EventKind::DesignOpened { .. }
+        | EventKind::DesignEntry { .. }
+        | EventKind::DesignSigned { .. } => {
+            require_studio(state)?;
+            crate::design_validate::validate_design(state, new)
         }
         EventKind::ReqVersion { version, .. } => {
             require_studio(state)?;

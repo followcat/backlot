@@ -60,6 +60,7 @@ fn seed_studio(dir: &std::path::Path, title: &str) {
         limits: Default::default(),
         max_actors: default_max_actors(),
         push: Default::default(),
+        design_gate: backlot_model::event::DesignGate::Off,
     };
     store::append::<(), _>(dir, |_, _| {
         Ok(Pending {
@@ -204,7 +205,7 @@ async fn stage_pauses_read_only_for_unknown_studio_marks_summary_and_runs_others
     append_msg(&acme, "writer");
     append_msg(&acme, "producer");
     let unknown_line =
-        r#"{"v":1,"seq":5,"ts_ms":5000,"by":{"role":"producer"},"kind":"design.opened"}"#;
+        r#"{"v":1,"seq":5,"ts_ms":5000,"by":{"role":"producer"},"kind":"future.annotated"}"#;
     OpenOptions::new()
         .append(true)
         .open(acme.join("events.jsonl"))
@@ -282,7 +283,7 @@ async fn stage_pauses_read_only_for_unknown_studio_marks_summary_and_runs_others
     assert_eq!(acme_sum["needs_upgrade"], true, "{acme_sum}");
     assert_eq!(
         acme_sum["unknown_kinds"],
-        json!(["design.opened"]),
+        json!(["future.annotated"]),
         "{acme_sum}"
     );
     let beta_sum = studios.iter().find(|s| s["id"] == "beta").unwrap();

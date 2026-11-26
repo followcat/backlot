@@ -69,6 +69,7 @@ pub fn studio_kind() -> EventKind {
         limits: BTreeMap::new(),
         max_actors: default_max_actors(),
         push: PushPolicy::default(),
+        design_gate: DesignGate::Off,
     }
 }
 

@@ -139,6 +139,7 @@ mod tests {
                     outward_cards: Vec::new(),
                     needs_upgrade: false,
                     unknown_kinds: Vec::new(),
+                    design: None,
                 })
                 .collect(),
             hollywood: None,

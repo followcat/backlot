@@ -171,6 +171,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
             limits: BTreeMap::new(),
             max_actors: backlot_model::event::default_max_actors(),
             push: Default::default(),
+            design_gate: backlot_model::event::DesignGate::Off,
         },
     );
     append(

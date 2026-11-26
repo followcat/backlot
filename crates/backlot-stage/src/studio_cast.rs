@@ -89,6 +89,7 @@ pub(crate) fn read(path: &Path) -> Result<CastSettings, Fail> {
             protect_default_branch: file.push.protect_default_branch.unwrap_or(true),
             remotes: Vec::new(),
         },
+        design_gate: file.design_gate.unwrap_or_default(),
     })
 }
 

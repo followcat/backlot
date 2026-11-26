@@ -57,6 +57,9 @@ pub struct StudioConfig {
     /// Studio outward push policy and recorded remote URLs.
     #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
     pub push: PushPolicy,
+    /// Opening design gate policy; absent on old logs reads as `Off`.
+    #[serde(default, skip_serializing_if = "DesignGate::is_off")]
+    pub design_gate: DesignGate,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the
@@ -674,6 +677,12 @@ pub struct StudioState {
     /// `EventKind::Unknown` kind names encountered during replay.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub unknown_kinds: std::collections::BTreeSet<String>,
+    /// Active opening design discussion state for the current requirement version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<crate::design::DesignState>,
+    /// Signed design records retained from prior requirement versions.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub design_history: BTreeMap<u32, crate::design::DesignState>,
     pub last_seq: u64,
 }
 
@@ -754,6 +763,15 @@ impl StudioState {
         self.outward_completions
             .iter()
             .any(|c| c.source_seq == source_seq)
+    }
+
+    /// Current opening design phase for [`Self::requirement_version`].
+    pub fn design_phase(&self) -> crate::design::DesignPhase {
+        self.design
+            .as_ref()
+            .filter(|d| d.version == self.requirement_version)
+            .map(|d| d.phase)
+            .unwrap_or(crate::design::DesignPhase::Idle)
     }
 
     /// The identity a fixed role plays now: the newest `role.recast`

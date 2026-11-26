@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::design::{DesignGate, DesignQuestion, DesignSlot, EntrySource, SignMode};
 pub use crate::progress::{
     MAX_PROGRESS_CHARS, MAX_RUNNING_CHARS, age_short, normalize_progress_text,
 };
@@ -377,6 +378,9 @@ pub enum EventKind {
         /// Studio outward push policy and recorded remote URLs.
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
+        /// Opening design gate policy; absent on old logs reads as `Off`.
+        #[serde(default, skip_serializing_if = "DesignGate::is_off")]
+        design_gate: DesignGate,
     },
     /// `studio.cast`: the studio's cast changed after creation — the
     /// person's own `studio cast set`, or a card the stage carries out
@@ -412,6 +416,9 @@ pub enum EventKind {
         max_actors: u32,
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
+        /// Opening design gate policy (`required` or `off`).
+        #[serde(default, skip_serializing_if = "DesignGate::is_off")]
+        design_gate: DesignGate,
         /// The `c<n>` marker when a card carried the change out — the
         /// idempotence key on a restart, like `role.recast`'s.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -767,6 +774,41 @@ pub enum EventKind {
     /// ledger directory under `archive/<id>-<stamp>`.
     #[serde(rename = "studio.deleted")]
     StudioDeleted { archive: String },
+    /// `design.opened`: opens Round 1 (or `--suggest-skip`, or Round `N+1` from `waiting_user`).
+    #[serde(rename = "design.opened")]
+    DesignOpened {
+        version: u32,
+        round: u32,
+        #[serde(default, skip_serializing_if = "is_false")]
+        suggest_skip: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        doc_file: String,
+    },
+    /// `design.entry`: appends one immutable slot entry (`proposal`, `buildability`, `summary`, `user_input`, `supplement`).
+    #[serde(rename = "design.entry")]
+    DesignEntry {
+        version: u32,
+        round: u32,
+        slot: DesignSlot,
+        file: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<EntrySource>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        refs: Vec<u64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        questions: Vec<DesignQuestion>,
+    },
+    /// `design.signed`: user-only sign-off (`approved` or `skipped`) for the current requirement version.
+    #[serde(rename = "design.signed")]
+    DesignSigned {
+        version: u32,
+        round: u32,
+        mode: SignMode,
+        doc_file: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
     /// `target` is the seq of the event being corrected; `set` holds
     /// the changed fields. The earlier event stays in the log.
     #[serde(rename = "correction")]
@@ -858,6 +900,9 @@ impl EventKind {
             EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::StudioReopened { .. } => "studio.reopened",
             EventKind::StudioDeleted { .. } => "studio.deleted",
+            EventKind::DesignOpened { .. } => "design.opened",
+            EventKind::DesignEntry { .. } => "design.entry",
+            EventKind::DesignSigned { .. } => "design.signed",
             EventKind::Correction { .. } => "correction",
             EventKind::Unknown { .. } => "unknown",
         }
