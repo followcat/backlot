@@ -257,6 +257,7 @@ pub(crate) fn mirror_for(caller: &Caller, cmd: &Cmd) -> Option<PathBuf> {
         Cmd::Tell {
             role,
             source: crate::args::TextSource::File(file),
+            ..
         } if caller.role == "hollywood" && role == "producer" => Some(file.clone()),
         _ => None,
     }

@@ -1,0 +1,10 @@
+Claude usage limit reached
+Your weekly limit resets Monday at 9:00 AM.
+
+Choose how to continue:
+❯ 1. Stop now and wait for the weekly reset
+  2. Wait and continue automatically after the reset
+  3. Continue with usage credits
+  4. Upgrade the plan
+
+Use arrow keys to choose.

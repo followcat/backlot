@@ -78,9 +78,9 @@ prints `already at ledger v1`.
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq`; `delivered` carries the target seq |
 | `message.dropped` | target seq, reason — `stage` only |
 | `report.sent` | from, to, node, file |
-| `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
+| `attention.raised` / `attention.escalated` / `attention.cleared` | role, reason, detail, `needs_user`; `escalated` carries the target attention seq and replacement detail — `stage` only |
 | `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
-| `ask.answered` | role, target ask seq — `stage` only |
+| `ask.answered` / `ask.acknowledged` | role, target ask seq — `stage` / `user` only |
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
 | `outward.requested` | role, optional task, `command`, `cwd`, `argv`, optional `why` — explicit `backlot ask --run` card request |
 | `outward.completed` | `card`, `source_seq`, `outcome` (`Succeeded`/`Failed`/`TimedOut`/`Denied`/`Stale`), optional `exit_code`, `output_tail`, optional `log_file` — `stage` only |
@@ -136,9 +136,11 @@ gives every still session-less live role a fresh ten-minute window after a (re)s
 stage therefore looks again at a role already past the stop, finds the ID, and records
 `role.session` plus an `attention.cleared` for its open `session not found`.
 
-Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
-(to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
-`plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose. A plain
+Three `message.queued` purposes carry fixed meanings: `plan request` records `plan`
+(to the writer), `dispatch` records `dispatch` (to the director), and `tell user --ask` records
+`ask` as the explicit person-question mark. The writer is wanted from a
+`plan` message until the next `dispatch`; other plain `tell`/`ask` messages carry no purpose, so a
+plain `tell user` remains a report and never becomes a question merely because it is newest. A plain
 `tell` to the writer or director also keeps that role wanted — while it is undelivered, and after
 delivery until the role writes to the ledger again — so a tell to a role closed as `no longer
 desired` starts it again and delivers the message, the way a `plan` request does. A `tell` to an
@@ -228,6 +230,8 @@ that role's terminal: the role started a new turn (`UserPromptSubmit` / `PreInvo
 with a prompt hook, or `waiting` → `working` on runners without one) while nothing had been sent
 to its terminal and no restart, resume, recast, start or close happened since `target`. It clears
 `RoleSummary.asks` (and the panel's waiting count) while leaving the question in `exchange`.
+`ask.acknowledged` is the user's own receipt for the same target: it also clears the open question
+without removing the exchange turn. Only the user may record it, and only while that explicit ask is open.
 
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
 200 chars, `cwd`, and optional `decision` / `argv` when cardable or guarded) refused by `backlot guard`,

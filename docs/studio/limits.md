@@ -179,8 +179,14 @@ re-raise one `stall_limit_s` later.
   `Connection error` stop, and Claude Code's measured `hit your limit` / `session limit` /
   `weekly limit` / `monthly limit` screens. A short limit waits the parsed reset and sends
   `continue` three times before escalating; a weekly or monthly quota escalates
-  `needs the user` at once instead of burning those retries. A connection error gets the same
-  bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
+  `needs the user` at once instead of burning those retries. The parser accepts Claude's local
+  12-hour reset clock (`resets 12:10pm`) as well as relative waits and Devin's UTC absolute form.
+  A runner that explicitly says `Continuing automatically at 12:10pm` is left alone: it is never
+  the person's merely because a retry count elapsed, and escalates only when that reset has passed
+  without the limit lifting. Escalation uses `attention.escalated` on the same attention, so one
+  stall raises one attention and Hollywood is told once. Claude's weekly-limit four-choice dialog
+  is recognized as a limit, never as a question the stage may answer; its detail says options 1–2
+  wait while 3–4 cost money. A connection error gets the same bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
   merely be printed — and a banner deeper than the last 12 non-blank lines is scrollback, not
   evidence. What is not verified: none of these paths has met a real agent since they were
   written. The unit and fake-core tests cover the detection and retry cycles; Devin's,

@@ -10,6 +10,15 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
+- **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
+
+### Changed
+
+- **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
 ## 0.4.9 — 2026-11-26
 
 A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.

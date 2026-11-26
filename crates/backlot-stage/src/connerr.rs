@@ -182,31 +182,14 @@ impl Stage {
                     Step::Escalate => {
                         record(
                             dir,
-                            EventKind::AttentionCleared {
+                            EventKind::AttentionEscalated {
                                 target: attn.seq,
-                                reason: Some(format!(
-                                    "auto-retries exhausted after {}",
-                                    MAX_CONN_RETRIES
-                                )),
+                                detail: format!(
+                                    "connection error after {} auto-retries; needs the user — screen saved to attention/{}.txt",
+                                    MAX_CONN_RETRIES, attn.seq
+                                ),
                             },
                         )?;
-                        self.raise_attention(
-                            Raise {
-                                dir,
-                                role,
-                                reason: CONNECTION_ERROR,
-                                text,
-                                needs_user: true,
-                                bound: None,
-                            },
-                            move |seq| {
-                                format!(
-                                    "connection error after {} auto-retries; needs the user — screen saved to attention/{seq}.txt",
-                                    MAX_CONN_RETRIES
-                                )
-                            },
-                        )
-                        .await?;
                         eprintln!(
                             "stage: {role} connection error escalated after {} auto-retries",
                             MAX_CONN_RETRIES
