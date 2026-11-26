@@ -112,9 +112,11 @@ impl App {
             self.studio.others_expanded = !self.studio.others_expanded;
             return;
         }
-        // The sidebar's `menu` button opens `Ctrl+B ?` (S5 §2) —
-        // studio mode only; in `--plain` herdr's dead hit stays dead.
-        if !self.plain && contains(hits.global_launcher, point) {
+        // The sidebar's `menu` button (or bottom-left `? keys`) opens `Ctrl+B ?`
+        // (S5 §2) — studio mode only; in `--plain` herdr's dead hit stays dead.
+        if !self.plain
+            && (contains(hits.global_launcher, point) || contains(hits.sidebar_help, point))
+        {
             self.help = true;
             self.help_state = crate::chrome::help::HelpState::default();
             return;

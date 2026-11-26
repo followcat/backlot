@@ -410,8 +410,6 @@ fn short_height_stacks_other_blocks_to_single_lines() {
 
 #[test]
 fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
-    // Two studios + a 2-entry cast (`cast_entries = 2` in `draw`)
-    // light both nav hints (wide-01).
     let mut value = summary_json();
     let mut second = value["studios"][0].clone();
     second["id"] = serde_json::json!("second-studio");
@@ -419,30 +417,31 @@ fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
     let two_studios: Summary = serde_json::from_value(value).unwrap();
     let unfocused = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
+    // Unfocused Lot keeps its bottom footer blank rather than repeating alt+arrow shortcuts.
     let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(last.contains("alt"), "{last}");
-    assert!(last.contains("studio"), "{last}");
-    assert!(last.contains("role"), "{last}");
-    // One studio alone drops the `studio` hint — the key has
-    // nowhere to go.
-    let one = summary();
-    let (buf, _) = draw(area, Some(&one), &unfocused, None);
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(!last.contains("studio"), "{last}");
-    assert!(last.contains("role"), "{last}");
-    // Focused panel shows its own keys.
+    assert!(
+        last.trim_end() == "│",
+        "unfocused footer stays blank: {last}"
+    );
+    // Focused panel shows the border-muted hairline and up to 3 verbful hints.
     let mut focused = panel(PanelMode::Expanded);
     focused.focused = true;
     let (buf, _) = draw(area, Some(&two_studios), &focused, None);
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(last.contains('m'), "{last}");
-    assert!(last.contains('?'), "{last}");
-    // Under 8 rows the line is dropped.
+    let rows = lines(&buf, area);
+    let sep = &rows[area.height as usize - 2];
+    let last = &rows[area.height as usize - 1];
+    assert!(
+        sep.contains("───"),
+        "missing focused footer separator: {sep}"
+    );
+    assert!(last.contains("↑↓ move"), "{last}");
+    assert!(last.contains("m menu"), "{last}");
+    assert!(last.contains("esc leave"), "{last}");
+    // Under 8 rows the focused footer (separator + hints) is dropped.
     let area = Rect::new(0, 0, 30, 7);
-    let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
+    let (buf, _) = draw(area, Some(&two_studios), &focused, None);
     let text = lines(&buf, area).join("\n");
-    assert!(!text.contains("studio  ←"), "{text}");
     assert!(!text.contains("m menu"), "{text}");
 }
 
@@ -934,10 +933,17 @@ fn the_mark_paints_only_where_a_studio_workspace_points() {
 /// studio cycles ≥2 cast entries — a solo cast drops the hint.
 #[test]
 fn a_solo_cast_drops_the_role_hint() {
+    assert_eq!(
+        keys().footer_tiers(false, true),
+        vec!["↑↓ role".to_string()]
+    );
+    assert!(keys().footer_tiers(false, false).is_empty());
+
+    // Unfocused Lot never draws shortcut hints in its footer regardless of cast size.
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
-    for (cast_entries, want) in [(2usize, true), (0, false)] {
+    for cast_entries in [2usize, 0] {
         let mut buf = Buffer::empty(area);
         render(
             &mut buf,
@@ -961,14 +967,14 @@ fn a_solo_cast_drops_the_role_hint() {
             1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("↑↓ role"), want, "{cast_entries}: {last}");
+        assert!(!last.contains("↑↓ role"), "{cast_entries}: {last}");
     }
 }
 
-/// wide-01: the unfocused footer's `alt ←→ studio` names a navigation
-/// that exists — a lone studio drops the half, two studios keep it.
+/// Unfocused Lot keeps its bottom footer row blank (`elev.surface`),
+/// eliminating footer clutter alongside the main pane.
 #[test]
-fn a_lone_studio_drops_the_studio_hint() {
+fn unfocused_lot_leaves_bottom_footer_blank() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
@@ -981,7 +987,9 @@ fn a_lone_studio_drops_the_studio_hint() {
             },
         ]
     };
-    for (list, want) in [(machines(Some(&summary)), false), (two(), true)] {
+    let pal = palette();
+    let elev = pal.elevation();
+    for list in [machines(Some(&summary)), two()] {
         let mut buf = Buffer::empty(area);
         render(
             &mut buf,
@@ -993,7 +1001,7 @@ fn a_lone_studio_drops_the_studio_hint() {
             panel.mode,
             None,
             None,
-            0,
+            2,
             None,
             &keys(),
             None,
@@ -1001,36 +1009,19 @@ fn a_lone_studio_drops_the_studio_hint() {
             false,
             true,
             &Default::default(),
-            &palette(),
+            &pal,
             1,
         );
+        let fy = area.y + area.height - 1;
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("alt ←→ studio"), want, "{last}");
+        assert!(
+            last.trim_end() == "│",
+            "expected blank bottom row: {last:?}"
+        );
+        for x in (area.x + 1)..area.right() {
+            assert_eq!(buf[(x, fy)].bg, elev.surface, "x={x}");
+        }
     }
-    let mut buf = Buffer::empty(area);
-    render(
-        &mut buf,
-        area,
-        &two(),
-        |_| true,
-        |_| true,
-        &panel,
-        panel.mode,
-        None,
-        None,
-        2,
-        None,
-        &keys(),
-        None,
-        false,
-        false,
-        true,
-        &Default::default(),
-        &palette(),
-        1,
-    );
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert_eq!(last, "│ alt ←→ studio  ↑↓ role");
 }
 
 #[test]

@@ -12,6 +12,7 @@ mod draw;
 mod draw_blocks;
 mod draw_cards;
 mod draw_compact;
+mod draw_hints;
 mod draw_tasks;
 mod pending;
 pub(crate) mod remote;

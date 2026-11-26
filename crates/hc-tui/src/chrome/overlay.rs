@@ -12,12 +12,24 @@ use ratatui::style::Color;
 
 use super::palette::Palette;
 
-/// Whether this palette is backlot's opaque look. The stock herdr
-/// themes and `terminal` leave the sidebar's background `Reset`, so
-/// their overlays are untouched; a theme that sets an opaque sidebar
-/// gets opaque overlays with it.
+/// Whether this palette uses an opaque frame surface. Stock Herdr themes and
+/// `terminal` leave `sidebar_bg == Reset`, unless backlot studio mode sets it
+/// to `elevation.surface`; explicit `Reset` / `terminal` keeps translucency.
 pub(crate) fn opaque(palette: &Palette) -> bool {
-    palette.sidebar_bg != Color::Reset
+    palette.sidebar_bg != Color::Reset && palette.panel_bg != Color::Reset
+}
+
+/// Top bar background color: `elevation.surface` when studio chrome opacity
+/// is active (all non-`terminal` RGB themes under `!plain && source != "herdr"`),
+/// otherwise `palette.panel_bg`.
+pub(crate) fn chrome_bg(config: &super::ClientShellConfig) -> Color {
+    if config.studio_chrome {
+        let surface = config.palette.elevation().surface;
+        if surface != Color::Reset {
+            return surface;
+        }
+    }
+    config.palette.panel_bg
 }
 
 /// Fill every default-background cell in `area` with the panel

@@ -156,6 +156,7 @@ pub(crate) struct ShellHitMap {
     /// toggles the Hollywood bar.
     pub lot_pill: Rect,
     pub lot_pill_segments: Vec<(Rect, super::lot::PillAction)>,
+    pub sidebar_help: Rect,
     /// The studio name inside a studio header — clicking it focuses
     /// the dock on that studio.
     pub studio_header: Rect,
@@ -240,18 +241,24 @@ pub(crate) struct ShellRenderState<'a> {
     pub tree_cursor: Option<&'a crate::chrome::studio_tree::SidebarRow>,
 }
 
-pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
+pub(crate) fn sidebar_surface_and_edge(
+    palette: &Palette,
+) -> (ratatui::style::Color, ratatui::style::Color) {
     let elev = palette.elevation();
     // Translucent themes keep `Color::Reset` + `surface_dim` for Herdr
     // parity. Opaque `backlot` joins `elevation.surface` unless the
     // user explicitly overrode `[theme.custom] sidebar_bg`.
-    let (bg, edge) = if palette.sidebar_bg == ratatui::style::Color::Reset {
+    if palette.sidebar_bg == ratatui::style::Color::Reset {
         (palette.sidebar_bg, palette.surface_dim)
     } else if palette.sidebar_bg == Palette::backlot().sidebar_bg {
         (elev.surface, elev.border_muted)
     } else {
         (palette.sidebar_bg, elev.border_muted)
-    };
+    }
+}
+
+pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
+    let (bg, edge) = sidebar_surface_and_edge(palette);
     buffer.set_style(area, Style::default().bg(bg));
     let separator_x = area.right().saturating_sub(1);
     for y in area.y..area.bottom() {
@@ -262,18 +269,67 @@ pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette
     }
 }
 
-/// Draw a unified two-tone footer hint bar (`key` in `subtext0`,
-/// `label` in `muted_surface`) on `elevation.surface`. Groups may be
-/// separated by runs of two or more spaces (`"  "`) or middle dots (`" · "`).
+/// Paint bottom-left `? keys` next to `«` in expanded studio sidebars.
+pub(crate) fn render_sidebar_help(
+    buffer: &mut Buffer,
+    area: Rect,
+    palette: &Palette,
+    hits: &mut ShellHitMap,
+) {
+    if area.height == 0 || area.width < 12 {
+        return;
+    }
+    let y = area.bottom().saturating_sub(1);
+    let (bg, _) = sidebar_surface_and_edge(palette);
+    put_text(
+        buffer,
+        area.x.saturating_add(1),
+        y,
+        1,
+        "?",
+        Style::default().fg(palette.subtext0).bg(bg),
+    );
+    put_text(
+        buffer,
+        area.x.saturating_add(2),
+        y,
+        5,
+        " keys",
+        Style::default().fg(palette.overlay0).bg(bg),
+    );
+    hits.sidebar_help = Rect::new(area.x.saturating_add(1), y, 6, 1);
+}
+
+/// Display width of a structured footer hint pair slice rendered via `put_hint_bar`.
+pub(crate) fn hint_bar_width(pairs: &[(&str, &str)]) -> u16 {
+    let mut w = 0u16;
+    for (idx, (key, label)) in pairs.iter().enumerate() {
+        if idx > 0 {
+            w = w.saturating_add(2);
+        }
+        w = w.saturating_add(crate::chrome::text::display_width(key) as u16);
+        if !label.is_empty() {
+            if !key.is_empty() {
+                w = w.saturating_add(1);
+            }
+            w = w.saturating_add(crate::chrome::text::display_width(label) as u16);
+        }
+    }
+    w
+}
+
+/// Draw a unified two-tone footer hint bar from structured `(key, label)` pairs:
+/// keys render in `subtext0`, explanatory labels in `elevation.muted_surface`,
+/// across the row on `elevation.surface` (Call Sheet Band + Studio Dock footer).
 pub(crate) fn put_hint_bar(
     buf: &mut Buffer,
     x: u16,
     y: u16,
     max_w: u16,
-    text: &str,
+    pairs: &[(&str, &str)],
     palette: &Palette,
 ) {
-    if max_w == 0 {
+    if max_w == 0 || pairs.is_empty() {
         return;
     }
     let elev = palette.elevation();
@@ -283,60 +339,36 @@ pub(crate) fn put_hint_bar(
     let gap_style = Style::default().bg(bg);
     let mut cx = x;
     let limit = x.saturating_add(max_w);
-    let mut rest = text.trim_start();
-    while !rest.is_empty() && cx < limit {
-        let next_spaces = rest.find("  ");
-        let next_dot = rest.find(" · ");
-        let (split, sep_dot) = match (next_spaces, next_dot) {
-            (Some(s), Some(d)) if d < s => (d, true),
-            (Some(s), _) => (s, false),
-            (None, Some(d)) => (d, true),
-            (None, None) => (rest.len(), false),
-        };
-        let group = &rest[..split];
-        if !group.is_empty() {
-            if let Some(sp) = group.find(' ') {
-                let (key, label) = group.split_at(sp);
-                let w_key = crate::chrome::text::display_width(key) as u16;
-                if cx.saturating_add(w_key) > limit {
-                    break;
-                }
-                put_text(buf, cx, y, limit - cx, key, key_style);
-                cx = cx.saturating_add(w_key);
-                let w_lbl = crate::chrome::text::display_width(label) as u16;
-                if cx < limit && w_lbl > 0 {
-                    let clip = (limit - cx).min(w_lbl);
-                    put_text(buf, cx, y, clip, label, label_style);
-                    cx = cx.saturating_add(clip);
-                }
-            } else {
-                let w_grp = (crate::chrome::text::display_width(group) as u16).min(limit - cx);
-                put_text(buf, cx, y, w_grp, group, key_style);
-                cx = cx.saturating_add(w_grp);
-            }
-        }
-        rest = &rest[split..];
-        if rest.is_empty() {
+    for (idx, (key, label)) in pairs.iter().enumerate() {
+        if cx >= limit {
             break;
         }
-        if sep_dot {
-            let dot = " · ";
-            let take = (crate::chrome::text::display_width(dot) as u16).min(limit - cx);
-            put_text(buf, cx, y, take, dot, label_style);
+        if idx > 0 {
+            let take = 2u16.min(limit - cx);
+            put_text(buf, cx, y, take, &"  "[..usize::from(take)], gap_style);
             cx = cx.saturating_add(take);
-            rest = &rest[dot.len()..];
-        } else {
-            let gap_len = rest.bytes().take_while(|&b| b == b' ').count();
-            if gap_len == 0 {
+        }
+        let w_key = crate::chrome::text::display_width(key) as u16;
+        if w_key > 0 {
+            if cx.saturating_add(w_key) > limit {
                 break;
             }
-            if cx < limit {
-                let take = (gap_len as u16).min(limit - cx);
-                let gap = " ".repeat(take as usize);
-                put_text(buf, cx, y, take, &gap, gap_style);
-                cx = cx.saturating_add(take);
+            put_text(buf, cx, y, limit - cx, key, key_style);
+            cx = cx.saturating_add(w_key);
+        }
+        if !label.is_empty() && cx < limit {
+            if !key.is_empty() {
+                if cx + 1 > limit {
+                    break;
+                }
+                put_text(buf, cx, y, 1, " ", gap_style);
+                cx += 1;
             }
-            rest = &rest[gap_len..];
+            let w_lbl = (crate::chrome::text::display_width(label) as u16).min(limit - cx);
+            if w_lbl > 0 {
+                put_text(buf, cx, y, w_lbl, label, label_style);
+                cx = cx.saturating_add(w_lbl);
+            }
         }
     }
 }

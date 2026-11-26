@@ -137,6 +137,14 @@ pub struct ClientShellConfig {
     pub local_config_path: PathBuf,
     /// backlot's own `[theme]`: its file, and whether it is in force.
     pub own_theme: crate::own_theme::Shell,
+    /// True when `--plain` is active.
+    pub plain: bool,
+    /// True when `!plain && source != "herdr"`, unifying studio chrome surfaces
+    /// on `elevation.surface`.
+    pub studio_chrome: bool,
+    /// Tracks whether studio chrome filled an unset `sidebar_bg` so toggling
+    /// `--plain` or `source = "herdr"` restores `Color::Reset` cleanly.
+    pub(crate) studio_injected_sidebar_bg: bool,
     /// `keys.remote_image_paste` resolved once — `None` disables the
     /// image-paste key trigger (empty or invalid value, diagnosed at
     /// load).
@@ -240,6 +248,9 @@ impl ClientShellConfig {
             startup_config_diagnostic: diagnostic,
             local_config_path,
             own_theme: crate::own_theme::Shell::default(),
+            plain: false,
+            studio_chrome: false,
+            studio_injected_sidebar_bg: false,
             remote_image_paste_key: config.remote_image_paste_key().ok().flatten(),
             preferences: crate::preferences::ClientChromePreferences::default(),
             preferences_path: None,

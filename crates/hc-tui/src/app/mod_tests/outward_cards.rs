@@ -625,8 +625,8 @@ async fn folded_studio_outward_card_counts_in_folded_line_lot_pill_and_call_shee
     );
     let _ = blog_top;
 
-    // 3. Cramped height (`body_height = 6 < 7`) stacks `blog` into one line with `!1`.
-    let stacked_lines = screen_lines(&draw_to(&mut app, 140, 8));
+    // 3. Cramped height (`body_height = 6 < 7`: 9 - 1 header - 2 focused footer) stacks `blog` into one line with `!1`.
+    let stacked_lines = screen_lines(&draw_to(&mut app, 140, 9));
     let stacked_text = stacked_lines.join("\n");
     assert!(
         stacked_lines

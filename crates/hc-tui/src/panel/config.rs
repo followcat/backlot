@@ -115,6 +115,13 @@ impl Default for StudioKeys {
 }
 
 impl StudioKeys {
+    /// Display text for the configured `focus_lot` binding (`alt+l`).
+    pub(crate) fn focus_lot_label(&self) -> Option<String> {
+        self.focus_lot
+            .map(crate::config::format_key_combo)
+            .filter(|s| !s.is_empty())
+    }
+
     /// Whether `key` matches the configured `focus_lot` binding.
     pub(crate) fn focus_lot_matches(&self, key: &crate::config::TerminalKey) -> bool {
         self.focus_lot
@@ -145,6 +152,7 @@ impl StudioKeys {
     /// by default — so the caller can drop the half whose navigation
     /// has nowhere to go (wide-01: `studio` only across ≥2 studios,
     /// `role` only across ≥2 cast entries) or fit them as separate tiers.
+    #[cfg(test)]
     pub(crate) fn shortcut_parts(&self) -> (String, String) {
         use crossterm::event::KeyCode;
         let four = [
@@ -199,9 +207,9 @@ impl StudioKeys {
         )
     }
 
-    /// The unfocused footer's width tiers (R3-M13 / wide-01): the
-    /// combined hint, then each surviving half alone — nothing when
-    /// neither navigation has anywhere to go.
+    /// The unfocused footer's width tiers (R3-M13 / wide-01): retained for
+    /// config serialization tests; Lot no longer renders unfocused footer hints.
+    #[cfg(test)]
     pub(crate) fn footer_tiers(&self, studio_nav: bool, role_nav: bool) -> Vec<String> {
         let (studio, role) = self.shortcut_parts();
         let mut tiers = Vec::new();
@@ -219,6 +227,7 @@ impl StudioKeys {
 }
 
 /// A modifier set's label for the shortcuts row (`alt`, `ctrl`, …).
+#[cfg(test)]
 pub(crate) fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
     use crossterm::event::KeyModifiers as M;
     match mods {
@@ -234,6 +243,7 @@ pub(crate) fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
 }
 
 /// A key code's label for the pair fallback (`↑`, `pageup`, `x`, …).
+#[cfg(test)]
 pub(crate) fn code_label(code: crossterm::event::KeyCode) -> String {
     use crossterm::event::KeyCode;
     match code {

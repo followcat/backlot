@@ -25,7 +25,7 @@ use super::{Panel, PanelMode, rows};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
-use crate::chrome::text::{display_width, fit_hints, truncate_end};
+use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::StudioKey;
 use crate::studio::glyphs::{self, Person};
 
@@ -81,10 +81,10 @@ pub(crate) fn render(
     mark: Option<&StudioKey>,
     // The `current` studio's cast size (roles + shells) — the
     // footer's `↑↓ role` hint reads it (wide-01).
-    cast_entries: usize,
+    _cast_entries: usize,
     local: Option<&str>,
     keys: &StudioKeys,
-    sheet: Option<String>,
+    _sheet: Option<String>,
     overlay: bool,
     pane_refuses: bool,
     active_surface: bool,
@@ -148,10 +148,13 @@ pub(crate) fn render(
         &title_text,
         Style::default().fg(title_fg).add_modifier(Modifier::BOLD),
     );
-    if let Some(hint) = header_hint(
+    if let Some(hint) = super::draw_hints::header_hint(
+        panel.focused,
+        overlay,
+        pane_refuses,
         mode,
         keys,
-        sheet.as_deref(),
+        area.width,
         title
             .width
             .saturating_sub(display_width(&title_text) as u16 + 1) as usize,
@@ -168,45 +171,39 @@ pub(crate) fn render(
     }
     hits.title = title;
 
-    // The last row is the dim shortcuts line — dropped under 8
-    // rows. An overlay dock's `Esc` steps back, so its footer says
-    // `esc back` rather than plain `esc` (S2 §1). Over a pane that
-    // refuses input the keys have nowhere to step back to: the
-    // footer says `esc close` — the same two facts the Esc key
-    // reads (`App::panel_esc_closes`), so label and key cannot
-    // disagree.
+    // Footer hint isolation: when unfocused, keep bottom row blank `elev.surface`;
+    // when focused, draw a `border_muted` hairline above up to 3 verbful hints.
     let shortcuts = area.height >= 8;
-    if shortcuts {
-        let esc = if pane_refuses {
-            "esc close"
-        } else if overlay {
-            "esc back"
-        } else {
-            "esc"
-        };
-        // The footer's focused hints name what the selected row can
-        // do — a person line and a studio line offer different keys
-        // and the `›` line shows its own, so the dock teaches its
-        // verbs where the cursor sits (A2.2's "cursor on something
-        // real" made readable).
-        let focused_tiers = hint_tiers(panel.selected.as_ref(), panel.editing, machines, esc);
-        let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
-        let keys_line = if panel.focused {
-            fit_hints(&tier_refs, inner.width.saturating_sub(1) as usize).to_string()
-        } else {
-            // R3-M13 + wide-01: the unfocused footer fits clean
-            // tiers too, and each nav hint is conditional — `studio`
-            // needs ≥2 studios, `role` ≥2 cast entries.
-            let tiers = keys.footer_tiers(studios >= 2, cast_entries >= 2);
-            let refs: Vec<&str> = tiers.iter().map(String::as_str).collect();
-            fit_hints(&refs, inner.width.saturating_sub(1) as usize).to_string()
-        };
+    let footer_rows = if shortcuts {
+        if panel.focused { 2 } else { 1 }
+    } else {
+        0
+    };
+    if shortcuts && panel.focused {
+        let sep_y = inner.y + inner.height - 2;
+        put_text(
+            buf,
+            inner.x,
+            sep_y,
+            inner.width,
+            &"─".repeat(usize::from(inner.width)),
+            Style::default().fg(elev.border_muted).bg(elev.surface),
+        );
+        let pairs = super::draw_hints::focused_hint_pairs(
+            panel.selected.as_ref(),
+            panel.editing,
+            panel.finish_confirm.is_some(),
+            machines,
+            overlay,
+            pane_refuses,
+            usize::from(inner.width.saturating_sub(1)),
+        );
         crate::chrome::render::put_hint_bar(
             buf,
             inner.x + 1,
             inner.y + inner.height - 1,
             inner.width.saturating_sub(1),
-            &keys_line,
+            &pairs,
             palette,
         );
     }
@@ -217,7 +214,7 @@ pub(crate) fn render(
         inner.x,
         inner.y + 1,
         inner.width,
-        inner.height.saturating_sub(1 + u16::from(shortcuts)),
+        inner.height.saturating_sub(1 + footer_rows),
     );
     if body.height == 0 {
         return hits;
@@ -626,114 +623,3 @@ pub(crate) fn render(
 
 // The frame's colour and the `│` edges live in `draw_blocks` — the
 // error/next/divider/bottom rows share them with the painters there.
-
-/// Right-aligned hint on the `lot · <n>` header: carries `alt+l`
-/// alongside the Call Sheet hint when space permits, degrading cleanly
-/// across dock widths.
-fn header_hint(
-    mode: PanelMode,
-    keys: &StudioKeys,
-    sheet: Option<&str>,
-    room: usize,
-) -> Option<String> {
-    let lot = keys.focus_lot.map(crate::config::format_key_combo);
-    let sheet = sheet
-        .map(|s| s.strip_suffix(" sheet").unwrap_or(s))
-        .filter(|s| !s.is_empty());
-    let mut candidates = Vec::new();
-    if mode == PanelMode::Collapsed {
-        if let Some(lot) = lot {
-            candidates.push(lot);
-        }
-    } else {
-        match (lot, sheet) {
-            (Some(lot), Some(sheet)) => {
-                candidates.push(format!("{lot} · {sheet} sheet"));
-                candidates.push(format!("{lot} · {sheet}"));
-                if let Some((direct, _)) = sheet.split_once(" / ") {
-                    candidates.push(format!("{lot} · {direct}"));
-                }
-                candidates.push(lot);
-            }
-            (Some(lot), None) => candidates.push(lot),
-            (None, Some(sheet)) => {
-                candidates.push(format!("{sheet} sheet"));
-                candidates.push(sheet.to_string());
-                if let Some((direct, _)) = sheet.split_once(" / ") {
-                    candidates.push(direct.to_string());
-                }
-            }
-            (None, None) => {}
-        }
-    }
-    candidates
-        .into_iter()
-        .find(|cand| display_width(cand) < room)
-}
-
-/// The focused footer's three width tiers — what the *selected* row
-/// can do, so the hints a person sees change with the cursor: a
-/// person line offers `p`/`y`/`d`, a task `+`/`-`, a composing `›`
-/// line's `⏎` sends and `↑`/`esc` leave the edit. `esc` is the label
-/// the caller already resolved (`esc`/`esc back`/`esc close`).
-fn hint_tiers(
-    selected: Option<&Target>,
-    editing: bool,
-    machines: &[MachineSummary],
-    esc: &str,
-) -> [String; 3] {
-    let s = |v: &[&str]| {
-        let mut out = [String::new(), String::new(), esc.to_string()];
-        for (i, t) in v.iter().enumerate() {
-            out[i] = format!("{t}  {esc}");
-        }
-        out
-    };
-    match selected {
-        Some(Target::Input(_)) if editing => [
-            "⏎ send · ↑↓ history · esc done".to_string(),
-            "⏎ ↑↓ · esc".to_string(),
-            "esc".to_string(),
-        ],
-        Some(Target::Input(_)) => s(&["⏎ compose  i tell  / verb  m", "⏎ i / m", "⏎ m"]),
-        Some(Target::ReopenProducer(_)) => s(&["o reopen  m", "o m"]),
-        Some(Target::Talk(key, seq)) => {
-            let has_file = super::data::studio(machines, key).is_some_and(|st| {
-                st.studio
-                    .exchange
-                    .iter()
-                    .any(|e| e.seq == *seq && e.file.is_some())
-            });
-            if has_file {
-                s(&["⏎ read  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
-            } else {
-                s(&["i tell  v sheet  m", "i v m", "m"])
-            }
-        }
-        Some(Target::Person(key, role_name)) => {
-            let state = super::data::studio(machines, key)
-                .and_then(|st| st.studio.roles.iter().find(|r| r.role == *role_name))
-                .map(|r| r.state.as_str());
-            if state == Some("closed") {
-                s(&["o reopen  i tell  m", "o i m", "o m"])
-            } else if state == Some("standby") {
-                s(&["v sheet  i tell  m", "v i m", "i m"])
-            } else {
-                s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
-            }
-        }
-        Some(Target::Task(..)) => s(&["v sheet  +- pri  i tell  m", "v +- i m", "v m"]),
-        Some(Target::OutwardCard(..)) => {
-            s(&["a/y apply  x/d cancel  s/⏎ show  m", "a/y x/d s/⏎ m", "s m"])
-        }
-        Some(Target::Studio(_) | Target::Block(_) | Target::Strip(_)) => {
-            s(&["⏎ focus  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
-        }
-        Some(Target::Fold(_)) | Some(Target::ClosedFold(_)) => {
-            s(&["⏎ open  i tell  m", "⏎ i m", "⏎ m"])
-        }
-        Some(Target::Stage(_)) => s(&["s start  m", "s m"]),
-        Some(Target::Setup) => s(&["⏎ setup", "⏎"]),
-        _ => s(&["↑↓ move  i tell  m menu  ? keys", "↑↓ i m ?", "m ?"]),
-    }
-}

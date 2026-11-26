@@ -100,6 +100,31 @@ impl App {
         }
         // U7: `--plain` drops the Hollywood bar; studio mode has it.
         self.sync_hollywood_plain();
+        self.sync_studio_chrome();
+    }
+
+    /// Synchronize `shell.plain`, `shell.studio_chrome`, and studio sidebar
+    /// opacity (`elevation.surface` across RGB themes when `!plain && source != "herdr"`,
+    /// unless `[theme.custom] sidebar_bg` explicitly opted out/overrode it).
+    pub(crate) fn sync_studio_chrome(&mut self) {
+        self.shell.plain = self.plain;
+        self.shell.studio_chrome = !self.plain && !self.shell.own_theme.source_herdr;
+        let explicit_sb = self
+            .shell
+            .theme_runtime
+            .has_explicit_sidebar_bg(self.host_appearance);
+        if self.shell.studio_chrome {
+            if !explicit_sb && self.shell.palette.sidebar_bg == ratatui::style::Color::Reset {
+                let surface = self.shell.palette.elevation().surface;
+                if surface != ratatui::style::Color::Reset {
+                    self.shell.palette.sidebar_bg = surface;
+                    self.shell.studio_injected_sidebar_bg = true;
+                }
+            }
+        } else if self.shell.studio_injected_sidebar_bg {
+            self.shell.palette.sidebar_bg = ratatui::style::Color::Reset;
+            self.shell.studio_injected_sidebar_bg = false;
+        }
     }
 
     /// Whether the sidebar draws the machine-first view: always in

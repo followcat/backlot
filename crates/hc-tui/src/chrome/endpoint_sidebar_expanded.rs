@@ -604,4 +604,7 @@ pub(crate) fn render_expanded(
         "«",
         Style::default().fg(palette.overlay0),
     );
+    if !config.plain {
+        super::render::render_sidebar_help(buffer, area, palette, hits);
+    }
 }

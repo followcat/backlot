@@ -70,7 +70,7 @@ impl App {
         let mut pane = pane::Pane::new(pane_tx.clone(), open.clone());
         pane.set_scrollback_bytes(shell.scrollback_limit_bytes);
         pane.set_attach_history(shell.attach_history_lines);
-        App {
+        let mut app = App {
             notice: None,
             core_start: None,
             update_check: None,
@@ -305,7 +305,9 @@ impl App {
             reaped_exited: Default::default(),
             outer_focused: None,
             probe,
-        }
+        };
+        app.sync_studio_chrome();
+        app
     }
 
     /// A pane wired to this app: the shared event channel, the attach

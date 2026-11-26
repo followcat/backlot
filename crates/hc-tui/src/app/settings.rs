@@ -171,6 +171,8 @@ impl App {
             &self.shell.theme_runtime,
             None,
         );
+        self.shell.studio_injected_sidebar_bg = false;
+        self.sync_studio_chrome();
     }
 
     /// `cancel_settings_overlay`: Esc or an outside click restores the
@@ -181,6 +183,8 @@ impl App {
         };
         self.shell.theme_name = settings.original_theme_name;
         self.shell.palette = settings.original_palette;
+        self.shell.studio_injected_sidebar_bg = false;
+        self.sync_studio_chrome();
     }
 
     /// `save_settings_edit`: write the TOML first, then reload the live

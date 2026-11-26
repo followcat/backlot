@@ -36,7 +36,9 @@ impl App {
                 resolve_effective_theme(&self.shell.theme_runtime, self.host_appearance);
             self.shell.palette = palette;
             self.shell.theme_name = name;
+            self.shell.studio_injected_sidebar_bg = false;
         }
+        self.sync_studio_chrome();
     }
 
     /// `true` when any measured fact moved — default colors, palette

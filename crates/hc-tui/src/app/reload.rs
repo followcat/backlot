@@ -83,6 +83,7 @@ impl App {
             next.agent_panel_sort = previous.agent_panel_sort;
         }
         self.shell = next;
+        self.sync_studio_chrome();
         self.prefix.reset();
         self.release_pane_mouse();
         self.chrome_drag = None;
