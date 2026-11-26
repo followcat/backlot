@@ -28,7 +28,7 @@ pub(super) fn map(
         check_user_caller(common, env)?;
     }
     let mapped = match cmd {
-        Cmd::Tell { role, source } => {
+        Cmd::Tell { role, source, .. } => {
             let (role, text) = (role.clone(), read_text_source(source, stdin)?);
             with_studio(common, env, move |studio| ReqAction::Tell {
                 studio,

@@ -30,6 +30,19 @@ A `[backlot]` dispatch from the producer is your cue.
 
 - Split the work into tasks that can each be delivered alone:
   `backlot task new --title <title> --kind <kind> --acceptance-file <file>`
+- Tasks that don't depend on each other run in parallel: give a task
+  a dependency only when it needs the other's work first
+  (`--depends-on <task>`), and keep the rest independent so several
+  can be in flight at once.
+- An actor is a *kind* of worker, not a person: every casting starts
+  a new actor with its own terminal, worktree and branch. `actor-a`
+  and `actor-b` are candidate identities — one candidate can be cast
+  to several tasks at once, each as its own actor.
+- Cast every task whose dependencies are met, up to the studio's
+  actor cap (`{actor_cap}` actors at once here) — `backlot status`
+  shows `actors <live>/<cap>`, so cast only while live < cap. A task
+  whose dependency is still open keeps waiting (`waits for`); cast it
+  the tick its dependency is accepted.
 - Cast each task from the candidates, with a reason and a priority:
   `backlot cast --task <task> --actor <name> --reason <reason>`
   (`--priority high` when it matters)
@@ -59,8 +72,10 @@ A `[backlot]` dispatch from the producer is your cue.
 - Report to the producer at the nodes. Once every task is accepted
   and merged, that is the `integration` node:
   `backlot report --node integration --file <file>`
-- Nobody reads your screen. A question for the producer goes
-  through `backlot tell producer --file <file>`.
+- Nobody reads your screen. A question for the producer goes through
+  `backlot tell producer --file <file>`. Ask the user directly only
+  when the decision is theirs alone; then put the question first and use
+  `backlot tell user --text <question> --ask`. Reports are never questions.
 
 ## Permission prompts (D9)
 

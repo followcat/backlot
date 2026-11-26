@@ -135,11 +135,22 @@ pub(crate) fn fail_title(p: &Pending) -> String {
 
 /// The exact first non-empty line of the failure's `stderr` (§3.3).
 pub(crate) fn fail_body(err: &str) -> String {
-    err.lines()
+    let first = err
+        .lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
-        .unwrap_or("command failed")
-        .to_owned()
+        .unwrap_or("command failed");
+    if first.contains("already answered") {
+        "that was already answered elsewhere".to_owned()
+    } else if first.contains("already cleared") {
+        "that was already cleared elsewhere".to_owned()
+    } else if first.contains("is not a 'tell user'") {
+        "that question is no longer waiting".to_owned()
+    } else if first.contains("has no open permission prompt") {
+        "that prompt was already answered elsewhere".to_owned()
+    } else {
+        first.to_owned()
+    }
 }
 
 /// D17a: an argv word carrying a control byte — NUL, newline, ESC —

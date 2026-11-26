@@ -221,6 +221,9 @@ pub(crate) fn format_card_show(res: &CardShowResult) -> String {
                 if let Some(v) = cast.task_budget_s {
                     limits.push(format!("task_budget_s {v}"));
                 }
+                if let Some(v) = cast.max_actors {
+                    limits.push(format!("max_actors {v}"));
+                }
                 for (runner, cap) in &cast.limits {
                     limits.push(format!("{runner} ≤{cap} live"));
                 }

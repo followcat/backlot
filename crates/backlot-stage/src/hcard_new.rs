@@ -225,6 +225,9 @@ fn studio_created_kind(
         checks,
         task_budget_s: cast.task_budget_s,
         limits: cast.limits.clone(),
+        max_actors: cast
+            .max_actors
+            .unwrap_or_else(backlot_model::event::default_max_actors),
         push,
     })
 }

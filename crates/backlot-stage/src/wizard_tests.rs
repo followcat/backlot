@@ -125,7 +125,11 @@ fn every_prompt_defaults_and_accepts() {
         fs::read_dir(std::env::temp_dir())
             .unwrap()
             .filter_map(|e| e.ok())
-            .all(|e| !e.file_name().to_string_lossy().starts_with("backlot-cast-")),
+            .all(|e| {
+                !e.file_name()
+                    .to_string_lossy()
+                    .starts_with(&format!("backlot-cast-{}-", std::process::id()))
+            }),
         "draft temp file left behind"
     );
 }
@@ -380,6 +384,7 @@ fn a_terminal_pick_replaces_the_line_prompt() {
 /// written, like a refused cast.
 #[test]
 fn a_cancelled_pick_writes_nothing() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
     let (scratch, env) = scratch();
     let answers = b"\n\n\n\n".as_slice();
     let mut input = answers;

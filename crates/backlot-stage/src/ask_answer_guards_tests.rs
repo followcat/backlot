@@ -166,6 +166,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
             checks: Vec::<CheckDecl>::new(),
             task_budget_s: None,
             limits: BTreeMap::new(),
+            max_actors: backlot_model::event::default_max_actors(),
             push: Default::default(),
         },
     );
@@ -191,7 +192,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
                 EventKind::MessageQueued {
                     to: "user".into(),
                     file: Some(format!("messages/{seq}-ask.md")),
-                    purpose: None,
+                    purpose: Some("ask".into()),
                     source_seq: None,
                 },
             ),

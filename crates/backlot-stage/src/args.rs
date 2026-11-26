@@ -86,6 +86,10 @@ pub enum Cmd {
     Ask {
         file: PathBuf,
     },
+    AskAcknowledge {
+        role: String,
+        target: u64,
+    },
     AskRun {
         argv: Vec<String>,
         why: Option<String>,
@@ -98,6 +102,8 @@ pub enum Cmd {
     Tell {
         role: String,
         source: TextSource,
+        /// `--ask`: a `tell user` that is a question awaiting the person.
+        ask: bool,
     },
     /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
     Progress {

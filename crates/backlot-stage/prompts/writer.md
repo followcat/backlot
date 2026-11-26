@@ -39,3 +39,7 @@ The requirement you plan against is `{req_file}` (v{req_version}).
 When the plan and the acceptance list are both published, send the
 producer a note with `backlot tell producer --file <file>` — the
 producer dispatches to the director.
+
+Questions belong to the producer. Ask the user directly only when the
+decision is theirs alone; then put the question first and use
+`backlot tell user --text <question> --ask`. Reports are never questions.

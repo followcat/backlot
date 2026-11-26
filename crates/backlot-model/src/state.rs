@@ -51,6 +51,9 @@ pub struct StudioConfig {
     /// Runner name → maximum live roles in this studio (S9e).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub limits: BTreeMap<String, u32>,
+    /// At most this many actors live at once; fixed roles never count.
+    #[serde(default = "default_max_actors")]
+    pub max_actors: u32,
     /// Studio outward push policy and recorded remote URLs.
     #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
     pub push: PushPolicy,

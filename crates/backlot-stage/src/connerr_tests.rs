@@ -166,6 +166,7 @@ fn studio(dir: &Path) {
                     checks: Vec::new(),
                     task_budget_s: None,
                     limits: Default::default(),
+                    max_actors: backlot_model::event::default_max_actors(),
                     push: Default::default(),
                 },
             ),
@@ -259,29 +260,17 @@ async fn three_retries_escalate_and_the_banner_lifting_resumes() {
     assert_eq!(fake.lock().unwrap().sends.len(), 3);
     assert_eq!(fake.lock().unwrap().sends.as_slice(), ["continue"; 3]);
 
-    // The budget is spent: the stage-owned attention clears and a
-    // `needs_user` one takes its place; no fourth `continue`.
+    // The budget is spent: the same attention escalates to the
+    // person; no fourth `continue` and no replacement attention.
     sample(&stage, &dir, &term, Work::Waiting, T0 + 60_000).await;
     assert_eq!(fake.lock().unwrap().sends.len(), 3);
-    let cleared = events(&dir, "attention.cleared");
-    assert_eq!(cleared.len(), 1);
-    match &cleared[0].kind {
-        EventKind::AttentionCleared { reason, .. } => {
-            assert_eq!(reason.as_deref(), Some("auto-retries exhausted after 3"));
-        }
-        _ => unreachable!(),
-    }
+    assert_eq!(events(&dir, "attention.cleared").len(), 0);
     let raised = events(&dir, "attention.raised");
-    assert_eq!(raised.len(), 2);
-    match &raised[1].kind {
-        EventKind::AttentionRaised {
-            reason,
-            needs_user,
-            detail,
-            ..
-        } => {
-            assert_eq!(reason, CONNECTION_ERROR);
-            assert!(*needs_user, "the exhausted episode stayed the stage's");
+    assert_eq!(raised.len(), 1);
+    let escalated = events(&dir, "attention.escalated");
+    assert_eq!(escalated.len(), 1);
+    match &escalated[0].kind {
+        EventKind::AttentionEscalated { detail, .. } => {
             assert!(detail.contains("needs the user"), "{detail}");
         }
         _ => unreachable!(),
@@ -290,7 +279,7 @@ async fn three_retries_escalate_and_the_banner_lifting_resumes() {
     // stage sends nothing more.
     sample(&stage, &dir, &term, Work::Waiting, T0 + 75_000).await;
     assert_eq!(fake.lock().unwrap().sends.len(), 3);
-    assert_eq!(events(&dir, "attention.raised").len(), 2);
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
 
     // The banner lifts — the open attention clears `resumed`.
     let clean = term_with("done", "");
@@ -307,8 +296,8 @@ async fn three_retries_escalate_and_the_banner_lifting_resumes() {
         .await
         .unwrap();
     let cleared = events(&dir, "attention.cleared");
-    assert_eq!(cleared.len(), 2);
-    match &cleared[1].kind {
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
         EventKind::AttentionCleared { reason, .. } => {
             assert_eq!(reason.as_deref(), Some("resumed"));
         }
@@ -454,11 +443,9 @@ async fn three_rate_limit_retries_escalate_and_recover() {
     rate_pass(&stage, &dir, &term, screen, Work::Waiting, T0 + 140_000).await;
     assert_eq!(fake.lock().unwrap().sends.len(), 3);
     let raised = events(&dir, "attention.raised");
-    assert_eq!(raised.len(), 2);
-    match &raised[1].kind {
-        EventKind::AttentionRaised { needs_user, .. } => assert!(*needs_user),
-        _ => unreachable!(),
-    }
+    assert_eq!(raised.len(), 1);
+    let escalated = events(&dir, "attention.escalated");
+    assert_eq!(escalated.len(), 1);
 
     // The status recovers: the escalated attention clears `resumed`.
     let clean = term_with("working", "");
@@ -472,8 +459,8 @@ async fn three_rate_limit_retries_escalate_and_recover() {
     )
     .await;
     let cleared = events(&dir, "attention.cleared");
-    assert_eq!(cleared.len(), 2);
-    match &cleared[1].kind {
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
         EventKind::AttentionCleared { reason, .. } => {
             assert_eq!(reason.as_deref(), Some("resumed"));
         }
@@ -531,4 +518,46 @@ async fn a_weekly_limit_escalates_at_once_and_never_loops() {
     rate_pass(&stage, &dir, &term, screen, Work::Waiting, T0 + 3_601_000).await;
     rate_pass(&stage, &dir, &term, screen, Work::Waiting, T0 + 3_602_000).await;
     assert_eq!(events(&dir, "attention.raised").len(), 1);
+}
+
+/// A runner that says it continues automatically is never retried by the
+/// stage: the same attention escalates only after the reset window has passed.
+#[tokio::test]
+async fn an_auto_continuing_rate_limit_waits_then_escalates_in_place() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term_with("done", "");
+    let (stage, fake) = stage().await;
+    let screen = "session limit reached · resets 11:59pm\nContinuing automatically at 11:59pm";
+
+    rate_pass(&stage, &dir, &term, screen, Work::Waiting, T0).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            needs_user, detail, ..
+        } => {
+            assert!(!needs_user);
+            assert!(detail.contains("waiting until"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    rate_pass(&stage, &dir, &term, screen, Work::Waiting, T0 + 60_000).await;
+    assert!(fake.lock().unwrap().sends.is_empty());
+    assert_eq!(events(&dir, "attention.escalated").len(), 0);
+
+    // Even the longest same-clock reset is inside one day; after that,
+    // a banner still on screen means the promised continuation did not move.
+    rate_pass(
+        &stage,
+        &dir,
+        &term,
+        screen,
+        Work::Waiting,
+        T0 + 86_400_000 + crate::ratelimit::RETRY_MARGIN_MS,
+    )
+    .await;
+    assert!(fake.lock().unwrap().sends.is_empty());
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+    assert_eq!(events(&dir, "attention.escalated").len(), 1);
 }

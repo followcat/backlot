@@ -163,7 +163,7 @@ fn delivered_and_cleared_links_validate() {
         EventKind::MessageQueued {
             to: "director".into(),
             file: None,
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -388,7 +388,7 @@ fn ask_answered_is_the_stages_and_requires_an_open_ask() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/5-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));

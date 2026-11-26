@@ -1353,6 +1353,7 @@ fn summary_exposes_current_requirement_file_when_present() {
         checks: Vec::new(),
         task_budget_s: None,
         limits: BTreeMap::new(),
+        max_actors: crate::event::default_max_actors(),
         push: Default::default(),
     });
     let s0 = summary(
@@ -1452,4 +1453,62 @@ fn legacy_backlot_1_summary_without_exchange_metadata_deserializes_to_none() {
     assert_eq!(hw.exchange[0].kind, None);
     assert_eq!(hw.exchange[0].task, None);
     assert_eq!(hw.exchange[0].ts_ms, None);
+}
+
+/// A plain `tell user` is a report in the exchange, never a question;
+/// only the explicit `ask` purpose opens `RoleSummary.asks`.
+#[test]
+fn a_report_is_not_a_question_and_an_explicit_ask_is() {
+    let tell = |seq, purpose: Option<&str>| EventKind::MessageQueued {
+        to: "user".into(),
+        file: Some(format!("messages/{seq}.md")),
+        purpose: purpose.map(str::to_string),
+        source_seq: None,
+    };
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("stage", started("producer", "t1", "prod")),
+            ("producer", tell(10, None)),
+        ],
+    );
+    assert_eq!(open_ask(&state, "producer"), None);
+
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("stage", started("producer", "t1", "prod")),
+            ("producer", tell(10, Some("ask"))),
+        ],
+    );
+    let ask = open_ask(&state, "producer").expect("explicit ask is open");
+    let exchange = crate::studio_exchange::studio_exchange(&state, &BTreeMap::new());
+    assert!(exchange.iter().any(|e| e.seq == ask.seq && e.ask));
+}
+
+/// `ask.acknowledged` clears the open question without removing the
+/// exchange turn; a later role action still answers it too.
+#[test]
+fn acknowledge_clears_the_question_and_keeps_the_exchange() {
+    let ask = EventKind::MessageQueued {
+        to: "user".into(),
+        file: Some("messages/10-q.md".into()),
+        purpose: Some("ask".into()),
+        source_seq: None,
+    };
+    let mut events = base_events();
+    events.push(ev(8, "stage", started("producer", "t1", "prod")));
+    events.push(ev(10, "producer", ask));
+    events.push(ev(
+        11,
+        "user",
+        EventKind::AskAcknowledged {
+            role: "producer".into(),
+            target: 10,
+        },
+    ));
+    let state = replay(&events);
+    assert_eq!(open_ask(&state, "producer"), None);
+    let exchange = crate::studio_exchange::studio_exchange(&state, &BTreeMap::new());
+    assert!(exchange.iter().any(|e| e.seq == 10 && e.ask));
 }

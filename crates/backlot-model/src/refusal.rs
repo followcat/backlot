@@ -202,6 +202,9 @@ pub enum Refusal {
     CastBadLimit {
         runner: String,
     },
+    /// A `studio.cast` setting `max_actors` below one — a studio with
+    /// no actor slot can never cast.
+    CastBadMaxActors,
     /// A `role.progress` text that is empty, too long, or holds control characters.
     BadProgress(String),
     /// An invalid `outward.requested` or `outward.completed` payload.
@@ -433,6 +436,7 @@ impl fmt::Display for Refusal {
             Refusal::CastBadLimit { runner } => {
                 write!(f, "limits.{runner} must be at least 1")
             }
+            Refusal::CastBadMaxActors => write!(f, "max_actors must be at least 1"),
             Refusal::BadProgress(msg) | Refusal::InvalidOutward(msg) => f.write_str(msg),
         }
     }

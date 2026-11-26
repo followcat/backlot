@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use backlot_model::attention::is_prompt_reason;
 use backlot_model::event::{ActorIdentity, EventKind, Priority, TaskStateChange};
 use backlot_model::req_results::{
-    AttentionClearResult, CloseResult, RecastResult, ReopenResult, RestartResult,
-    TaskPriorityResult, TaskStateResult, TellResult,
+    AskAcknowledgeResult, AttentionClearResult, CloseResult, RecastResult, ReopenResult,
+    RestartResult, TaskPriorityResult, TaskStateResult, TellResult,
 };
 
 use crate::args::{Cmd, TextSource};
@@ -74,6 +74,7 @@ pub(crate) fn tell_file(
         Cmd::Tell {
             role: role.clone(),
             source: TextSource::File(file),
+            ask: false,
         },
         env,
         base,
@@ -90,6 +91,42 @@ pub(crate) fn tell_file(
         role,
         seq: event.seq,
         file: dest,
+    })
+}
+
+/// `ask-acknowledge`: the person marked an explicit role question seen without answering it.
+pub(crate) fn ask_acknowledge(
+    base: &Path,
+    caller: &Caller,
+    role: String,
+    target: u64,
+) -> Result<AskAcknowledgeResult, Fail> {
+    if caller.role != "user" {
+        return Err(Fail::refused("acknowledging a question is the user's"));
+    }
+    let dir = store::studio_dir(base, &caller.studio);
+    require_studio_dir(&dir, &caller.studio)?;
+    let by = caller.by();
+    let event = store::append(&dir, move |_, _| {
+        Ok(crate::store::Pending {
+            event: backlot_model::NewEvent::new(
+                by,
+                EventKind::AskAcknowledged {
+                    role: role.clone(),
+                    target,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })?;
+    let EventKind::AskAcknowledged { role, .. } = event.kind else {
+        unreachable!()
+    };
+    Ok(AskAcknowledgeResult {
+        studio: caller.studio.clone(),
+        role,
+        target,
+        seq: event.seq,
     })
 }
 

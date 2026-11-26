@@ -292,7 +292,7 @@ fn role_asks_tracks_the_newest_unanswered_tell_user() {
         "producer",
         "user",
         Some("messages/10-q.md"),
-        None,
+        Some("ask"),
         None,
     ));
     state.messages.push(msg(
@@ -300,7 +300,7 @@ fn role_asks_tracks_the_newest_unanswered_tell_user() {
         "producer",
         "user",
         Some("messages/11-q2.md"),
-        None,
+        Some("ask"),
         None,
     ));
     let mut snippets = BTreeMap::new();
@@ -352,7 +352,7 @@ fn role_asks_clears_when_the_role_acts_after_it() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -395,7 +395,7 @@ fn a_stage_written_event_does_not_answer_the_role() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -440,7 +440,7 @@ fn finishing_clears_the_open_question() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -549,7 +549,7 @@ fn ask_answered_clears_asks_without_hiding_the_exchange_question() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -617,7 +617,7 @@ fn restart_recast_resume_and_progress_after_ask_do_not_clear_it() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -700,7 +700,7 @@ fn role_stage_touch_seq_tracks_terminal_writes_and_lifecycle_since_ask() {
         EventKind::MessageQueued {
             to: "producer".into(),
             file: Some("messages/5-hi.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));
@@ -710,7 +710,7 @@ fn role_stage_touch_seq_tracks_terminal_writes_and_lifecycle_since_ask() {
         EventKind::MessageQueued {
             to: "user".into(),
             file: Some("messages/10-q.md".into()),
-            purpose: None,
+            purpose: Some("ask".into()),
             source_seq: None,
         },
     ));

@@ -34,7 +34,8 @@ layout, so toggling it resizes nothing.
   machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
   machine's `■ live` / `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
   task counts, the role on set, what it is doing (a broken ledger's error in red), and one
-  `◆` per cast member coloured by its state. A frame whose studio has a plain next step carries
+  `◆` per cast member coloured by its state beside `actors <live>/<cap>` (or `<N> cast` on a
+  document an older stage wrote). A frame whose studio has a plain next step carries
   `· next: tell the producer what to build`, `· next: director reviewing` or `· next: finish (f)`
   on its blank row. The last frame is always the dashed
   **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen

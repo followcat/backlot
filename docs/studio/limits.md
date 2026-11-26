@@ -179,8 +179,14 @@ re-raise one `stall_limit_s` later.
   `Connection error` stop, and Claude Code's measured `hit your limit` / `session limit` /
   `weekly limit` / `monthly limit` screens. A short limit waits the parsed reset and sends
   `continue` three times before escalating; a weekly or monthly quota escalates
-  `needs the user` at once instead of burning those retries. A connection error gets the same
-  bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
+  `needs the user` at once instead of burning those retries. The parser accepts Claude's local
+  12-hour reset clock (`resets 12:10pm`) as well as relative waits and Devin's UTC absolute form.
+  A runner that explicitly says `Continuing automatically at 12:10pm` is left alone: it is never
+  the person's merely because a retry count elapsed, and escalates only when that reset has passed
+  without the limit lifting. Escalation uses `attention.escalated` on the same attention, so one
+  stall raises one attention and Hollywood is told once. Claude's weekly-limit four-choice dialog
+  is recognized as a limit, never as a question the stage may answer; its detail says options 1–2
+  wait while 3–4 cost money. A connection error gets the same bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
   merely be printed — and a banner deeper than the last 12 non-blank lines is scrollback, not
   evidence. What is not verified: none of these paths has met a real agent since they were
   written. The unit and fake-core tests cover the detection and retry cycles; Devin's,
@@ -284,7 +290,15 @@ re-raise one `stall_limit_s` later.
   the runner, or at their count while the writer or a candidate shares it. **Hollywood is outside
   every cap** — `bl-hollywood` is not a studio role and no cast counts it — but its start still
   spends the tick's one-real-runner slot like any other launch.
-- **A held role owes nothing until it starts.** A start a `[limits]` cap holds back accrues no
+- **`max_actors` caps actors per studio, on top of the runner caps.** The cast's `max_actors`
+  (default 4) holds a wanted actor back once that many actors are live or being started. Only
+  actors count — the producer, the director and the writer never fill an actor slot — and a
+  candidate is a kind of actor, so one candidate cast to several tasks is several actors. A held
+  actor waits `waiting for an actor slot` (distinct from a `waiting for a <runner> slot`) and
+  starts the tick one closes; `backlot status` shows `actors <live>/<cap>`, and the panel and
+  Hollywood frame show the same. A `max_actors` below 1 is refused. This is behavioural only:
+  nothing ever refused a second actor on a candidate, and the per-runner caps are unchanged.
+- **A held role owes nothing until it starts.** A start a `[limits]` or `max_actors` cap holds back accrues no
   task budget (the clock opens at the first `role.started`), owes no step, draws no nudge and no
   `owed` attention; once the role starts, an owed step ages from the later of its ordinary
   `since` and that start.

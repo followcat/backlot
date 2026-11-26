@@ -52,6 +52,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             checks,
             task_budget_s,
             limits,
+            max_actors,
             push,
         } => {
             state.studio = Some(StudioConfig {
@@ -70,6 +71,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 checks: checks.clone(),
                 task_budget_s: *task_budget_s,
                 limits: limits.clone(),
+                max_actors: *max_actors,
                 push: push.clone(),
             });
             state.targets.insert(seq, SeqTarget::Studio);
@@ -95,6 +97,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             checks,
             task_budget_s,
             limits,
+            max_actors,
             push,
             card,
         } => {
@@ -109,6 +112,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 cfg.checks = checks.clone();
                 cfg.task_budget_s = *task_budget_s;
                 cfg.limits = limits.clone();
+                cfg.max_actors = *max_actors;
                 // The knobs come from the event; the recorded remote
                 // URLs are facts from the bound repository and stay.
                 let remotes = cfg.push.remotes.clone();
@@ -631,6 +635,14 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 .targets
                 .insert(seq, SeqTarget::Attention(state.attention.len() - 1));
         }
+        EventKind::AttentionEscalated { target, detail } => {
+            if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
+                && let Some(a) = state.attention.get_mut(*idx)
+            {
+                a.needs_user = true;
+                a.detail = detail.clone();
+            }
+        }
         EventKind::AttentionCleared { target, reason } => {
             let mut touched_role = None;
             if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
@@ -656,7 +668,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             }
             bump_stage_touch(state, role, seq);
         }
-        EventKind::AskAnswered { role, target } => {
+        EventKind::AskAnswered { role, target } | EventKind::AskAcknowledged { role, target } => {
             state.ask_answers.push(AskAnswerRecord {
                 seq,
                 role: role.clone(),

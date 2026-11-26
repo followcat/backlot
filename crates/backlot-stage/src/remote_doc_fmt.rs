@@ -1,10 +1,10 @@
 //! Result formatting helpers for `plugin.backlot.res` acknowledgements.
 
 use backlot_model::req_results::{
-    AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult, CloseResult,
-    HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, StudioFinishResult,
-    StudioNewResult, StudioPlan, StudioReopenResult, TaskPriorityResult, TaskStateResult,
-    TellHollywoodResult, TellResult,
+    AskAcknowledgeResult, AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult,
+    CloseResult, HollywoodSetupResult, RecastResult, ReopenResult, RestartResult,
+    StudioFinishResult, StudioNewResult, StudioPlan, StudioReopenResult, TaskPriorityResult,
+    TaskStateResult, TellHollywoodResult, TellResult,
 };
 use backlot_model::req_wire::{ReqAction, ResAck};
 use serde::de::DeserializeOwned;
@@ -70,6 +70,10 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
         }
         ReqAction::CardShow { .. } => {
             verbs_card_show::format_card_show(&parse_res::<CardShowResult>(&ack)?)
+        }
+        ReqAction::AskAcknowledge { .. } => {
+            let r: AskAcknowledgeResult = parse_res(&ack)?;
+            format!("question #{} in {} marked seen", r.target, r.studio)
         }
         ReqAction::AttentionClear { .. } => {
             verbs_fmt::format_attention_clear(&parse_res::<AttentionClearResult>(&ack)?)

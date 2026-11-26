@@ -104,9 +104,12 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             {
                 Ok(())
             }
-            EventKind::MessageQueued { purpose: None, .. }
-            | EventKind::RoleRefused { .. }
-            | EventKind::OutwardRequested { .. } => Ok(()),
+            EventKind::MessageQueued { purpose, .. }
+                if purpose.as_deref().is_none_or(|p| p == "ask") =>
+            {
+                Ok(())
+            }
+            EventKind::RoleRefused { .. } | EventKind::OutwardRequested { .. } => Ok(()),
             EventKind::RoleProgress {
                 role: target, task, ..
             } if target == role && task.as_deref().is_none_or(|t| t == own) => Ok(()),
@@ -114,16 +117,20 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         };
     }
     if role == "writer" {
-        let ok = matches!(
-            &new.kind,
+        let ok = match &new.kind {
             EventKind::PlanPublished { .. }
-                | EventKind::MessageQueued { purpose: None, .. }
-                | EventKind::RoleRefused { .. }
-                | EventKind::OutwardRequested { .. }
-        ) || matches!(
-            &new.kind,
-            EventKind::RoleProgress { role: target, task: None, .. } if target == role
-        );
+            | EventKind::RoleRefused { .. }
+            | EventKind::OutwardRequested { .. } => true,
+            EventKind::MessageQueued { purpose, .. } => {
+                purpose.as_deref().is_none_or(|p| p == "ask")
+            }
+            EventKind::RoleProgress {
+                role: target,
+                task: None,
+                ..
+            } => target == role,
+            _ => false,
+        };
         return if ok {
             Ok(())
         } else {
@@ -144,6 +151,13 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Ok(())
         } else {
             Err(cannot(role, "the stage"))
+        };
+    }
+    if let EventKind::AskAcknowledged { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
         };
     }
     if let EventKind::TaskDelivered { task, .. } = &new.kind {
@@ -197,9 +211,11 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::MessageDelivered { .. }
         | EventKind::MessageDropped { .. }
         | EventKind::AttentionRaised { .. }
+        | EventKind::AttentionEscalated { .. }
         | EventKind::AttentionCleared { .. }
         | EventKind::TaskChecked { .. }
         | EventKind::OutwardCompleted { .. } => "the stage",
+        EventKind::AskAcknowledged { .. } => "the user",
         EventKind::RoleReopen { .. }
         | EventKind::RoleRelease { .. }
         | EventKind::RoleRestart { .. }

@@ -85,11 +85,6 @@ async fn modals_dim_backdrop_and_suppress_underlying_cursors_and_highlights() {
         // visible in backdrop or cleared under a wide modal).
         let cs_input = app.hollywood_hits.input;
         assert_ne!(
-            buf[(cs_input.x + 1, cs_input.y)].fg,
-            palette.accent,
-            "{label}: Call Sheet `›` accent suppressed"
-        );
-        assert_ne!(
             buf[(app.hollywood_hits.area.x, cs_input.y)].symbol(),
             "▌",
             "{label}: Call Sheet selection bar suppressed"

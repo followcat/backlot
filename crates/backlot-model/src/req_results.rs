@@ -117,6 +117,15 @@ pub struct CardShowResult {
     pub roles_summary: Option<String>,
 }
 
+/// Result of `ask-acknowledge`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AskAcknowledgeResult {
+    pub studio: String,
+    pub role: String,
+    pub target: u64,
+    pub seq: u64,
+}
+
 /// Result of `attention-clear`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttentionClearResult {

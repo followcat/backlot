@@ -25,6 +25,22 @@ and you can reopen a finished studio.
 
 - **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
 - **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
+- **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
+- **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
+
+### Changed
+
+- **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
+
+## 0.4.9 — 2026-11-26
+
+A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.
+
+### Added
+
+- **A studio-wide actor cap, `max_actors` (default 4).** The cast caps how many actors play at once; only actors count — the producer, the director and the writer never fill an actor slot — and an actor being started counts too. A wanted actor past the cap waits `waiting for an actor slot` (distinct from a runner's `waiting for a <runner> slot`) and starts the tick one actor closes. It is part of the cast, so `backlot studio cast show|set`, `Edit cast…` and Hollywood `cast` cards change it; a value below 1 is refused. `backlot status` shows `actors <live>/<cap>`, and the panel and Hollywood frames show the same beside their cast.
+- **The director casts in parallel.** The director prompt now says a candidate is a kind of actor (not a person), every cast starts a new actor with its own terminal, worktree and branch, one candidate can be cast to several tasks at once, and independent tasks should run in parallel — cast every task whose dependencies are met, up to the studio's actor cap, and let dependent tasks keep waiting. The producer's prompt asks for that split when it dispatches. Nothing in the code ever refused a second actor or capped it behaviourally; this makes the intent explicit (`docs/studio/guide.md`, `docs/studio/design.md`, `docs/studio/limits.md`, `docs/studio/ledger.md`).
 
 ## 0.4.8 — 2026-11-26
 

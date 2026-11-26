@@ -369,6 +369,11 @@ pub enum EventKind {
         /// Absent on logs that predate the field.
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         limits: BTreeMap<String, u32>,
+        /// The studio-wide actor cap: at most this many actors live at
+        /// once, fixed roles never counting. Absent on logs that
+        /// predate the field reads as [`default_max_actors`].
+        #[serde(default = "default_max_actors")]
+        max_actors: u32,
         /// Studio outward push policy and recorded remote URLs.
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
@@ -402,6 +407,9 @@ pub enum EventKind {
         task_budget_s: Option<u32>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         limits: BTreeMap<String, u32>,
+        /// The studio-wide actor cap; see [`StudioCreated`]'s.
+        #[serde(default = "default_max_actors")]
+        max_actors: u32,
         #[serde(default, skip_serializing_if = "PushPolicy::is_default")]
         push: PushPolicy,
         /// The `c<n>` marker when a card carried the change out — the
@@ -639,6 +647,11 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "is_false")]
         needs_user: bool,
     },
+    /// `attention.escalated`: the same open attention becomes the
+    /// person's — one stall keeps one attention rather than a close
+    /// plus a fresh raise. `detail` replaces the display detail.
+    #[serde(rename = "attention.escalated")]
+    AttentionEscalated { target: u64, detail: String },
     /// `target` is the seq of the `attention.raised` event.
     #[serde(rename = "attention.cleared")]
     AttentionCleared {
@@ -666,6 +679,11 @@ pub enum EventKind {
     /// question in `StudioSummary.exchange`.
     #[serde(rename = "ask.answered")]
     AskAnswered { role: String, target: u64 },
+    /// `ask.acknowledged`: the user marked the open question at
+    /// `target` seen without answering it. Clears
+    /// `RoleSummary.asks` while keeping the question in the exchange.
+    #[serde(rename = "ask.acknowledged")]
+    AskAcknowledged { role: String, target: u64 },
     /// `role.refused`: an outward-action shim or git hook refused a
     /// command run by a role (D3) or routed it to a user card.
     #[serde(rename = "role.refused")]
@@ -787,6 +805,12 @@ pub fn default_escalate_after_s() -> u32 {
     600
 }
 
+/// The studio-wide actor cap when the cast does not set one — actors
+/// playing at once, fixed roles never counting.
+pub fn default_max_actors() -> u32 {
+    4
+}
+
 impl EventKind {
     /// The wire name, identical to the serde tag.
     pub fn name(&self) -> &'static str {
@@ -817,9 +841,11 @@ impl EventKind {
             EventKind::MessageDropped { .. } => "message.dropped",
             EventKind::ReportSent { .. } => "report.sent",
             EventKind::AttentionRaised { .. } => "attention.raised",
+            EventKind::AttentionEscalated { .. } => "attention.escalated",
             EventKind::AttentionCleared { .. } => "attention.cleared",
             EventKind::StageAnswered { .. } => "stage.answered",
             EventKind::AskAnswered { .. } => "ask.answered",
+            EventKind::AskAcknowledged { .. } => "ask.acknowledged",
             EventKind::RoleRefused { .. } => "role.refused",
             EventKind::OutwardRequested { .. } => "outward.requested",
             EventKind::OutwardCompleted { .. } => "outward.completed",

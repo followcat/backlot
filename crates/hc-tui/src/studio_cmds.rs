@@ -295,6 +295,29 @@ pub(crate) fn tell(key: &StudioKey, role: &str, text: &str) -> Action {
     a
 }
 
+/// `ask acknowledged --person <role> --target <seq>` — the person's receipt for a question.
+pub(crate) fn ask_acknowledge(key: &StudioKey, role: &str, target: u64) -> Action {
+    let mut a = action(
+        format!("acknowledging {role}"),
+        format!("acknowledged {role}"),
+        format!("acknowledge {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &[
+            "ask".into(),
+            "acknowledged".into(),
+            "--person".into(),
+            role.into(),
+            "--target".into(),
+            target.to_string(),
+        ],
+        key,
+    );
+    a
+}
+
 /// `req revise --stdin --summary <s>` (§4, G2) — `body` pipes
 /// through the runner's stdin, local and remote alike.
 pub(crate) fn revise(key: &StudioKey, summary: &str, body: String) -> Action {
