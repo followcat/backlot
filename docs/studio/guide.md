@@ -645,11 +645,21 @@ in the state directory.
 - A prompt reaching for **the role-identity variables or environment-clearing flags**
   — `BACKLOT_*`, `env -i`, `--ignore-environment` — is yours outright: the stage marks it
   `needs the user`, the director gets no notice and its `backlot approve` refuses.
+- An actor's prompt the **director cannot answer** — it is rate-limited, stalled or gone — is
+  routed to you after a one-minute grace (see below).
 
 Read-only commands do not prompt at all: `git status`, `git log`, `git show`, `git diff`,
 `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for
 every role on every runner that has an allow list (`runners.md` says which). One plain command per
 shell call: a `cd x && git log`, a pipe or `git -C` does not match the rule and prompts.
+
+**A prompt the director cannot answer reaches you with the reason.** An actor's prompt is the
+director's to answer, but a director that is rate-limited, stalled or closed cannot. Past a
+one-minute grace the stage clears the director-owned attention `routed to the user`, raises a fresh
+`needs the user` one, and its detail says why and how long — *the director is rate-limited until
+12:10; waiting 14m* — with the same screen saved under `attention/<seq>.txt`. From then the prompt
+is yours: the panel and Hollywood's `prompt` notice show it, and the director's `backlot approve`
+refuses like any user-owned prompt.
 
 Answer with `backlot approve`, naming the role's key — `producer`, `director`, `writer` or
 `actor-<task>-c<n>` (the panel and `backlot status` show it):

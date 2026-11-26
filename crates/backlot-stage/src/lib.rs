@@ -109,6 +109,7 @@ mod relabel;
 pub mod render;
 mod repos;
 mod restore;
+mod route;
 mod runners;
 mod sample;
 mod sendfail;
@@ -319,6 +320,8 @@ mod restart_cmd_tests;
 mod restore_tests;
 #[cfg(test)]
 mod role_cmd_tests;
+#[cfg(test)]
+mod route_tests;
 #[cfg(test)]
 mod sample_tests;
 

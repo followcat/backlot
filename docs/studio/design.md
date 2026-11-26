@@ -594,6 +594,17 @@ runner maps none — with whitespace and box-drawing characters removed, so a wr
 prompt. It flags the attention `needs_user`: no notice to the director, `backlot status` and the panel mark it as the
 user's.
 
+**A prompt the director cannot answer is routed to the person.** An actor's prompt is the director's to answer, but a
+director that is rate-limited, stalled or closed cannot. The deliver pass (`route.rs`) reads the director's open
+`rate limited` / `stalled` attention and its lifecycle — a rate limit outranks a stall, which outranks a closed or
+never-started role — and once the actor's open, director-owned prompt is past a one-minute grace (`ROUTE_GRACE_MS`),
+it clears that attention `routed to the user` and re-raises it `needs_user` with the same saved screen. The detail
+names the reason and the wait — `the director is rate-limited until 12:10; waiting 14m; screen saved to attention/<n>.txt`
+— so the panel and Hollywood's `prompt` notice read as one line. From then it is the user's: the director's
+`backlot approve` is refused like any `needs_user` prompt, and an already-flagged or non-actor prompt is never touched.
+Only the re-raise's own reason text distinguishes a routed prompt in the ledger; the flag is what routes it. The state
+is reloaded before the notices are built, so the new seq lands in the same pass.
+
 ## Guard (D3)
 
 A role works against local state and controlled feature-branch pushes under its studio's `[push]` policy (`recorded` default allows non-protected branch pushes to recorded studio or member remotes; `any` and `none` widen or close auto-pushes). Protected branches, tags (when permitted by policy), unrecorded remotes, and `gh pr create` classify as `Card`: the guard stops the role cleanly and records `role.refused` (`decision: "card"`, full `argv`) so `stage` proposes an `Outward` card (or the role submits one explicitly via `backlot ask --run [--why <r>] -- <cmd>`). Hard-refused calls (force/mirror pushes, config/transport overrides, non-PR `gh` writes, `hc` control (`update`, `machine`, `server stop`, `run`, `exec`, `send`, `keys`, `connect`), interpreter code (`python -c`, `node -e`, heredocs) that writes `plugin.backlot.req` or `doc.set` or reads the core socket, detach tricks that leave the role's process tree (`systemd-run`, `tmux new -d`/`new-session -d`), `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm`/`cargo publish`, `backlot server run|start|stop|adopt|service`, shell alias or env mutations) record `role.refused` and stop outright. Each such refusal also raises one `outward action` attention, informational (`needs_user: false`, class `info`) — the role was told to `backlot ask` if it still needs the command, so it stays on the studio's attention list but never counts as "needs you". It clears `role moved on` once the role writes anything else to the ledger after it, or the stage delivers it new work. `role_env`/`hrole_env` stamp `BACKLOT_TERMINAL`, and user-privileged CLI verbs (`card`, `--as user`, `approve --as user`, `perms revoke`, and `backlot server …`) verify the calling process tree against `BACKLOT_TERMINAL` so a subshell cannot escape by unsetting `BACKLOT_*`. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
