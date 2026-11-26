@@ -451,8 +451,8 @@ pub(crate) fn render_expanded(
                         rect.x,
                         rect.y,
                         1,
-                        "▌",
-                        Style::default().fg(palette.accent),
+                        "▎",
+                        Style::default().fg(palette.overlay1),
                     );
                 }
                 if endpoint.status != ClientEndpointStatus::Online {

@@ -4,6 +4,7 @@
 mod draw_tests;
 mod keys_tests;
 mod rows_tests;
+mod zones_tests;
 
 use backlot_model::summary::Summary;
 

@@ -65,8 +65,9 @@ pub(crate) fn render_with_shadow(
         return hits;
     };
     let inner = geom.inner;
-    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
-    let raised = p.elevation().raised_on_overlay;
+    let elev = p.elevation();
+    let overlay_bg = elev.overlay;
+    let raised = elev.raised_on_overlay;
     hits.area = geom.outer;
     let title = if d.existing.is_some() {
         " Switch Hollywood's agent "
@@ -89,7 +90,7 @@ pub(crate) fn render_with_shadow(
         inner,
         inner.y,
         "esc cancel",
-        Style::default().fg(p.overlay0).bg(overlay_bg),
+        Style::default().fg(elev.muted_overlay).bg(overlay_bg),
     );
     let body = Rect::new(
         inner.x + 1,
@@ -109,7 +110,7 @@ pub(crate) fn render_with_shadow(
                 body.y,
                 body.width,
                 "detecting runners…",
-                Style::default().fg(p.overlay0).bg(overlay_bg),
+                Style::default().fg(elev.muted_overlay).bg(overlay_bg),
             );
             return hits;
         }
@@ -139,7 +140,7 @@ pub(crate) fn render_with_shadow(
                 body.y + 1,
                 body.width,
                 "install one — `backlot runners` lists what is looked for",
-                Style::default().fg(p.overlay0).bg(overlay_bg),
+                Style::default().fg(elev.muted_overlay).bg(overlay_bg),
             );
             return hits;
         }
@@ -207,13 +208,18 @@ pub(crate) fn render_with_shadow(
             Field::Effort => ("effort", d.effort_value().unwrap_or("-").to_string()),
             Field::Apply => ("apply", String::new()),
         };
+        let label_fg = if selected {
+            elev.muted_raised
+        } else {
+            elev.muted_overlay
+        };
         put_text(
             b,
             body.x + 1,
             y,
             8,
             name,
-            Style::default().fg(p.overlay0).bg(bg),
+            Style::default().fg(label_fg).bg(bg),
         );
         let cell = Rect::new(body.x + 9, y, body.width.saturating_sub(9), 1);
         if selected && field == Field::Model && d.model_edit.is_some() {
@@ -297,7 +303,7 @@ pub(crate) fn render_with_shadow(
         inner.bottom().saturating_sub(1),
         inner.width,
         hint,
-        Style::default().fg(p.overlay0).bg(overlay_bg),
+        Style::default().fg(elev.muted_overlay).bg(overlay_bg),
     );
     hits
 }
@@ -310,8 +316,9 @@ fn draw_pick(
     p: &Palette,
     hits: &mut HwHits,
 ) {
-    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
-    let raised = p.elevation().raised_on_overlay;
+    let elev = p.elevation();
+    let overlay_bg = elev.overlay;
+    let raised = elev.raised_on_overlay;
     let runner = d.runner_row().map(|r| r.runner.as_str()).unwrap_or("-");
     let head_style = Style::default()
         .fg(p.accent)
@@ -358,7 +365,7 @@ fn draw_pick(
             y,
             body.width,
             "nothing matches the filter",
-            Style::default().fg(p.overlay0).bg(overlay_bg),
+            Style::default().fg(elev.muted_overlay).bg(overlay_bg),
         );
         return;
     }
@@ -397,13 +404,18 @@ fn draw_pick(
             Style::default().fg(p.text).bg(bg),
         );
         if *option == "auto" {
+            let note_fg = if selected {
+                elev.muted_raised
+            } else {
+                elev.muted_overlay
+            };
             put_segment(
                 b,
                 x,
                 y,
                 body.right(),
                 " · runner default",
-                Style::default().fg(p.overlay0).bg(bg),
+                Style::default().fg(note_fg).bg(bg),
             );
         }
         hits.push(line, HwHit::ModelPick(i));

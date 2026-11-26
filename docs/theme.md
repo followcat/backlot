@@ -3,9 +3,10 @@
 backlot has a look of its own, so you can tell it from hc-tui and Herdr at a glance: the built-in `backlot` theme,
 marquee gold on midnight blue with cream text. It is the default.
 
-The backlot theme is opaque: its sidebar is a step darker than the panes with a one-column rule where it meets
-them, and its overlays — popups, the wizard, notice and release cards, the Hollywood layer — fill their
-default-background cells with the panel colour. A translucent terminal therefore never shows the window behind
+The backlot theme is opaque: its sidebar, top studio header, Lot dock, and Call Sheet share the same tonal
+surface with a one-column muted rule on the inner edges (unless `[theme.custom] sidebar_bg` overrides the sidebar),
+and its overlays — popups, the wizard, notice and release cards, the Call Sheet — fill their
+default-background cells with the theme surface or panel colour. A translucent terminal therefore never shows the window behind
 the UI. With `[theme] source = "herdr"` (or any built-in Herdr theme) the reference look is unchanged, translucency
 included.
 

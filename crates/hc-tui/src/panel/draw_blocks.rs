@@ -14,13 +14,14 @@ use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
-/// The frame's colour: `accent` for the selected studio (whether or
-/// not the lot owns the keys), `surface1` for every other block.
-pub(super) fn frame_style(selected: bool, palette: &Palette) -> Style {
-    Style::default().fg(if selected {
+/// The frame's colour: `accent` only while Lot owns focus and this
+/// studio is selected, `border_muted` for every other block.
+pub(super) fn frame_style(focused_selected: bool, palette: &Palette) -> Style {
+    let elev = palette.elevation();
+    Style::default().fg(if focused_selected {
         palette.accent
     } else {
-        palette.surface1
+        elev.border_muted
     })
 }
 
@@ -167,17 +168,20 @@ pub(super) fn draw_top(
             );
         }
         if id_width > 0 {
+            let title_style = if focused_terminal {
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(palette.subtext0)
+            };
             put_text(
                 buf,
                 rect.x + 2 + marker_w,
                 rect.y,
                 id_width,
                 &id_text,
-                Style::default().fg(if focused_terminal {
-                    palette.text
-                } else {
-                    palette.subtext0
-                }),
+                title_style,
             );
         }
     }
@@ -383,12 +387,36 @@ pub(super) fn draw_input(
     frame: Style,
     palette: &Palette,
 ) -> Option<crate::chrome::help::CursorState> {
+    let elev = palette.elevation();
+    let field_bg = elev.raised_field;
     draw_inner(buf, rect, frame);
-    let mark = Style::default().fg(if composing {
-        palette.accent
+    if rect.width > 2 {
+        let inner = Rect::new(rect.x + 1, rect.y, rect.width.saturating_sub(2), 1);
+        buf.set_style(inner, Style::default().bg(field_bg));
+        let (bar, bar_fg) = if selected || composing {
+            (glyphs::SELECTION_BAR, palette.accent)
+        } else {
+            ("▎", elev.border_muted)
+        };
+        put_text(
+            buf,
+            rect.x + 1,
+            rect.y,
+            1,
+            bar,
+            Style::default().fg(bar_fg).bg(field_bg),
+        );
+    }
+    let mark = if composing {
+        Style::default()
+            .fg(palette.accent)
+            .bg(field_bg)
+            .add_modifier(Modifier::BOLD)
+    } else if selected {
+        Style::default().fg(palette.accent).bg(field_bg)
     } else {
-        palette.overlay0
-    });
+        Style::default().fg(elev.muted_raised).bg(field_bg)
+    };
     put_text(buf, rect.x + 2, rect.y, 1, "›", mark);
     let badge = cue
         .filter(|_| rect.width >= 20)
@@ -397,11 +425,30 @@ pub(super) fn draw_input(
     let width = if badge_w > 0 {
         rect.width.saturating_sub(5 + badge_w + 1)
     } else {
-        rect.width.saturating_sub(4)
+        rect.width.saturating_sub(5)
     };
     let text = Rect::new(rect.x + 4, rect.y, width, 1);
     let cursor = if composing {
-        crate::chrome::text_editor::render(buf, text, draft, Style::default().fg(palette.text))
+        let cursor = crate::chrome::text_editor::render(
+            buf,
+            text,
+            draft,
+            Style::default().fg(palette.text).bg(field_bg),
+        );
+        if draft.as_str().is_empty() && width > 0 {
+            put_text(
+                buf,
+                text.x,
+                text.y,
+                width,
+                &truncate_end("tell producer · / actions", width as usize),
+                Style::default()
+                    .fg(elev.muted_raised)
+                    .bg(field_bg)
+                    .add_modifier(Modifier::ITALIC),
+            );
+        }
+        cursor
     } else if draft.as_str().is_empty() {
         put_text(
             buf,
@@ -409,7 +456,10 @@ pub(super) fn draw_input(
             text.y,
             width,
             &truncate_end("tell producer · / actions", width as usize),
-            Style::default().fg(palette.overlay0),
+            Style::default()
+                .fg(elev.muted_raised)
+                .bg(field_bg)
+                .add_modifier(Modifier::ITALIC),
         );
         None
     } else {
@@ -419,11 +469,13 @@ pub(super) fn draw_input(
             text.y,
             width,
             &truncate_end(draft.as_str(), width as usize),
-            Style::default().fg(if selected {
-                palette.subtext0
-            } else {
-                palette.overlay0
-            }),
+            Style::default()
+                .fg(if selected {
+                    palette.subtext0
+                } else {
+                    elev.muted_raised
+                })
+                .bg(field_bg),
         );
         None
     };
@@ -434,7 +486,7 @@ pub(super) fn draw_input(
             rect.y,
             badge_w,
             &badge,
-            Style::default().fg(fg),
+            Style::default().fg(fg).bg(field_bg),
         );
     }
     cursor

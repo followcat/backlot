@@ -130,7 +130,7 @@ pub(super) const COMPACT_LINES: u16 = 2;
 
 /// One person: the first line always; the rest either wrapped (`full`)
 /// or the old two-row form. Focus paints the active background across
-/// every row and the accent `▌` on each.
+/// every row and a quiet `▎` bar so only the active pane holds an accent ring.
 pub(super) fn draw(
     buffer: &mut Buffer,
     rect: Rect,
@@ -155,9 +155,9 @@ pub(super) fn draw(
                 rect.x,
                 y,
                 1,
-                "▌",
+                "▎",
                 Style::default()
-                    .fg(palette.accent)
+                    .fg(palette.overlay1)
                     .bg(palette.active_row_bg),
             );
         }

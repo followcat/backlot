@@ -17,7 +17,7 @@ fn palettes() -> [Palette; 2] {
     ]
 }
 
-fn layer(mode: LayerMode) -> Hollywood {
+pub(super) fn layer(mode: LayerMode) -> Hollywood {
     Hollywood {
         mode,
         ..Hollywood::new()
@@ -33,7 +33,7 @@ fn selecting(mode: LayerMode, target: Target) -> Hollywood {
     }
 }
 
-fn lines(buf: &Buffer, area: Rect) -> Vec<String> {
+pub(super) fn lines(buf: &Buffer, area: Rect) -> Vec<String> {
     (area.y..area.y + area.height)
         .map(|y| {
             (area.x..area.x + area.width)
@@ -53,7 +53,7 @@ fn row_of(buf: &Buffer, area: Rect, y: u16) -> String {
         .to_string()
 }
 
-fn stage_up(_: Option<&str>) -> (crate::hollywood::sheet::Conn, bool) {
+pub(super) fn stage_up(_: Option<&str>) -> (crate::hollywood::sheet::Conn, bool) {
     (crate::hollywood::sheet::Conn::Online, true)
 }
 
@@ -88,7 +88,7 @@ fn draw_with(
     (buf, hits)
 }
 
-fn draw(
+pub(super) fn draw(
     area: Rect,
     summary: Option<&Summary>,
     stage_running: bool,
@@ -110,7 +110,7 @@ fn draw(
     )
 }
 
-fn draw_without_agent(
+pub(super) fn draw_without_agent(
     area: Rect,
     summary: Option<&Summary>,
     stage_running: bool,
@@ -211,15 +211,16 @@ fn the_band_draws_sprockets_title_and_counts() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    // The band is surface_dim; the sprocket rows sit on sidebar_bg.
-    assert_eq!(buf[(0, 2)].bg, palette.surface_dim);
-    // Sprockets: `▄▄` on the first row, `▀▀` on the last, on sidebar_bg.
+    let elev = palette.elevation();
+    // The band body is `elevation.surface`; dark sprockets sit on `panel_bg`.
+    assert_eq!(buf[(0, 2)].bg, elev.surface);
+    // Sprockets: `▄▄` on the first row, `▀▀` on the last.
     let top = row_of(&buf, area, 0);
     assert!(top.contains("▄▄"), "{top}");
     let bottom = row_of(&buf, area, hits.area.height - 1);
     assert!(bottom.contains("▀▀"), "{bottom}");
-    assert_eq!(buf[(1, 0)].bg, palette.sidebar_bg);
-    assert_eq!(buf[(1, hits.area.height - 1)].bg, palette.sidebar_bg);
+    assert_eq!(buf[(1, 0)].bg, palette.panel_bg);
+    assert_eq!(buf[(1, hits.area.height - 1)].bg, palette.panel_bg);
     // The title row: the mark, the agent and the right-hand counts.
     let title = row_of(&buf, area, 1);
     assert!(title.contains("✦  H O L L Y W O O D"), "{title}");
@@ -490,7 +491,10 @@ fn the_live_row_draws_under_the_user_line() {
         .iter()
         .position(|l| l.contains("recast the producer"))
         .expect("the user line");
-    assert!(rows[at].contains("user › recast the producer"), "{rows:?}");
+    assert!(
+        rows[at].contains("› you") && rows[at].contains("recast the producer"),
+        "{rows:?}"
+    );
     assert!(
         rows[at + 1].contains("⠶ hollywood: reading the ledgers"),
         "{rows:?}"
@@ -527,7 +531,8 @@ fn a_card_line_draws_and_the_idle_row_names_the_missing_answer() {
         .expect("the card line");
     assert!(rows[card].trim_start().starts_with('✦'), "{rows:?}");
     assert!(
-        rows[card - 1].contains("user › recast the producer and the director"),
+        rows[card - 1].contains("› you")
+            && rows[card - 1].contains("recast the producer and the director"),
         "the card sits under the person's line: {rows:?}"
     );
     // The card ends the live row, and the idle-Hollywood line shows on
@@ -580,10 +585,9 @@ fn long_report_summary() -> Summary {
     serde_json::from_value(value).unwrap()
 }
 
-/// The newest Hollywood line wraps to a few rows (its end survives);
-/// every other line stays one row.
+/// Any exchange line wraps up to 2 lines and clamps with `…`; short ones keep 1 row.
 #[test]
-fn the_newest_report_wraps_and_an_older_one_does_not() {
+fn the_newest_report_wraps_and_clamps_at_two_lines() {
     let summary = long_report_summary();
     let palette = palettes()[0].clone();
     let area = Rect::new(0, 0, 80, 45);
@@ -598,82 +602,82 @@ fn the_newest_report_wraps_and_an_older_one_does_not() {
     let rows = lines(&buf, area);
     let first = rows
         .iter()
-        .position(|l| l.contains("✦ the producer of acme-shop"))
+        .position(|l| l.contains("✦ hw") && l.contains("the producer of acme-shop"))
         .expect("the wrap's first row");
-    // The point at the end ("choose 1 … recast … now") survives across
-    // the wrapped rows.
-    let joined = rows[first..].join(" ");
-    assert!(joined.contains("choose 1"), "{rows:?}");
-    assert!(joined.contains("now"), "{rows:?}");
-    // The person's line is still one row.
+    // Wraps to 2 lines with continuation indented under body, clamped with `…`.
+    assert!(
+        !rows[first + 1].contains("✦ hw") && rows[first + 1].trim_end().ends_with('…'),
+        "2nd line continues body with ellipsis: {:?}",
+        &rows[first..=(first + 2).min(rows.len() - 1)]
+    );
+    // The short user line stays on one row with fixed narrow speaker col.
     let user = rows
         .iter()
-        .position(|l| l.contains("user › status?"))
+        .position(|l| l.contains("› you") && l.contains("status?"))
         .expect("the user line");
     assert!(!rows[user + 1].contains("status?"));
 }
 
-/// A short band gives the wrap back — down to one row — before it
-/// drops a waiting row.
+/// A short band gives wraps back oldest-first, then drops unselected details
+/// and older talk before dropping zone rules, frames, or waiting rows.
 #[test]
 fn a_short_band_gives_the_wrap_back_before_dropping_a_wait() {
     use crate::hollywood::plan::Plan;
-    // Two waiting rows, three talk lines and a four-row wrap on the
-    // newest one (wrap = 3 extra rows). Details, hints and sprockets are
-    // already gone, so only the wrap, the talk lines and the waiting
-    // window can give rows back.
     let base = || Plan {
         top_sprocket: false,
         title: true,
         blank_1: false,
+        studios_rule: false,
         frames_h: 1,
         blank_2: false,
+        waiting_rule: false,
         headline: false,
         details: vec![false, false],
         shown: 2,
+        hollywood_rule: false,
+        setup_hairline: false,
         talk: 3,
-        wrap_seq: Some(6),
-        wrap_keep: 1,
-        wrap: 3,
+        talk_wraps: vec![1, 0, 1],
         live: false,
         tail_rows: 1,
         hints: false,
         bottom_sprocket: false,
+        shadow: false,
     };
-    // Full height: the whole wrap shows and both waiting rows survive.
     let mut full = base();
     let full_h = full.height();
     crate::hollywood::plan::fit(&mut full, full_h, 30, None);
-    assert_eq!(full.wrap, 3, "the whole wrap at full height");
-    assert_eq!(full.shown, 2, "both waiting rows at full height");
+    assert_eq!(full.wrap_rows(), 2);
+    assert_eq!(full.shown, 2);
 
-    // One row short: the wrap gives one row back, both waits stay.
+    // One row short: oldest wrapped message shrinks 2->1 first, newest keeps wrap.
     let mut short = base();
     crate::hollywood::plan::fit(&mut short, full_h - 1, 30, None);
-    assert_eq!(short.wrap, 2, "the wrap gave a row back first");
-    assert_eq!(short.shown, 2, "no waiting row dropped yet");
+    assert_eq!(short.talk_wraps, vec![0, 0, 1]);
+    assert_eq!(short.wrap_rows(), 1);
+    assert_eq!(short.shown, 2);
 
-    // Short enough that the wrap is one row: the waits still hold.
+    // Two rows short: all wraps gone, both waits and all 3 talk lines stay.
     let mut one = base();
-    crate::hollywood::plan::fit(&mut one, full_h - 3, 30, None);
-    assert_eq!(one.wrap, 0, "the wrap is back to one row");
-    assert_eq!(one.shown, 2, "the waits still hold at the one-row wrap");
+    crate::hollywood::plan::fit(&mut one, full_h - 2, 30, None);
+    assert_eq!(one.wrap_rows(), 0);
+    assert_eq!(one.talk, 3);
+    assert_eq!(one.shown, 2);
 
-    // Only once the wrap is gone do older talk lines leave, and a
-    // waiting row leaves last.
+    // Three rows short: oldest talk line drops before a waiting row drops.
     let mut dropped = base();
-    crate::hollywood::plan::fit(&mut dropped, full_h - 4, 30, None);
-    assert_eq!(dropped.wrap, 0);
-    assert_eq!(dropped.talk, 2, "an older talk line leaves before a wait");
-    assert_eq!(dropped.shown, 2, "the waiting rows hold");
+    crate::hollywood::plan::fit(&mut dropped, full_h - 3, 30, None);
+    assert_eq!(dropped.wrap_rows(), 0);
+    assert_eq!(dropped.talk, 2);
+    assert_eq!(dropped.shown, 2);
 }
 
-/// At a narrow/mobile width the wrap still applies, capped at two
-/// rows, and every older line stays one row.
+/// At a narrow 60-col width, a long message wraps up to two lines when
+/// the band has room ahead of frames-to-chips folding.
 #[test]
 fn a_mobile_band_wraps_the_newest_line_at_two_rows() {
     let summary = long_report_summary();
-    let area = Rect::new(0, 0, 60, 30);
+    let area = Rect::new(0, 0, 60, 48);
     let list = machines(Some(&summary));
     let status: &crate::hollywood::sheet::Status = &stage_up;
     let (waits, rows) = crate::hollywood::band_rows(&list, status, true);
@@ -685,14 +689,14 @@ fn a_mobile_band_wraps_the_newest_line_at_two_rows() {
         &hollywood,
         LayerOpts {
             agent: true,
-            mobile: true,
+            mobile: false,
             ..LayerOpts::default()
         },
     );
     assert_eq!(
         plan.wrap_rows(),
         1,
-        "the mobile wrap caps at two rows, so one extra row"
+        "exchange wrap caps at two rows (one extra row)"
     );
 }
 
@@ -988,10 +992,11 @@ fn every_studio_is_a_frame_and_the_selected_one_is_accent() {
     assert!(top.contains("╭─ acme-shop"), "{top}");
     assert_eq!(buf[(frame.x, frame.y)].fg, palette.accent);
     // The inside is selection_bg; another frame's is panel_bg.
-    assert_eq!(buf[(frame.x + 1, frame.y + 1)].bg, palette.selection_bg);
+    let elev = palette.elevation();
+    assert_eq!(buf[(frame.x + 1, frame.y + 1)].bg, elev.raised_row);
     let other = frame_hit(&hits, &Target::Studio("beta-tools".into())).expect("beta-tools");
     assert_eq!(buf[(other.x + 1, other.y + 1)].bg, palette.panel_bg);
-    assert_eq!(buf[(other.x, other.y)].fg, palette.surface1);
+    assert_eq!(buf[(other.x, other.y)].fg, elev.border_muted);
 }
 
 #[test]
@@ -1058,7 +1063,8 @@ fn every_colour_is_a_palette_entry() {
     let summary = summary();
     let area = Rect::new(0, 0, 160, 45);
     for palette in palettes() {
-        let allowed = [
+        let elev = palette.elevation();
+        let mut allowed = vec![
             palette.accent,
             palette.panel_bg,
             palette.sidebar_bg,
@@ -1078,7 +1084,20 @@ fn every_colour_is_a_palette_entry() {
             palette.blue,
             palette.teal,
             palette.peach,
+            elev.surface,
+            elev.raised_row,
+            elev.raised_field,
+            elev.border_muted,
+            elev.muted_surface,
+            elev.muted_raised,
+            crate::studio::glyphs::contrast_fg(&palette),
         ];
+        if let Some(d) = elev.dim_bg {
+            allowed.push(d);
+        }
+        if let Some(s) = elev.shadow {
+            allowed.push(s);
+        }
         for mode in [LayerMode::Collapsed, LayerMode::Expanded] {
             let (buf, hits) = draw(area, Some(&summary), true, &layer(mode), false, &palette);
             for y in hits.area.y..hits.area.y + hits.area.height {
@@ -1384,7 +1403,7 @@ fn the_new_studio_frame_is_always_last_and_dashed() {
     let top = row_of(&buf, area, new.y);
     assert!(top.contains('┄'), "a dashed edge: {top}");
     assert!(top.contains('╭') && top.contains('╮'), "{top}");
-    assert_eq!(buf[(new.x, new.y)].fg, palette.overlay0);
+    assert_eq!(buf[(new.x, new.y)].fg, palette.elevation().border_muted);
     assert!(row_of(&buf, area, new.y + 2).contains("+  new studio"));
     assert!(row_of(&buf, area, new.y + 3).contains("repository + cast"));
     let chip = row_of(&buf, area, new.y + 5);

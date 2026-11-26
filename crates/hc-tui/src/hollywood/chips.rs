@@ -42,9 +42,10 @@ pub(crate) fn render(
     if rect.height == 0 || rect.width < 8 {
         return out;
     }
-    let base = Style::default().bg(palette.surface_dim);
+    let elev = palette.elevation();
+    let base = Style::default().bg(elev.surface);
     let mut x = rect.x + 1;
-    put_text(buf, x, rect.y, 9, " studios ", base.fg(palette.overlay0));
+    put_text(buf, x, rect.y, 9, " studios ", base.fg(elev.muted_surface));
     x += 10;
     let start = scroll.min(frames.len().saturating_sub(1));
     let mut drawn = 0usize;
@@ -55,9 +56,11 @@ pub(crate) fn render(
         let target = frame.target();
         let sel = !suppress_highlights && selected == Some(&target);
         let bg = if sel {
-            palette.selection_bg
-        } else {
+            elev.raised_row
+        } else if elev.is_dark {
             palette.surface0
+        } else {
+            elev.surface
         };
         let digit = if index < 9 {
             format!("{}", index + 1)
@@ -72,7 +75,7 @@ pub(crate) fn render(
                 // `finished` chip draws `✓`, not a live `●`.
                 let health = crate::panel::health_of(studio.studio, stage, conn != Conn::Offline);
                 let mut segs = vec![
-                    ("[".into(), palette.overlay0),
+                    ("[".into(), elev.muted_surface),
                     (digit, palette.accent),
                     (" ".into(), palette.text),
                     (label.fit(18), palette.text),
@@ -87,13 +90,13 @@ pub(crate) fn render(
                         if user { palette.red } else { palette.peach },
                     ));
                 }
-                segs.push(("]".into(), palette.overlay0));
+                segs.push(("]".into(), elev.muted_surface));
                 segs
             }
             Frame::New => vec![
-                ("[".into(), palette.overlay0),
+                ("[".into(), elev.muted_surface),
                 ("+ new n".into(), palette.accent),
-                ("]".into(), palette.overlay0),
+                ("]".into(), elev.muted_surface),
             ],
         };
         let w: u16 = segs

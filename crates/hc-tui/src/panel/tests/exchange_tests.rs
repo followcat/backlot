@@ -84,17 +84,18 @@ fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
             .any(|l| l.contains("✦ prioritize p99") && l.ends_with('│')),
         "{text}"
     );
-    // Selected Talk(#3) paints selection_bg inside `│ … │` with `▌` at x=1.
+    // Selected Talk(#3) paints selection_bg inside `│ … │` with `▌` inside the block border.
     let (sel_rect, _) = hits
         .rows
         .iter()
         .find(|(_, t)| *t == Target::Talk("acme-shop".into(), 3))
         .expect("Talk(3) hit");
     assert_eq!(buf[(0, sel_rect.y)].symbol(), "│");
-    assert_eq!(buf[(1, sel_rect.y)].symbol(), "▌");
-    assert_eq!(buf[(2, sel_rect.y)].symbol(), "✦");
-    assert_eq!(buf[(2, sel_rect.y)].fg, palette.accent);
-    assert_eq!(buf[(4, sel_rect.y)].bg, palette.selection_bg);
+    assert_eq!(buf[(sel_rect.x, sel_rect.y)].symbol(), "│");
+    assert_eq!(buf[(sel_rect.x + 1, sel_rect.y)].symbol(), "▌");
+    assert_eq!(buf[(sel_rect.x + 2, sel_rect.y)].symbol(), "✦");
+    assert_eq!(buf[(sel_rect.x + 2, sel_rect.y)].fg, palette.accent);
+    assert_eq!(buf[(sel_rect.x + 3, sel_rect.y)].bg, palette.selection_bg);
     assert_eq!(buf[(area.width - 1, sel_rect.y)].symbol(), "│");
 
     // Footer shows `⏎ read` when `file.is_some()`.
@@ -157,18 +158,18 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
         .collect()
     };
 
-    // Base block height in `summary()` is 3 (top + input + bottom) + 7 live
-    // roles + 3 role-group dividers + the closed fold = 14. Unconstrained
-    // (0) and roomy (20 >= 14 + 6): all 6 turns render.
+    // Base block height in `summary()` is 4 (top + input-divider + input + bottom)
+    // + 7 live roles + 3 role-group dividers + the closed fold = 15.
+    // Unconstrained (0) and roomy (21 >= 15 + 6): all 6 turns render.
     assert_eq!(talk_seqs(0), vec![1, 2, 3, 4, 5, 6]);
-    assert_eq!(talk_seqs(20), vec![1, 2, 3, 4, 5, 6]);
-    // Partial slack (16 = 14 + 2): newest 2 turns render above `›`.
-    assert_eq!(talk_seqs(16), vec![5, 6]);
-    // Exact fit (14) or cramped (10): 0 turns render so roles + `›` never starve.
-    assert_eq!(talk_seqs(14), Vec::<u64>::new());
+    assert_eq!(talk_seqs(21), vec![1, 2, 3, 4, 5, 6]);
+    // Partial slack (17 = 15 + 2): newest 2 turns render above `›`.
+    assert_eq!(talk_seqs(17), vec![5, 6]);
+    // Exact fit (15) or cramped (10): 0 turns render so roles + `›` never starve.
+    assert_eq!(talk_seqs(15), Vec::<u64>::new());
     assert_eq!(talk_seqs(10), Vec::<u64>::new());
 
-    // Even at exact fit (body_height = 14), every role and `›` Input remain present.
+    // Even at exact fit (body_height = 15), every role and `›` Input remain present.
     let exact_targets: Vec<Target> = rows(
         &machines(Some(&summary)),
         |_| true,
@@ -176,7 +177,7 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
         &panel,
         PanelMode::Expanded,
         Some(&current),
-        14,
+        15,
     )
     .iter()
     .map(|r| r.target())

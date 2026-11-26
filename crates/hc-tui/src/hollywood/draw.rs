@@ -71,6 +71,8 @@ pub(crate) struct HollywoodRender {
     pub cursor: Option<crate::chrome::help::CursorState>,
     /// Whether an animated spinner mark was drawn this frame.
     pub working_drawn: bool,
+    /// Whether the 1-row external bottom drop shadow rendered below `area`.
+    pub shadow_drawn: bool,
 }
 
 impl HollywoodRender {
@@ -180,7 +182,51 @@ fn render_band(
             buf[(x, y)].reset();
         }
     }
-    buf.set_style(area, Style::default().bg(palette.surface_dim));
+    let elev = palette.elevation();
+    buf.set_style(area, Style::default().bg(elev.surface));
+
+    let studios_n = all_frames
+        .iter()
+        .filter(|f| matches!(f, rows::Frame::Studio(_)))
+        .count();
+    let sel_ref = (!opts.suppress_highlights)
+        .then_some(hollywood.selected.as_ref())
+        .flatten();
+    let studios_focused =
+        sel_ref.is_some_and(|t| matches!(t, Target::Studio(_) | Target::NewStudio | Target::Title));
+    let wait_focused = sel_ref.is_some_and(|t| {
+        matches!(
+            t,
+            Target::Prompt(..)
+                | Target::Role(..)
+                | Target::Tell(..)
+                | Target::Stage(..)
+                | Target::Card(..)
+                | Target::OutwardCard(..)
+                | Target::Ready(..)
+                | Target::Hollywood
+        )
+    });
+    let hollywood_focused = sel_ref.is_some_and(|t| {
+        matches!(
+            t,
+            Target::Headline
+                | Target::Talk(_)
+                | Target::HollywoodLive
+                | Target::Input
+                | Target::Setup
+        )
+    });
+
+    let band_wait_total = band_rows
+        .iter()
+        .filter(|r| matches!(r, Row::Wait(_)))
+        .count();
+    let scroll_range = (band_wait_total > plan.shown && plan.shown > 0)
+        .then(|| (scroll + 1, (scroll + plan.shown).min(band_wait_total)));
+    let title_scroll = (!plan.waiting_rule && !plan.hints)
+        .then_some(scroll_range)
+        .flatten();
 
     let mut y = area.y;
     if plan.top_sprocket {
@@ -197,12 +243,17 @@ fn render_band(
             opts.agent,
             activity,
             hollywood.spin,
+            title_scroll,
             palette,
             &mut hits,
         );
         y += 1;
     }
     if plan.blank_1 {
+        y += 1;
+    }
+    if plan.studios_rule {
+        super::zone::draw_studios_rule(buf, area, y, studios_n, studios_focused, palette);
         y += 1;
     }
     if plan.frames_h == frames::FRAME_H {
@@ -213,6 +264,7 @@ fn render_band(
             &all_frames,
             frames::FramesView {
                 selected: hollywood.selected.as_ref(),
+                active_studio: hollywood.active_studio.as_ref(),
                 scroll: hollywood.frame_scroll,
                 mobile: opts.mobile,
                 local,
@@ -250,36 +302,27 @@ fn render_band(
     if plan.blank_2 {
         y += 1;
     }
-    // The band rows: headline, then the scroll window of waiting
-    // items (each with its detail when kept), then the dialog's
-    // newest exchange lines and the tail — the calm row or the
-    // input/setup line.
+
+    let now_ms = hollywood.now_ms.unwrap_or_else(crate::update_state::now_ms);
+    let user_urgent = items::any_user_urgent(&waits);
+    if plan.waiting_rule && !waits.is_empty() {
+        super::zone::draw_waiting_rule(
+            buf,
+            area,
+            y,
+            waits.len(),
+            user_urgent,
+            wait_focused,
+            scroll_range.map(|(top, bot)| (top, bot.min(waits.len()))),
+            palette,
+        );
+        y += 1;
+    }
+
+    // Upper-half lower zone: visible waiting items or calm status line.
     let mut wait_seen = 0usize;
-    let talk_total = band_rows
-        .iter()
-        .filter(|r| matches!(r, Row::Talk(_) | Row::Fold { .. }))
-        .count();
-    let mut talk_seen = 0usize;
     for row in &band_rows {
         match row {
-            Row::Headline(headline) if plan.headline => {
-                let rect = Rect::new(area.x, y, area.width, 1);
-                band::draw_row(
-                    buf,
-                    rect,
-                    &Row::Headline(headline),
-                    &waits,
-                    hollywood,
-                    local_label,
-                    multi,
-                    opts.mobile,
-                    opts.suppress_highlights,
-                    activity,
-                    palette,
-                    &mut hits,
-                );
-                y += 1;
-            }
             Row::Wait(i) => {
                 let index = *i;
                 let in_window = wait_seen >= scroll && wait_seen < scroll + plan.shown;
@@ -301,23 +344,112 @@ fn render_band(
                     opts.mobile,
                     opts.suppress_highlights,
                     activity,
+                    now_ms,
                     palette,
                     &mut hits,
                 );
                 y += h;
             }
-            // The dialog keeps its newest lines: when the plan cut
-            // `talk` short the oldest rows skip without a row. The
-            // newest Hollywood line draws tall when its wrap survives.
-            Row::Talk(_) | Row::Fold { .. } => {
+            Row::Calm { .. } => {
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    opts.mobile,
+                    opts.suppress_highlights,
+                    activity,
+                    now_ms,
+                    palette,
+                    &mut hits,
+                );
+                y += 1;
+            }
+            _ => {}
+        }
+    }
+
+    // Lower zone: `HOLLYWOOD` rule (with embedded fold target) or setup
+    // hairline, then headline/talk/live/compose/setup.
+    let talk_entries: Vec<&backlot_model::summary::Exchange> = band_rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Talk(e) => Some(*e),
+            _ => None,
+        })
+        .collect();
+    let talk_total = talk_entries.len();
+    let shown_talks = (plan.talk as usize).min(talk_total);
+    let skipped_talks = talk_total.saturating_sub(shown_talks);
+    let model_fold = band_rows.iter().find_map(|r| match r {
+        Row::Fold { count, newest } => Some((*count, *newest)),
+        _ => None,
+    });
+    let fold_badge = if skipped_talks > 0 {
+        let newest = talk_entries[skipped_talks - 1].seq;
+        let count = model_fold.map_or(0, |(c, _)| c) + skipped_talks;
+        Some(super::zone::FoldBadge {
+            count,
+            newest,
+            selected: sel_ref == Some(&Target::Talk(newest)),
+        })
+    } else {
+        model_fold.map(|(count, newest)| super::zone::FoldBadge {
+            count,
+            newest,
+            selected: sel_ref == Some(&Target::Talk(newest)),
+        })
+    };
+
+    if opts.agent && plan.hollywood_rule {
+        super::zone::draw_hollywood_rule(
+            buf,
+            area,
+            y,
+            hollywood_focused,
+            fold_badge,
+            palette,
+            &mut hits,
+        );
+        y += 1;
+    } else if !opts.agent && plan.setup_hairline {
+        super::zone::draw_setup_hairline(buf, area, y, palette);
+        y += 1;
+    }
+
+    let mut talk_seen = 0usize;
+    for row in &band_rows {
+        match row {
+            Row::Headline(_) if plan.headline => {
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    opts.mobile,
+                    opts.suppress_highlights,
+                    activity,
+                    now_ms,
+                    palette,
+                    &mut hits,
+                );
+                y += 1;
+            }
+            Row::Talk(_) => {
+                let idx = talk_seen;
                 talk_seen += 1;
-                if talk_seen <= talk_total.saturating_sub(plan.talk as usize) {
+                if idx < skipped_talks {
                     continue;
                 }
-                let h = match row {
-                    Row::Talk(line) if plan.wrap_seq == Some(line.seq) => plan.wrap_rows() + 1,
-                    _ => 1,
-                };
+                let h = 1 + plan.talk_wrap_at(idx);
                 let rect = Rect::new(area.x, y, area.width, h);
                 band::draw_row(
                     buf,
@@ -330,6 +462,7 @@ fn render_band(
                     opts.mobile,
                     opts.suppress_highlights,
                     activity,
+                    now_ms,
                     palette,
                     &mut hits,
                 );
@@ -348,15 +481,13 @@ fn render_band(
                     opts.mobile,
                     opts.suppress_highlights,
                     activity,
+                    now_ms,
                     palette,
                     &mut hits,
                 );
                 y += 1;
             }
-            Row::Live(_) => {}
-            Row::Calm { .. } | Row::Input | Row::Setup => {
-                // The scroll marker lives on this row's right edge
-                // when items hid — `2/6` of the sheet showing.
+            Row::Input | Row::Setup => {
                 let rect = Rect::new(area.x, y, area.width, 1);
                 band::draw_row(
                     buf,
@@ -369,27 +500,10 @@ fn render_band(
                     opts.mobile,
                     opts.suppress_highlights,
                     activity,
+                    now_ms,
                     palette,
                     &mut hits,
                 );
-                if waits.len() > plan.shown {
-                    let mark = format!(
-                        "{}/{waits_len}",
-                        scroll + plan.shown.min(waits.len()),
-                        waits_len = waits.len()
-                    );
-                    let w = mark.chars().count() as u16;
-                    put_text(
-                        buf,
-                        (rect.x + rect.width).saturating_sub(MARGIN + w),
-                        rect.y,
-                        w,
-                        &mark,
-                        Style::default()
-                            .fg(palette.overlay0)
-                            .bg(palette.surface_dim),
-                    );
-                }
                 y += 1;
             }
             _ => {}
@@ -403,8 +517,6 @@ fn render_band(
     ));
     if plan.hints {
         let usable = (area.width as usize).saturating_sub((MARGIN * 2) as usize);
-        // An armed `finish?` owns every key but `y`/`n`/`Esc` — the
-        // footer names just those while it asks (R3-N5).
         let tier = if hollywood.confirm.is_some() {
             hints::for_confirm(usable)
         } else {
@@ -417,24 +529,36 @@ fn render_band(
                 usable,
             )
         };
-        let w = display_width(&tier) as u16;
-        let x = (area.x + area.width.saturating_sub(MARGIN))
-            .saturating_sub(w)
-            .max(area.x);
-        put_text(
-            buf,
-            x,
-            y,
-            w.min(area.width),
-            &tier,
-            Style::default()
-                .fg(palette.overlay0)
-                .bg(palette.surface_dim),
-        );
+        crate::chrome::render::put_hint_bar(buf, area.x + MARGIN, y, usable as u16, &tier, palette);
+        if !plan.waiting_rule
+            && let Some((top, bot)) = scroll_range
+        {
+            let mark = format!("{top}–{bot}/{}", waits.len());
+            let mw = display_width(&mark) as u16;
+            let mx = (area.x + area.width).saturating_sub(MARGIN + mw);
+            if mx > area.x + MARGIN + display_width(&tier) as u16 + 1 {
+                put_text(
+                    buf,
+                    mx,
+                    y,
+                    mw,
+                    &mark,
+                    Style::default().fg(elev.muted_surface).bg(elev.surface),
+                );
+            }
+        }
         y += 1;
     }
     if plan.bottom_sprocket {
         title::draw_sprocket(buf, area, y, '▀', palette);
+    }
+    if plan.shadow {
+        let shadow_row = Rect::new(area.x, area.bottom(), area.width, 1);
+        crate::chrome::popup_frame::draw_bottom_shadow(buf, shadow_row, frame, palette, true);
+        hits.shadow_drawn = !shadow_row
+            .intersection(frame)
+            .intersection(buf.area)
+            .is_empty();
     }
     hits
 }
@@ -463,17 +587,29 @@ pub(crate) fn paint_wait_chips(
     let start_x = x;
     let target = wait.target();
     let hit_h = row_height.max(1);
+    let elev = palette.elevation();
     for (idx, chip) in chips.iter().enumerate() {
         let text = items::chip_text(chip, compact);
         let w = display_width(&text) as u16;
         let is_focused = selected && focused_chip == Some(idx);
         let style = if is_focused {
-            Style::default()
-                .fg(crate::studio::glyphs::contrast_fg(palette))
-                .bg(palette.accent)
-                .add_modifier(Modifier::BOLD)
+            if elev.is_terminal_16 {
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::REVERSED | Modifier::BOLD)
+            } else {
+                Style::default()
+                    .fg(crate::studio::glyphs::contrast_fg(palette))
+                    .bg(palette.accent)
+                    .add_modifier(Modifier::BOLD)
+            }
         } else {
-            Style::default().fg(palette.subtext0).bg(palette.surface0)
+            let chip_bg = if elev.is_dark {
+                palette.surface0
+            } else {
+                elev.surface
+            };
+            Style::default().fg(palette.subtext0).bg(chip_bg)
         };
         put_text(buf, x, y, w, &text, style);
         let key = if chip.key == "↵" {
