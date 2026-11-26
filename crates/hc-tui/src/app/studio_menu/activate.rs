@@ -138,6 +138,11 @@ impl App {
                     self.prune_open(key);
                 }
             }
+            StudioAct::EditCast => {
+                if let Some(key) = &menu.studio {
+                    self.cast_edit_open(key);
+                }
+            }
             StudioAct::Archived => {
                 self.open_archived(menu.machine().map(str::to_owned));
             }

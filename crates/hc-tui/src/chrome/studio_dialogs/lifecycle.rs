@@ -12,7 +12,7 @@ use super::super::render::put_text;
 use super::super::text::truncate_end;
 use super::{DialogHits, cancel_button, centered, dialog_width, dim_line, send_button, title_line};
 use crate::new_studio::Probe;
-use crate::studio_dialog::{RecastDialog, RecastStep, RestartDialog};
+use crate::studio_dialog::{CastEditDialog, CastEditStep, RecastDialog, RecastStep, RestartDialog};
 
 /// The restart dialog — both choices always, the unavailable one dim.
 pub(super) fn render_restart(
@@ -235,4 +235,75 @@ fn list_line(b: &mut Buffer, i: Rect, y: u16, selected: bool, text: &str, palett
         &truncate_end(&format!("{mark}{text}"), i.width as usize),
         style,
     );
+}
+
+/// The `Edit cast…` dialog: while fetching or checking it says what it
+/// is doing; on a diff it shows the changes and offers apply; a refusal
+/// shows its reason and offers only cancel.
+pub(super) fn render_cast_edit(
+    b: &mut Buffer,
+    band: Rect,
+    d: &CastEditDialog,
+    palette: &Palette,
+) -> Option<DialogHits> {
+    let width = dialog_width(band.width);
+    let q = centered(band, width, 16)?;
+    Clear.render(q, b);
+    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    title_line(b, i, &d.title, palette);
+    let step = match d.step {
+        CastEditStep::Loading => "reading the cast…",
+        CastEditStep::Editing => "open in your editor — save and close to check it",
+        CastEditStep::Checking => "checking the change…",
+        CastEditStep::Diff => "the change",
+    };
+    dim_line(b, i.x, i.y + 1, i.width, &format!(" {step}"), palette);
+    // The body: an error wins, else the diff. Wrapped to the panel width
+    // and clipped to the rows the panel leaves above the buttons.
+    let inner = i.width.saturating_sub(2) as usize;
+    let body = match &d.error {
+        Some(err) => err.clone(),
+        None if d.step == CastEditStep::Diff && d.diff.trim().is_empty() => {
+            "nothing changes".to_owned()
+        }
+        None => d.diff.clone(),
+    };
+    let mut lines: Vec<String> = Vec::new();
+    for raw in body.lines() {
+        if raw.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        // A diff line already fits a full-width panel on a normal
+        // terminal; an over-long one is truncated, never wrapped, so a
+        // change stays on its own row.
+        lines.push(truncate_end(raw, inner));
+    }
+    let top = i.y + 2;
+    let room = i.height.saturating_sub(5) as usize;
+    for (n, line) in lines.iter().take(room).enumerate() {
+        put_text(
+            b,
+            i.x,
+            top + n as u16,
+            i.width,
+            &format!(" {line}"),
+            Style::default().fg(palette.text).bg(palette.panel_bg),
+        );
+    }
+    let rs = row(i, &[19, 13], 2, i.height.saturating_sub(2));
+    let [send, cancel] = rs.as_slice() else {
+        return None;
+    };
+    let apply = d.step == CastEditStep::Diff && d.ready && !d.busy;
+    send_button(b, *send, " ↵ / y apply ", apply, palette);
+    cancel_button(b, *cancel, palette);
+    Some(DialogHits {
+        area: q,
+        send: *send,
+        cancel: *cancel,
+        body: Rect::default(),
+        summary: Rect::default(),
+        cursor: None,
+    })
 }

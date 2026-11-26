@@ -13,6 +13,7 @@ use crate::studio_menu::StudioMenu;
 use super::App;
 
 mod activate;
+mod cast_edit;
 mod delete;
 mod prune;
 mod stale;

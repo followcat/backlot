@@ -70,6 +70,7 @@ fn a_studio_rows_items_follow_the_spec_order() {
             "Inspect studio sheet (v)",
             "Revise requirement…",
             "Tell producer…",
+            "Edit cast…",
             "Finish studio…",
             "Actor records",
             "Delete studio…"
@@ -79,7 +80,7 @@ fn a_studio_rows_items_follow_the_spec_order() {
     // studio. Stopping the stage is machine-wide and lives on the
     // machine's own menu.
     let down = StudioMenu::studio(&key(None), &studio(), true, false);
-    assert_eq!(labels(&down)[4], "Start stage");
+    assert_eq!(labels(&down)[5], "Start stage");
     assert!(
         !labels(&menu).iter().any(|l| l.contains("Stop stage")),
         "a live stage offers no per-studio stop"
@@ -87,7 +88,7 @@ fn a_studio_rows_items_follow_the_spec_order() {
     let mut ready = studio();
     ready.ready_to_finish = true;
     let menu = StudioMenu::studio(&key(None), &ready, false, false);
-    assert!(menu.items()[4].teal, "finish draws teal when ready");
+    assert!(menu.items()[5].teal, "finish draws teal when ready");
     assert_eq!(menu.title(), "Studio · acme-shop");
     let role_menu = StudioMenu::role(&key(None), &role("live"), false);
     assert_eq!(role_menu.title(), "Role · alice (acme-shop)");
@@ -110,6 +111,7 @@ fn a_live_role_rows_items() {
             "Tell alice…",
             "Inspect task t1 (v)",
             "Restart alice",
+            "Recast…",
             "Close alice…"
         ]
     );
@@ -130,6 +132,7 @@ fn a_user_prompt_rows_items() {
             "Peek screen (p)",
             "Focus terminal",
             "Restart alice",
+            "Recast…",
             "Clear stale attention #7…"
         ]
     );
@@ -153,6 +156,7 @@ fn a_director_prompt_rows_items() {
             "Answer prompt myself: Allow…",
             "Answer prompt myself: Deny…",
             "Restart alice",
+            "Recast…",
             "Clear stale attention #7…"
         ]
     );

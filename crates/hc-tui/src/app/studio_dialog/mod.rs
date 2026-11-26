@@ -120,6 +120,14 @@ impl App {
         if self.lifecycle_dialog_fetch(result.clone()) {
             return;
         }
+        // `Edit cast…`'s `studio cast set --dry-run` lands here too.
+        if let Some(StudioDialog::CastEdit(d)) = self.studio_dialog.as_mut()
+            && d.step == crate::studio_dialog::CastEditStep::Checking
+        {
+            d.dry_run(result);
+            self.sched.mark_dirty(std::time::Instant::now());
+            return;
+        }
         match self.studio_dialog.as_mut() {
             Some(StudioDialog::Revise(d)) => {
                 match result {
@@ -228,6 +236,16 @@ impl App {
             return;
         }
         self.studio_editor_file = None;
+        // `Edit cast…`'s editor rides the same popup: its close runs the
+        // dry run on the edited file, never the Revise reload.
+        if matches!(
+            self.studio_dialog.as_ref(),
+            Some(StudioDialog::CastEdit(d)) if d.epoch == epoch
+        ) {
+            self.cast_edit_editor_closed(&file, epoch);
+            let _ = std::fs::remove_file(&file);
+            return;
+        }
         let live = matches!(
             self.studio_dialog.as_ref(),
             Some(StudioDialog::Revise(d)) if d.editor_gen == epoch
@@ -251,6 +269,6 @@ impl App {
 }
 
 /// POSIX single-quote escaping — the `$EDITOR` line's file path.
-fn sh_quote(word: &str) -> String {
+pub(super) fn sh_quote(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))
 }

@@ -515,17 +515,17 @@ impl App {
                         },
                     });
                 }
-                if matches!(role.role.as_str(), "producer" | "director" | "writer") {
-                    rows.push(HelpRow {
-                        label: format!("Recast {} · {place}", role.name),
-                        hint: "run ↵".to_owned(),
-                        glyph: "",
-                        launch: Launch::Act {
-                            menu: Box::new(menu),
-                            act: StudioAct::Recast,
-                        },
-                    });
-                }
+                // A fixed seat or an actor recasts onto a new identity
+                // (step 2: actors too).
+                rows.push(HelpRow {
+                    label: format!("Recast {} · {place}", role.name),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu),
+                        act: StudioAct::Recast,
+                    },
+                });
             }
             if studio.studio.state == "finished" && !studio.studio.ready_to_finish {
                 rows.push(HelpRow {

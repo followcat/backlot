@@ -112,7 +112,7 @@ mod kinds;
 mod lifecycle;
 use archived::render_restore;
 use kinds::{render_confirm, render_reason, render_revise, render_tell};
-use lifecycle::{render_recast, render_restart};
+use lifecycle::{render_cast_edit, render_recast, render_restart};
 
 /// One render entry — the app hands the `modal_band()` rect so a
 /// beside dock's border is never crossed (A6.2).
@@ -130,6 +130,7 @@ pub(crate) fn render(
         StudioDialog::Restart(d) => render_restart(b, band, d, palette),
         StudioDialog::Recast(d) => render_recast(b, band, d, palette),
         StudioDialog::Restore(d) => render_restore(b, band, d, palette),
+        StudioDialog::CastEdit(d) => render_cast_edit(b, band, d, palette),
     }
 }
 

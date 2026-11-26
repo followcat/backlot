@@ -212,6 +212,9 @@ pub(crate) enum StudioAct {
     Restart,
     /// The recast picker — runner, then model, then effort.
     Recast,
+    /// `Edit cast…` — the effective cast in `$EDITOR`, checked with
+    /// `studio cast set --dry-run`, recorded on confirm.
+    EditCast,
     /// `studio prune <studio>` after its `--dry-run` confirmation.
     Prune,
     /// The machine's archived studios — the restore list dialog.

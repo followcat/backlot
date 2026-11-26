@@ -30,11 +30,11 @@ async fn a_fixed_seat_offers_restart_and_recast_but_no_close() {
         assert!(rows.iter().any(|l| l == "Recast…"), "{rows:?}");
         assert!(!rows.iter().any(|l| l.starts_with("Close")), "{rows:?}");
     }
-    // An actor keeps its close and gains restart, not recast.
+    // An actor keeps its close and gains restart and recast (step 2).
     let alice = labels(&role_menu(&app, "actor-alice"));
     assert!(alice.iter().any(|l| l == "Restart alice"), "{alice:?}");
     assert!(alice.iter().any(|l| l == "Close alice…"), "{alice:?}");
-    assert!(!alice.iter().any(|l| l == "Recast…"), "{alice:?}");
+    assert!(alice.iter().any(|l| l == "Recast…"), "{alice:?}");
 }
 
 #[tokio::test]
