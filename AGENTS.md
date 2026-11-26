@@ -6,7 +6,7 @@ Read `docs/requirements.md` and `docs/plan.md` first. Work on one milestone task
 - **Small commits** with Conventional Commit subjects (`feat(sidebar): …`, `fix(proto): …`), each
   with its tests.
 - **Commit messages:** omit Devin generation notices and Devin `Co-Authored-By` trailers.
-- **Before every commit**, all three must pass (see `CONTRIBUTING.md` for macOS portability rules):
+- **Before every commit**, all three must pass (macOS differences: `docs/studio/testing.md`):
   - `cargo fmt --check`
   - `cargo clippy --all-targets -- -D warnings`
   - `sh scripts/check-test-tmp.sh` (or `cargo test`)
