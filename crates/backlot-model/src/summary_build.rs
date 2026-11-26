@@ -322,7 +322,7 @@ pub(crate) fn latest_ask<'a>(
             m.from == role
                 && m.to == "user"
                 && !m.dropped
-                && m.purpose.is_none()
+                && m.purpose.as_deref() == Some("ask")
                 && m.source_seq.is_none()
         })
         .max_by_key(|m| m.seq)

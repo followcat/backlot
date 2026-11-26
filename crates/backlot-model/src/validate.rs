@@ -125,6 +125,21 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        EventKind::MessageQueued {
+            to,
+            purpose: Some(purpose),
+            source_seq,
+            ..
+        } if purpose == "ask" => {
+            require_studio(state)?;
+            if to == "user" && source_seq.is_none() {
+                Ok(())
+            } else {
+                Err(Refusal::InvalidOutward(
+                    "an ask-purpose message is an explicit question to the user".into(),
+                ))
+            }
+        }
         EventKind::MessageQueued { .. } => {
             require_studio(state)?;
             Ok(())
@@ -168,9 +183,9 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::NoRole(role.clone()))
             }
         }
-        // `ask.answered` marks one open `tell user` from `role` as
-        // answered in that role's terminal.
-        EventKind::AskAnswered { role, target } => {
+        // `ask.answered`/`ask.acknowledged` close one open explicit
+        // `tell user --ask` from `role`.
+        EventKind::AskAnswered { role, target } | EventKind::AskAcknowledged { role, target } => {
             require_studio(state)?;
             match state.targets.get(target) {
                 Some(SeqTarget::Message(idx)) => {
@@ -178,7 +193,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     if m.from != *role
                         || m.to != "user"
                         || m.dropped
-                        || m.purpose.is_some()
+                        || m.purpose.as_deref() != Some("ask")
                         || m.source_seq.is_some()
                     {
                         return Err(Refusal::NoAsk {
@@ -306,6 +321,13 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     }
                 }
                 _ => Err(Refusal::NoMessage(*target)),
+            }
+        }
+        EventKind::AttentionEscalated { target, .. } => {
+            require_studio(state)?;
+            match state.targets.get(target) {
+                Some(SeqTarget::Attention(idx)) if state.attention[*idx].open => Ok(()),
+                _ => Err(Refusal::NoAttention(*target)),
             }
         }
         EventKind::AttentionCleared { target, .. } => {

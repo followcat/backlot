@@ -16,6 +16,15 @@ use crate::daemon::Stage;
 use crate::permit;
 use crate::sample::{Raise, Watched};
 
+fn hhmm_local(ms: u64) -> String {
+    let timestamp = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
+        return "the reset".into();
+    }
+    format!("{:02}:{:02}", local.tm_hour, local.tm_min)
+}
+
 impl Stage {
     /// The S12d error-taxonomy pass on one fresh sample. A limited
     /// role gets one stage-owned attention while the stage waits
@@ -65,6 +74,8 @@ impl Stage {
                 if self.rate_pace.borrow().contains_key(&pair) {
                     return Ok(());
                 }
+                let until = hhmm_local(now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS);
+                let weekly_choice = rl::weekly_choice_dialog(text);
                 self.raise_attention(
                     Raise {
                         dir,
@@ -76,9 +87,13 @@ impl Stage {
                     },
                     move |seq| {
                         if hit.escalate_now {
-                            format!("weekly or monthly limit exhausted; needs the user — screen saved to attention/{seq}.txt")
+                            if weekly_choice {
+                                format!("weekly limit reached: options 1–2 wait, 3–4 cost money; needs the user — screen saved to attention/{seq}.txt")
+                            } else {
+                                format!("weekly or monthly limit exhausted; needs the user — screen saved to attention/{seq}.txt")
+                            }
                         } else {
-                            format!("rate limited; auto-retry after the reset; screen saved to attention/{seq}.txt")
+                            format!("waiting until {until}; auto-retry after the reset; screen saved to attention/{seq}.txt")
                         }
                     },
                 )
@@ -128,6 +143,20 @@ impl Stage {
                         retries: 0,
                         due_ms: now_ms,
                     });
+                if hit.auto_continue {
+                    if now_ms >= pace.due_ms {
+                        self.escalate_rate_limit(
+                            dir,
+                            role,
+                            attn.seq,
+                            text,
+                            "reset passed without movement".into(),
+                            "rate-limit reset passed without movement; needs the user",
+                        )
+                        .await?;
+                    }
+                    return Ok(());
+                }
                 match rl::step(pace, pace.retries < rl::MAX_RETRIES, now_ms) {
                     rl::Step::Wait => {}
                     rl::Step::Send => {
@@ -248,37 +277,25 @@ impl Stage {
         Ok(())
     }
 
-    /// The rate-limit escalation: the open stage-owned attention
-    /// resolves with `cleared`, and a `needs_user` rate-limit one
-    /// takes its place, naming the saved screen.
+    /// The rate-limit escalation flips the same open attention to
+    /// the person: one stall keeps one attention, so Hollywood hears
+    /// about the episode once.
     async fn escalate_rate_limit(
         &self,
         dir: &std::path::Path,
-        role: &str,
+        _role: &str,
         seq: u64,
-        text: &str,
-        cleared: String,
+        _text: &str,
+        _cleared: String,
         detail: &str,
     ) -> Result<(), Fail> {
         record(
             dir,
-            EventKind::AttentionCleared {
+            EventKind::AttentionEscalated {
                 target: seq,
-                reason: Some(cleared),
+                detail: format!("{detail} — screen saved to attention/{seq}.txt"),
             },
         )?;
-        let detail = detail.to_string();
-        self.raise_attention(
-            Raise {
-                dir,
-                role,
-                reason: crate::ratelimit::RATE_LIMITED,
-                text,
-                needs_user: true,
-                bound: None,
-            },
-            move |seq| format!("{detail} — screen saved to attention/{seq}.txt"),
-        )
-        .await
+        Ok(())
     }
 }

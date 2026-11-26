@@ -500,6 +500,21 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         }
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
         Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
+        Cmd::AskAcknowledge { role, target } => {
+            if caller.role != "user" {
+                return Err(Fail::refused("acknowledging a question is the user's"));
+            }
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::AskAcknowledged {
+                        role: role.clone(),
+                        target,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::AskRun {
             argv,
             why,
@@ -528,7 +543,17 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
-        Cmd::Tell { role, source } => message_cmd(by, source_file(&source)?, role, None),
+        Cmd::Tell { role, source, ask } => {
+            if ask && role != "user" {
+                return Err(Fail::usage("--ask only applies to tell user"));
+            }
+            message_cmd(
+                by,
+                source_file(&source)?,
+                role,
+                if ask { Some("ask") } else { None },
+            )
+        }
         Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;

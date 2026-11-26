@@ -388,3 +388,33 @@ fn review_only_latest_delivery_of_delivered_task() {
         Ok(())
     );
 }
+
+/// Only the user may acknowledge an explicit question, and only while it is open.
+#[test]
+fn ask_acknowledge_validates_target_and_caller() {
+    let ask = EventKind::MessageQueued {
+        to: "user".into(),
+        file: Some("messages/4-q.md".into()),
+        purpose: Some("ask".into()),
+        source_seq: None,
+    };
+    let state = replay(&[ev(1, "user", studio_kind()), ev(4, "producer", ask)]);
+    let ack = EventKind::AskAcknowledged {
+        role: "producer".into(),
+        target: 4,
+    };
+    assert_eq!(validate(&state, &new_ev("user", ack.clone())), Ok(()));
+    assert!(validate(&state, &new_ev("producer", ack.clone())).is_err());
+
+    let report = EventKind::MessageQueued {
+        to: "user".into(),
+        file: Some("messages/5-r.md".into()),
+        purpose: None,
+        source_seq: None,
+    };
+    let report_state = replay(&[ev(1, "user", studio_kind()), ev(4, "producer", report)]);
+    assert!(matches!(
+        validate(&report_state, &new_ev("user", ack)),
+        Err(Refusal::NoAsk { .. })
+    ));
+}

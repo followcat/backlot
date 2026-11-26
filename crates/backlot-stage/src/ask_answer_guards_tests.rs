@@ -191,7 +191,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
                 EventKind::MessageQueued {
                     to: "user".into(),
                     file: Some(format!("messages/{seq}-ask.md")),
-                    purpose: None,
+                    purpose: Some("ask".into()),
                     source_seq: None,
                 },
             ),

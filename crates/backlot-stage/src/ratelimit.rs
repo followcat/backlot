@@ -62,6 +62,18 @@ pub(crate) struct LimitHit {
     /// The text names a weekly or monthly quota: raise it for a
     /// person at once instead of auto-`continue`ing.
     pub escalate_now: bool,
+    /// The runner says it continues by itself after the reset.
+    pub auto_continue: bool,
+}
+
+/// Claude's weekly-limit four-choice dialog: options 1–2 wait;
+/// options 3–4 spend money. The stage must never answer it.
+pub(crate) fn weekly_choice_dialog(screen: &str) -> bool {
+    let lower = screen.to_lowercase();
+    lower.contains("weekly limit")
+        && lower.contains("upgrade")
+        && (lower.contains("usage credits") || lower.contains("credits"))
+        && lower.contains("wait")
 }
 
 /// Whether the terminal reports `error` — regardless of whether
@@ -100,6 +112,7 @@ pub(crate) fn limited(
                 return Some(LimitHit {
                     wait_ms: wait.clamp(RETRY_MARGIN_MS, 3_600_000),
                     escalate_now: long_limit(&msg) || long_limit(tail),
+                    auto_continue: auto_continue(tail),
                 });
             }
             if limit_text(tail) {
@@ -120,7 +133,13 @@ fn hit(text: &str, wait_ms: u64) -> LimitHit {
     LimitHit {
         wait_ms,
         escalate_now: long_limit(text),
+        auto_continue: auto_continue(text),
     }
+}
+
+/// Whether the runner says it continues by itself after the reset.
+fn auto_continue(text: &str) -> bool {
+    text.to_lowercase().contains("continuing automatically at")
 }
 
 /// Whether `text` names a multi-day quota.
@@ -203,7 +222,46 @@ fn last_limit_line(text: &str) -> Option<&str> {
 /// The wait one region asks for: `at HH:MM UTC` first, then the
 /// relative forms.
 fn parse_wait(text: &str, now_ms: u64) -> Option<u64> {
-    parse_at(text, now_ms).or_else(|| parse_in(text))
+    parse_at(text, now_ms)
+        .or_else(|| parse_local_ampm(text, now_ms))
+        .or_else(|| parse_in(text))
+}
+
+/// Claude's local `12:10pm`/`1:05am` reset clock → ms until it next
+/// strikes. Compared in local wall-clock time, so no timezone table is needed.
+fn parse_local_ampm(text: &str, now_ms: u64) -> Option<u64> {
+    let lower = text.to_lowercase();
+    for needle in ["resets ", "continuing automatically at "] {
+        let Some(at) = lower.find(needle) else {
+            continue;
+        };
+        let tail = lower[at + needle.len()..].trim_start();
+        let (hh, tail) = front_digits(tail, 1, 2)?;
+        let tail = tail.strip_prefix(':')?;
+        let (mm, tail) = front_digits(tail, 2, 2)?;
+        let pm = if tail.starts_with("pm") {
+            true
+        } else if tail.starts_with("am") {
+            false
+        } else {
+            return None;
+        };
+        if !(1..=12).contains(&hh) || mm > 59 {
+            return None;
+        }
+        let hour = (hh % 12) + u64::from(pm) * 12;
+        let timestamp = (now_ms / 1000).min(i64::MAX as u64) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
+            return None;
+        }
+        let now = (local.tm_hour as u64) * 3_600_000
+            + (local.tm_min as u64) * 60_000
+            + (local.tm_sec as u64) * 1000;
+        let target = hour * 3_600_000 + mm * 60_000;
+        return Some((target + 86_400_000 - now) % 86_400_000);
+    }
+    None
 }
 
 /// The first `at HH:MM UTC` in the region → ms until that clock

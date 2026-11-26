@@ -14,6 +14,7 @@ fn wait(ms: u64) -> Option<LimitHit> {
     Some(LimitHit {
         wait_ms: ms,
         escalate_now: false,
+        auto_continue: false,
     })
 }
 
@@ -207,6 +208,7 @@ fn a_weekly_or_monthly_quota_escalates_at_once() {
         Some(LimitHit {
             wait_ms: DEFAULT_WAIT_MS,
             escalate_now: true,
+            auto_continue: false,
         })
     );
     let monthly = "You've hit your monthly limit · resets Dec 1, 4pm";
@@ -268,4 +270,27 @@ fn the_retry_budget_escalates() {
     assert!(matches!(step(pace, true, 99), Step::Wait));
     assert!(matches!(step(pace, true, 100), Step::Send));
     assert!(matches!(step(pace, false, 9_999), Step::Escalate));
+}
+
+/// Claude's 12-hour reset clock and explicit auto-continue line parse.
+#[test]
+fn parses_claude_local_reset_and_auto_continue() {
+    let text = "Session limit reached · resets 12:10pm\nContinuing automatically at 12:10pm";
+    let now = 1_700_000_000_000u64;
+    let hit = hit(text, reset_ms(text, now));
+    assert!(hit.auto_continue);
+    assert!(hit.wait_ms <= 86_400_000);
+    assert_eq!(
+        parse_wait("resets 12:10pm", now),
+        parse_wait("Continuing automatically at 12:10pm", now)
+    );
+}
+
+/// Claude's weekly-limit picker is limit evidence, not a question the stage answers.
+#[test]
+fn recognizes_the_weekly_limit_paid_choice_dialog() {
+    let screen = include_str!("../tests/fixtures/claude/weekly-limit.txt");
+    assert!(weekly_choice_dialog(screen));
+    assert!(limit_text(screen));
+    assert!(long_limit(screen));
 }

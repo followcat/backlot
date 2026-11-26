@@ -180,6 +180,11 @@ pub enum ReqAction {
         #[serde(alias = "seq")]
         target: u64,
     },
+    AskAcknowledge {
+        studio: String,
+        role: String,
+        target: u64,
+    },
     Recast {
         studio: String,
         #[serde(alias = "role")]
