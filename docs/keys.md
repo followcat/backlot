@@ -24,7 +24,7 @@ The defaults you'll use most:
 | `Ctrl+B ?` | Key bindings and the studio action launcher |
 | `Ctrl+B s` | Settings |
 | `Ctrl+B c` | New tab — a studio shell in the focused person's worktree |
-| `Ctrl+B m` | Studio menu for the focused pane — a role pane's role menu, a shell pane's studio menu |
+| `Ctrl+B m` | Studio menu for the focused pane — a role pane's role menu (restart, recast, close), a shell pane's studio menu (`Edit cast…`, finish, prune, delete) |
 | `Ctrl+B v`, `Ctrl+B -` | Split right, split down — a studio shell joining the focused tab |
 | `Ctrl+B h/j/k/l` | Move focus |
 | `Ctrl+B z` | Zoom the pane |
