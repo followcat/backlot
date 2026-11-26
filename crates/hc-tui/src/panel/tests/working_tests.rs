@@ -1,4 +1,4 @@
-//! D5 panel tests for the working role's detail line (`PersonLine::Working`).
+//! Tests for inline working progress/running detail and wall-clock idle/working ages.
 
 use super::*;
 use crate::chrome::palette::Palette;
@@ -113,65 +113,7 @@ fn studio_with(role: RoleSummary, updated_ms: u64) -> Summary {
 }
 
 #[test]
-fn fit_working_line_scales_across_three_widths_and_omits_missing_parts() {
-    let now_ms = 60 * 60_000;
-    let mut role = base_role(Work::Working, now_ms - 47 * 60_000);
-    role.progress = Some(RoleProgress {
-        text: "running the parity suite".into(),
-        ts_ms: now_ms - 12 * 60_000,
-    });
-    role.running = Some(RoleRunning {
-        cmd: "cargo test".into(),
-        since_ms: now_ms - 3 * 60_000,
-    });
-
-    // 1. Wide width: full line fits.
-    let full = fit_working_line(&role, now_ms, 80);
-    assert_eq!(
-        full,
-        "working 47m · \"running the parity suite\" 12m ago · cargo test 3m"
-    );
-
-    // 2. Medium width: progress inside quotes shortens with `…`, keeping doing.
-    let mid = fit_working_line(&role, now_ms, 55);
-    assert!(display_width(&mid) <= 55, "{mid}");
-    assert!(mid.starts_with("working 47m · \""), "{mid}");
-    assert!(mid.contains("…\" 12m ago · cargo test 3m"), "{mid}");
-
-    // 3. Narrow width: drops `doing` first, then fits/shortens progress.
-    let narrow = fit_working_line(&role, now_ms, 34);
-    assert!(display_width(&narrow) <= 34, "{narrow}");
-    assert!(!narrow.contains("cargo test"), "{narrow}");
-    assert!(narrow.starts_with("working 47m · \""), "{narrow}");
-    assert!(narrow.contains("12m ago"), "{narrow}");
-
-    // 4. Tiny width: drops progress too and truncates head cleanly.
-    let tiny = fit_working_line(&role, now_ms, 10);
-    assert!(display_width(&tiny) <= 10, "{tiny}");
-    assert!(!tiny.contains('·'), "{tiny}");
-
-    // 5. Missing progress / running / since_ms omit parts with no stray `·`.
-    role.progress = None;
-    assert_eq!(
-        fit_working_line(&role, now_ms, 80),
-        "working 47m · cargo test 3m"
-    );
-    role.doing = None;
-    role.running = None;
-    assert_eq!(fit_working_line(&role, now_ms, 80), "working 47m");
-    role.since_ms = 0;
-    role.progress = Some(RoleProgress {
-        text: "wrapping up".into(),
-        ts_ms: now_ms - 60_000,
-    });
-    assert_eq!(
-        fit_working_line(&role, now_ms, 80),
-        "working · \"wrapping up\" 1m ago"
-    );
-}
-
-#[test]
-fn panel_renders_working_detail_row_only_for_working_roles() {
+fn panel_renders_inline_working_detail_with_progress_priority_and_omits_extra_row() {
     let now_ms = 60 * 60_000;
     let mut working = base_role(Work::Working, now_ms - 47 * 60_000);
     working.progress = Some(RoleProgress {
@@ -182,33 +124,37 @@ fn panel_renders_working_detail_row_only_for_working_roles() {
         cmd: "cargo test".into(),
         since_ms: now_ms - 3 * 60_000,
     });
+    working.doing = Some("writing code".into());
 
-    // Wide panel shows full line at x + 4 under the person row.
-    let wide = render_panel(studio_with(working.clone(), now_ms), 72);
-    assert!(
-        wide.iter()
-            .any(|l| l
-                .contains("working 47m · \"running the parity suite\" 12m ago · cargo test 3m")),
-        "{wide:#?}"
-    );
-
-    // Medium panel shortens progress text inside quotes with `…`.
-    let mid = render_panel(studio_with(working.clone(), now_ms), 58);
-    assert!(
-        mid.iter()
-            .any(|l| l.contains("…\" 12m ago · cargo test 3m")),
-        "{mid:#?}"
-    );
-
-    // Narrow panel drops `doing`.
-    let narrow = render_panel(studio_with(working, now_ms), 38);
-    let working_row = narrow
+    // Wide panel renders `progress` in the 1-line inline tail, not a 2nd row.
+    let wide = render_panel(studio_with(working.clone(), now_ms), 64);
+    let working_rows: Vec<&String> = wide
         .iter()
-        .find(|l| l.contains("working 47m"))
-        .expect("working row present");
-    assert!(!working_row.contains("cargo test"), "{working_row}");
+        .filter(|l| l.contains("working 47m"))
+        .collect();
+    assert_eq!(working_rows.len(), 1, "{wide:#?}");
+    assert!(
+        working_rows[0].contains("working 47m · running the parity suite"),
+        "{}",
+        working_rows[0]
+    );
 
-    // Non-working role keeps its existing single line (no `working ...` row).
+    // Narrow panel truncates detail with `…`, never pushing `working` off.
+    let narrow = render_panel(studio_with(working.clone(), now_ms), 34);
+    let row = narrow.iter().find(|l| l.contains("working 47m")).unwrap();
+    assert!(row.contains("…"), "{row}");
+
+    // Without progress, falls back to `running.cmd`.
+    working.progress = None;
+    let fallback = render_panel(studio_with(working, now_ms), 54);
+    assert!(
+        fallback
+            .iter()
+            .any(|l| l.contains("working 47m · cargo test")),
+        "{fallback:#?}"
+    );
+
+    // Non-working role keeps idle state without stale working progress.
     let mut idle = base_role(Work::Waiting, now_ms - 15 * 60_000);
     idle.progress = Some(RoleProgress {
         text: "leftover note".into(),
@@ -221,8 +167,8 @@ fn panel_renders_working_detail_row_only_for_working_roles() {
     );
 }
 
-/// A live waiting role that has sat at its prompt past `IDLE_SHOWN_MS`
-/// shows `idle <n>m` in its dock row, not a plain `waiting`.
+/// A live role that has sat at its prompt past `IDLE_SHOWN_MS`
+/// shows `idle <n>m` in its dock row; under the floor it shows `idle`.
 #[test]
 fn a_role_at_its_prompt_reads_idle_minutes_in_the_dock() {
     let now_ms = 90 * 60_000;
@@ -231,17 +177,17 @@ fn a_role_at_its_prompt_reads_idle_minutes_in_the_dock() {
     let lines = render_panel(studio_with(role, now_ms), 72);
     let row = lines
         .iter()
-        .find(|l| l.contains("Ⓐ"))
+        .find(|l| l.contains("Ⓐ t1"))
         .expect("person row present");
     assert!(row.contains("idle 4m"), "{row}");
 
-    // Under the floor it stays plain `waiting`, not `idle 0s`.
+    // Under the floor it stays plain `idle`, not `idle 0s`.
     let mut fresh = base_role(Work::Waiting, now_ms - 30 * 60_000);
     fresh.idle_since_ms = Some(now_ms - 30_000);
     let lines = render_panel(studio_with(fresh, now_ms), 72);
-    let row = lines.iter().find(|l| l.contains("Ⓐ")).unwrap();
-    assert!(row.contains("waiting"), "{row}");
-    assert!(!row.contains("idle"), "{row}");
+    let row = lines.iter().find(|l| l.contains("Ⓐ t1")).unwrap();
+    assert!(row.contains("idle"), "{row}");
+    assert!(!row.contains("0s"), "{row}");
 }
 
 #[test]
@@ -252,26 +198,22 @@ fn working_ages_advance_with_injected_wall_clock_for_fixed_summary() {
         text: "running the parity suite".into(),
         ts_ms: updated_ms - 2 * 60_000,
     });
-    role.running = Some(RoleRunning {
-        cmd: "cargo test".into(),
-        since_ms: updated_ms - 60_000,
-    });
     let fixed_summary = studio_with(role, updated_ms);
 
     let at_t1 = render_panel_at(fixed_summary.clone(), 80, updated_ms);
     assert!(
-        at_t1.iter().any(
-            |l| l.contains("working 10m · \"running the parity suite\" 2m ago · cargo test 1m")
-        ),
+        at_t1
+            .iter()
+            .any(|l| l.contains("working 10m · running the parity suite")),
         "{at_t1:#?}"
     );
 
     // Same fixed summary (same `updated_ms`), 5 minutes later by injected wall clock.
     let at_t2 = render_panel_at(fixed_summary.clone(), 80, updated_ms + 5 * 60_000);
     assert!(
-        at_t2.iter().any(
-            |l| l.contains("working 15m · \"running the parity suite\" 7m ago · cargo test 6m")
-        ),
+        at_t2
+            .iter()
+            .any(|l| l.contains("working 15m · running the parity suite")),
         "{at_t2:#?}"
     );
 
@@ -280,7 +222,7 @@ fn working_ages_advance_with_injected_wall_clock_for_fixed_summary() {
     assert!(
         at_early
             .iter()
-            .any(|l| l.contains("working 0s · \"running the parity suite\" 0s ago · cargo test 0s")),
+            .any(|l| l.contains("working 0s · running the parity suite")),
         "{at_early:#?}"
     );
 }

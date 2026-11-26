@@ -37,22 +37,32 @@ pub(crate) enum MachineProbe {
 /// The menu/sidebar line for one machine — `backlot`'s own version
 /// and tone, plus the endpoint's `hc` version when the inventory
 /// knows it.
-fn machine_line(hc: Option<&str>, backlot: &Backlot, latest: Option<&str>) -> MachineLine {
-    let (text, tone) = match backlot {
+fn machine_line(
+    hc: Option<&str>,
+    backlot: &Backlot,
+    latest: Option<&str>,
+    stage_running: bool,
+) -> MachineLine {
+    let (text, tone, stage_ok) = match backlot {
         Backlot::Installed { version, .. } => match latest {
             Some(latest) if crate::machine_versions::behind(version, latest) => {
-                (format!("↑{latest}"), MachineTone::Accent)
+                (format!("↑{latest}"), MachineTone::Accent, None)
             }
-            _ => (format!("backlot {version}"), MachineTone::Normal),
+            _ => (
+                format!("backlot {version}"),
+                MachineTone::Normal,
+                Some(stage_running),
+            ),
         },
-        Backlot::Missing => ("no backlot".to_owned(), MachineTone::Dim),
-        Backlot::Probing | Backlot::Unknown => ("backlot …".to_owned(), MachineTone::Dim),
-        Backlot::Error(_) => ("backlot ?".to_owned(), MachineTone::Dim),
+        Backlot::Missing => ("no backlot".to_owned(), MachineTone::Dim, None),
+        Backlot::Probing | Backlot::Unknown => ("backlot …".to_owned(), MachineTone::Dim, None),
+        Backlot::Error(_) => ("backlot ?".to_owned(), MachineTone::Dim, None),
     };
     MachineLine {
         hc: hc.map(str::to_owned),
         text,
         tone,
+        stage_ok,
     }
 }
 
@@ -123,9 +133,12 @@ impl App {
         let mut out = BTreeMap::new();
         for endpoint in &self.projection.endpoints {
             let line = match &endpoint.endpoint_id {
-                ClientEndpointId::Local => {
-                    machine_line(None, &self.machine_backlot(None), latest.as_deref())
-                }
+                ClientEndpointId::Local => machine_line(
+                    None,
+                    &self.machine_backlot(None),
+                    latest.as_deref(),
+                    self.machine_stage_running(None),
+                ),
                 ClientEndpointId::Remote(name) => {
                     let hc = self
                         .view
@@ -135,7 +148,12 @@ impl App {
                         .iter()
                         .find(|m| m.name == *name)
                         .map(|m| m.version.as_str());
-                    machine_line(hc, &self.machine_backlot(Some(name)), latest.as_deref())
+                    machine_line(
+                        hc,
+                        &self.machine_backlot(Some(name)),
+                        latest.as_deref(),
+                        self.machine_stage_running(Some(name)),
+                    )
                 }
             };
             out.insert(endpoint.endpoint_id.clone(), line);

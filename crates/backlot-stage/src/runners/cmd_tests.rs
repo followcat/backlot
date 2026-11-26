@@ -484,6 +484,7 @@ fn plan_carries_its_prep() {
         stage_env: &env,
         role: "actor-t1-c1",
         checks: &[check("unit", "cargo test")],
+        answer_trust: true,
     };
     let ident = ActorIdentity {
         runner: "cmd".into(),
@@ -536,6 +537,7 @@ fn prepare_for_a_studio_role_writes_the_studio_dir() {
         stage_env: &env,
         role: "actor-t1-c1",
         checks: &[],
+        answer_trust: true,
     };
     let l = plan(&ident, &ctx).unwrap();
     let Some(Prep::Cmd(p)) = l.prep else {
@@ -583,6 +585,7 @@ fn prepare_for_hollywood_names_the_studios_dir() {
         stage_env: &env,
         role: "hollywood",
         checks: &[],
+        answer_trust: true,
     };
     let l = plan(&ident, &ctx).unwrap();
     let Some(Prep::Cmd(p)) = l.prep else {

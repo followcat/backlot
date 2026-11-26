@@ -14,7 +14,7 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio;
-use crate::studio::glyphs::{Health, Person, PriorityMark};
+use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
 /// Right-aligned `(<text>, <colour>)` parts — `count` marks the
 /// label's right end; returns where the tail started.
@@ -101,10 +101,9 @@ pub(super) fn draw_stacked(
     }
 }
 
-/// The collapsed strip's studio line: `● acme·Loc  1/3` — the
-/// health glyph, a short `id·<machine>` label and `<done>/<total>`
-/// or `!<n>` right-aligned (A4.3). Never blank: a studio with no
-/// tasks and nothing waiting still shows its health and name.
+/// The collapsed strip's studio line: `▸ beta    0/0` or `✓ gamm    5/5` —
+/// the focus/health glyph, studio id (plus `·<machine>` only when studios span
+/// machines), and `<done>/<total>` or `!<n>` right-aligned.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_strip(
     buf: &mut Buffer,
@@ -113,17 +112,17 @@ pub(super) fn draw_strip(
     health: Health,
     selected: bool,
     focused: bool,
+    focused_terminal: bool,
+    multi: bool,
     local: Option<&str>,
     palette: &Palette,
 ) {
-    put_text(
-        buf,
-        rect.x,
-        rect.y,
-        1,
-        health.glyph(),
-        Style::default().fg(health.color(palette)),
-    );
+    let (glyph, glyph_fg) = if focused_terminal {
+        (crate::studio::glyphs::FOCUSED_STUDIO, palette.accent)
+    } else {
+        (health.glyph(), health.color(palette))
+    };
+    put_text(buf, rect.x, rect.y, 1, glyph, Style::default().fg(glyph_fg));
     let waiting = crate::studio::waiting_count(studio.studio);
     let mut parts = Vec::new();
     if waiting > 0 {
@@ -133,7 +132,7 @@ pub(super) fn draw_strip(
             if user { palette.red } else { palette.peach },
         ));
     }
-    if studio.studio.tasks_total > 0 {
+    if studio.studio.tasks_total > 0 || focused_terminal {
         parts.push((
             format!("{}/{}", studio.studio.tasks_done, studio.studio.tasks_total),
             palette.overlay0,
@@ -141,14 +140,16 @@ pub(super) fn draw_strip(
     }
     let tail = put_parts_right(buf, rect, &parts);
     let gap = u16::from(!parts.is_empty());
-    // `<short_id>·<machine 2-3>` — the machine keeps its three
-    // chars, the id truncates first (A4.3).
-    let machine = studio.machine.or(local).unwrap_or("local");
-    let short_m: String = machine.chars().take(3).collect();
     let label_w = tail.saturating_sub(rect.x + 2 + gap);
-    let id_room = (label_w as usize).saturating_sub(1 + short_m.chars().count());
-    let id = truncate_end(&studio.studio.id, id_room.max(1));
-    let label = format!("{id}·{short_m}");
+    let label = if multi {
+        let machine = studio.machine.or(local).unwrap_or("local");
+        let short_m: String = machine.chars().take(3).collect();
+        let id_room = (label_w as usize).saturating_sub(1 + short_m.chars().count());
+        let id = truncate_end(&studio.studio.id, id_room.max(1));
+        format!("{id}·{short_m}")
+    } else {
+        truncate_end(&studio.studio.id, label_w as usize)
+    };
     if label_w > 0 {
         let style = studio_title_style(selected, focused, palette.text, palette);
         put_text(
@@ -162,10 +163,9 @@ pub(super) fn draw_strip(
     }
 }
 
-/// A strip's active-or-blocked role line: `× dir      USER` or
-/// `◐ act-a    t1 ↑` — the mark keeps its colour, the name
-/// truncates, the task id and its priority flag or the `USER` word
-/// hold the right edge (A4.3).
+/// A strip's active-or-blocked role line: `× Ⓐ t8   USER` or
+/// `◐ Ⓐ t9   work` — the mark and badge keep their colour, the label
+/// truncates, and the short state word holds the right edge.
 pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, palette: &Palette) {
     let mark = Person::of(role);
     put_text(
@@ -176,45 +176,42 @@ pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, 
         mark.glyph(0),
         mark.style(palette),
     );
-    let flag = role.priority.and_then(PriorityMark::of);
-    let mut right = String::new();
-    if mark == Person::UserPrompt {
-        right = "USER".to_string();
-    } else if let Some(task) = &role.task {
-        right = task.clone();
-        if let Some(flag) = flag {
-            right.push(' ');
-            right.push_str(flag.glyph());
-        }
-        // R3-N2: `t2 dir` — a director-blocked person is not just
-        // its task id; the `dir` cue stays beside it.
-        if mark == Person::DirPrompt {
-            right.push_str(" dir");
-        }
-    } else if mark == Person::DirPrompt {
-        right = "dir".to_string();
-    }
-    let right_w = display_width(&right) as u16;
+    let right = match mark {
+        Person::UserPrompt => "USER",
+        Person::DirPrompt => "dir",
+        Person::Asks => "asks",
+        Person::NeedsYou => "needs",
+        Person::Stuck => "stuck",
+        Person::Failed => "failed",
+        Person::Lost => "lost",
+        Person::Working => "work",
+        Person::Slot => "queue",
+        _ => "",
+    };
+    let right_w = display_width(right) as u16;
     if right_w > 0 {
         put_text(
             buf,
             rect.x + rect.width.saturating_sub(right_w),
             rect.y,
             right_w,
-            &right,
-            Style::default().fg(if mark == Person::UserPrompt {
-                palette.red
-            } else {
-                palette.subtext0
-            }),
+            right,
+            match mark {
+                Person::UserPrompt => Style::default().fg(palette.red),
+                Person::Working => Style::default().fg(palette.subtext0),
+                _ => mark.style(palette),
+            },
         );
+    }
+    let flag = role.priority.and_then(PriorityMark::of);
+    let mut label = glyphs::role_label(role);
+    if let Some(flag) = flag {
+        label.push(' ');
+        label.push_str(flag.glyph());
     }
     let name_w = rect
         .width
         .saturating_sub(3 + right_w + u16::from(right_w > 0));
-    let label = crate::studio::glyphs::RoleBadge::of_role(&role.role)
-        .map(|badge| badge.glyph().to_string())
-        .unwrap_or_else(|| role.name.clone());
     put_role_badged_text(
         buf,
         rect.x + 3,

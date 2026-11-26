@@ -72,7 +72,7 @@ impl App {
         pane.set_scrollback_bytes(shell.scrollback_limit_bytes);
         pane.set_attach_history(shell.attach_history_lines);
         pane.set_tick_epoch(pane_tick_epoch);
-        App {
+        let mut app = App {
             notice: None,
             core_start: None,
             update_check: None,
@@ -140,7 +140,11 @@ impl App {
             popup_pending: None,
             command_overlay: None,
             peek: None,
-            panel: crate::panel::Panel::new(),
+            panel: {
+                let mut p = crate::panel::Panel::new();
+                p.sidebar_collapsed = sidebar_collapsed;
+                p
+            },
             panel_config: crate::panel::PanelConfig::default(),
             panel_config_path: std::path::PathBuf::new(),
             panel_key_combo: crate::config::parse_key_combo("y"),
@@ -307,7 +311,9 @@ impl App {
             monotonic_clock: Arc::new(Instant::now),
             tab_status_clock: Arc::new(tab_status::system_unix_seconds),
             pane_tick_epoch,
-        }
+        };
+        app.sync_studio_chrome();
+        app
     }
 
     pub(super) fn now(&self) -> Instant {

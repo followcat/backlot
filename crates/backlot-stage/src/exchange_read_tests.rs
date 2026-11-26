@@ -22,7 +22,10 @@ fn studio_snippets_extracts_user_producer_hollywood_and_report_turns() {
     );
 
     // 1. User -> producer `--text`.
-    ok(&env, "tell producer --text check-the-cart --as user");
+    {
+        let _g = STAGE_LOCK.lock().unwrap();
+        ok(&env, "tell producer --text check-the-cart --as user");
+    }
     // 2. Hollywood -> producer `--file`.
     let hw_note = fixture(
         &scratch,

@@ -244,7 +244,7 @@ fn the_band_draws_sprockets_title_and_counts() {
     // the fixed right block — no row keys, and the old bare
     // all-keys tier is gone.
     assert!(
-        text.contains("i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
     );
     assert!(!text.contains("y/d a/x"), "{text}");
@@ -420,7 +420,7 @@ fn a_prompt_row_footer_names_y_d_answer() {
     );
     let text = lines(&buf, area).join("\n");
     assert!(
-        text.contains("y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("y/d answer  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
     );
 }
@@ -724,7 +724,7 @@ fn a_selected_hollywood_prompt_names_its_answers() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("⚠ hollywood asks: backlot --help"), "{text}");
     assert!(
-        text.contains("y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("y/d answer  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
     );
 }
@@ -748,7 +748,7 @@ fn a_row_without_answers_never_names_their_keys() {
         );
         let text = lines(&buf, area).join("\n");
         assert!(
-            text.contains("i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
+            text.contains("i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
             "{selected:?}: {text}"
         );
         assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
@@ -767,7 +767,7 @@ fn a_row_without_answers_never_names_their_keys() {
         );
         let text = lines(&buf, area).join("\n");
         assert!(
-            text.contains("i tell   tab ↑↓ ⏎ read   m menu   ? help   esc"),
+            text.contains("i tell  tab ↑↓ ⏎ read  m menu  ? help  esc"),
             "{selected:?}: {text}"
         );
         assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
@@ -791,7 +791,7 @@ fn a_card_row_footer_names_a_x_card() {
     );
     let text = lines(&buf, area).join("\n");
     assert!(
-        text.contains("a/x card   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("a/x card  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
     );
 }
@@ -809,11 +809,11 @@ fn a_ready_studio_footer_names_f_finish_from_row_and_frame() {
     let cases = [
         (
             Target::Ready(key.clone()),
-            "f finish   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
+            "f finish  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc",
         ),
         (
             Target::Studio(key),
-            "f finish   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
+            "f finish  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc",
         ),
     ];
     for (selected, footer) in cases {
@@ -874,7 +874,7 @@ fn an_armed_finish_confirm_names_yes_no_and_warns_on_a_pending_report() {
     let (buf, _) = draw(area, Some(&pending), true, &layer, false, &palette);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("finish studio (report pending)?"), "{text}");
-    assert!(text.contains("y confirm   n / esc cancel"), "{text}");
+    assert!(text.contains("y confirm  n / esc cancel"), "{text}");
     assert!(!text.contains("p peek"), "{text}");
 
     // Report landed: the ask drops the warning, the footer stays.
@@ -884,7 +884,7 @@ fn an_armed_finish_confirm_names_yes_no_and_warns_on_a_pending_report() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("finish studio?"), "{text}");
     assert!(!text.contains("(report pending)"), "{text}");
-    assert!(text.contains("y confirm   n / esc cancel"), "{text}");
+    assert!(text.contains("y confirm  n / esc cancel"), "{text}");
 }
 
 #[test]
@@ -907,10 +907,7 @@ fn a_narrow_prompt_row_still_names_y_d() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(
-        text.contains("y/d p i   tab ←→ ↑↓ ⏎   m menu   esc"),
-        "{text}"
-    );
+    assert!(text.contains("y/d p i  tab ←→ ↑↓ ⏎  m menu  esc"), "{text}");
 }
 
 // ---------- the no-agent bar ----------
@@ -1039,7 +1036,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     assert!(what.contains("review delivery 1"), "{what}");
     // The cast line: one mark each, coloured by role state.
     let cast = row_of(&buf, area, frame.y + 5);
-    assert!(cast.contains("◐ ! ! ◦"), "{cast}");
+    assert!(cast.contains("◐ ! ! ○"), "{cast}");
     assert!(cast.contains("4 cast"), "{cast}");
     let marks: Vec<Color> = (frame.x..frame.x + frame.width)
         .filter(|x| matches!(buf[(*x, frame.y + 5)].symbol(), "◐" | "!" | "○" | "◦"))

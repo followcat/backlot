@@ -68,6 +68,7 @@ fn the_own_list_is_backlot_then_the_references_in_order() {
     let own = Shell {
         path: Some("/scratch/config.toml".into()),
         own: true,
+        source_herdr: false,
     };
     assert_eq!(own.names()[0], NAME);
     assert_eq!(&own.names()[1..], THEME_NAMES);

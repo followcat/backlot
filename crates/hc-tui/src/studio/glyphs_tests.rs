@@ -94,7 +94,7 @@ fn person_glyphs_and_tokens() {
     let palette = Palette::from_name("backlot").unwrap();
     let cases = [
         (Person::Idle, "○", palette.overlay1),
-        (Person::Ready, "◦", palette.overlay1),
+        (Person::Ready, "○", palette.overlay1),
         (Person::Slot, "◌", palette.peach),
         (Person::UserPrompt, "×", palette.red),
         (Person::DirPrompt, "×", palette.peach),
@@ -212,9 +212,9 @@ fn person_of_reads_a_role() {
 
 /// The real case: a live producer whose work reads waiting and whose
 /// `doing` reads idle, carrying an open `session id not found`
-/// attention, is `ready` — not stalled and not flagged.
+/// attention, resolves cleanly to `idle` — never flagged and never `ready`.
 #[test]
-fn an_info_attention_leaves_a_live_producer_ready() {
+fn an_info_attention_leaves_a_live_producer_idle() {
     use backlot_model::attention::AttentionClass;
     let producer: RoleSummary = serde_json::from_value(serde_json::json!({
         "role": "producer",
@@ -233,53 +233,69 @@ fn an_info_attention_leaves_a_live_producer_ready() {
         Some(AttentionClass::Info)
     );
     assert_eq!(Person::of(&producer), Person::Ready);
-    assert_eq!(Person::of(&producer).word(), "ready");
-    assert_eq!(Person::state_text(&producer), "ready");
+    assert_eq!(Person::of(&producer).word(), "idle");
+    let inline = Person::inline_state(&producer, 60_000);
+    assert_eq!(inline.word, "idle");
+    assert_eq!(inline.detail, None);
 }
 
-/// The shown state's plain words for each priority.
+/// The unified inline state vocabulary: priority, word, elapsed age,
+/// and meaningful detail tail.
 #[test]
-fn state_text_uses_the_priority_words() {
+fn inline_state_uses_the_priority_words() {
     use backlot_model::attention::AttentionClass;
+    let now_ms = 90 * 60_000;
     let mut role: RoleSummary = serde_json::from_value(serde_json::json!({
         "role": "producer",
         "name": "producer",
         "state": "live",
         "doing": "900 tokens",
-        "work": "working"
+        "work": "working",
+        "since_ms": now_ms - 4 * 60_000
     }))
     .unwrap();
-    assert_eq!(Person::state_text(&role), "working · 900 tokens");
+    let st = Person::inline_state(&role, now_ms);
+    assert_eq!(st.word, "working");
+    assert_eq!(st.age.as_deref(), Some("4m"));
+    assert_eq!(st.detail.as_deref(), Some("900 tokens"));
+
     role.work = Some(Work::Waiting);
-    assert_eq!(Person::state_text(&role), "waiting · 900 tokens");
+    role.idle_since_ms = Some(now_ms - 35 * 60_000);
+    let st = Person::inline_state(&role, now_ms);
+    assert_eq!(st.word, "idle");
+    assert_eq!(st.age.as_deref(), Some("35m"));
+    assert_eq!(st.detail.as_deref(), Some("900 tokens"));
 
     role.work = None;
     role.doing = None;
     role.running = None;
+    role.idle_since_ms = None;
+    role.since_ms = now_ms - 3 * 60_000;
     role.attention = Some("cannot resume".into());
     role.attention_class = Some(AttentionClass::NeedsYou);
     role.attention_detail = Some("no session id to resume".into());
-    assert_eq!(
-        Person::state_text(&role),
-        "needs you · no session id to resume"
-    );
+    let st = Person::inline_state(&role, now_ms);
+    assert_eq!(st.word, "needs you");
+    assert_eq!(st.age.as_deref(), Some("3m"));
+    assert_eq!(st.detail.as_deref(), Some("no session id to resume"));
 
     role.asks = Some("which shop?".into());
-    assert_eq!(
-        Person::state_text(&role),
-        "needs you · no session id to resume"
-    );
+    assert_eq!(Person::inline_state(&role, now_ms).word, "needs you");
     role.attention = None;
     role.attention_class = None;
-    assert_eq!(Person::state_text(&role), "asks you · which shop?");
+    let st = Person::inline_state(&role, now_ms);
+    assert_eq!(st.word, "asks");
+    assert_eq!(st.detail.as_deref(), Some("which shop?"));
 
     role.asks = None;
     role.attention = Some("rate limited".into());
     role.attention_class = Some(AttentionClass::Stuck);
     role.attention_detail = Some("rate limited; auto-retry after the reset".into());
+    let st = Person::inline_state(&role, now_ms);
+    assert_eq!(st.word, "stuck");
     assert_eq!(
-        Person::state_text(&role),
-        "stuck · rate limited; auto-retry after the reset"
+        st.detail.as_deref(),
+        Some("rate limited; auto-retry after the reset")
     );
 }
 

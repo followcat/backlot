@@ -519,9 +519,9 @@ fn render_band(
     if plan.hints {
         let usable = (area.width as usize).saturating_sub((MARGIN * 2) as usize);
         let tier = if hollywood.confirm.is_some() {
-            hints::for_confirm(usable)
+            hints::pairs_for_confirm(usable)
         } else {
-            hints::for_row_with_handoff(
+            hints::pairs_for_row_with_handoff(
                 hollywood.selected.as_ref(),
                 hollywood.editing,
                 &waits,
@@ -537,7 +537,8 @@ fn render_band(
             let mark = format!("{top}–{bot}/{}", waits.len());
             let mw = display_width(&mark) as u16;
             let mx = (area.x + area.width).saturating_sub(MARGIN + mw);
-            if mx > area.x + MARGIN + display_width(&tier) as u16 + 1 {
+            let hint_w = crate::chrome::render::hint_bar_width(&tier);
+            if mx > area.x + MARGIN + hint_w + 1 {
                 put_text(
                     buf,
                     mx,

@@ -217,7 +217,8 @@ fn setup_two_machine_app() -> App {
 #[tokio::test]
 async fn outward_cards_surface_without_hollywood_and_dedupe_with_hollywood() {
     let mut app = setup_local_app(false);
-    assert_eq!(app.studio.lot.counts.urgent, 1, "lot pill urgent count");
+    assert_eq!(app.studio.lot.counts.cards, 1, "lot pill card count");
+    assert_eq!(app.studio.lot.counts.blocking, 0, "cards are not blocking");
 
     // 1. Call Sheet renders outward card even when `[hollywood]` is absent.
     if app.hollywood.mode != LayerMode::Expanded {
@@ -596,7 +597,8 @@ async fn folded_studio_outward_card_counts_in_folded_line_lot_pill_and_call_shee
     app.reconcile_published_view();
 
     // 1. Outward card in folded `blog` counts on the lot pill and renders in Call Sheet.
-    assert_eq!(app.studio.lot.counts.urgent, 1, "lot pill urgent count");
+    assert_eq!(app.studio.lot.counts.cards, 1, "lot pill card count");
+    assert_eq!(app.studio.lot.counts.blocking, 0, "cards are not blocking");
     if app.hollywood.mode != LayerMode::Expanded {
         press_mods(&mut app, hc_vt::Key::Char('y'), hc_vt::Mods::ALT);
     }
@@ -623,7 +625,7 @@ async fn folded_studio_outward_card_counts_in_folded_line_lot_pill_and_call_shee
     );
     let _ = blog_top;
 
-    // 3. Cramped height (`body_height = 7 < 8`) stacks `blog` into one line with `!1`.
+    // 3. Cramped height (`body_height = 6 < 7`: 9 - 1 header - 2 focused footer) stacks `blog` into one line with `!1`.
     let stacked_lines = screen_lines(&draw_to(&mut app, 140, 9));
     let stacked_text = stacked_lines.join("\n");
     assert!(

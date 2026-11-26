@@ -21,11 +21,20 @@ impl App {
         let index = self.panel_selected_index(&targets);
         let (key, role_name) = match targets.get(index).cloned() {
             Some(Target::Person(key, role_name)) => (key, role_name),
-            // The finished studio's row names its one reopenable seat.
+            // The finished studio's row (or compact finished line) names its one reopenable seat.
             Some(Target::ReopenProducer(key)) => (key, "producer".to_owned()),
+            Some(Target::Block(key))
+                if crate::panel::data::studio(&machines, &key)
+                    .is_some_and(|s| s.studio.state == "finished" && !s.studio.ready_to_finish) =>
+            {
+                (key, "producer".to_owned())
+            }
             _ => return,
         };
-        let reopen_row = matches!(targets.get(index), Some(Target::ReopenProducer(_)));
+        let reopen_row = matches!(
+            targets.get(index),
+            Some(Target::ReopenProducer(_) | Target::Block(_))
+        );
         match crate::panel::data::studio(&machines, &key)
             .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
         {

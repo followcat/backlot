@@ -37,11 +37,17 @@ fn standby_summary(writer_state: &str, producer_state: &str) -> Summary {
     .unwrap()
 }
 
-fn draw_panel(summary: &Summary, width: u16, height: u16) -> (Buffer, crate::panel::PanelRender) {
+fn draw_panel(
+    summary: &Summary,
+    width: u16,
+    height: u16,
+    sidebar_collapsed: bool,
+) -> (Buffer, crate::panel::PanelRender) {
     let area = Rect::new(0, 0, width, height);
     let mut buf = Buffer::empty(area);
     let panel = Panel {
         mode: PanelMode::Expanded,
+        sidebar_collapsed,
         ..Panel::new()
     };
     let palette = Palette::from_name("catppuccin").unwrap();
@@ -76,16 +82,17 @@ fn line_at(buf: &Buffer, area: Rect, y: u16) -> String {
 }
 
 #[test]
-fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
+fn standby_row_in_dock_renders_single_line_role_badge_and_no_counts() {
     let summary = standby_summary("standby", "live");
     let counts = mark_counts(&summary.studios[0]);
     let total_marked: usize = counts.iter().map(|(_, n)| *n).sum();
-    // producer (ready) + director (ready) + alice (working) = 3; writer standby ignored.
+    // producer (idle/ready) + director (idle) + alice (working) = 3; writer standby ignored.
     assert_eq!(total_marked, 3, "standby ignored in counts: {counts:?}");
 
     let palette = Palette::from_name("catppuccin").unwrap();
     let area = Rect::new(0, 0, 44, 30);
-    let (buf, hits) = draw_panel(&summary, area.width, area.height);
+    // When left sidebar is collapsed, Lot expands all roles including standby writer.
+    let (buf, hits) = draw_panel(&summary, area.width, area.height, true);
     let writer_rect = hits
         .rows
         .iter()
@@ -95,42 +102,43 @@ fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
 
     let row1 = line_at(&buf, area, writer_rect.y);
     assert!(row1.contains("Ⓦ"), "{row1}");
-    assert!(row1.trim_end().ends_with("standby│"), "{row1}");
+    assert!(row1.contains("standby"), "{row1}");
     // No activity glyph at mark column (index 2 inside `│ <mark> ...`).
     assert_eq!(buf[(writer_rect.x + 2, writer_rect.y)].symbol(), " ");
-    // The badge keeps its role colour even on a dim standby row.
-    let col = |row: &str, needle: &str| row[..row.find(needle).unwrap()].chars().count() as u16;
-    let name_x = col(&row1, "Ⓦ");
-    assert_eq!(buf[(area.x + name_x, writer_rect.y)].fg, palette.teal);
-    let state_x = col(&row1, "standby");
+    let badge_x = row1[..row1.find("Ⓦ").unwrap()].chars().count() as u16;
+    assert_eq!(buf[(area.x + badge_x, writer_rect.y)].fg, palette.teal);
+    let state_x = row1[..row1.find("standby").unwrap()].chars().count() as u16;
     assert_eq!(buf[(area.x + state_x, writer_rect.y)].fg, palette.overlay0);
 
-    let row2 = line_at(&buf, area, writer_rect.y + 1);
+    // When left sidebar is open, calm + standby roles summarize onto 1 line.
+    let (open_buf, _) = draw_panel(&summary, area.width, area.height, false);
+    let open_text = (area.y..area.y + area.height)
+        .map(|y| line_at(&open_buf, area, y))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(open_text.contains("○ 2 idle · Ⓦ standby"), "{open_text}");
+
+    // Hint moved to `Space` drawer rather than a permanent 2nd dock line.
+    let all_text = (area.y..area.y + area.height)
+        .map(|y| line_at(&buf, area, y))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
-        row2.contains("starts when the director plans"),
-        "expected writer standby hint line below row, got: {row2}"
-    );
-    let hint_x = row2[..row2.find("starts").unwrap()].chars().count() as u16;
-    assert_eq!(
-        buf[(area.x + hint_x, writer_rect.y + 1)].fg,
-        palette.overlay0
+        !all_text.contains("starts when the director plans"),
+        "expected no permanent 2nd line: {all_text}"
     );
 }
 
 #[test]
-fn standby_producer_in_dock_renders_studio_start_hint() {
+fn standby_producer_drawer_carries_studio_start_hint() {
     let summary = standby_summary("standby", "standby");
-    let area = Rect::new(0, 0, 44, 30);
-    let (buf, hits) = draw_panel(&summary, area.width, area.height);
-    let prod_rect = hits
-        .rows
-        .iter()
-        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "producer"))
-        .map(|(r, _)| *r)
-        .expect("producer row in dock");
-    let row2 = line_at(&buf, area, prod_rect.y + 1);
+    let studio = crate::panel::data::StudioRef {
+        machine: None,
+        studio: &summary.studios[0],
+    };
+    let lines = crate::panel::row_lines::person_drawer(studio, &summary.studios[0].roles[0]);
     assert!(
-        row2.contains("starts with the studio"),
-        "expected studio start hint, got: {row2}"
+        lines.iter().any(|l| l.contains("starts with the studio")),
+        "expected studio start hint in Space drawer: {lines:?}"
     );
 }

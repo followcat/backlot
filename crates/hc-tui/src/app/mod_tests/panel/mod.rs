@@ -228,7 +228,7 @@ fn overflow_doc() -> Document {
     for i in 0..20 {
         roles.push(serde_json::json!({
             "role": format!("actor-x{i}"), "name": format!("x{i}"),
-            "state": "live", "work": "waiting",
+            "state": "live", "work": "working", "task": format!("tx{i}"),
         }));
     }
     Document {
@@ -497,7 +497,7 @@ async fn mobile_60x20_activates_mobile_header_full_pane_and_full_width_overlay()
     let drawn = draw_to(&mut app, 60, 20);
     let header_row = screen_lines(&drawn)[0].clone();
     assert!(header_row.contains("acme-shop"), "{header_row}");
-    assert!(header_row.contains("producer"), "{header_row}");
+    assert!(header_row.contains("acme-shop › Ⓟ"), "{header_row}");
     assert!(header_row.contains("✦1"), "{header_row}");
     let header_area: String = screen_lines(&drawn)[..2].join("\n");
     assert!(header_area.contains("switch"), "{header_area}");
@@ -664,7 +664,7 @@ async fn manual_c_strip_at_120x40_shows_calm_summary_for_idle_studio() {
     assert_eq!(app.panel_width(120), 16);
     let drawn = draw_to(&mut app, 120, 40);
     let text = screen_lines(&drawn).join("\n");
-    assert!(text.contains("◦2 ✓1"), "{text}");
+    assert!(text.contains("▸ acme-shop 1/5"), "{text}");
 }
 
 #[tokio::test]

@@ -379,7 +379,15 @@ the ledger keeps, use `backlot tell`:
 
 ```sh
 backlot tell director --file /home/user/note.md --studio acme-shop --as user
+backlot tell user --text "Should we ship v1?" --ask --as producer
+backlot tell user --text "Why did staging fail? Fixed in v2." --note --as producer
 ```
+
+When a studio role (`producer`, `director`, `writer`, or `actor-<task>-c<n>`) calls `backlot tell user`
+with `?` or `？` outside inline code spans, fenced code blocks, and URL query strings (`?key=`),
+the CLI refuses with exit code 2 unless `--ask` (a question awaiting the person's answer, recorded
+with `purpose = "ask"`) or `--note` (explicitly plain information) is passed. `--ask` and `--note`
+only apply to `tell user` and cannot be combined.
 
 The stage delivers it as `[backlot] user → director: read <file>` once the role reads idle and
 its screen has held still — it can wait a while. When several items are owed at once they arrive
