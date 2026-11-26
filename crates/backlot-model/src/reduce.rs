@@ -19,6 +19,10 @@ fn bump_stage_touch(state: &mut StudioState, role: &str, seq: u64) {
 /// refused at append time is skipped rather than panicking on replay.
 pub fn apply(state: &mut StudioState, event: &Event) {
     state.last_seq = event.seq;
+    if let EventKind::Unknown { raw_kind } = &event.kind {
+        state.unknown_kinds.insert(raw_kind.clone());
+        return;
+    }
     let seq = event.seq;
     let ts = event.ts_ms;
     if !event.by.role.is_empty() {
@@ -760,6 +764,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
             });
         }
+        EventKind::StudioReopened { reason, card } => {
+            state.finished = None;
+            state.reopened = Some(crate::state::ReopenRecord {
+                seq,
+                reason: reason.clone(),
+                ts_ms: ts,
+                card: card.clone(),
+            });
+        }
         EventKind::StudioDeleted { .. } => {
             for entry in state.roles.values_mut() {
                 entry.live = false;
@@ -782,6 +795,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 set: set.clone(),
             });
         }
+        EventKind::Unknown { .. } => {}
     }
 }
 

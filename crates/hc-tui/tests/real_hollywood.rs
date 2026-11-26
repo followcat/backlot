@@ -448,3 +448,266 @@ async fn real_no_hollywood_without_config() {
     drop(client);
     scratch.finish().expect("scratch teardown");
 }
+
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_hollywood_switch_make_before_break_and_retention() {
+    use hc_proto::terminal::{ListParams, TerminalParams};
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = ScratchCore::spawn_with(vec![(
+        "BACKLOT_HOLLYWOOD_PREVIOUS_MS".into(),
+        "4000".into(),
+    )])
+    .await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    write_config(&scratch, HOLLYWOOD_CFG);
+    bl_unpinned(&scratch, &state, "stage start");
+
+    let hw_a = wait_terminal(&client, "bl-hollywood").await;
+    wait_read(&client, &hw_a.address, "fake runner: hollywood").await;
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let (_, doc) = wait_doc(&client).await;
+        if doc["hollywood"]["state"] == "live" && doc["hollywood"]["terminal"] == hw_a.address {
+            break;
+        }
+        assert!(Instant::now() < deadline, "initial hollywood live: {doc}");
+        tokio::time::sleep(POLL).await;
+    }
+
+    // Start switch A -> B and queue a user tell while handoff runs.
+    bl_unpinned(
+        &scratch,
+        &state,
+        "hollywood switch --runner fake --model m --effort low --no-wait --as user",
+    );
+    bl_unpinned(&scratch, &state, "tell hollywood queued-during-switch-once");
+
+    // Candidate boots with `hollywood-handoff` while A stays live, and receives the brief prompt.
+    let hw_b = wait_terminal(&client, "bl-hollywood-next").await;
+    assert_eq!(
+        hw_b.labels.get("backlot.role").map(String::as_str),
+        Some("hollywood-handoff"),
+        "{hw_b:?}"
+    );
+    wait_read(&client, &hw_b.address, "fake runner: hollywood").await;
+    let live_a = client
+        .terminal_get(TerminalParams {
+            terminal: hw_a.address.clone(),
+            caller: None,
+        })
+        .await
+        .expect("terminal.get old");
+    assert_eq!(live_a.state, "live", "old hollywood dropped before commit");
+
+    send_text(
+        &client,
+        &hw_b.address,
+        "sh:printf '%s' \"$FAKE_PROMPT\" > \"$BACKLOT_STATE_DIR/cand-prompt.txt\"",
+    )
+    .await;
+    wait_count(&client, &hw_b.address, "fake-sh: exit 0", 1).await;
+    let prompt_file = state.join("cand-prompt.txt");
+    wait_path(&prompt_file);
+    let cand_prompt = fs::read_to_string(&prompt_file).unwrap();
+    assert!(
+        cand_prompt.contains("handoffs/") && cand_prompt.contains(".md"),
+        "candidate missing brief prompt: {cand_prompt:?}"
+    );
+    let handoffs_dir = state.join("hollywood").join("handoffs");
+    let brief_entry = fs::read_dir(&handoffs_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("md"))
+        .expect("brief markdown file");
+    let brief_mode = fs::metadata(brief_entry.path())
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(brief_mode, 0o600);
+    let brief_body = fs::read_to_string(brief_entry.path()).unwrap();
+    assert!(brief_body.contains("# Hollywood Handoff Brief"));
+
+    // Signal readiness from inside the candidate terminal -> atomic commit.
+    send_text(
+        &client,
+        &hw_b.address,
+        "sh:backlot hollywood report \"Handoff ready on b\"",
+    )
+    .await;
+    wait_count(&client, &hw_b.address, "fake-sh: exit 0", 2).await;
+
+    // Verify label promotion on B and `hollywood-previous` tombstone on A inside the grace window.
+    let mut saw_promoted = false;
+    let mut saw_previous = false;
+    let deadline = Instant::now() + DEADLINE;
+    while !(saw_promoted && saw_previous) {
+        let all = client
+            .terminal_list(ListParams {
+                all: true,
+                ..ListParams::default()
+            })
+            .await
+            .expect("terminal.list all")
+            .terminals;
+        if let Some(b) = all.iter().find(|t| t.address == hw_b.address)
+            && b.state == "live"
+            && b.labels.get("backlot.role").map(String::as_str) == Some("hollywood")
+            && b.labels
+                .get("backlot.handoff_id")
+                .is_none_or(String::is_empty)
+        {
+            saw_promoted = true;
+        }
+        if let Some(a) = all.iter().find(|t| t.address == hw_a.address)
+            && a.state == "finished"
+            && a.labels.get("backlot.role").map(String::as_str) == Some("hollywood-previous")
+        {
+            saw_previous = true;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "commit promotion/previous not observed (promoted={saw_promoted}, previous={saw_previous}): {all:?}"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+
+    // Old `bl-hollywood` tombstone sweeps cleanly once the shortened 4s retention expires.
+    wait_absent(&client, "bl-hollywood").await;
+
+    // Queued tell is delivered once to new Hollywood after commit.
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let ev = hledger(&state);
+        let sent = ev
+            .iter()
+            .find(|e| e["kind"] == "message.sent" && e["text"] == "queued-during-switch-once");
+        let delivered_count = sent.map_or(0, |s| {
+            ev.iter()
+                .filter(|e| e["kind"] == "message.delivered" && e["target"] == s["seq"])
+                .count()
+        });
+        let inbox = fs::read_to_string(state.join("fake-inbox-hollywood")).unwrap_or_default();
+        if delivered_count == 1 && inbox.matches("queued-during-switch-once").count() == 1 {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "queued tell delivery check failed (delivered={delivered_count}, inbox={inbox:?})"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+
+    // `HollywoodSummary.terminal` names the new terminal `hw_b`.
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let (_, doc) = wait_doc(&client).await;
+        if doc["hollywood"]["state"] == "live"
+            && doc["hollywood"]["terminal"] == hw_b.address
+            && doc["hollywood"]["model"] == "m"
+        {
+            assert_eq!(doc["hollywood"]["runner"], "fake", "{doc}");
+            break;
+        }
+        assert!(Instant::now() < deadline, "summary never updated: {doc}");
+        tokio::time::sleep(POLL).await;
+    }
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_hollywood_switch_rollback_keeps_old_live() {
+    use hc_proto::terminal::TerminalParams;
+
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    write_config(&scratch, HOLLYWOOD_CFG);
+    bl_unpinned(&scratch, &state, "stage start");
+
+    let hw_a = wait_terminal(&client, "bl-hollywood").await;
+    wait_read(&client, &hw_a.address, "fake runner: hollywood").await;
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let (_, doc) = wait_doc(&client).await;
+        if doc["hollywood"]["state"] == "live" && doc["hollywood"]["terminal"] == hw_a.address {
+            break;
+        }
+        assert!(Instant::now() < deadline, "initial hollywood live: {doc}");
+        tokio::time::sleep(POLL).await;
+    }
+
+    bl_unpinned(
+        &scratch,
+        &state,
+        "hollywood switch --runner fake --model m --effort low --no-wait --as user",
+    );
+    let hw_b = wait_terminal(&client, "bl-hollywood-next").await;
+    // Candidate fails verification by exiting abruptly.
+    client
+        .call(
+            "terminal.kill",
+            Some(serde_json::json!({ "terminal": hw_b.address })),
+        )
+        .await
+        .expect("kill candidate");
+    wait_absent(&client, "bl-hollywood-next").await;
+
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let (_, doc) = wait_doc(&client).await;
+        if doc["hollywood"]["handoff"]["phase"] == "rolled_back"
+            && doc["hollywood"]["state"] == "live"
+            && doc["hollywood"]["terminal"] == hw_a.address
+            && doc["hollywood"]["model"] == "model-h"
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "rollback not reflected: {doc}");
+        tokio::time::sleep(POLL).await;
+    }
+
+    let term_a = client
+        .terminal_get(TerminalParams {
+            terminal: hw_a.address.clone(),
+            caller: None,
+        })
+        .await
+        .expect("terminal.get old");
+    assert_eq!(term_a.state, "live");
+    assert_eq!(
+        term_a.labels.get("backlot.role").map(String::as_str),
+        Some("hollywood")
+    );
+
+    bl_unpinned(&scratch, &state, "tell hollywood after-rollback-live");
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let ev = hledger(&state);
+        let sent = ev
+            .iter()
+            .find(|e| e["kind"] == "message.sent" && e["text"] == "after-rollback-live");
+        let delivered = sent.is_some_and(|s| {
+            ev.iter()
+                .any(|e| e["kind"] == "message.delivered" && e["target"] == s["seq"])
+        });
+        let inbox = fs::read_to_string(state.join("fake-inbox-hollywood")).unwrap_or_default();
+        if delivered && inbox.contains("after-rollback-live") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "old hollywood did not receive tell after rollback"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}

@@ -47,8 +47,9 @@ part of this step.
 
 Every event has `v`, `seq`, `ts_ms`, `kind`, and `by` (the role and session). `v` is the ledger
 schema version — `1` today. Lines written before versioning carry no `v` and read as `v: 1`;
-a `v` newer than the binary's `LEDGER_VERSION` is refused with an "upgrade backlot" error rather
-than a serde failure. `backlot studio migrate [<studio> | --all] [--dry-run]` walks a studio's
+a `v` newer than the binary's `LEDGER_VERSION` is refused with a corrupt `"ledger event version vN is newer than supported v1; upgrade backlot"` error, and malformed JSON, missing envelope fields (`seq`, `ts_ms`, `by`, `kind`), known kinds with invalid payloads, or `v: 0` return a line-numbered corrupt error (an unterminated trailing line without a newline is ignored on read as a torn write and truncated before any append).
+
+A valid JSON line with `v <= LEDGER_VERSION` and an unknown `kind` (for example a record added by a newer backlot release without bumping `v`) deserializes as `EventKind::Unknown { raw_kind }`, preserving its `seq`, `ts_ms`, and `by` and advancing `last_seq` / `next_seq` past it while ignoring its payload during state reduction. `backlot studio migrate` and any ledger rewrite preserve unknown-kind lines byte-for-byte. While a studio's ledger holds any unknown kind, CLI and stage read commands keep working, every write (`append_locked`) is refused with `"this ledger has records from a newer backlot (<kinds>); upgrade backlot"`, `backlot stage` pauses read-only on that studio (no reconciles, launches, watches, checks, relabels, or terminal sends; sibling studios keep running), and the studio's entry in `plugin.backlot.summary` sets `needs_upgrade: true` and `unknown_kinds` so the TUI Lot, Call Sheet, and studio frames show `"upgrade backlot"`. `backlot studio migrate [<studio> | --all] [--dry-run]` walks a studio's
 log (and, with `--all`, Hollywood's) under the lock, rewrites any unversioned lines to the
 current `v` through the model's step-by-step migration pipeline, keeps a `events.jsonl.v0.bak`
 backup, and verifies the migrated log replays to the same state — a current log is a no-op that
@@ -65,6 +66,7 @@ prints `already at ledger v1`.
 | `role.recast` | role, new actor identity, reason, optional `card` |
 | `role.approval` | role, decision (`allow` or `deny`) |
 | `studio.finished` | reason |
+| `studio.reopened` | reason, optional `card` — `user` only; clears the finished marker so recasts, cast changes and new tasks work again |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
@@ -279,6 +281,8 @@ message to the producer (R26).
 | `card.proposed` | the exact `action` (D18, including stage-proposed `Outward` cards), a one-line `why`, and the `base` (`GitHead` for outward) — `hollywood` or `stage` |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
+| `card.withdrawn` | card id, reason — `hollywood` only, on its own open card |
+| `card.superseded` | card id, `by_card`, reason — `hollywood` or `stage`, appended with the newer proposal so a batch apply cannot run both |
 | `card.stale` | card id, reason — `user` at apply time on an open card, `stage` on an applied one (H3) |
 | `card.done` / `card.failed` | card id, optional detail / reason — `stage` only (H3) |
 | `hollywood.reported` | headline (one nonempty line), optional body file — `hollywood` only |
@@ -288,7 +292,8 @@ message to the producer (R26).
 
 A card's **base** is the fact it was proposed against — `studio_absent` for `studio-new`,
 `person_held`/`person_closed` for `close`/`reopen`, `task_priority { was }` for `priority`,
-`task_status { was }` for `pause`/`resume`/`abandon`. The reducer holds cards by seq; staleness is a
+`task_status { was }` for `pause`/`resume`/`abandon`, `cast_seq { was }` for `cast`, and
+`studio_finished` for `reopen-studio`. The reducer holds cards by seq; staleness is a
 pure read of the card against the studio's state, checked at apply time (a moved base records
 `card.stale` instead of `card.applied`) and again when the stage executes an applied card.
 `card.done`/`card.failed`/`card.stale`-by-stage are refused on a card that is not `applied`; an

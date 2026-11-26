@@ -28,10 +28,11 @@ impl App {
         stage_running: bool,
         out: Result<String, String>,
     ) {
+        let now = self.now();
         let text = out.as_deref().map_err(String::as_str);
         self.studio_index
-            .note_reply(machine, stage_running, Instant::now(), text);
-        self.sched.mark_dirty(Instant::now());
+            .note_reply(machine, stage_running, now, text);
+        self.sched.mark_dirty(now);
     }
 
     /// The cached archived list answered `machine`.
@@ -40,10 +41,10 @@ impl App {
         machine: Option<String>,
         out: Result<String, String>,
     ) {
+        let now = self.now();
         let text = out.as_deref().map_err(String::as_str);
-        self.studio_index
-            .note_archived_reply(machine, Instant::now(), text);
-        self.sched.mark_dirty(Instant::now());
+        self.studio_index.note_archived_reply(machine, now, text);
+        self.sched.mark_dirty(now);
     }
 
     /// Ask every reachable machine for its archived studios — the
@@ -65,7 +66,7 @@ impl App {
                 ClientEndpointId::Remote(name) => Some(name.clone()),
             })
             .collect();
-        let due = self.studio_index.want_archived(Instant::now(), &reachable);
+        let due = self.studio_index.want_archived(self.now(), &reachable);
         if due.is_empty() {
             return;
         }
@@ -118,7 +119,7 @@ impl App {
                 }
             })
             .collect();
-        let due = self.studio_index.want(Instant::now(), &machines);
+        let due = self.studio_index.want(self.now(), &machines);
         if due.is_empty() {
             return;
         }

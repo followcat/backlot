@@ -5,8 +5,6 @@
 //! document and the focused terminal's labels, so it can never
 //! disagree with the panel the way the old floating strip did.
 
-use backlot_model::hollywood::HOLLYWOOD_TERMINAL;
-
 use crate::panel::data::MachineSummary;
 
 use crate::chrome::lot::{HeaderKind, Lot, LotCounts, StudioHeader};
@@ -29,6 +27,7 @@ impl super::App {
         };
         if !self.plain {
             self.sync_hollywood_seen(machines);
+            self.sync_handoff_outcome(machines);
             self.lot_counts(machines, &mut lot.counts);
             lot.pill = lot.counts.studios > 0
                 || self.has_hollywood_cfg
@@ -89,6 +88,53 @@ impl super::App {
                 crate::hollywood::WaitBucket::Ready => counts.ready += 1,
             }
         }
+        let hw = crate::hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref());
+        counts.switch_state = crate::hollywood::pill_switch_state(hw, counts.any_waiting());
+    }
+
+    fn sync_handoff_outcome(&mut self, machines: &[MachineSummary]) {
+        let Some(hw) = crate::hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref())
+        else {
+            return;
+        };
+        let Some(hf) = hw.handoff.as_ref() else {
+            return;
+        };
+        let next = (hf.id.clone(), hf.phase.clone());
+        if self.last_handoff_seen.as_ref() == Some(&next) {
+            return;
+        }
+        let prev_phase = self
+            .last_handoff_seen
+            .as_ref()
+            .filter(|(id, _)| id == &hf.id)
+            .map(|(_, p)| p.clone());
+        self.last_handoff_seen = Some(next);
+        match hf.phase.as_str() {
+            "committed" if prev_phase.is_some() => {
+                let target = crate::hollywood::handoff_target_short(hf);
+                self.reload_hollywood_cfg();
+                let updated = backlot_stage::config::HollywoodCfg {
+                    runner: hf.target_runner.clone(),
+                    model: hf.target_model.clone(),
+                    effort: hf.target_effort.clone(),
+                    key: self.hollywood_cfg.as_ref().and_then(|c| c.key.clone()),
+                    default_cast: self
+                        .hollywood_cfg
+                        .as_ref()
+                        .and_then(|c| c.default_cast.clone()),
+                };
+                self.has_hollywood_cfg = true;
+                self.hollywood_overseer = Some(super::hollywood::overseer_label(&updated));
+                self.hollywood_cfg = Some(updated);
+                self.show_handoff_toast(&format!("switched hollywood to {target}"), "", false);
+            }
+            "rolled_back" => {
+                let msg = crate::hollywood::rollback_banner(hw, hf);
+                self.show_handoff_toast("hollywood switch failed", &msg, true);
+            }
+            _ => {}
+        }
     }
 
     /// The start policy, applied once the first summary lands, plus
@@ -129,8 +175,13 @@ impl super::App {
         let focused = self.focused.as_deref()?;
         let terminal = self.view.inventory.get(focused)?;
         let labels = &terminal.labels;
-        if labels.get("backlot.role").map(String::as_str) == Some("hollywood")
-            || terminal.name.as_deref() == Some(HOLLYWOOD_TERMINAL)
+        if matches!(
+            labels.get("backlot.role").map(String::as_str),
+            Some("hollywood" | "hollywood-handoff" | "hollywood-previous")
+        ) || terminal
+            .name
+            .as_deref()
+            .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
         {
             return Some(StudioHeader {
                 key: None,

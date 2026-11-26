@@ -7,7 +7,7 @@ use std::time::Duration;
 use backlot_model::summary::Work;
 
 use super::PrepNote;
-use super::devin::{DevinPrep, config_content, prepare};
+use super::devin::{DevinPrep, allow_rules, config_content, prepare};
 use crate::cli::Env;
 use crate::hook::run_io_env;
 use crate::signals;
@@ -122,11 +122,13 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
     let dir = tmp("prep");
     let sig = dir.join("signals.jsonl");
     let existing =
-        "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(echo *)\"\n    ]\n  }\n}\n";
-    let spliced = String::from_utf8(config_content(Some(existing.as_bytes()), &sig)).unwrap();
+        "{\n  \"permissions\": {\n    \"allow\": [\n      \"Exec(echo)\"\n    ]\n  }\n}\n";
+    // With no allow list, an existing `permissions.allow` keeps its
+    // bytes — the hook splice touches nothing else.
+    let spliced = String::from_utf8(config_content(Some(existing.as_bytes()), &sig, &[])).unwrap();
     assert!(
         spliced.starts_with(
-            "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(echo *)\"\n    ]\n  }"
+            "{\n  \"permissions\": {\n    \"allow\": [\n      \"Exec(echo)\"\n    ]\n  }"
         ),
         "{spliced}"
     );
@@ -149,6 +151,7 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
     let prep = DevinPrep {
         config: repo.join(".devin/config.local.json"),
         signals: sig.clone(),
+        allow: Vec::new(),
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
@@ -170,10 +173,74 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
     let tprep = DevinPrep {
         config: cfg.clone(),
         signals: sig,
+        allow: Vec::new(),
     };
     assert_eq!(
         prepare(&tprep).unwrap(),
         Some(PrepNote::HooksUnavailable(".devin/config.local.json"))
     );
     assert_eq!(fs::read_to_string(&cfg).unwrap(), orig);
+}
+
+/// The role's `permissions.allow` carries the shared read-only set as
+/// one `Exec(<cmd>)` per command — Devin's own prefix rule syntax — and
+/// the splice keeps another `permissions` member (`deny`) intact: only
+/// `allow` is replaced.
+#[test]
+fn the_read_only_set_lands_in_permissions_allow() {
+    let dir = tmp("allow");
+    let sig = dir.join("signals.jsonl");
+    let existing = "{\"permissions\":{\"deny\":[\"Exec(rm)\"],\"allow\":[\"Exec(old)\"]}}\n";
+    let allow = allow_rules();
+    let text = String::from_utf8(config_content(Some(existing.as_bytes()), &sig, &allow)).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let listed = v["permissions"]["allow"].as_array().unwrap();
+    for want in [
+        "Exec(git status)",
+        "Exec(git log)",
+        "Exec(git show)",
+        "Exec(git diff)",
+        "Exec(git branch --list)",
+        "Exec(git branch --show-current)",
+        "Exec(ls)",
+        "Exec(rg)",
+        "Exec(wc)",
+        "Exec(head)",
+    ] {
+        assert!(
+            listed.iter().any(|r| r.as_str() == Some(want)),
+            "missing {want}: {text}"
+        );
+    }
+    // Devin's syntax takes no `Bash(...)` and no ` *` form — one rule
+    // per command, prefix-matched by the runner itself.
+    for rule in listed {
+        let rule = rule.as_str().unwrap();
+        assert!(!rule.starts_with("Bash("), "a Bash rule leaked: {rule}");
+        assert!(!rule.contains(" *)"), "a ` *` form leaked: {rule}");
+    }
+    // The old allow entry is gone, the deny member survives untouched.
+    assert!(!listed.iter().any(|r| r.as_str() == Some("Exec(old)")));
+    assert_eq!(v["permissions"]["deny"][0], "Exec(rm)");
+    // The hooks are still spliced beside it.
+    assert_eq!(v["hooks"]["PermissionRequest"][0]["matcher"], "");
+}
+
+/// Nothing that writes is pre-allowed: no `git add`, `git commit`,
+/// `git merge`, no bare `git branch` family — only its listing forms.
+#[test]
+fn the_read_only_set_holds_no_writes() {
+    let rules = allow_rules();
+    for bad in [
+        "Exec(git add)",
+        "Exec(git commit)",
+        "Exec(git merge)",
+        "Exec(git branch)",
+        "Exec(git push)",
+        "Exec(git branch -D)",
+    ] {
+        assert!(!rules.iter().any(|r| r == bad), "{bad}: {rules:?}");
+    }
+    // One rule per read-only command — no doubled ` *` variant.
+    assert_eq!(rules.len(), crate::runners::READ_ONLY.len());
 }

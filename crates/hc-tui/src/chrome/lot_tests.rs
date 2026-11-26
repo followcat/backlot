@@ -34,6 +34,7 @@ fn non_blocking_pill_uses_raised_row_with_teal_and_peach_segments() {
         ready: 1,
         unread: 0,
         activity: HollywoodActivity::Idle,
+        switch_state: None,
     };
     let mut hits = ShellHitMap::default();
     let w = pill_width(&counts, PillTier::Full, true);
@@ -94,6 +95,7 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
         ready: 1,
         unread: 0,
         activity: HollywoodActivity::Idle,
+        switch_state: None,
     };
     let mut hits = ShellHitMap::default();
     let w = pill_width(&counts, PillTier::Wide, true);

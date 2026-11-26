@@ -254,7 +254,11 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     }
     let sidebar_rows = slice_cols(buf, layout.sidebar);
     let sidebar_text = sidebar_rows.join("\n");
-    assert!(sidebar_text.contains("backlot 0.4.10 · ● ok"));
+    let expected_ver = format!("backlot {} · ● ok", env!("CARGO_PKG_VERSION"));
+    assert!(
+        sidebar_text.contains(&expected_ver),
+        "missing `{expected_ver}` in:\n{sidebar_text}"
+    );
     assert!(sidebar_text.contains("finished (1)"));
     assert!(!sidebar_text.contains("host-a · ok"));
     assert!(!app.hit_map.sidebar_help.is_empty());

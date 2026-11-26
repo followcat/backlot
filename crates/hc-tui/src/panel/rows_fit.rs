@@ -68,6 +68,55 @@ pub(crate) fn health_of(
     }
 }
 
+/// The role groups a block separates with a thin rule, in order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RoleGroup {
+    Producer,
+    Director,
+    Writer,
+    Actors,
+}
+
+impl RoleGroup {
+    fn index(self) -> usize {
+        match self {
+            RoleGroup::Producer => 0,
+            RoleGroup::Director => 1,
+            RoleGroup::Writer => 2,
+            RoleGroup::Actors => 3,
+        }
+    }
+}
+
+/// A role key's group — fixed seats by name, every `actor…` together.
+pub(super) fn role_group(role: &str) -> RoleGroup {
+    match role {
+        "producer" => RoleGroup::Producer,
+        "director" => RoleGroup::Director,
+        "writer" => RoleGroup::Writer,
+        _ => RoleGroup::Actors,
+    }
+}
+
+/// How many thin rules a block draws across a specific role list.
+pub(super) fn divider_count_for(roles: &[&RoleSummary]) -> usize {
+    let mut seen = [false; 4];
+    for role in roles {
+        seen[role_group(&role.role).index()] = true;
+    }
+    seen.iter()
+        .filter(|present| **present)
+        .count()
+        .saturating_sub(1)
+}
+
+/// How many thin rules a block draws: one between each pair of
+/// adjacent non-empty role groups, so an empty group leaves no rule.
+#[allow(dead_code)]
+pub(super) fn divider_count(studio: &StudioSummary) -> usize {
+    divider_count_for(&live_roles(studio))
+}
+
 /// The studio's non-closed roles in display order: `producer`,
 /// `director`, `writer` first when present, then the actors in the
 /// summary's order. Closed roles come after (S2 §2).
@@ -209,7 +258,8 @@ pub(super) fn live_person_plan<'a>(
 
 /// An expanded block's height without talk rows: top + bottom
 /// borders, compose divider + `›` (or reopen line), owed/report/confirm/
-/// next/usage lines, calm summary + live people, task section, and closed section.
+/// next/usage lines, calm summary + live people, role dividers, task section,
+/// and closed section.
 pub(super) fn block_height(
     studio: StudioRef<'_>,
     panel: &Panel,
@@ -219,19 +269,24 @@ pub(super) fn block_height(
     closed_open: bool,
 ) -> usize {
     let has_input_divider = !(studio.studio.state == "finished" && !studio.studio.ready_to_finish);
+    let report_pending = !studio.studio.needs_upgrade && super::data::report_pending(studio.studio);
+    let finish_confirm =
+        !studio.studio.needs_upgrade && panel.finish_confirm.as_ref() == Some(&studio.key());
+    let next_step = !studio.studio.needs_upgrade && super::data::next_step(studio.studio).is_some();
     let mut height = 3
         + usize::from(has_input_divider)
         + usize::from(owed)
-        + usize::from(super::data::report_pending(studio.studio))
-        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()))
-        + usize::from(super::data::next_step(studio.studio).is_some())
+        + usize::from(report_pending)
+        + usize::from(finish_confirm)
+        + usize::from(next_step)
         + usize::from(studio.studio.usage.is_some())
         + studio.studio.outward_cards.len();
     let (calm, shown) = live_person_plan(studio, panel, current);
     height += usize::from(calm.is_some());
-    for role in shown {
+    for role in &shown {
         height += person_height(studio, role, panel);
     }
+    height += divider_count_for(&shown);
     height += tasks_height(studio, panel, accepted_open);
     height += closed_height(studio, panel, closed_open);
     height

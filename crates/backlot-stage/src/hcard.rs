@@ -97,6 +97,11 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
             let marker = format!("c{}", card.seq);
             s.cast_card.as_deref() == Some(marker.as_str())
         }
+        // A reopen's marker is the card id on the newest `studio.reopened`.
+        CardAction::ReopenStudio { .. } => {
+            let marker = format!("c{}", card.seq);
+            s.reopened.as_ref().and_then(|r| r.card.as_deref()) == Some(marker.as_str())
+        }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
         CardAction::Setup { .. } => false,
         CardAction::Outward { .. } => s.has_outward_completion(card.seq),
@@ -271,6 +276,65 @@ impl Stage {
             crate::stagelog::stage_log!("card c{} stale", card.seq);
             return Ok(());
         }
+        if let Ok(Some(cur)) = crate::handoff::load_handoff(hdir)
+            && cur.phase.is_active()
+        {
+            if cur.card_seq == Some(card.seq) {
+                return Ok(());
+            }
+            let reason = "another handoff is already in progress".to_string();
+            self.happend(
+                hdir,
+                HollywoodKind::CardFailed {
+                    card: card.seq,
+                    reason,
+                },
+            )?;
+            return Ok(());
+        }
+        let role = self.hstate.borrow().role.clone();
+        if role.live && !role.closed {
+            if let Err(e) = crate::hsetup::validate_hollywood_target(
+                &env,
+                &target.runner,
+                &target.model,
+                target.effort.as_deref(),
+            ) {
+                let reason = e.message().to_string();
+                self.happend(
+                    hdir,
+                    HollywoodKind::CardFailed {
+                        card: card.seq,
+                        reason: reason.clone(),
+                    },
+                )?;
+                return Ok(());
+            }
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            if let Err(reason) = crate::handoff::stage_handoff_request(
+                hdir,
+                &target.runner,
+                &target.model,
+                target.effort.as_deref(),
+                crate::handoff::DEFAULT_TIMEOUT_MS,
+                true,
+                &format!("card c{}", card.seq),
+                Some(card.seq),
+                now_ms,
+            ) {
+                self.happend(
+                    hdir,
+                    HollywoodKind::CardFailed {
+                        card: card.seq,
+                        reason,
+                    },
+                )?;
+            }
+            return Ok(());
+        }
         let cfg = crate::config::HollywoodCfg {
             runner: target.runner.clone(),
             model: target.model.clone(),
@@ -359,6 +423,10 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
             role: person.clone(),
             fresh: *fresh,
             reason: Some(marker(card.seq, &card.why)),
+        }),
+        CardAction::ReopenStudio { .. } => Ok(EventKind::StudioReopened {
+            reason: card.why.clone(),
+            card: Some(format!("c{}", card.seq)),
         }),
         // The cast change reads its file in `cast_step`, not here.
         CardAction::Cast { .. } => Err("cast is handled apart".into()),

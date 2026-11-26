@@ -2,10 +2,11 @@
 //! agents section's slots, then the 1-line rows under `chrome/scroll`'s
 //! list metrics — same scroll model as herdr's agents list.
 
-use backlot_model::summary::RoleSummary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
+
+use backlot_model::summary::RoleSummary;
 
 use super::CastView;
 use super::rows::{CastRow, cast_rows};
@@ -92,7 +93,7 @@ pub(crate) fn render_cast(
         }
     }
 
-    let rows = cast_rows(view);
+    let mut rows = cast_rows(view);
     let body = Rect::new(
         area.x,
         area.y.saturating_add(3),
@@ -103,6 +104,15 @@ pub(crate) fn render_cast(
     if body.is_empty() || rows.is_empty() {
         *cast_scroll = 0;
         return;
+    }
+    if rows
+        .iter()
+        .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
+    {
+        let total: usize = rows.iter().map(|row| row.lines() as usize).sum();
+        if total > body.height as usize {
+            rows.retain(|r| !matches!(r, CastRow::ClosedDivider { .. }));
+        }
     }
 
     let heights: Vec<u16> = rows.iter().map(|row| row.lines()).collect();
@@ -127,7 +137,7 @@ pub(crate) fn render_cast(
         .max_offset_from_bottom
         .saturating_sub(metrics.offset_from_bottom);
     let show_bar = metrics.max_offset_from_bottom > 0 && body.width > 1;
-    let content_width = body.width.saturating_sub(u16::from(show_bar));
+    let content_width = if show_bar { body.width - 1 } else { body.width };
     let mut y = body.y;
     for (index, row) in rows.iter().enumerate().skip(*cast_scroll) {
         let height = heights[index].min(body.height);

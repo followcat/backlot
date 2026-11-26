@@ -109,7 +109,7 @@ async fn a_held_call_does_not_stall_others() {
     timeout(server).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn timeout_releases_capacity_and_late_replies_are_dropped() {
     let (mut core, read, write) = fakecore::pair(64 * 1024);
     let server = tokio::spawn(async move {
@@ -221,7 +221,7 @@ async fn cancelled_callers_release_their_pending_entries() {
     server.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn queued_writes_stay_whole_when_a_caller_cancels() {
     // A tiny pipe: the writer blocks mid-frame until the peer drains.
     let (mut core, read, write) = fakecore::pair(16);
@@ -257,7 +257,7 @@ async fn queued_writes_stay_whole_when_a_caller_cancels() {
     call_a.abort(); // no reply is coming; keep the test fast
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn enqueue_waits_inside_the_call_deadline() {
     // A peer that stops reading after hello: the pipe fills, the bounded
     // queue fills, and further sends block.

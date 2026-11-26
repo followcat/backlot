@@ -95,20 +95,10 @@ fn studio_notification(event: StudioEvent) -> NotificationEvent {
 }
 
 impl super::App {
-    /// This core's live `bl-hollywood` address — the read the Call
+    /// This core's active live Hollywood address — the read the Call
     /// Sheet's Enter takes.
     pub(super) fn visible_hollywood_terminal(&self) -> Option<String> {
-        self.view
-            .inventory
-            .terminals()
-            .values()
-            .find(|terminal| {
-                terminal.state == "live"
-                    && !terminal.address.contains('/')
-                    && terminal.name.as_deref()
-                        == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
-            })
-            .map(|terminal| terminal.address.clone())
+        self.hollywood_terminal()
     }
 }
 
@@ -153,7 +143,7 @@ pub(super) fn target_is_focused(app: &super::App, target: &Target) -> bool {
             app.hollywood.expanded()
                 && app.hollywood.selected == Some(Target::OutwardCard(key.clone(), id.clone()))
         }
-        Target::Ready(key) | Target::Tell(key) => {
+        Target::Ready(key) | Target::Tell(key) | Target::Upgrade(key) => {
             app.studio.current.as_ref() == Some(key) && focused_in(key)
         }
         Target::Stage(machine, false) => {

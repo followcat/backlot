@@ -122,7 +122,10 @@ pub(crate) fn done_title(p: &Pending) -> String {
 /// own `stage` verbs and the `hollywood setup` write are not
 /// studio/task/role mutations.
 pub(crate) fn mutates_ledger(action: &Action) -> bool {
-    !action.view && !action.mark.starts_with("stage:") && action.mark != mark::hollywood_setup()
+    !action.view
+        && !action.mark.starts_with("stage:")
+        && action.mark != mark::hollywood_setup()
+        && action.mark != mark::hollywood_switch()
 }
 
 /// `host-b failed: pause task t1` / `failed: pause task t1` (§3.3).
@@ -229,6 +232,10 @@ pub(crate) mod mark {
     /// `tell`'s `hollywood` so the two never dedup each other.
     pub(crate) fn hollywood_setup() -> String {
         "hollywood:setup".to_owned()
+    }
+    /// Live make-before-break switch / cancel mark.
+    pub(crate) fn hollywood_switch() -> String {
+        "hollywood:switch".to_owned()
     }
     /// One Hollywood report/message read — `hollywood show <seq>`.
     pub(crate) fn hollywood_entry(seq: u64) -> String {

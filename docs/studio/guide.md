@@ -9,6 +9,24 @@ inside `backlot` shows who is doing what.
 This guide walks one studio end to end. [limits.md](limits.md) says plainly what has and has not
 been verified; read it before trusting a studio with real work.
 
+## Reading backlot's own docs
+
+These files ship inside the binary. `backlot guide` lists the topics — one per file in
+`docs/studio/` — and `backlot guide <topic>` prints one whole; `--grep <word>` narrows either to
+the matching lines, over every topic when no topic is named:
+
+```sh
+backlot guide
+backlot guide guide
+backlot guide runners --grep permission
+```
+
+The topics are `design`, `guide`, `hollywood`, `ledger`, `limits`, `panel`, `plan`, `progress`,
+`requests`, `requirements`, `runners`, `server` and `testing`. A role is told to read them from
+here, never to search the disk: `docs/studio/` is not in its work area, and a search only stops at
+a permission prompt. Nothing is read from disk at run time — the text is compiled in — and the
+command needs no studio, ledger or core.
+
 ## What you need
 
 - **`hc` installed and a core running.** `backlot` (the TUI) starts a local core itself when
@@ -333,10 +351,13 @@ people, the role keys reach them after the people, and the stage never touches t
 nudging, sampling, counting, reaping, relabelling all skip a `backlot.shell` terminal. A finished
 studio keeps its shells for as long as it stays in the document.
 
-Four direct keys move around without the prefix: `Alt+Left`/`Alt+Right` step to the previous or
-next studio, `Alt+Up`/`Alt+Down` to the previous or next person of the current studio's cast —
-live people first, then the shells. Their defaults are `keys.previous_studio` and friends in
-backlot's config.
+Four direct keys move around without the prefix: `Alt+PageUp`/`Alt+PageDown` step to the previous
+or next studio, `Alt+Up`/`Alt+Down` to the previous or next person of the current studio's cast —
+live people first, then the shells. A studio step also switches the main pane to that studio's last
+member (a role or a shell, else its producer, else its first live person, else its first live
+shell); stepping from a terminal moves the keys there, while stepping from the lot or the machines
+tree swaps the pane and leaves that surface in charge. Their defaults are `keys.previous_studio`
+and friends in backlot's config; `Alt+Left`/`Alt+Right` stay free for the terminal.
 
 Every studio command also accepts `--session <s>` and `--remote <t>` to reach another core, the
 same flags the TUI takes.
@@ -432,24 +453,30 @@ and review the delivery — the same commands, recorded the same way.
 
 ### What the panel and the cast show
 
-The sidebar's cast lists the current studio's people, live first, two lines each: mark, name and
-task, the runner at the right edge; the terminal's title under it with a short model at the
-right. An open attention replaces the whole second line, model included, with `! <attention>`;
-a failed turn says `last turn failed` the same way. The focused person's pair of rows is highlighted with a `▌` marker. A
+The sidebar's cast lists the current studio's people, live first, a first row each: mark,
+name and task, the runner at the right edge. The rest wraps over as many rows as it needs
+(up to four per person) — the full state text and, on a row of its own, the full model with
+its effort. An open attention wraps its whole state text (`needs you · …`, `asks you · …`)
+and takes the model's row away; a failed turn says `last turn failed` the same way. When the
+studio's people do not all fit, only the focused person keeps the full height and the others
+fall back to two rows. The focused person's rows are highlighted with a `▌` marker. A
 trailing `others` row expands to the agents that belong to no studio.
 
 Expanded, the dock draws one bordered block per studio — the id in the frame, a header row
 with the health glyph (`●` live, `◌` stage stopped, `×` offline or ledger error, `✓`
 finished), `r<version> · <done>/<total>` and `!<waiting>` — then the owed-step line in role
-names (`→ deliver t1 · actor-a`), then the people: mark, name with the actor's task and
-priority flag, a `USER` badge on your own role, the `dir` tag on a director-owned prompt,
-and the state word at the right. A user-owned prompt adds a `! <attention>  [y/d/p]` cue
+names (`→ deliver t1 · actor-a`), then the people split into the producer, director, writer and
+actor groups by a thin `├──┤` rule (an empty group draws none): role badge, the actor's
+task and priority flag, a `USER` badge on your own role, the `dir` tag on a director-owned
+prompt, and the state word at the right. A user-owned prompt adds a `! <attention>  [y/d/p]` cue
 line; a director-owned one gets no cue. When a working role has neither a cue nor a failure line,
 a dim detail line underneath shows `working <dur> · "<progress>" <age> ago · <running> <dur>` (shortening
 `<progress>` inside quotes with `…`, then dropping `<running>`, on narrower panels). Below the live people, task rows list the work no
 actor carries — uncast, dependency-gated, paused, at cap or blocked, and accepted — and
 six or more accepted tasks fold into one `✓ <n> accepted` line. `Space` opens a three-line
-drawer under a person or task, or folds a studio block on its header. The marks:
+drawer under a person or task, or folds a studio block on its header. Roles read as one-cell
+badges — `Ⓟ producer Ⓓ director Ⓦ writer Ⓐ actor` — coloured from the theme; a terminal set to
+draw East-Asian-ambiguous characters wide will shift the cells after them. The marks:
 
 | Mark | Meaning |
 |---|---|
@@ -568,7 +595,7 @@ and a finished row opens the existing finished-studio menu (reopen producer, she
 records, delete).
 A machine that cannot be reached at all shows one `unreachable` line, never an empty tree. Rows
 never drop out of a short sidebar: the section scrolls to the machine row of the studio the
-selection landed on, so `Alt+Right` into a studio deeper down brings its machine into view instead
+selection landed on, so `Alt+PageDown` into a studio deeper down brings its machine into view instead
 of hiding it. A machine that does not serve the document — no `backlot` installed, a foreign
 schema, a core that does not answer — simply contributes nothing beyond that line: its slot stays
 blank, never an error.
@@ -627,6 +654,21 @@ in the state directory.
 - A prompt reaching for **the role-identity variables or environment-clearing flags**
   — `BACKLOT_*`, `env -i`, `--ignore-environment` — is yours outright: the stage marks it
   `needs the user`, the director gets no notice and its `backlot approve` refuses.
+- An actor's prompt the **director cannot answer** — it is rate-limited, stalled or gone — is
+  routed to you after a one-minute grace (see below).
+
+Read-only commands do not prompt at all: `git status`, `git log`, `git show`, `git diff`,
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for
+every role on every runner that has an allow list (`runners.md` says which). One plain command per
+shell call: a `cd x && git log`, a pipe or `git -C` does not match the rule and prompts.
+
+**A prompt the director cannot answer reaches you with the reason.** An actor's prompt is the
+director's to answer, but a director that is rate-limited, stalled or closed cannot. Past a
+one-minute grace the stage clears the director-owned attention `routed to the user`, raises a fresh
+`needs the user` one, and its detail says why and how long — *the director is rate-limited until
+12:10; waiting 14m* — with the same screen saved under `attention/<seq>.txt`. From then the prompt
+is yours: the panel and Hollywood's `prompt` notice show it, and the director's `backlot approve`
+refuses like any user-owned prompt.
 
 Answer with `backlot approve`, naming the role's key — `producer`, `director`, `writer` or
 `actor-<task>-c<n>` (the panel and `backlot status` show it):
@@ -956,11 +998,33 @@ removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `atten
 `backlot records` and `backlot status` keep the full history. To remove that history too,
 delete the studio's directory under `studios/` yourself.
 
-### Finish, prune, delete, restore
+### Reopening a finished studio, or starting a new one
+
+A finished studio goes quiet: the stage stops scheduling it, and recasting a role, changing the
+cast, adding a task and answering a permission prompt are all refused (`the studio is finished —
+reopen or restore it first`). Reopening is yours alone — no role runs it, and Hollywood can only
+ask for it with a card:
+
+```sh
+backlot studio reopen --studio acme-shop --as user
+```
+
+The reopening is recorded (`studio.reopened`), and every change a finished studio refused works
+again. Reopen when the studio still owns the work — another task on the same requirement, a
+different actor for the same role, or a fix to the same integration branch.
+
+Start a **new** studio instead when the requirement is different, when the old studio's cast,
+limits or repository no longer fit, or when you would rather keep the old ledger closed as a
+record. A new studio shares nothing with the old one — a new ledger, new work areas, new
+`backlot/<name>/*` branches — so the finished ledger stays as an audit trail. To revisit an
+archived studio, `studio restore` brings it back finished and it reopens the same way.
+
+### Finish, reopen, prune, delete, restore
 
 | Command | What it does | The ledger |
 |---|---|---|
 | `studio finish [--force]` | Ends the studio; producer and director close, only a reopened person comes back. Refuses while a task is open, and on an empty studio unless `--force`. | Kept where it is; `studio.finished` appended. |
+| `studio reopen <s>` | Brings a finished studio back; recast, `cast set`, new tasks and permission answers work again. Only `--as user`. | `studio.reopened` appended. |
 | `studio prune <s> \| --all-finished` | Reaps a finished studio's `work/` worktrees and `backlot/<studio>/*` branches git considers merged. | Kept; nothing appended. |
 | `studio delete <s>` | Finishes if needed, closes the studio's terminals, prunes safely, records `studio.deleted`, and moves the ledger under `archive/<s>-<stamp>`. | Archived to `archive/`, gone from `studios/`. |
 | `studio list --archived` | Lists what is under `archive/`: name, stamp, repo and last requirement title. | Read-only. |
@@ -1026,7 +1090,7 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
 - **Actions via the server queue (`plugin.backlot.req` -> `plugin.backlot.res`):** both the TUI's
   panel/Call Sheet actions and the remote CLI's person verbs (`tell`, `tell hollywood`,
   `card apply`, `card cancel`, `card show`, `attention clear`, `recast`, `restart`, `close`, `reopen`,
-  `priority`, `pause|resume|abandon`, `hollywood setup`) append a timestamped request with CAS
+  `priority`, `pause|resume|abandon`, `hollywood setup`, `hollywood switch`) append a timestamped request with CAS
   (up to 3 retries) and wait up to 5 s for its matching ack. Queue overflow or CAS contention prints
   `server busy`; requests past the server's 60 s window fail with `request expired`; missing replies
   time out with `timed out waiting for ack of '<req_id>' (no reply from server)`.

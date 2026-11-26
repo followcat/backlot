@@ -22,9 +22,12 @@ mod cast_file;
 pub mod casting;
 pub mod correct;
 pub mod event;
+mod event_unknown;
 pub mod hollywood;
+mod hollywood_snapshot;
 mod hollywood_state;
 mod hollywood_summary;
+pub mod hollywood_switch;
 mod hollywood_validate;
 pub mod limits;
 pub mod progress;
@@ -65,6 +68,8 @@ mod budget_tests;
 #[cfg(test)]
 mod cap_tests;
 #[cfg(test)]
+mod cards_hardening_tests;
+#[cfg(test)]
 mod cast_tests;
 #[cfg(test)]
 mod casting_tests;
@@ -76,6 +81,8 @@ mod hollywood_card_tests;
 mod hollywood_setup_tests;
 #[cfg(test)]
 mod hollywood_summary_tests;
+#[cfg(test)]
+mod hollywood_switch_tests;
 #[cfg(test)]
 mod hollywood_tests;
 #[cfg(test)]
@@ -114,6 +121,8 @@ mod studio_exchange_tests;
 mod summary_standby_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod unknown_tests;
 #[cfg(test)]
 mod usage_tests;
 #[cfg(test)]

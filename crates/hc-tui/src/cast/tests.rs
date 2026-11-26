@@ -202,6 +202,33 @@ fn idle_detail_prefers_doing_then_terminal_title_excluding_idle() {
 }
 
 #[test]
+fn role_labels_are_coloured_badges_with_the_state_glyph_kept() {
+    let summary = summary();
+    let view = cast_view(&summary, vec![], false, None);
+    let (buf, ..) = draw(&view, 40, 24);
+    let rows = lines(&buf, Rect::new(0, 0, 40, 24));
+    let text = rows.join("\n");
+    assert!(text.contains("Ⓟ"), "{text}");
+    assert!(text.contains("Ⓐ task-1"), "{text}");
+    let palette = Palette::from_name("catppuccin").unwrap();
+    let col = |row: &str, needle: &str| row[..row.find(needle).unwrap()].chars().count() as u16;
+    let producer = rows.iter().position(|l| l.contains("Ⓟ")).unwrap() as u16;
+    assert_eq!(
+        buf[(col(&rows[producer as usize], "Ⓟ"), producer)].fg,
+        palette.mauve
+    );
+    assert_eq!(
+        buf[(1, producer)].symbol(),
+        crate::studio::glyphs::Person::Working.glyph(0)
+    );
+    let alice = rows.iter().position(|l| l.contains("Ⓐ task-1")).unwrap() as u16;
+    assert_eq!(
+        buf[(col(&rows[alice as usize], "Ⓐ"), alice)].fg,
+        palette.peach
+    );
+}
+
+#[test]
 fn attention_wins_over_failed_and_both_sit_inline_without_title() {
     let mut value = summary_json();
     value["studios"][0]["roles"][1]["attention"] = serde_json::json!("needs permission");

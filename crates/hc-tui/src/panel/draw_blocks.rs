@@ -230,7 +230,7 @@ pub(super) fn draw_owed(
         Owed::ReportPending => ("·", Style::default().fg(palette.overlay0)),
         Owed::StageDown | Owed::ServerStopped => ("◌", Style::default().fg(palette.peach)),
         Owed::Offline => ("×", Style::default().fg(palette.red)),
-        Owed::Error | Owed::Confirm => ("!", Style::default().fg(palette.peach)),
+        Owed::Error | Owed::Upgrade | Owed::Confirm => ("!", Style::default().fg(palette.peach)),
     };
     let width = rect.width.saturating_sub(3);
     put_text(

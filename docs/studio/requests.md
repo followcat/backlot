@@ -110,7 +110,10 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 | `task-pause` | `studio`, `task`, `reason?` | `studio`, `task`, `seq`, `state` (`paused`), `reason?` |
 | `task-resume` | `studio`, `task`, `reason?` | `studio`, `task`, `seq`, `state` (`resumed`), `reason?` |
 | `task-abandon` | `studio`, `task`, `reason?` | `studio`, `task`, `seq`, `state` (`abandoned`), `reason?` |
-| `hollywood-setup` | `runner`, `model`, `effort?`, `key?`, `default_cast?` | `runner`, `model`, `effort?`, `key?`, `default_cast?`, `action` (`configured` \| `updated`), `restarted` |
+| `hollywood-setup` | `runner`, `model`, `effort?`, `key?`, `default_cast?`, `force_offline?` | `runner`, `model`, `effort?`, `key?`, `default_cast?`, `action` (`configured` \| `updated`), `restarted` |
+| `hollywood-switch` | `runner`, `model`, `effort?`, `timeout_s?`, `force?` | `action` (`queued`), `handoff?` (`HandoffSummary`) |
+| `hollywood-switch-cancel` | — | `action` (`cancel-requested`), `handoff?` (`HandoffSummary`) |
+| `hollywood-switch-status` | — | `active` (`bool`), `handoff?` (`HandoffSummary`) |
 
 ### Studio lifecycle (`B1b`)
 

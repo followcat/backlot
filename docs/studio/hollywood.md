@@ -207,34 +207,77 @@ supported or not installed (with the dry run's message), a bad model, an effort 
 rule does not take, a key value the layer could not bind, and a config file that does not
 parse.
 
-The TUI runs the same command for you: while no section exists, the expanded Call Sheet's last
-band line (`⏎ hollywood setup`), the expanded studio panel's last row and the settings overseer
-row all open the **setup dialog** — a runner picked from `backlot runners --json` (installed
-only), that runner's model catalog with `auto` first and free input kept (`e`), and its effort
-list where the runner has one. With a table already written, `m` on the Call Sheet title row
-(`Change Hollywood's agent…` — the same runner/model/effort picker `Recast…` uses, prefilled
-from `[hollywood]`), `c` on the Call Sheet, or the same settings row opens setup — its
-`key`/`default_cast` (plus `start` and other keys in `[hollywood]`) ride along — and changing
-the identity starts a fresh conversation while `memory.md` stays.
-The write and every refusal stay `hsetup`'s own; a success flips the bar to its agent form on
-the next tick.
+The TUI runs the same command for you before `[hollywood]` exists or while the stage is offline:
+the expanded Call Sheet's last band line (`⏎ hollywood setup`), the expanded studio panel's
+last row, and the settings overseer row all open the unified **switch/setup picker** — a runner
+picked from `backlot runners --json` (installed only), that runner's model catalog with `auto`
+first and free input kept (`e`), and its effort list where the runner has one. With a table
+already written and Hollywood live, pressing `w` in the resting Call Sheet, clicking `[switch w]`
+on a blocked/quota Hollywood row, opening `Switch agent…` (`w`) from the title/lot menu, or
+selecting the settings overseer row opens the same picker prefilled from `[hollywood]` (and
+prefers a healthy alternative runner when opened from a quota/error state).
 
-Pickup: a running **stage** re-reads the table on its next tick and starts `bl-hollywood`; a
-running **client** reads the config once, at start — a layer appears or its key changes at the
-next client start. There is no file watcher.
+When Hollywood is already live on a running stage, `backlot hollywood setup` refuses to edit
+`config.toml` directly so it never triggers an unguarded break-before-make replacement — use
+`backlot hollywood switch` (or `--force-offline` for offline config repair). Pickup: when
+unconfigured or starting offline, a running **stage** reads `[hollywood]` on its next tick; a
+running **client** reads `key`/`start` once at start. There is no file watcher.
 
-With a valid section the stage runs **one terminal named `bl-hollywood`** — labelled
-`backlot.role=hollywood` and never `backlot.studio` — in `<state dir>/hollywood/` with
-`BACKLOT_ROLE=hollywood`, the state dir, and no `BACKLOT_STUDIO`. It is started, adopted after a
-stage restart, and resumed after a loss the way a producer is (three losses in ten minutes is its
-`cannot resume` — that give-up holds while the same stage process lives; restarting the stage is
-the way back, and the loss count starts over). A runner that mints its session id after launch —
-`cmd`, `codex`, `devin`, `cursor`, `cline`, `agy` — is discovered the same way a studio role's
-is, so a lost Hollywood resumes its own conversation; a resume never carries a session id
-recorded under another runner, and a `closed` or a session-less `started` clears the old one.
-Changing the runner starts a new conversation; removing the section closes it.
-Its lifecycle lands in Hollywood's own ledger as `role.state` events — the studios' four role
-events folded into one.
+## Switching Hollywood's agent
+
+Switching a live Hollywood runs a **make-before-break handoff** (`backlot hollywood switch`) so
+work and context survive quota exhaustion, auth failures, or model swaps with zero cooperation
+from the running overseer:
+
+```sh
+backlot hollywood switch --runner codex --model gpt-6-sol --effort high
+backlot hollywood switch --runner codex --model gpt-6-sol --effort high --timeout 90 --no-wait --json
+backlot hollywood switch --status --json
+backlot hollywood switch --cancel
+```
+
+`hollywood switch` is user-only: any attempt inside a role terminal (`BACKLOT_ROLE` or role
+process-tree ancestor) refuses and points back to `backlot hollywood propose setup`. Switching
+against a stopped stage also refuses (use `hollywood setup` offline).
+
+Handoff protocol:
+
+1. **Prepare & brief (`<state dir>/hollywood/handoffs/<id>.md`):** without touching `config.toml`
+   or the active terminal, the stage validates the target identity and builds a redacted handoff
+   brief containing an in-memory `status --all` ledger snapshot, open/applied cards, queued and
+   unanswered user tells, `memory.md`, and a read-only conversation tail extracted for the prior
+   runner (falling back cleanly to terminal scrollback plus ledger exchanges when no runner
+   transcript file is available).
+2. **Side-by-side candidate & probation (`Verifying` / `NeedsApproval`):** the stage launches a
+   candidate terminal (`bl-hollywood-next` / `bl-hollywood-g<N>`, labelled
+   `backlot.role=hollywood-handoff`) with an isolated signals file while keeping old Hollywood
+   (`backlot.role=hollywood`) untouched. In the Call Sheet and Lot Pill (`switching…`), `p` peeks
+   the candidate (`[peek next p]`), `x` cancels cleanly (`[cancel x]`), and `y`/`d` answers a
+   candidate permission prompt (`[allow y]`). Delivery of queued user tells pauses behind the
+   handoff until commit.
+3. **Commit or rollback:** once the candidate proves live — either via its readiness `hollywood
+   report` / `role.progress` carrying its handoff identity or via a clean `Working -> Waiting`
+   completed turn with zero quota/auth/error banners — the stage atomically updates
+   `config.toml`, promotes the candidate to `backlot.role=hollywood`, appends existing
+   `role.closed` + `role.started` ledger events, stops the old agent process while retaining its
+   read-only `hollywood-previous` screen for 10 minutes before sweep, and drains queued tells to
+   the new terminal. Any pre-commit failure (exit, quota, auth, error, timeout, or cancel) removes
+   the candidate cleanly and leaves `config.toml`, the old terminal, and all queued messages intact.
+
+Active terminal resolution across the stage (`hlife`, `hwatch`, `hdeliver`) and client
+(`hollywood_terminal`) reads `role.terminal` and `backlot.role=hollywood` rather than requiring a
+hardcoded `"bl-hollywood"` pane name.
+
+With a valid section the stage starts Hollywood in `<state dir>/hollywood/` (`backlot.role=hollywood`,
+never `backlot.studio`) with `BACKLOT_ROLE=hollywood`, the state dir, and no `BACKLOT_STUDIO`. It
+is adopted after a stage restart and resumed after a loss the way a producer is (three losses in
+ten minutes is its `cannot resume` — that give-up holds while the same stage process lives;
+restarting the stage is the way back, and the loss count starts over). A runner that mints its
+session id after launch — `cmd`, `codex`, `devin`, `cursor`, `cline`, `agy` — is discovered the same
+way a studio role's is, so a lost Hollywood resumes its own conversation; a resume never carries a
+session id recorded under another runner, and a `closed` or a session-less `started` clears the old
+one. Removing the section closes it. Its lifecycle lands in Hollywood's own ledger as `role.state`
+events — the studios' four role events folded into one.
 
 The stage owns the folder: `AGENTS.md` (the role prompt with its CLI reference, rewritten every
 start and refreshed on adopt or stage boot whenever it differs), `memory.md` (made once, never
@@ -275,11 +318,45 @@ backlot hollywood propose recast --studio acme-shop --person director --runner c
 backlot hollywood propose recast --studio acme-shop --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effort medium --why "the actor's runner keeps timing out" --as hollywood
 backlot hollywood propose restart --studio acme-shop --person director --why "stuck at a prompt" --as hollywood
 backlot hollywood propose cast --studio acme-shop --file drafts/acme-shop/cast.toml --why "cheaper actors for the second pass" --as hollywood
+backlot hollywood propose reopen-studio --studio acme-shop --why "more work on the cart" --as hollywood
 backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "person asked to switch agent" --as hollywood
+backlot hollywood withdraw c1 --reason "the quota came back" --as hollywood
 backlot card list
 backlot card apply c1
 backlot card cancel c2 --reason "not now"
 ```
+
+### Paths are resolved, and files snapshotted, when a card is proposed
+
+A file a card names — `--cast`, `--brief`, or a `cast` card's `--file` — is resolved against
+Hollywood's **working directory at propose time**, not against Hollywood's own folder at apply
+time. A relative path becomes absolute, `..` is normalised away, and a file that is not there then
+is refused at propose, never accepted and failed later at apply. `propose studio-new` runs the same
+validation apply will run — `studio new --dry-run` — against the resolved files, so a card that
+could not apply is refused before it exists.
+
+The referenced cast and brief are **copied into the card's own directory** (`cards/c<n>/` under
+Hollywood's ledger) at propose, with their SHA-256 hashes recorded on the card. Apply reads the
+copy — what the person reviewed is what executes. If the source file has changed since the
+proposal, the card goes **stale** with `the cast file changed after this card was proposed`, like
+the other base checks. `card list` and `card show` print a one-line roles summary for a card that
+carries a cast (`producer=claude/opus-5-5 director=claude/opus-5-5 writer=cmd/deepseek…`), read
+from the snapshot.
+
+### Withdrawing, and superseding
+
+`backlot hollywood withdraw <card> --reason <text>` takes back a card Hollywood proposed that is
+still **open**; the ledger records who withdrew it and why (`card.withdrawn`), and the TUI shows it
+as `withdrawn`. Hollywood may withdraw only its own card — never the user's, and never the stage's
+outward card — and not one already applied, cancelled or stale.
+
+A **newer card replaces an older conflicting one**. When a new card targets the same single fact an
+open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a
+studio's cast (`cast`), a studio's finished state (`reopen-studio`), a studio name (`studio-new`),
+or Hollywood's own identity (`setup`) — the older card is recorded `superseded by c<n>` in the same
+append. A batch apply can therefore never run both. Cards with a sequence rather than one target
+(`pause`/`resume` on a task, `priority`, `close`/`reopen` on a person) never supersede.
+
 
 Each card carries the exact action, a one-line why, and its **base** — the fact about the studio
 that must still be true when you apply it. A `pause` card bases on the task running; a `studio-new`
@@ -300,9 +377,9 @@ an effect already in the ledger records `card.done` without re-appending, so a r
 action and its record repeats nothing. Cards execute whether or not `[hollywood]` is configured:
 the config gates the agent, never the gate.
 
-Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`,
-`recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a permission
-prompt; those stay yours, answered in the studio.
+Card actions (D18): `studio-new`, `close`, `reopen`, `reopen-studio`, `priority`, `pause`, `resume`,
+`abandon`, `recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a
+permission prompt; those stay yours, answered in the studio.
 
 A `recast` card swaps the agent that plays a fixed role — `producer`, `director` or `writer` —
 or an actor, by its key `actor-<task>-c<n>`. Its text reads `recast director → cmd/deepseek-v4.1-flash`
@@ -328,6 +405,12 @@ draft, read with `studio new`'s parser and checked with the same runnable rules.
 change in between makes it stale. `card show` prints the dry-run diff the file would make. Applied,
 the stage records the recasts and one `studio.cast` `by: user`, idempotent like the other cards
 (the newest `studio.cast` carries the card's `c<n>` marker).
+
+A `reopen-studio` card brings a finished studio back. Reopening is the person's own command
+(`backlot studio reopen`); this card is how Hollywood asks for it. It bases on `studio_finished`:
+the studio is finished now, so a studio that is already running refuses the card at propose. Applied,
+the stage records `studio.reopened` `by: user` with the card's marker (a restart between the append
+and `card.done` repeats nothing), and recasts, cast changes and new tasks work again.
 
 A `setup` card changes Hollywood's own identity (`Hollywood: <old> → <new>`) against a
 `hollywood_identity` base. `propose setup` validates the runner, model and effort rule up front
@@ -455,9 +538,10 @@ decision you recorded — `y`/`d` on the bar's Hollywood prompt row — and only
 that decision answered still shows.
 
 The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
-`devin`, `codex` and `opencode` take no command list — there the runner's own permission mode
-(`smart`, `on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
-the ledger.
+`codex` and `opencode` take no command list — there the runner's own permission mode
+(`on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
+the ledger. `devin` takes no argv list either, and — since Hollywood gets none of the shared
+read-only set — `smart` alone governs it. `backlot guide` is on every list, the compiled-in docs.
 
 ## What is not here yet
 

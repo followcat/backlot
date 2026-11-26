@@ -144,6 +144,7 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
             Row::BlockTop { .. } => "BlockTop",
             Row::Person { .. } => "Person",
             Row::BlockBottom(_) => "BlockBottom",
+            Row::Divider { .. } => "Divider",
             Row::Owed { .. } => "Owed",
             Row::Usage { .. } => "Usage",
             Row::Task { .. } => "Task",
@@ -155,8 +156,8 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
         .collect();
     assert_eq!(
         tags,
-        vec!["BlockTop", "Person", "Person", "BlockBottom"],
-        "unselected active blog folds to header + active/alert roles + bottom: {blog:?}"
+        vec!["BlockTop", "Person", "Divider", "Person", "BlockBottom"],
+        "unselected active blog folds to header + active/alert roles with divider + bottom: {blog:?}"
     );
     let blog_roles: Vec<&str> = blog
         .iter()
@@ -196,6 +197,7 @@ fn moving_cursor_to_second_studio_folds_first_and_unfolds_second() {
         .map(|r| match r {
             Row::BlockTop { .. } => "BlockTop",
             Row::Person { .. } => "Person",
+            Row::Divider { .. } => "Divider",
             Row::BlockBottom(_) => "BlockBottom",
             _ => "Other",
         })

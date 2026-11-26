@@ -48,6 +48,14 @@ fn check_task_open(task: &crate::state::Task, allow_paused: bool) -> Result<(), 
 /// state check. It never runs on replay: an old log loads whatever
 /// it holds.
 pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
+    if !state.unknown_kinds.is_empty() {
+        return Err(Refusal::NewerRecords(
+            state.unknown_kinds.iter().cloned().collect(),
+        ));
+    }
+    if let EventKind::Unknown { raw_kind } = &new.kind {
+        return Err(Refusal::NewerRecords(vec![raw_kind.clone()]));
+    }
     crate::roles::check(state, new)?;
     match &new.kind {
         EventKind::StudioCreated { .. } => {
@@ -388,6 +396,13 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::UnfinishedTasks(open))
             }
         }
+        EventKind::StudioReopened { .. } => {
+            require_studio(state)?;
+            if state.finished.is_none() {
+                return Err(Refusal::NotFinished);
+            }
+            Ok(())
+        }
         EventKind::StudioDeleted { .. } => {
             require_studio(state)?;
             if state.finished.is_none() {
@@ -686,6 +701,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        EventKind::Unknown { raw_kind } => Err(Refusal::NewerRecords(vec![raw_kind.clone()])),
     }
 }
 

@@ -6,6 +6,42 @@ use crate::panel::Target;
 use crate::studio::StudioKey;
 use crate::test_support::TestDir;
 
+/// The role-group rules are informative rows — the cursor steps over
+/// them from one person to the next in group order.
+#[tokio::test]
+async fn the_cursor_skips_role_group_dividers() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    // With sidebar open, CalmSummary folds calm director + writer onto one summary row,
+    // so Down from producer skips both CalmSummary and the actor-group divider.
+    draw_to(&mut app, 120, 24);
+    let producer = Target::Person("acme-shop".into(), "producer".into());
+    app.panel.selected = Some(producer.clone());
+    app.panel.selected_row = app.panel_targets().iter().position(|t| *t == producer);
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-alice".into())),
+        "CalmSummary and Divider are never cursor stops"
+    );
+
+    // With sidebar collapsed, all 4 groups render separated by three `├──┤` dividers.
+    app.shell_state.sidebar_collapsed = true;
+    app.panel.sidebar_collapsed = true;
+    draw_to(&mut app, 120, 24);
+    app.panel.selected = Some(producer.clone());
+    app.panel.selected_row = app.panel_targets().iter().position(|t| *t == producer);
+    for next in ["director", "writer", "actor-alice"] {
+        key(&mut app, hc_vt::Key::ArrowDown);
+        assert_eq!(
+            app.panel.selected,
+            Some(Target::Person("acme-shop".into(), next.into())),
+            "the divider is never a cursor stop"
+        );
+    }
+}
+
 /// Bump `updated_ms` in both documents and land the publish — the
 /// republish rhythm a live two-machine client sees between presses.
 fn republish(app: &mut App) {

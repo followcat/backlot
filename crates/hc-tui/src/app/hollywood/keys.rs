@@ -177,6 +177,9 @@ impl App {
                 self.hollywood_select(Target::Input);
                 self.hollywood.editing = true;
             }
+            KeyCode::Char('w') if plain => {
+                self.hw_switch_open(self.hw_switch_prefer_alternative());
+            }
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Char('m') if plain => self.hollywood_menu_selected(),
             KeyCode::Char('?') if question => {

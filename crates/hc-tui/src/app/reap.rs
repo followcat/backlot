@@ -64,8 +64,12 @@ pub(super) fn should_reap_exited(term: &Terminal, now_ms: u64) -> bool {
     }
     if matches!(
         term.name.as_deref(),
-        Some("backlot-stage" | "backlot-server" | "bl-hollywood")
-    ) {
+        Some("backlot-stage" | "backlot-server")
+    ) || term
+        .name
+        .as_deref()
+        .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
+    {
         return false;
     }
     !term.labels.contains_key("wherdr-request")

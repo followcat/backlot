@@ -119,7 +119,22 @@ fn the_working_mark_changes_between_frames() {
 #[test]
 fn expanded_block_draws_frame_people_and_state_words() {
     let summary = summary();
-    let panel = panel(PanelMode::Expanded);
+    // With open sidebar on the current studio, CalmSummary collapses calm
+    // director+writer, leaving producer | actors (1) + InputDivider (1) = 2 rules.
+    let open_panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 26, 30);
+    let (buf, _) = draw(area, Some(&summary), &open_panel, Some("acme-shop"));
+    let open_dividers = (area.y..area.y + area.height)
+        .filter(|&y| buf[(area.x + 1, y)].symbol() == "├")
+        .count();
+    assert_eq!(
+        open_dividers, 2,
+        "open sidebar collapses calm director/writer"
+    );
+
+    // Collapsed left sidebar expands every live group in the Lot.
+    let mut panel = panel(PanelMode::Expanded);
+    panel.sidebar_collapsed = true;
     for width in [26u16, 22, 40] {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
@@ -134,12 +149,12 @@ fn expanded_block_draws_frame_people_and_state_words() {
         assert!(text.contains(work_word), "w{width}: {text}");
         assert!(text.contains("Ⓐ task-1"), "w{width}: {text}");
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
-        // S2 dropped role-group `├──┤` dividers; only the compose
-        // `InputDivider` directly above `› tell producer` emits `├`.
+        // Three role-group rules separate producer / director / writer /
+        // actors, plus the `InputDivider` above `› tell producer`.
         let divider_rows = (area.y..area.y + area.height)
             .filter(|&y| buf[(area.x + 1, y)].symbol() == "├")
             .count();
-        assert_eq!(divider_rows, 1, "w{width}");
+        assert_eq!(divider_rows, 4, "w{width}");
     }
 }
 
@@ -220,9 +235,13 @@ fn the_usage_line_shows_only_with_figures() {
     assert!(!text.contains("$0.08"), "cost elides at w22: {text}");
 }
 
+/// L4: the lot's person row carries no runner and no model — the cast
+/// already shows both — so the name, task and state word get the cells.
 #[test]
-fn a_person_draws_one_line_with_role_badge_and_state() {
-    let summary = summary();
+fn a_person_row_shows_no_runner_and_no_model() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["model"] = serde_json::json!("unmistakable-model");
+    let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 44, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
@@ -239,8 +258,54 @@ fn a_person_draws_one_line_with_role_badge_and_state() {
     assert!(line.contains("working · writes code"), "{line}");
     // Neither runner nor model leaks onto regular lot rows.
     assert!(!line.contains("agent-a"), "{line}");
+    assert!(!line.contains("unmistakable-model"), "{line}");
 }
 
+/// The space the runner/model badge used to take now belongs to the
+/// name: a task that needed one more cell shows whole.
+#[test]
+fn a_long_name_uses_the_cells_the_badge_used_to_take() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["task"] = serde_json::json!("t1234567890123456789");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("Ⓐ t1234567890123456789"), "{line}");
+}
+
+/// Narrow rows keep the state word visible, switching `working` to
+/// `work` below 24 cols so state never drops off the line.
+#[test]
+fn a_narrow_row_keeps_the_state_and_drops_runner() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 22, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("work"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
+}
+
+/// Every role label is its one-cell badge, coloured by the role's
+/// theme token; the state glyph keeps its column and meaning.
 #[test]
 fn lot_person_rows_use_coloured_role_badges() {
     let summary = summary();
@@ -267,28 +332,67 @@ fn lot_person_rows_use_coloured_role_badges() {
         assert!(line.contains(badge), "{role_key}: {line}");
         let x = line[..line.find(badge).unwrap()].chars().count() as u16;
         assert_eq!(buf[(area.x + x, rect.y)].fg, color, "{role_key}");
+        let role = summary.studios[0]
+            .roles
+            .iter()
+            .find(|r| r.role == role_key)
+            .unwrap();
+        assert_eq!(
+            buf[(rect.x + 2, rect.y)].symbol(),
+            Person::of(role).glyph(0),
+            "{role_key}"
+        );
     }
 }
 
-/// Narrow rows keep the state word visible, switching `working` to
-/// `work` below 24 cols so state never drops off the line.
+/// The role groups are split by a thin `├──┤` rule (plus one above
+/// compose); an empty group draws none.
 #[test]
-fn a_narrow_row_keeps_the_state_and_drops_runner() {
+fn role_groups_are_split_by_thin_rules() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 22, 30);
-    let (buf, hits) = draw(area, Some(&summary), &panel, None);
-    let alice = hits
-        .rows
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rows = lines(&buf, area);
+    let rules: Vec<&String> = rows.iter().filter(|l| l.starts_with("│├")).collect();
+    assert_eq!(
+        rules.len(),
+        4,
+        "producer / director / writer / actors + input divider"
+    );
+    for rule in rules {
+        assert!(rule.ends_with('┤'), "{rule}");
+    }
+
+    // No director and no writer: producer then actors (1) + input divider (1).
+    let mut value = summary_json();
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|r| {
+            let role = r["role"].as_str().unwrap();
+            role == "producer" || role.starts_with("actor")
+        });
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rules = lines(&buf, area)
         .iter()
-        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
-        .map(|(rect, _)| *rect)
-        .expect("alice row hit");
-    let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, alice.y)].symbol())
-        .collect::<String>();
-    assert!(line.contains("work"), "{line}");
-    assert!(!line.contains("agent-a"), "{line}");
+        .filter(|l| l.starts_with("│├"))
+        .count();
+    assert_eq!(rules, 2, "producer | actors + input divider");
+
+    // One group alone draws only the compose input divider.
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|r| r["role"] == "producer");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let rules = lines(&buf, area)
+        .iter()
+        .filter(|l| l.starts_with("│├"))
+        .count();
+    assert_eq!(rules, 1);
 }
 
 /// A long task keeps the cells available and never pushes state off.
@@ -382,7 +486,7 @@ fn short_height_stacks_other_blocks_to_single_lines() {
     let panel = panel(PanelMode::Expanded);
     // Tall enough for one expanded block but not two → the
     // non-current studio draws its `╶` line with mark counts.
-    let area = Rect::new(0, 0, 31, 14);
+    let area = Rect::new(0, 0, 31, 20);
     let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("╶ second-studio"), "{text}");
@@ -416,8 +520,8 @@ fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
     value["studios"].as_array_mut().unwrap().push(second);
     let two_studios: Summary = serde_json::from_value(value).unwrap();
     let unfocused = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 30, 20);
-    // Unfocused Lot keeps its bottom footer blank rather than repeating alt+arrow shortcuts.
+    let area = Rect::new(0, 0, 32, 20);
+    // Unfocused Lot keeps its bottom footer blank rather than repeating alt+PgUp/PgDn shortcuts.
     let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
     assert!(
@@ -977,7 +1081,7 @@ fn a_solo_cast_drops_the_role_hint() {
 fn unfocused_lot_leaves_bottom_footer_blank() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 30, 20);
+    let area = Rect::new(0, 0, 32, 20);
     let two = || {
         vec![
             remote(&summary),
@@ -1110,4 +1214,30 @@ fn stopped_ledger_renders_start_untruncated_at_38_cols() {
         wide.contains("2 studios on stopped stages — s to start"),
         "full form when width fits: {wide}"
     );
+}
+
+#[test]
+fn a_studio_needing_upgrade_draws_single_line_in_lot_and_strip() {
+    let mut value = summary_json();
+    value["studios"][0]["needs_upgrade"] = serde_json::json!(true);
+    value["studios"][0]["unknown_kinds"] = serde_json::json!(["design.opened"]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+
+    let (buf, _) = draw(
+        Rect::new(0, 0, 40, 24),
+        Some(&summary),
+        &panel(PanelMode::Expanded),
+        None,
+    );
+    let text = lines(&buf, Rect::new(0, 0, 40, 24)).join("\n");
+    assert!(text.contains("! upgrade backlot"), "{text}");
+
+    let (strip_buf, _) = draw(
+        Rect::new(0, 0, 16, 20),
+        Some(&summary),
+        &panel(PanelMode::Collapsed),
+        None,
+    );
+    let strip = lines(&strip_buf, Rect::new(0, 0, 16, 20)).join("\n");
+    assert!(strip.contains("! upgrade"), "{strip}");
 }

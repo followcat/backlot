@@ -625,3 +625,39 @@ fn ready_absorbs_the_studios_asks() {
         Target::Role(k, _) if k.id == "acme-shop"
     )));
 }
+
+#[test]
+fn a_studio_needing_upgrade_emits_a_single_line_wait_in_call_sheet() {
+    let mut value = summary_json();
+    value["studios"][0]["needs_upgrade"] = serde_json::json!(true);
+    value["studios"][0]["unknown_kinds"] = serde_json::json!(["design.opened"]);
+    value["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let upgrade_waits: Vec<_> = waits
+        .iter()
+        .filter(|w| {
+            crate::hollywood::rows::wait_studio_key(w).is_some_and(|(_, id)| id == "acme-shop")
+                && !w.detailable()
+                && matches!(w, Wait::Upgrade(_))
+        })
+        .collect();
+    assert_eq!(upgrade_waits.len(), 1, "waits count = {}", waits.len());
+    assert_eq!(
+        crate::hollywood::WaitBucket::of(upgrade_waits[0]),
+        crate::hollywood::WaitBucket::Blocking,
+        "Wait::Upgrade must count in the Blocking (!N) pill bucket"
+    );
+    assert!(
+        !waits
+            .iter()
+            .any(|w| matches!(w, Wait::Ready(r) if r.studio.id == "acme-shop")),
+        "ready_to_finish must not emit Wait::Ready while studio needs upgrade"
+    );
+    let wait_rows: Vec<_> = rows
+        .iter()
+        .filter(|r| matches!(r, Row::Wait(i) if waits[*i].target() == upgrade_waits[0].target()))
+        .collect();
+    assert_eq!(wait_rows.len(), 1);
+}

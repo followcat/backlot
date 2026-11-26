@@ -60,10 +60,11 @@ pub(super) fn folded_roles(studio: &StudioSummary) -> Vec<&backlot_model::summar
         .collect()
 }
 
-/// A folded block's height: `BlockTop`, one row per active/alert live
-/// role, and `BlockBottom`.
+/// A folded block's height: `BlockTop`, optional `Owed::Upgrade`, one row per
+/// active/alert live role, group dividers, and `BlockBottom`.
 pub(super) fn folded_block_height(studio: &StudioSummary) -> usize {
-    2 + folded_roles(studio).len()
+    let roles = folded_roles(studio);
+    2 + usize::from(studio.needs_upgrade) + roles.len() + super::rows_fit::divider_count_for(&roles)
 }
 
 /// 1-line compact studio categories in `Expanded` mode when a non-current

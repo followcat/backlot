@@ -36,7 +36,7 @@ fn fmt_ms(ms: u64) -> String {
 
 /// `14:02` — a ledger millisecond stamp as the local wall clock's
 /// hour and minute, the same shape the panel's clock keeps.
-fn hh_mm(ms: u64) -> String {
+pub(crate) fn hh_mm(ms: u64) -> String {
     let timestamp: libc::time_t = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
     let mut local: libc::tm = unsafe { std::mem::zeroed() };
     if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
@@ -207,6 +207,12 @@ pub fn status(
         "studio {name}: \"{}\" ({:?}){badge}",
         studio.title, studio.mode
     );
+    if !state.unknown_kinds.is_empty() {
+        let msg = backlot_model::refusal::upgrade_required_message(
+            state.unknown_kinds.iter().map(String::as_str),
+        );
+        let _ = writeln!(out, "  warning: {msg}");
+    }
     // The producer's own stall or unresumable terminal is the one
     // problem no role in the studio can fix; put it above everything
     // else so a glance at `backlot status` says why nothing moves.
@@ -733,5 +739,5 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::Correction { target, .. } => format!(" on event {target}"),
         _ => String::new(),
     };
-    format!("event {}: {}{}", event.seq, event.kind.name(), subject)
+    format!("event {}: {}{}", event.seq, event.kind.raw_name(), subject)
 }

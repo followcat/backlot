@@ -200,6 +200,7 @@ fn render_band(
             Target::Prompt(..)
                 | Target::Role(..)
                 | Target::Tell(..)
+                | Target::Upgrade(..)
                 | Target::Stage(..)
                 | Target::Card(..)
                 | Target::OutwardCard(..)
@@ -520,7 +521,7 @@ fn render_band(
         let tier = if hollywood.confirm.is_some() {
             hints::pairs_for_confirm(usable)
         } else {
-            hints::pairs_for_row(
+            hints::pairs_for_row_with_handoff(
                 hollywood.selected.as_ref(),
                 hollywood.editing,
                 &waits,

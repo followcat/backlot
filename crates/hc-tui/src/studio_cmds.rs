@@ -495,6 +495,46 @@ pub(crate) fn hw_setup(cfg: &backlot_stage::config::HollywoodCfg) -> Action {
     }
 }
 
+/// `hollywood switch --runner <r> --model <m> [--effort <e>] --no-wait --as user`.
+pub(crate) fn hw_switch(runner: &str, model: &str, effort: Option<&str>) -> Action {
+    let mut command = vec![
+        "hollywood".into(),
+        "switch".into(),
+        "--runner".into(),
+        runner.to_owned(),
+        "--model".into(),
+        model.to_owned(),
+    ];
+    if let Some(e) = effort {
+        command.extend(["--effort".into(), e.to_owned()]);
+    }
+    command.push("--no-wait".into());
+    Action {
+        label: "starting hollywood switch".into(),
+        done: "hollywood switch queued".into(),
+        name: "hollywood switch".into(),
+        mark: mark::hollywood_switch(),
+        argv: plain_argv(&command),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `hollywood switch --cancel --as user` (via `plain_argv`).
+pub(crate) fn hollywood_switch_cancel() -> Action {
+    Action {
+        label: "cancelling hollywood switch".into(),
+        done: "hollywood switch cancel requested".into(),
+        name: "cancel hollywood switch".into(),
+        mark: mark::hollywood_switch(),
+        argv: plain_argv(&["hollywood".into(), "switch".into(), "--cancel".into()]),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
 /// `approve --person hollywood --decision allow|deny` — the answer to
 /// a prompt on Hollywood's own screen; no `--studio`, its own ledger.
 pub(crate) fn hollywood_approve(allow: bool) -> Action {

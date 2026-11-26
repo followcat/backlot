@@ -184,8 +184,8 @@ role navigation cleanly from Compose):
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
-| `c` | Reconfigure the agent — the setup dialog prefilled from `[hollywood]` |
-| `m` | The selected row's context menu (`Change Hollywood's agent…` on the title row opens the runner/model/effort picker) |
+| `w` | Switch Hollywood's agent — opens the unified switch/setup picker prefilled from `[hollywood]` (and prefers an alternative runner when out of quota or blocked) |
+| `m` | The selected row's context menu (`Switch agent…` on the title row opens the unified picker) |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | In Compose: rest on `›` keeping any draft (even when empty). In Resting: collapse to the pill |
@@ -197,14 +197,16 @@ A click outside the expanded bar collapses it to the pill and hands the keys to 
 it. The `+ new studio` frame is the exception: it is a button, and a click opens the
 new-studio dialog directly.
 
-The setup line — or `c` on a configured bar, the dock's `⏎ hollywood setup` row, or the settings
-overseer row — opens the Hollywood setup dialog: a runner picked from `backlot runners --json`
-(installed only), that runner's model catalog with `auto` first (`e` types a free model name),
-and its effort list where the runner has one. `↑`/`↓`/`Tab` move between the rows, `←`/`→` cycle
-a value, `Enter` opens the model list or applies, `Esc` or a click outside closes it — apply runs
-`backlot hollywood setup` for you, so the write and its rules stay the CLI's own. A reconfigure
-prefills the existing table and keeps its `key`/`default_cast` verbatim; a runner change starts a
-new conversation and `memory.md` stays.
+The setup line — or `w` anywhere in the resting Call Sheet, `[switch w]` on a blocked/quota
+Hollywood row, `Switch agent…` from the title/lot menu, the dock's `⏎ hollywood setup` row, or
+the settings overseer row — opens the unified **Hollywood switch/setup picker**: a runner picked
+from `backlot runners --json` (installed only), that runner's model catalog with `auto` first
+(`e` types a free model name), and its effort list where the runner has one. `↑`/`↓`/`Tab` move
+between the rows, `←`/`→` cycle a value, `Enter` opens the model list or applies, `Esc` or a
+click outside closes it. While Hollywood is live on a running stage, applying runs
+`backlot hollywood switch --no-wait` for a **make-before-break handoff** (`p` peeks the
+candidate during verification, `x` cancels before commit, `y`/`d` answers a candidate prompt);
+before initial setup or when the stage is offline, it runs `backlot hollywood setup`.
 
 ## Studio menus and dialogs
 
@@ -256,12 +258,14 @@ behind. In a terminal, `backlot studio new --interactive` still asks the same qu
 
 backlot is always in studio mode (start it with `--plain` for the plain multiplexer), so five
 direct keys — no prefix — move between studios and roles or jump straight to the lot. They are
-bound in `~/.config/backlot/config.toml` and default to `Alt+arrow` and `Alt+L`:
+bound in `~/.config/backlot/config.toml` and default to `Alt+PageUp/PageDown`, `Alt+arrow` and
+`Alt+L`. Studios are a vertical list in both the machines tree and the lot, so the studio step
+lives on the page keys; `Alt+Left`/`Alt+Right` stay free for the terminal:
 
 ```toml
 [keys]
-previous_studio = "alt+left"
-next_studio = "alt+right"
+previous_studio = "alt+pageup"
+next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"
@@ -269,7 +273,7 @@ focus_lot = "alt+l"
 
 | Keys | Action |
 |---|---|
-| `Alt+Left`, `Alt+Right` | Previous or next studio in document order. Wraps around. Focuses the member last used there — a role or a shell — else the studio's producer, else its first live role, else its first live shell. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one gets a notice. |
+| `Alt+PageUp`, `Alt+PageDown` | Previous or next studio in document order. Wraps around. Switches the main pane to that studio's last member — a role or a shell — else its producer, else its first live role, else its first live shell. Stepping from a terminal moves the keys to the landed member's terminal; stepping while the lot or the machines tree has the keyboard swaps the pane but leaves that surface focused, its selection on the studio it landed on. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one leaves the pane as it is, quietly (its explicit `Enter` still says `has no live terminal`). |
 | `Alt+Up`, `Alt+Down` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered member. |
 | `Alt+L` | Expand the right-hand lot dock if hidden or collapsed, move keyboard focus to it, and scroll the selection to its last selectable row (e.g. `› tell producer · / actions`) without starting compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressed while already focused (outside compose or confirm), jumps to the last row again without closing. Yields to floats, modals, the Call Sheet, and running compose. |
 
@@ -278,11 +282,12 @@ focus — no pane and no program is resized — and a focused dock, the Call She
 up releases the keys to the pane the switch lands on.
 
 These keys exist only in studio mode — that is, always unless you run `backlot --plain`. They
-win over a Herdr binding on the same key — the usual Herdr config binds `previous_tab = "alt+left"`,
-`previous_agent = "alt+up"` and friends — so set different chords in either file if you want both;
+win over a Herdr binding on the same key — the usual Herdr config binds `previous_agent = "alt+up"`
+and `next_agent = "alt+down"` — so set different chords in either file if you want both;
 `Ctrl+B ?` lists each studio key near the top of its studio group with the Herdr action it shadows
-on your config, and Enter on one runs the navigation. Outside a studio workspace,
-`Alt+Left`/`Alt+Right` enter the current studio; `Alt+Up`/`Alt+Down` own the key
+on your config, and Enter on one runs the navigation. `Alt+Left`/`Alt+Right` are not claimed by
+backlot, so `previous_tab`/`next_tab` and the program keep them. Outside a studio workspace,
+`Alt+PageUp`/`Alt+PageDown` enter the current studio; `Alt+Up`/`Alt+Down` own the key
 only inside a studio workspace — on your own workspaces and on the `backlot` stage workspace the
 role keys fall through to Herdr's `previous_agent`/`next_agent`. With no studio at all, all four
 keys are Herdr's again. Under `--plain` Herdr's

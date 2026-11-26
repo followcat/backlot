@@ -4,7 +4,9 @@
 //! stacked block's `╶ id …` line — so the scroll math stays in
 //! one-line steps.
 
-use backlot_model::summary::{OutwardCardSummary, RoleSummary, StudioExchange, TaskSummary};
+use backlot_model::summary::{
+    OutwardCardSummary, RoleSummary, StudioExchange, StudioSummary, TaskSummary,
+};
 
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
@@ -99,6 +101,8 @@ pub(crate) enum Owed {
     Offline,
     /// `! <error>` — the ledger/stage error.
     Error,
+    /// `! upgrade backlot` — ledger holds newer unknown kinds.
+    Upgrade,
     /// `· next: <step>` — the studio's own next step.
     Next,
 }
@@ -170,6 +174,10 @@ pub(crate) enum Row<'a> {
     Person {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
+    },
+    /// `├───┤` — the thin rule between two non-empty role groups.
+    Divider {
+        studio: StudioRef<'a>,
     },
     /// A task with no live actor row: `│ · task t2 (waits t1)  dep │`.
     Task {
@@ -277,6 +285,7 @@ impl Row<'_> {
             | Row::InputDivider { .. }
             | Row::BlockBottom(_)
             | Row::CalmSummary { .. }
+            | Row::Divider { .. }
             | Row::Drawer { .. }
             | Row::Update { .. } => Target::None,
             // R22: the hint is the dialog's button — actionable like
@@ -335,6 +344,8 @@ fn block_rows<'a>(
         }
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
+    } else if studio.studio.needs_upgrade {
+        Some((Owed::Upgrade, upgrade_text(studio.studio)))
     } else if studio.studio.ready_to_finish {
         // R3-3: `f` is offered as soon as every task is accepted —
         // a post-acceptance `node report` step must not hide it.
@@ -351,7 +362,7 @@ fn block_rows<'a>(
     }
     // R3-3: while the wrap report is missing the offer carries a
     // dim `report pending` under it.
-    let report_pending = super::data::report_pending(studio.studio);
+    let report_pending = !studio.studio.needs_upgrade && super::data::report_pending(studio.studio);
     if report_pending {
         out.push(Row::Owed {
             studio,
@@ -362,7 +373,7 @@ fn block_rows<'a>(
     // `f` armed the finish confirm — its `y`/`n` line sits under
     // the owed step, cleared by Esc or a selection move (S2 §2). An
     // early finish (report still pending) warns inside the ask.
-    if panel.finish_confirm.as_ref() == Some(&studio.key()) {
+    if !studio.studio.needs_upgrade && panel.finish_confirm.as_ref() == Some(&studio.key()) {
         let pending = if report_pending {
             " (report pending)"
         } else {
@@ -376,7 +387,9 @@ fn block_rows<'a>(
     }
     // The studio's own next step, when its state names one — the
     // ledger's owed step is a different line above it.
-    if let Some(step) = super::data::next_step(studio.studio) {
+    if !studio.studio.needs_upgrade
+        && let Some(step) = super::data::next_step(studio.studio)
+    {
         out.push(Row::Owed {
             studio,
             kind: Owed::Next,
@@ -406,9 +419,7 @@ fn block_rows<'a>(
             standby_badges,
         });
     }
-    for role in shown_roles {
-        emit_person(out, role);
-    }
+    push_grouped_roles(out, studio, &shown_roles, emit_person);
     for card in &studio.studio.outward_cards {
         out.push(Row::OutwardCard { studio, card });
     }
@@ -463,8 +474,49 @@ fn block_rows<'a>(
     out.push(Row::BlockBottom(studio));
 }
 
+fn upgrade_text(studio: &StudioSummary) -> String {
+    if studio.unknown_kinds.is_empty() {
+        "upgrade backlot".to_string()
+    } else {
+        format!("upgrade backlot · {}", studio.unknown_kinds.join(", "))
+    }
+}
+
+/// Emit `roles` ordered by `Producer` / `Director` / `Writer` / `Actors`,
+/// placing a `Row::Divider` rule between each pair of non-empty groups.
+fn push_grouped_roles<'a>(
+    out: &mut Vec<Row<'a>>,
+    studio: StudioRef<'a>,
+    roles: &[&'a RoleSummary],
+    mut emit_role: impl FnMut(&mut Vec<Row<'a>>, &'a RoleSummary),
+) {
+    let mut first = true;
+    for group in [
+        RoleGroup::Producer,
+        RoleGroup::Director,
+        RoleGroup::Writer,
+        RoleGroup::Actors,
+    ] {
+        let group_roles: Vec<&RoleSummary> = roles
+            .iter()
+            .copied()
+            .filter(|role| role_group(&role.role) == group)
+            .collect();
+        if group_roles.is_empty() {
+            continue;
+        }
+        if !first {
+            out.push(Row::Divider { studio });
+        }
+        first = false;
+        for role in group_roles {
+            emit_role(out, role);
+        }
+    }
+}
+
 /// An unselected active studio's folded block: header, one `Person` row per
-/// active/alert live role, and bottom border.
+/// active/alert live role separated by role-group dividers, and bottom border.
 fn folded_block_rows<'a>(
     out: &mut Vec<Row<'a>>,
     studio: StudioRef<'a>,
@@ -473,9 +525,17 @@ fn folded_block_rows<'a>(
 ) {
     let health = health_of(studio.studio, stage, reachable);
     out.push(Row::BlockTop { studio, health });
-    for role in super::rows_fold::folded_roles(studio.studio) {
-        out.push(Row::Person { studio, role });
+    if studio.studio.needs_upgrade {
+        out.push(Row::Owed {
+            studio,
+            kind: Owed::Upgrade,
+            text: upgrade_text(studio.studio),
+        });
     }
+    let folded = super::rows_fold::folded_roles(studio.studio);
+    push_grouped_roles(out, studio, &folded, |out, role| {
+        out.push(Row::Person { studio, role });
+    });
     out.push(Row::BlockBottom(studio));
 }
 
@@ -571,18 +631,19 @@ pub(crate) fn rows<'a>(
                     health,
                 });
                 let roles = strip_roles(studio.studio);
-                if !roles.is_empty() {
-                    for role in roles {
-                        out.push(Row::StripRole {
-                            studio: *studio,
-                            role,
-                        });
-                    }
-                } else if !stage || !reach || studio.studio.error.is_some() {
+                if studio.studio.needs_upgrade
+                    || (roles.is_empty() && (!stage || !reach || studio.studio.error.is_some()))
+                {
                     out.push(Row::StripSummary {
                         studio: *studio,
                         stage,
                         reachable: reach,
+                    });
+                }
+                for role in roles {
+                    out.push(Row::StripRole {
+                        studio: *studio,
+                        role,
                     });
                 }
             }
@@ -600,6 +661,7 @@ pub(crate) fn rows<'a>(
                 !reachable(studio.machine)
                     || !stage_running(studio.machine)
                     || studio.studio.error.is_some()
+                    || studio.studio.needs_upgrade
                     || studio.studio.next.is_some()
                     || studio.studio.ready_to_finish
             };

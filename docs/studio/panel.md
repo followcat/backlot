@@ -168,6 +168,9 @@ every other studio keeps `surface1`.
   field already has its brief queued as the producer's first `tell`, so it moves past this state
   on its own. Any other state draws nothing. The Hollywood frame carries the same line on its
   blank row.
+- Role groups are split by a thin `├──┤` rule in the frame's colour — the producer, then
+  the director, then the writer, then all actors together; an empty group draws no rule,
+  and a folded or stacked block follows the same grouping.
 - A **person** is always **one line** sharing Cast and Lot's unified `InlineState` renderer (`RoleBadge`
   `Ⓟ`/`Ⓓ`/`Ⓦ`/`Ⓐ` + priority flag + name/task + aligned semantic mark, state word, optional age, and
   CJK-safe truncated `· <detail>` tail). Runner and model metadata (`runner · model (effort)`) lives
@@ -185,7 +188,7 @@ every other studio keeps `surface1`.
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
 - **Footer & header hints:** when unfocused, the Lot dock leaves its bottom row blank on `elevation.surface`
-  (no static `alt ←→ studio  ↑↓ role` chrome) and shows only `<focus_lot> focus` in its header
+  (no static `alt PgUp/PgDn studio  ↑↓ role` chrome) and shows only `<focus_lot> focus` in its header
   without repeating Call Sheet keys. When focused, it swaps the header hint to `esc leave` (`esc back`
   over an overlay) and draws a `border_muted` hairline (`─`) above up to 3 structured verbful hint
   pairs via `put_hint_bar` (for example while composing on `›`: `⏎ send  ↑↓ history  esc done`).
@@ -410,8 +413,8 @@ key = "y"    # the chord tail after the prefix
 width = 36   # expanded column width, clamped to 28-48
 
 [keys]
-previous_studio = "alt+left"
-next_studio = "alt+right"
+previous_studio = "alt+pageup"
+next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"

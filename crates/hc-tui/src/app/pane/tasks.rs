@@ -120,7 +120,16 @@ pub async fn attach_task(
     ev: mpsc::Sender<PaneEv>,
 ) {
     let (_tx, rx) = tokio::sync::watch::channel(false);
-    attach_task_paced(open, params, role, generation, ev, rx).await
+    attach_task_paced(
+        open,
+        params,
+        role,
+        generation,
+        ev,
+        rx,
+        tokio::time::Instant::now(),
+    )
+    .await
 }
 
 /// `attach_task` with the pane's pacing receiver: the forward loop
@@ -132,6 +141,7 @@ pub(super) async fn attach_task_paced(
     generation: u64,
     ev: mpsc::Sender<PaneEv>,
     paced: tokio::sync::watch::Receiver<bool>,
+    tick_epoch: tokio::time::Instant,
 ) {
     let attach = match open(params).await {
         Ok(attach) => Arc::new(attach),
@@ -163,5 +173,5 @@ pub(super) async fn attach_task_paced(
     {
         return;
     }
-    super::pacing::forward_stream(&attach, role, generation, &ev, paced).await;
+    super::pacing::forward_stream(&attach, role, generation, &ev, paced, tick_epoch).await;
 }

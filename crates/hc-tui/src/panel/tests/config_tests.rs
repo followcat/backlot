@@ -22,11 +22,11 @@ fn a_missing_file_is_defaults() {
     assert_eq!(config.sidebar_width, 26);
     assert_eq!(
         config.keys.previous_studio,
-        crate::config::parse_key_combo("alt+left")
+        crate::config::parse_key_combo("alt+pageup")
     );
     assert_eq!(
         config.keys.next_studio,
-        crate::config::parse_key_combo("alt+right")
+        crate::config::parse_key_combo("alt+pagedown")
     );
     assert_eq!(
         config.keys.previous_role,
@@ -42,11 +42,15 @@ fn a_missing_file_is_defaults() {
     );
     assert_eq!(
         config.keys.shortcut_parts(),
-        ("alt ←→ studio".into(), "↑↓ role".into())
+        ("alt PgUp/PgDn studio".into(), "↑↓ role".into())
     );
     assert_eq!(
         config.keys.footer_tiers(true, true),
-        vec!["alt ←→ studio  ↑↓ role", "alt ←→ studio", "↑↓ role"]
+        vec![
+            "alt PgUp/PgDn studio  ↑↓ role",
+            "alt PgUp/PgDn studio",
+            "↑↓ role"
+        ]
     );
 }
 
@@ -169,12 +173,65 @@ fn old_layout_override_restores_arrows_and_hints() {
 }
 
 #[test]
+fn page_keys_on_both_pairs_read_with_one_slash_each() {
+    let dir = TestDir::new("panel-page-pairs");
+    let (config, _) = load(&write(
+        &dir,
+        "[keys]\nprevious_studio = \"alt+up\"\nnext_studio = \"alt+down\"\nprevious_role = \"alt+pageup\"\nnext_role = \"alt+pagedown\"\n",
+    ));
+    assert_eq!(
+        config.keys.shortcut_parts(),
+        ("alt ↑↓ studio".into(), "PgUp/PgDn role".into())
+    );
+}
+
+#[test]
 fn the_key_overrides_and_an_empty_one_keeps_the_default() {
     let dir = TestDir::new("panel-k");
     let (config, _) = load(&write(&dir, "[panel]\nkey = \"u\"\n"));
     assert_eq!(config.key, "u");
     let (config, _) = load(&write(&dir, "[panel]\nkey = \"\"\n"));
     assert_eq!(config.key, "y");
+}
+
+#[test]
+fn alt_pageup_and_pagedown_parse_as_studio_keys() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    // The defaults are the page keys.
+    let dir = TestDir::new("panel-page-keys");
+    let (config, notice) = load(&write(&dir, "[keys]\n"));
+    assert!(notice.is_none());
+    assert_eq!(
+        config.keys.previous_studio,
+        Some((KeyCode::PageUp, KeyModifiers::ALT))
+    );
+    assert_eq!(
+        config.keys.next_studio,
+        Some((KeyCode::PageDown, KeyModifiers::ALT))
+    );
+    // An explicit `alt+pageup`/`alt+pagedown` round-trips.
+    for (combo, want) in [
+        ("alt+pageup", (KeyCode::PageUp, KeyModifiers::ALT)),
+        ("alt+pagedown", (KeyCode::PageDown, KeyModifiers::ALT)),
+        ("alt+pgup", (KeyCode::PageUp, KeyModifiers::ALT)),
+        ("alt+pgdn", (KeyCode::PageDown, KeyModifiers::ALT)),
+    ] {
+        assert_eq!(crate::config::parse_key_combo(combo), Some(want), "{combo}");
+    }
+    // A user config that keeps the old arrows still steps studios.
+    let (config, notice) = load(&write(
+        &dir,
+        "[keys]\nnext_studio = \"alt+right\"\nprevious_studio = \"alt+left\"\n",
+    ));
+    assert!(notice.is_none());
+    assert_eq!(
+        config.keys.next_studio,
+        crate::config::parse_key_combo("alt+right")
+    );
+    assert_eq!(
+        config.keys.previous_studio,
+        crate::config::parse_key_combo("alt+left")
+    );
 }
 
 #[test]

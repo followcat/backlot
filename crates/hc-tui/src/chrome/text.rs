@@ -35,6 +35,54 @@ fn take_prefix_width(text: &str, max_width: usize) -> String {
     output
 }
 
+/// Wrap `text` into display lines of at most `width` cells. Breaks at
+/// whitespace; a word wider than the line (CJK text with no spaces, a
+/// long name) is split by character width. Widths count with
+/// [`display_width`], so a wide CJK character never overflows.
+#[cfg(test)]
+pub(crate) fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut line_width = 0usize;
+    for word in text.split_whitespace() {
+        let word_width = display_width(word);
+        if !line.is_empty() && line_width + 1 + word_width <= width {
+            line.push(' ');
+            line.push_str(word);
+            line_width += 1 + word_width;
+            continue;
+        }
+        if !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+        }
+        if word_width <= width {
+            line.push_str(word);
+            line_width = word_width;
+            continue;
+        }
+        let mut chunk = String::new();
+        let mut chunk_width = 0usize;
+        for ch in word.chars() {
+            let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+            if chunk_width + ch_width > width && !chunk.is_empty() {
+                lines.push(std::mem::take(&mut chunk));
+                chunk_width = 0;
+            }
+            chunk.push(ch);
+            chunk_width += ch_width;
+        }
+        line = chunk;
+        line_width = chunk_width;
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
 /// The longest hint tier that fits `width` — never a mid-word cut
 /// (A1.2/A1.3). Tiers are tried in order, so callers list them
 /// longest first and end with a tiny fallback like `"esc"` or
@@ -73,6 +121,17 @@ mod tests {
         }
         assert_eq!(fit_hints(&TIERS, 5), "");
         assert_eq!(fit_hints(&TIERS, 0), "");
+    }
+
+    #[test]
+    fn wrap_text_breaks_at_spaces_and_wide_characters() {
+        assert_eq!(
+            wrap_text("asks you · 已记录 memory 的反馈", 12),
+            vec!["asks you ·", "已记录", "memory", "的反馈"]
+        );
+        assert_eq!(wrap_text("a bb ccc", 3), vec!["a", "bb", "ccc"]);
+        assert_eq!(wrap_text("", 10), Vec::<String>::new());
+        assert!(wrap_text("x", 0).is_empty());
     }
 
     #[test]

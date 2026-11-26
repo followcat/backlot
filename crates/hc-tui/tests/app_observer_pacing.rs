@@ -55,14 +55,16 @@ fn app() -> Rig {
     );
     // The opening page is not what this loop test measures: dismiss it
     // (and its one-time animation) as Esc would, so idle draws are the
-    // shell's own.
+    // shell's own, and stub background CLI probes.
     app.dismiss_opening();
+    app.stub_cli_probes();
     (app, probe, subs, attaches)
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn off_tab_observers_pace_data_wakeups_on_the_shared_tick() {
     let (mut app, probe, mut subs, mut attaches) = app();
+    app.use_tokio_clock();
     let writes = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
     let sink = writes.clone();
     app.set_host_control(Box::new(move |bytes| {
@@ -106,6 +108,7 @@ async fn off_tab_observers_pace_data_wakeups_on_the_shared_tick() {
         session.send_data(t3, b"\x1b[?9001lt3 ready\r\n").await;
         session.send_data(t4, b"\x1b[?9001lt4 ready\r\n").await;
         session.send_data(t5, b"\x1b[?9001lt5 ready\r\n").await;
+        loopcore::settled_draws(&counters).await;
         // t2..t5 move off the focused tab; their observers stay cached.
         for (seq, (id, tab)) in [
             ("t2", "two"),
@@ -118,6 +121,9 @@ async fn off_tab_observers_pace_data_wakeups_on_the_shared_tick() {
         {
             session.move_to_tab(id, tab, seq as u64 + 2).await;
         }
+        // Advance past the 2s opening settle cap so opening settle
+        // lands before `draws_before` and `wakeups_before` are read.
+        tokio::time::advance(Duration::from_secs(2)).await;
         loopcore::settled_draws(&counters).await;
         let wakeups_before = counters.wakeups.load(Ordering::Relaxed);
         let draws_before = counters.draws.load(Ordering::Relaxed);

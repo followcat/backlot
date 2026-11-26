@@ -99,6 +99,9 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
         100,
     );
     assert_eq!(t.first(), Some(&Target::None));
+    // The top border is the only `Studio` row — the title, the three
+    // role-group dividers and the bottom border are the `Target::None`
+    // rows (A2.2).
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
@@ -108,8 +111,8 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     );
     assert_eq!(
         t.iter().filter(|x| **x == Target::None).count(),
-        3,
-        "title + input-divider + bottom: {t:?}"
+        6,
+        "title + three dividers + input-divider + bottom: {t:?}"
     );
     assert_eq!(
         people(&t),
@@ -458,4 +461,25 @@ fn the_studio_row_shows_its_next_step() {
         )),
         "{out:?}"
     );
+}
+
+#[test]
+fn a_studio_needing_upgrade_shows_a_single_owed_line_in_lot() {
+    use crate::panel::rows::Row;
+    let mut value = summary_json();
+    value["studios"][0]["needs_upgrade"] = serde_json::json!(true);
+    value["studios"][0]["unknown_kinds"] = serde_json::json!(["design.opened"]);
+    value["studios"][0]["ready_to_finish"] = serde_json::json!(false);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let p = panel(PanelMode::Expanded);
+    let all = machines(Some(&summary));
+    let out = rows(&all, |_| true, |_| true, &p, p.mode, None, 40);
+    let upgrade_rows: Vec<&String> = out
+        .iter()
+        .filter_map(|row| match row {
+            Row::Owed { text, .. } if text.contains("upgrade backlot") => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(upgrade_rows.len(), 1, "{out:?}");
 }

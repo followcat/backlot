@@ -97,7 +97,9 @@ impl App {
                 self.hollywood.scroll = 0;
                 self.studio.lot.counts.unread = 0;
             }
-            Target::Ready(key) | Target::Tell(key) => self.focus_studio(&key),
+            Target::Ready(key) | Target::Tell(key) | Target::Upgrade(key) => {
+                self.focus_studio(&key)
+            }
             Target::Stage(machine, offline) => {
                 self.studio_notify_stage(&machine, offline);
             }
@@ -136,18 +138,9 @@ impl App {
         })
     }
 
-    /// This core's live `bl-hollywood` address.
+    /// This core's active live Hollywood terminal address.
     pub(super) fn hollywood_live_terminal(&self) -> Option<String> {
-        self.view
-            .inventory
-            .terminals()
-            .values()
-            .find(|t| {
-                t.state == "live"
-                    && !t.address.contains('/')
-                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
-            })
-            .map(|t| t.address.clone())
+        self.hollywood_terminal()
     }
 
     /// Collapse the expanded Call Sheet before a jump focuses a pane —

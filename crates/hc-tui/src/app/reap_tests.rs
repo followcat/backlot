@@ -143,7 +143,7 @@ fn studio_terminals_are_never_reaped() {
     }
     // The stage and hollywood are excluded on the bare name too, in
     // case a record ever reaches the inventory without its labels.
-    for name in ["backlot-stage", "bl-hollywood"] {
+    for name in ["backlot-stage", "bl-hollywood", "bl-hollywood-next"] {
         let mut term = exited("t1", 0);
         term.name = Some(name.into());
         assert!(!should_reap_exited(&term, now), "{name} must stay");

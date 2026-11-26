@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: "Number of times to repeat the macOS test suite"
+        required: false
+        default: "3"
+        type: string
 
 jobs:
   checks:
@@ -74,6 +81,43 @@ jobs:
       - run: cargo test --no-fail-fast
       # shasum-based sha256 fallback on a host without sha256sum.
       - run: sh scripts/test-install.sh
+
+  macos-repeat:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        id: zig-cache
+        with:
+          path: ${{ runner.temp }}/hc-tui-zig-0.16.0
+          key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-zig.sh') }}
+      - name: Install Zig 0.16.0
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        run: tools/install-zig.sh "${{ runner.temp }}/hc-tui-zig-0.16.0"
+      - name: Add Zig to PATH
+        run: echo "${{ runner.temp }}/hc-tui-zig-0.16.0" >> "$GITHUB_PATH"
+      - name: Check Zig version
+        run: test "$(zig version)" = "0.16.0"
+      - uses: ./.github/actions/zig-deps
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --all-targets
+      - name: Repeat macOS test suite
+        run: |
+          n="${{ inputs.repeats }}"
+          case "$n" in
+            ''|*[!0-9]*|0) echo "invalid repeats count: $n" >&2; exit 2 ;;
+          esac
+          i=1
+          while [ "$i" -le "$n" ]; do
+            echo "=== macOS repeat $i/$n ==="
+            cargo test --no-fail-fast
+            i=$((i + 1))
+          done
 
   integration:
     runs-on: ubuntu-latest

@@ -13,6 +13,7 @@ mod band;
 mod chips;
 mod draw;
 mod frames;
+mod handoff_ui;
 mod hints;
 mod items;
 mod keys;
@@ -32,7 +33,10 @@ mod view;
 mod zone;
 
 pub(crate) use draw::{HollywoodRender, render};
-// The footer's and Reader's own tests inspect these directly.
+pub(crate) use handoff_ui::{
+    PillSwitchState, handoff_phase, handoff_target_short, is_handoff_active, is_quota_or_error,
+    pill_switch_state, rollback_banner,
+};
 #[cfg(test)]
 pub(crate) use hints::for_row;
 pub(crate) use items::{WaitBucket, chips_of, default_chip_index};
@@ -47,6 +51,7 @@ pub(crate) use reader_meta::{
     ReaderKind, ReaderMeta, ReaderOAction, ReaderOrigin, find_studio_role, hollywood_state_word,
     role_state_word,
 };
+pub(crate) use reader_wrap::wrap_plain;
 pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
     hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,

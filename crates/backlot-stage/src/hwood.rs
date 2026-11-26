@@ -34,8 +34,14 @@ pub(crate) fn role(common: &Common, env: &Env) -> String {
 pub(crate) fn by_for(common: &Common, env: &Env) -> EventBy {
     EventBy {
         role: role(common, env),
-        session: env.get("HC_TERMINAL_ID").map(String::from),
-        via: None,
+        session: env
+            .get("HC_TERMINAL_ID")
+            .or_else(|| env.get("BACKLOT_TERMINAL"))
+            .map(String::from),
+        via: env
+            .get("BACKLOT_HANDOFF_ID")
+            .filter(|id| !id.is_empty())
+            .map(|id| format!("handoff:{id}")),
     }
 }
 
@@ -80,6 +86,13 @@ pub(crate) fn require_studio(base: &Path, name: &str) -> Result<StudioState, Fai
 
 /// `hollywood propose` — Hollywood only, checked before the
 /// filesystem is touched.
+///
+/// A card that names files gets them resolved against the proposer's
+/// working directory, checked by the same dry run apply will run, and
+/// copied into the card's own `cards/c<n>/` at the same append — so
+/// what the person reviews is what executes (field notes §1.1–1.2).
+/// A newer card on the same single fact supersedes the older open one
+/// in the same append (§1.3).
 fn propose(
     common: &Common,
     env: &Env,
@@ -97,25 +110,58 @@ fn propose(
     // A recast's identity is completed and checked before the card
     // exists; every other action passes through unchanged.
     let action = crate::hwood_base::resolve_action(&base, action, env)?;
-    let card_base = crate::hwood_base::card_base(&base, &action, env)?;
+    // Files are resolved now, and a missing one is refused now.
+    let files = crate::hcard_snapshot::resolve(&action)?;
+    // The dry run against the resolved files: a card that would fail to
+    // apply is refused before it exists.
+    let checked = crate::hcard_snapshot::with_absolute(&action, files.as_ref());
+    let card_base = crate::hwood_base::card_base(&base, &checked, env)?;
     let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
     let why = why.to_string();
-    let event = store::append_hollywood(&hdir, |state, _| {
+    let events = store::append_hollywood_many(&hdir, |state, seq| {
         check_answers(state, answers)?;
-        Ok::<HPending, Fail>(HPending {
+        // The older cards this proposal replaces close right after it,
+        // so nothing can apply both. The proposal MUST be the first
+        // event: its seq is the card's id (the copies are named under
+        // it), and a torn tail that drops the trailing supersedes leaves
+        // both cards open as before — never an old card superseded by a
+        // card that does not exist.
+        let superseded = state.open_cards_superseded_by(&action);
+        let card_seq = seq;
+        let (stored, copies) =
+            crate::hcard_snapshot::to_card_local(&action, files.as_ref(), card_seq)?;
+        let mut pending: Vec<HPending> = Vec::with_capacity(superseded.len() + 1);
+        pending.push(HPending {
             event: NewHollywoodEvent::new(
                 by.clone(),
                 HollywoodKind::CardProposed {
-                    action,
+                    action: stored,
                     why,
                     base: card_base,
                 },
             ),
+            files: copies,
+        });
+        pending.extend(superseded.into_iter().map(|old| HPending {
+            event: NewHollywoodEvent::new(
+                by.clone(),
+                HollywoodKind::CardSuperseded {
+                    card: old,
+                    by_card: card_seq,
+                    reason: "a newer card replaces it".into(),
+                },
+            ),
             files: Vec::new(),
-        })
+        }));
+        Ok::<_, Fail>(pending)
     })
     .map_err(hstore_fail)?;
+    // The proposal is the first event; its seq is the card's id.
+    let event = events
+        .into_iter()
+        .next()
+        .expect("a proposal appends at least one event");
     mark_answers(&hdir, &by, event.seq, answers)?;
     Ok(format!(
         "{} — the user applies or cancels it",
@@ -306,7 +352,41 @@ pub fn run(common: Common, cmd: Cmd, env: &Env) -> Result<String, Fail> {
             ref answers,
         }) => hreport(&common, env, headline, body.clone(), answers),
         Cmd::Hollywood(HollywoodCmd::Show { seq }) => crate::hwood_show::show(&common, env, seq),
-        Cmd::Hollywood(HollywoodCmd::Setup { ref cfg }) => crate::hsetup::hsetup(&common, env, cfg),
+        Cmd::Hollywood(HollywoodCmd::Withdraw { id, ref reason }) => {
+            let base = base_of(&common, env)?;
+            let by = by_for(&common, env);
+            let res = crate::verbs_hwood::card_withdraw(&base, by, id, reason)?;
+            Ok(crate::verbs_hwood::format_card_withdraw(&res))
+        }
+        Cmd::Hollywood(HollywoodCmd::Setup {
+            ref cfg,
+            force_offline,
+        }) => crate::hsetup::hsetup(&common, env, cfg, force_offline),
+        Cmd::Hollywood(HollywoodCmd::Switch {
+            ref runner,
+            ref model,
+            ref effort,
+            timeout_s,
+            force,
+            no_wait,
+            json,
+        }) => crate::hswitch_verbs::switch_local(
+            &common,
+            env,
+            runner,
+            model,
+            effort.as_deref(),
+            timeout_s,
+            force,
+            no_wait,
+            json,
+        ),
+        Cmd::Hollywood(HollywoodCmd::SwitchCancel { json }) => {
+            crate::hswitch_verbs::cancel_local(&common, env, json)
+        }
+        Cmd::Hollywood(HollywoodCmd::SwitchStatus { json }) => {
+            crate::hswitch_verbs::status_local(&common, env, json)
+        }
         Cmd::Card(CardCmd::List) => crate::hwood_read::card_list(&common, env),
         Cmd::Card(CardCmd::Show { id }) => crate::hwood_read::card_show(&common, env, id),
         Cmd::Card(CardCmd::Apply { id }) => card_apply(&common, env, id),

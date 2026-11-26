@@ -34,6 +34,7 @@ pub(crate) struct LotCounts {
     pub ready: usize,
     pub unread: usize,
     pub activity: HollywoodActivity,
+    pub switch_state: Option<crate::hollywood::PillSwitchState>,
 }
 
 impl LotCounts {
@@ -154,6 +155,43 @@ fn segments(
     } else {
         "✦"
     };
+    if let Some(sw) = counts.switch_state {
+        use crate::hollywood::PillSwitchState;
+        match sw {
+            PillSwitchState::Switching => {
+                return match tier {
+                    PillTier::Full | PillTier::Wide => {
+                        vec![(format!(" {spark} switching… "), Seg::Unread)]
+                    }
+                    PillTier::Compact | PillTier::Mobile => {
+                        vec![(format!(" {spark}sw… "), Seg::Unread)]
+                    }
+                    PillTier::Tiny => vec![(format!(" {spark}sw "), Seg::Unread)],
+                };
+            }
+            PillSwitchState::NeedsApproval => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![(format!(" {spark} !switch prompt "), Seg::Blocking)];
+                }
+            }
+            PillSwitchState::QuotaOut { urgent } => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![
+                        (format!(" {spark} "), Seg::Spark),
+                        (format!("!{} (quota) ", count(urgent)), Seg::Blocking),
+                    ];
+                }
+            }
+            PillSwitchState::AuthError { urgent } => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![
+                        (format!(" {spark} "), Seg::Spark),
+                        (format!("!{} (auth) ", count(urgent)), Seg::Blocking),
+                    ];
+                }
+            }
+        }
+    }
     if s == 0 && hollywood {
         let (tail, tail_seg) = if n > 0 {
             (format!(" · +{} new", count(n)), Seg::Unread)
@@ -367,7 +405,15 @@ fn segments(
 }
 
 fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
-    if counts.blocking > 0 {
+    let switch_urgent = matches!(
+        counts.switch_state,
+        Some(
+            crate::hollywood::PillSwitchState::NeedsApproval
+                | crate::hollywood::PillSwitchState::QuotaOut { .. }
+                | crate::hollywood::PillSwitchState::AuthError { .. }
+        )
+    );
+    if counts.blocking > 0 || switch_urgent {
         let base = Style::default()
             .fg(panel_contrast_fg(palette))
             .bg(palette.red);
@@ -378,6 +424,12 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
         };
     }
     let base = Style::default().bg(palette.elevation().raised_row);
+    if matches!(
+        counts.switch_state,
+        Some(crate::hollywood::PillSwitchState::Switching)
+    ) {
+        return base.fg(palette.accent).add_modifier(Modifier::BOLD);
+    }
     let body_fg = if counts.asks > 0 || counts.cards > 0 || counts.ready > 0 || counts.unread > 0 {
         palette.text
     } else {

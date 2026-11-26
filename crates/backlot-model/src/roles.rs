@@ -180,6 +180,16 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, "the user"))
         };
     }
+    // Reopening a finished studio is the person's alone: a card's
+    // execution appends it `by: user` too, and Hollywood may only ask
+    // with a `reopen-studio` card.
+    if let EventKind::StudioReopened { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
+        };
+    }
     Ok(())
 }
 
@@ -225,6 +235,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::TaskReviewed { .. }
         | EventKind::TaskFinding { .. }
         | EventKind::Correction { .. } => "the user, the producer or the director",
+        EventKind::Unknown { .. } => "nobody (read-only unknown record)",
         EventKind::MessageQueued { purpose, .. } => {
             if purpose.is_none() {
                 "a person"
@@ -237,5 +248,6 @@ fn who_can(kind: &EventKind) -> &'static str {
         EventKind::OutwardRequested { .. } => "a studio role",
         EventKind::RoleProgress { .. } => "a studio role",
         EventKind::StudioFinished { .. } => "the user",
+        EventKind::StudioReopened { .. } => "the user",
     }
 }

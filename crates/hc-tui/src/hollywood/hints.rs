@@ -227,6 +227,113 @@ pub(crate) fn pairs_for_confirm(width: usize) -> Vec<(&'static str, &'static str
         .to_vec()
 }
 
+/// Structured footer pairs accounting for active Hollywood handoff.
+pub(crate) fn pairs_for_row_with_handoff(
+    selected: Option<&Target>,
+    editing: bool,
+    waits: &[Wait<'_>],
+    agent: bool,
+    hollywood_asking: bool,
+    width: usize,
+) -> Vec<(&'static str, &'static str)> {
+    if !editing {
+        let hw = waits.iter().find_map(|w| match w {
+            Wait::Hollywood(h) => Some(*h),
+            _ => None,
+        });
+        if let Some(hw) = hw
+            && super::handoff_ui::is_handoff_active(hw)
+        {
+            let candidates: &[&[(&'static str, &'static str)]] =
+                match super::handoff_ui::handoff_phase(hw) {
+                    Some("verifying") => &[
+                        &[
+                            ("↑↓", "row"),
+                            ("←→", "chip"),
+                            ("tab", "zone"),
+                            ("p", "peek candidate"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", "close"),
+                        ],
+                        &[
+                            ("p", "peek candidate"),
+                            ("x", "cancel switch"),
+                            ("w", "switch"),
+                            ("esc", ""),
+                        ],
+                        &[("p", "peek"), ("x", "cancel"), ("esc", "")],
+                    ],
+                    Some("needs_approval") => &[
+                        &[
+                            ("y/d", "answer"),
+                            ("p", "peek"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", ""),
+                        ],
+                        &[
+                            ("y/d", "answer"),
+                            ("p", "peek"),
+                            ("x", "cancel"),
+                            ("esc", ""),
+                        ],
+                    ],
+                    _ => &[
+                        &[
+                            ("↑↓", "row"),
+                            ("←→", "chip"),
+                            ("tab", "zone"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", "close"),
+                        ],
+                        &[("x", "cancel switch"), ("w", "switch"), ("esc", "")],
+                        &[("x", "cancel"), ("esc", "")],
+                    ],
+                };
+            if let Some(fit) = candidates.iter().find(|tier| pairs_width(tier) <= width) {
+                return (*fit).to_vec();
+            }
+        }
+        if matches!(selected, Some(Target::Hollywood | Target::HollywoodLive))
+            && hw.is_some_and(super::handoff_ui::is_quota_or_error)
+        {
+            let candidates: &[&[(&'static str, &'static str)]] = &[
+                &[
+                    ("w", "switch agent"),
+                    ("p", "peek"),
+                    ("i", "tell"),
+                    ("tab ←→ ↑↓ ⏎", ""),
+                    ("m", "menu"),
+                    ("?", "help"),
+                    ("esc", ""),
+                ],
+                &[
+                    ("w", "switch"),
+                    ("p", "peek"),
+                    ("i", "tell"),
+                    ("tab ↑↓ ⏎", ""),
+                    ("esc", ""),
+                ],
+            ];
+            if let Some(fit) = candidates.iter().find(|tier| pairs_width(tier) <= width) {
+                return (*fit).to_vec();
+            }
+        }
+        if matches!(selected, Some(Target::Title)) && agent {
+            let mut with_w = vec![("w", "switch agent")];
+            let base = pairs_for_row(selected, editing, waits, agent, hollywood_asking, width);
+            with_w.extend(base.iter().copied());
+            if pairs_width(&with_w) <= width {
+                return with_w;
+            }
+            return base;
+        }
+    }
+    pairs_for_row(selected, editing, waits, agent, hollywood_asking, width)
+}
+
 /// Text form of the selected row's footer (retained for existing tests).
 #[cfg(test)]
 pub(crate) fn for_row(

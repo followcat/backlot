@@ -38,6 +38,7 @@ pub(super) fn is_active_or_alert_role(role: &RoleSummary) -> bool {
 /// a non-current studio as a bordered card.
 pub(super) fn has_active_or_alert(studio: &StudioSummary) -> bool {
     studio.error.is_some()
+        || studio.needs_upgrade
         || !studio.outward_cards.is_empty()
         || studio.roles.iter().any(is_active_or_alert_role)
 }

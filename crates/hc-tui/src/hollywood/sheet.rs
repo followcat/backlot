@@ -109,6 +109,7 @@ pub(crate) enum Wait<'a> {
     /// Hollywood itself: a user-owned prompt (`attention_user`) or a
     /// blocked screen with no prompt.
     Hollywood(&'a backlot_model::summary::HollywoodSummary),
+    Upgrade(StudioItem<'a>),
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
@@ -123,7 +124,15 @@ impl Wait<'_> {
     pub fn can_answer(&self) -> bool {
         match self {
             Wait::Prompt(item) => item.role.can_answer_prompt,
-            Wait::Hollywood(hollywood) => hollywood.can_answer_prompt,
+            Wait::Hollywood(hollywood) => {
+                if let Some(hf) = &hollywood.handoff
+                    && hf.phase == "needs_approval"
+                {
+                    return backlot_model::caps::get(&hf.target_runner)
+                        .is_some_and(|c| c.can_answer());
+                }
+                hollywood.can_answer_prompt
+            }
             _ => false,
         }
     }
@@ -146,6 +155,10 @@ impl Wait<'_> {
                 item.role.role.clone(),
             ),
             Wait::Hollywood(_) => super::Target::Hollywood,
+            Wait::Upgrade(item) => super::Target::Upgrade(StudioKey {
+                machine: item.machine.map(str::to_string),
+                id: item.studio.id.clone(),
+            }),
             Wait::NoRequirement(item) => super::Target::Tell(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -181,7 +194,7 @@ impl Wait<'_> {
             | Wait::Outward(_)
             | Wait::NoRequirement(_) => true,
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
-            Wait::Stage(_) => false,
+            Wait::Stage(_) | Wait::Upgrade(_) => false,
         }
     }
 }
@@ -212,6 +225,16 @@ pub(crate) fn waiting_items<'a>(
     }
     for m in machines {
         for studio in &m.summary.studios {
+            if studio.needs_upgrade {
+                out.push(Wait::Upgrade(StudioItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                }));
+            }
+        }
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
             for role in &studio.roles {
                 if role.attention_user {
                     continue;
@@ -230,17 +253,23 @@ pub(crate) fn waiting_items<'a>(
             }
         }
     }
-    // Hollywood's own state is this core's: a user-owned prompt or a
-    // blocked screen waits on a person.
+    // Hollywood's own state is this core's: an active or rolled-back
+    // switch handoff, a user-owned prompt, quota/auth error, or blocked screen.
     if let Some(hw) = super::rows::local_summary(machines).and_then(|s| s.hollywood.as_ref())
-        && hw.state == "live"
-        && (hw.attention_user || hw.work == Some(backlot_model::summary::Work::Blocked))
+        && (super::handoff_ui::is_handoff_waiting_visible(hw)
+            || (hw.state == "live"
+                && (hw.attention_user
+                    || hw.work == Some(backlot_model::summary::Work::Blocked)
+                    || super::handoff_ui::is_quota_or_error(hw))))
     {
         out.push(Wait::Hollywood(hw));
     }
     for m in machines {
         for studio in &m.summary.studios {
-            if studio.requirement_version == 0 && studio.state != "finished" {
+            if studio.requirement_version == 0
+                && studio.state != "finished"
+                && !studio.needs_upgrade
+            {
                 out.push(Wait::NoRequirement(StudioItem {
                     machine: m.machine.as_deref(),
                     studio,
@@ -302,7 +331,7 @@ pub(crate) fn waiting_items<'a>(
     }
     for m in machines {
         for studio in &m.summary.studios {
-            if studio.ready_to_finish {
+            if studio.ready_to_finish && !studio.needs_upgrade {
                 out.push(Wait::Ready(ReadyItem {
                     machine: m.machine.as_deref(),
                     studio,

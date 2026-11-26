@@ -57,6 +57,20 @@ fn normalized(argv: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Every role's `--allowedTools` carries the base pair plus the shared
+/// read-only set, one bare and one starred rule per command.
+fn base_rules() -> String {
+    let mut rules = vec![
+        "Bash(backlot *)".to_string(),
+        "Read(//home/user/state/studios/acme-shop/**)".to_string(),
+    ];
+    for cmd in crate::runners::READ_ONLY {
+        rules.push(format!("Bash({cmd})"));
+        rules.push(format!("Bash({cmd} *)"));
+    }
+    rules.join(",")
+}
+
 #[test]
 fn claude_new_argv() {
     let env = BTreeMap::new();
@@ -66,7 +80,7 @@ fn claude_new_argv() {
         [
             "claude",
             "--allowedTools",
-            "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
+            base_rules().as_str(),
             "--settings",
             "/home/user/state/studios/acme-shop/roles/producer/claude-settings.json",
             "--model",
@@ -143,7 +157,7 @@ fn claude_resume_argv() {
             "-r",
             "ses-9",
             "--allowedTools",
-            "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
+            base_rules().as_str(),
             "--settings",
             "/home/user/state/studios/acme-shop/roles/producer/claude-settings.json",
             "--model",
@@ -259,9 +273,10 @@ fn hook_command_quotes_spaces_and_quotes() {
 }
 
 /// The `--allowedTools` pair is one flag and one comma-joined value
-/// of exactly the two rules, on fresh launches and resumes alike —
-/// and the value is always followed by another `--flag`, since the
-/// variadic list would otherwise swallow the positional prompt.
+/// that opens with the base pair and carries every shared read-only
+/// rule, on fresh launches and resumes alike — and the value is
+/// always followed by another `--flag`, since the variadic list would
+/// otherwise swallow the positional prompt.
 #[test]
 fn claude_allowed_tools_pair() {
     let env = BTreeMap::new();
@@ -281,9 +296,20 @@ fn claude_allowed_tools_pair() {
         assert_eq!(at.len(), 1, "{:?}", l.argv);
         let at = at[0];
         let rules: Vec<&str> = l.argv[at + 1].split(',').collect();
-        assert_eq!(rules.len(), 2, "{}", l.argv[at + 1]);
         assert_eq!(rules[0], "Bash(backlot *)");
         assert_eq!(rules[1], "Read(//home/user/state/studios/acme-shop/**)");
+        for cmd in crate::runners::READ_ONLY {
+            assert!(
+                rules.contains(&format!("Bash({cmd})").as_str()),
+                "missing `{cmd}`: {:?}",
+                l.argv[at + 1]
+            );
+            assert!(
+                rules.contains(&format!("Bash({cmd} *)").as_str()),
+                "missing `{cmd} *`: {:?}",
+                l.argv[at + 1]
+            );
+        }
         assert!(l.argv[at + 2].starts_with("--"), "{}", l.argv[at + 2]);
     }
     // The positional prompt is still the fresh launch's last element.
@@ -323,17 +349,20 @@ fn claude_allows_nothing_broader() {
     }
 }
 
-/// S9c: a Claude actor's launch pre-allows the git commands its
-/// loop needs plus every declared check's `run` — each bare and
-/// with arguments. The director gets `git merge` and the same
-/// checks; producer and writer stay on the base pair, and a `run`
-/// the rule syntax cannot hold — a parenthesis — is simply never
-/// pre-allowed though the cast accepted it.
+/// S9c: every role's launch pre-allows the shared read-only set —
+/// the producer's and writer's included, so no role's `git log` asks
+/// a person — plus the actor's `git add`/`git commit`, the director's
+/// `git merge`, and every declared check's `run`, each bare and with
+/// arguments. `git branch` stays its two listing forms only, and a
+/// `run` the rule syntax cannot hold — a parenthesis — is simply
+/// never pre-allowed though the cast accepted it.
 #[test]
 fn claude_pre_allows_per_role() {
     use backlot_model::event::CheckDecl;
     let env = BTreeMap::new();
-    let base = "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)";
+    // The base pair plus the shared read-only set — what every role
+    // gets before its own additions.
+    let base = base_rules();
     let checks = [
         CheckDecl {
             name: "unit".into(),
@@ -346,39 +375,7 @@ fn claude_pre_allows_per_role() {
             timeout_s: 600,
         },
     ];
-    // An actor: the six git commands bare and starred, then the
-    // checks verbatim.
-    let l = plan(
-        &actor("claude", "standard"),
-        &role_ctx(&env, "actor-t1-c1", None, None, &checks),
-    )
-    .unwrap();
-    assert_eq!(
-        l.argv[2],
-        format!(
-            "{base},Bash(git add),Bash(git add *),Bash(git commit),Bash(git commit *),\
-             Bash(git status),Bash(git status *),Bash(git diff),Bash(git diff *),\
-             Bash(git log),Bash(git log *),Bash(git show),Bash(git show *),\
-             Bash(cargo test --lib),Bash(cargo clippy)"
-        )
-    );
-    // The director: the read-only git set it reviews with, `git
-    // merge` and the same checks — never `git branch`, which would
-    // also allow `git branch -D`.
-    let l = plan(
-        &actor("claude", "standard"),
-        &role_ctx(&env, "director", None, None, &checks),
-    )
-    .unwrap();
-    assert_eq!(
-        l.argv[2],
-        format!(
-            "{base},Bash(git status),Bash(git status *),Bash(git diff),Bash(git diff *),\
-             Bash(git log),Bash(git log *),Bash(git show),Bash(git show *),\
-             Bash(git merge),Bash(git merge *),Bash(cargo test --lib),Bash(cargo clippy)"
-        )
-    );
-    // Producer and writer keep the base pair only.
+    // Producer and writer: base + read-only, nothing a job adds.
     for role in ["producer", "writer"] {
         let l = plan(
             &actor("claude", "standard"),
@@ -387,8 +384,36 @@ fn claude_pre_allows_per_role() {
         .unwrap();
         assert_eq!(l.argv[2], base, "{role}");
     }
-    // With no declared checks the actor's git set still lands,
-    // resume or fresh alike.
+    // An actor: read-only, its two writes, then the checks.
+    let l = plan(
+        &actor("claude", "standard"),
+        &role_ctx(&env, "actor-t1-c1", None, None, &checks),
+    )
+    .unwrap();
+    assert_eq!(
+        l.argv[2],
+        format!(
+            "{base},Bash(git add),Bash(git add *),\
+             Bash(git commit),Bash(git commit *),\
+             Bash(cargo test --lib),Bash(cargo clippy)"
+        )
+    );
+    // The director: read-only, `git merge`, the same checks — never
+    // bare `git branch`, which would also allow `git branch -D`.
+    let l = plan(
+        &actor("claude", "standard"),
+        &role_ctx(&env, "director", None, None, &checks),
+    )
+    .unwrap();
+    assert_eq!(
+        l.argv[2],
+        format!(
+            "{base},Bash(git merge),Bash(git merge *),\
+             Bash(cargo test --lib),Bash(cargo clippy)"
+        )
+    );
+    // With no declared checks the actor's read-only set and writes
+    // still land, resume or fresh alike.
     for resume in [None, Some("ses-9")] {
         let l = plan(
             &actor("claude", "standard"),
@@ -396,7 +421,14 @@ fn claude_pre_allows_per_role() {
         )
         .unwrap();
         let at = l.argv.iter().position(|a| a == "--allowedTools").unwrap();
-        assert_eq!(l.argv[at + 1].split(',').count(), 14, "{}", l.argv[at + 1]);
+        // 2 base + 2 per read-only command + 4 writes.
+        let want = 2 + 2 * crate::runners::READ_ONLY.len() + 4;
+        assert_eq!(
+            l.argv[at + 1].split(',').count(),
+            want,
+            "{}",
+            l.argv[at + 1]
+        );
     }
     // A `run` with a parenthesis is not expressible in the rule
     // syntax — the cast accepted it, no rule carries it.

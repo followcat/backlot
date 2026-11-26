@@ -172,7 +172,7 @@ impl App {
             || self.help
             || self.dialog.is_some()
             || self.new_studio.is_some()
-            || self.hw_setup.is_some()
+            || self.hw_switch.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()
             || self.sheet.is_some()

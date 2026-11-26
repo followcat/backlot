@@ -430,6 +430,21 @@ pub(crate) fn render(
                     palette,
                 );
             }
+            Row::Divider { studio } => {
+                let edge = frame_of(&studio.key());
+                if rect.width >= 2 {
+                    put_text(buf, rect.x, rect.y, 1, "├", edge);
+                    put_text(
+                        buf,
+                        rect.x + 1,
+                        rect.y,
+                        rect.width.saturating_sub(2),
+                        &"─".repeat(rect.width.saturating_sub(2) as usize),
+                        edge,
+                    );
+                    put_text(buf, rect.x + rect.width - 1, rect.y, 1, "┤", edge);
+                }
+            }
             Row::CompactStudio { studio, kind } => {
                 draw_compact_studio(buf, rect, *studio, *kind, &label(*studio), now_ms, palette);
             }

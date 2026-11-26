@@ -7,8 +7,9 @@
 //! `self.size_leases`, so its dimensions never collapse to the core's
 //! headless default while parked. `hc-tui.owner-tab` /
 //! `hc-tui.command` labels let a restarted client adopt the record
-//! without a resize.
+//! and size it from its current binding.
 
+use super::float_reconcile::resolve_float_size;
 use super::pane::{Role, Spec};
 use super::popup::{FLOAT_COMMAND_LABEL, FLOAT_OWNER_LABEL, POPUP_LABEL, PopupState, popup_fit};
 use super::*;
@@ -189,6 +190,25 @@ impl App {
         }
     }
 
+    /// Current requested size for a persistent float, preferring the
+    /// matching `[[keys.command]]` binding over any stored fallback.
+    pub(super) fn float_size(
+        &self,
+        command: &str,
+        width: Option<PopupSize>,
+        height: Option<PopupSize>,
+    ) -> (Option<PopupSize>, Option<PopupSize>) {
+        resolve_float_size(&self.live, command, width, height)
+    }
+
+    fn clear_owner_restore(&mut self, owner: &str) {
+        for (other_key, other) in self.floats.iter_mut() {
+            if other_key.owner == owner {
+                other.restore = false;
+            }
+        }
+    }
+
     /// Hide the shown float: the pane stays alive, parked on a
     /// `SizeLease` attach at the popup's resolved size — the program
     /// never sees the core's headless default while hidden. `restore`
@@ -205,9 +225,10 @@ impl App {
         }
         self.popup_selection = None;
         self.popup_gesture = None;
+        let key = popup.key.expect("persistent popups carry a key");
+        let (width, height) = self.float_size(&key.command, popup.width, popup.height);
         let mut pane = popup.pane;
-        if let Some(geometry) = resolve_popup_geometry(popup.width, popup.height, self.frame_area())
-        {
+        if let Some(geometry) = resolve_popup_geometry(width, height, self.frame_area()) {
             popup_fit(&mut pane, geometry);
         }
         pane.want(Some(Spec {
@@ -217,11 +238,11 @@ impl App {
         pane.on_view(&self.view);
         self.size_leases.insert(popup.terminal.clone(), pane);
         self.floats.insert(
-            popup.key.expect("persistent popups carry a key"),
+            key,
             FloatEntry {
                 terminal: popup.terminal,
-                width: popup.width,
-                height: popup.height,
+                width,
+                height,
                 restore,
                 created_ms: popup.created_ms,
                 seen: popup.seen,
@@ -239,29 +260,25 @@ impl App {
         };
         self.dismiss_popup();
         // Only the last-shown float of an owner may come back.
-        for (other_key, other) in self.floats.iter_mut() {
-            if other_key.owner == key.owner {
-                other.restore = false;
-            }
-        }
+        self.clear_owner_restore(&key.owner);
+        let (width, height) = self.float_size(&key.command, entry.width, entry.height);
         let mut pane = self
             .size_leases
             .remove(&entry.terminal)
             .unwrap_or_else(|| self.new_pane());
+        if let Some(geometry) = resolve_popup_geometry(width, height, self.frame_area()) {
+            popup_fit(&mut pane, geometry);
+        }
         pane.want(Some(Spec {
             terminal: entry.terminal.clone(),
             role: Role::Active,
         }));
         pane.on_view(&self.view);
-        if let Some(geometry) = resolve_popup_geometry(entry.width, entry.height, self.frame_area())
-        {
-            popup_fit(&mut pane, geometry);
-        }
         self.popup = Some(PopupState {
             pane,
             terminal: entry.terminal,
-            width: entry.width,
-            height: entry.height,
+            width,
+            height,
             owner_tab: None,
             persistent: true,
             key: Some(key.clone()),
@@ -282,22 +299,19 @@ impl App {
         height: Option<PopupSize>,
         created_ms: u64,
     ) {
+        let (width, height) = self.float_size(&key.command, width, height);
         let mut pane = self.new_pane();
+        if let Some(geometry) = resolve_popup_geometry(width, height, self.frame_area()) {
+            popup_fit(&mut pane, geometry);
+        }
         pane.want(Some(Spec {
             terminal: terminal.clone(),
             role: Role::Active,
         }));
         pane.on_view(&self.view);
-        if let Some(geometry) = resolve_popup_geometry(width, height, self.frame_area()) {
-            popup_fit(&mut pane, geometry);
-        }
         self.drop_float(&key, Some(terminal.as_str()));
         // Only the last-shown float of an owner may come back.
-        for (other_key, other) in self.floats.iter_mut() {
-            if other_key.owner == key.owner {
-                other.restore = false;
-            }
-        }
+        self.clear_owner_restore(&key.owner);
         self.popup = Some(PopupState {
             pane,
             terminal,
@@ -314,18 +328,21 @@ impl App {
     }
 
     /// Park a terminal on a hidden SizeLease — a late `Ran` or a
-    /// rediscovered record. The lease takes the record's own size when
-    /// known (adoption must not resize), else the popup geometry.
-    pub(super) fn hide_float(&mut self, key: FloatKey, entry: FloatEntry) {
+    /// rediscovered record. The lease takes the resolved popup geometry,
+    /// falling back to the record's own size only when the surface cannot
+    /// fit a minimum popup.
+    pub(super) fn hide_float(&mut self, key: FloatKey, mut entry: FloatEntry) {
+        let (width, height) = self.float_size(&key.command, entry.width, entry.height);
+        entry.width = width;
+        entry.height = height;
         let mut lease = self.new_pane();
-        let (cols, rows) = self
-            .view
-            .inventory
-            .get(&entry.terminal)
-            .map(|term| (term.cols, term.rows))
+        let (cols, rows) = resolve_popup_geometry(width, height, self.frame_area())
+            .map(|geometry| (geometry.terminal_cols, geometry.terminal_rows))
             .or_else(|| {
-                resolve_popup_geometry(entry.width, entry.height, self.frame_area())
-                    .map(|geometry| (geometry.terminal_cols, geometry.terminal_rows))
+                self.view
+                    .inventory
+                    .get(&entry.terminal)
+                    .map(|term| (term.cols, term.rows))
             })
             .unwrap_or((80, 24));
         lease.allocated(cols.max(1), rows.max(1));
@@ -338,11 +355,7 @@ impl App {
         self.drop_float(&key, Some(terminal.as_str()));
         // A fresh arrival parks as the owner's restore candidate.
         if entry.restore {
-            for (other_key, other) in self.floats.iter_mut() {
-                if other_key.owner == key.owner {
-                    other.restore = false;
-                }
-            }
+            self.clear_owner_restore(&key.owner);
         }
         self.floats.insert(key, entry);
         self.size_leases.insert(terminal, lease);
@@ -369,11 +382,15 @@ impl App {
     }
 
     /// Host resize: refit each hidden float's `SizeLease` pane from its
-    /// stored popup geometry — the percent/cell request follows the new
-    /// frame just like the visible popup's refit.
+    /// current binding geometry (or stored fallback) — the percent/cell
+    /// request follows the new frame just like the visible popup's refit.
     pub(super) fn floats_resize(&mut self, area: ratatui::layout::Rect) {
-        for entry in self.floats.values() {
-            if let Some(geometry) = resolve_popup_geometry(entry.width, entry.height, area)
+        for (key, entry) in self.floats.iter_mut() {
+            let (width, height) =
+                resolve_float_size(&self.live, &key.command, entry.width, entry.height);
+            entry.width = width;
+            entry.height = height;
+            if let Some(geometry) = resolve_popup_geometry(width, height, area)
                 && let Some(lease) = self.size_leases.get_mut(&entry.terminal)
             {
                 popup_fit(lease, geometry);

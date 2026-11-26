@@ -22,9 +22,10 @@ pub use crate::summary_build::{is_ask_answered, open_ask, role_name};
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
-    CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
-    MAX_OUTWARD_CARDS, MAX_OUTWARD_COMMITS, OutwardCardSummary, hollywood_section,
-    hollywood_section_with_activity, hollywood_section_with_work, studio_outward_cards,
+    CardSummary, Exchange, HEADLINE_CHARS, HandoffSummary, HollywoodSummary, MAX_EXCHANGE,
+    MAX_OPEN_CARDS, MAX_OUTWARD_CARDS, MAX_OUTWARD_COMMITS, OutwardCardSummary, QueueReason,
+    QueueStatus, hollywood_section, hollywood_section_with_activity, hollywood_section_with_work,
+    studio_outward_cards,
 };
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,
@@ -133,6 +134,13 @@ pub struct StudioSummary {
     /// Open outward push/PR cards for this studio (capped at [`MAX_OUTWARD_CARDS`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outward_cards: Vec<OutwardCardSummary>,
+    /// True while the studio's ledger contains [`crate::event::EventKind::Unknown`]
+    /// records from a newer backlot; the stage pauses read-only until upgraded.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub needs_upgrade: bool,
+    /// Sorted unique unknown event kind names found in this studio's ledger.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_kinds: Vec<String>,
 }
 
 /// One task's dock projection — the row the panel draws even when no
@@ -534,6 +542,8 @@ pub fn summary_with_running(
                     exchange: Vec::new(),
                     pending_tell: false,
                     outward_cards: Vec::new(),
+                    needs_upgrade: false,
+                    unknown_kinds: Vec::new(),
                 });
             }
             continue;
@@ -666,6 +676,8 @@ pub fn summary_with_running(
                 .iter()
                 .any(|m| m.from == "user" && m.to != "user" && !m.delivered && !m.dropped),
             outward_cards: Vec::new(),
+            needs_upgrade: !state.unknown_kinds.is_empty(),
+            unknown_kinds: state.unknown_kinds.iter().cloned().collect(),
         };
         if done {
             finished_studios.push(entry);

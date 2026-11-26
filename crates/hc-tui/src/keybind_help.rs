@@ -375,6 +375,7 @@ pub(crate) fn backlot_help_groups(
                     "tasks",
                     "· wait · ◐ run · ◈ rev · ✓ pass · = pause · ↑/↓ prio",
                 ),
+                entry("roles", "Ⓟ producer · Ⓓ director · Ⓦ writer · Ⓐ actor"),
             ],
         ),
     ];

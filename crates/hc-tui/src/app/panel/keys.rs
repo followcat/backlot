@@ -277,7 +277,7 @@ impl App {
             }
             // R22: the `hollywood setup` hint is the in-TUI dialog's
             // button — same dialog the Call Sheet's row opens.
-            Some(Target::Setup) => self.hw_setup_open(),
+            Some(Target::Setup) => self.hw_switch_open(false),
             Some(Target::Talk(key, seq)) => {
                 let file = crate::panel::data::studio(&machines, &key).and_then(|s| {
                     s.studio

@@ -750,6 +750,19 @@ pub enum EventKind {
         #[serde(default)]
         reason: String,
     },
+    /// `studio.reopened`: the person reopened a finished studio. Recs
+    /// and cast changes work again, and the fixed seats are wanted as
+    /// before. The `studio.finished` record stays in the log — it is
+    /// the past, and a question it answered stays answered.
+    #[serde(rename = "studio.reopened")]
+    StudioReopened {
+        #[serde(default)]
+        reason: String,
+        /// The `c<n>` marker a card's execution carries, so a restart
+        /// between the append and `card.done` repeats nothing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<String>,
+    },
     /// `studio.deleted`: the user archived the finished studio's
     /// ledger directory under `archive/<id>-<stamp>`.
     #[serde(rename = "studio.deleted")]
@@ -762,6 +775,10 @@ pub enum EventKind {
         reason: String,
         set: BTreeMap<String, String>,
     },
+    /// Read-only placeholder for a valid line with `v <= LEDGER_VERSION`
+    /// whose `kind` was added by a newer backlot.
+    #[serde(skip)]
+    Unknown { raw_kind: String },
 }
 
 /// `skip_serializing_if` for a bool flag that only carries meaning
@@ -799,7 +816,7 @@ pub fn default_max_actors() -> u32 {
 }
 
 impl EventKind {
-    /// The wire name, identical to the serde tag.
+    /// The wire name, identical to the serde tag (`"unknown"` for [`EventKind::Unknown`]).
     pub fn name(&self) -> &'static str {
         match self {
             EventKind::StudioCreated { .. } => "studio.created",
@@ -839,8 +856,18 @@ impl EventKind {
             EventKind::RoleProgress { .. } => "role.progress",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
+            EventKind::StudioReopened { .. } => "studio.reopened",
             EventKind::StudioDeleted { .. } => "studio.deleted",
             EventKind::Correction { .. } => "correction",
+            EventKind::Unknown { .. } => "unknown",
+        }
+    }
+
+    /// The wire name, returning the original `raw_kind` for [`EventKind::Unknown`].
+    pub fn raw_name(&self) -> &str {
+        match self {
+            EventKind::Unknown { raw_kind } => raw_kind.as_str(),
+            other => other.name(),
         }
     }
 }
@@ -858,7 +885,7 @@ pub fn default_ledger_version() -> u32 {
 }
 
 /// An event as appended to the log.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Event {
     /// Ledger schema version — always written.
     #[serde(default = "default_ledger_version")]

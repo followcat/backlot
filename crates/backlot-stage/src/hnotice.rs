@@ -184,6 +184,9 @@ pub(crate) fn owed(
 ) -> Vec<HNotice> {
     let mut out = Vec::new();
     for (name, s) in studios {
+        if !s.unknown_kinds.is_empty() {
+            continue;
+        }
         if let Some(f) = &s.finished {
             out.push(HNotice {
                 label: "finished",

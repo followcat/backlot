@@ -15,6 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::{ActorIdentity, ApprovalDecision, EventBy, Priority};
+pub use crate::hollywood_snapshot::{CardSnapshot, SnapshotFile, sha256_hex};
 use crate::state::{RoleLifecycle, StudioState, TaskStatus};
 
 // The reduced state and the append rules live in the two sibling
@@ -28,9 +29,14 @@ pub use crate::hollywood_validate::{HRefusal, validate};
 /// name, since its ledger sits beside the studios' at `<base>/hollywood`.
 pub const HOLLYWOOD: &str = "hollywood";
 
-/// Hollywood's terminal name (D13): one per core, outside the
-/// studios' `bl-<studio>-<role>` shape.
+/// Hollywood's initial terminal name (D13): outside the studios'
+/// `bl-<studio>-<role>` shape. Subsequent handoffs use `-next` or `-g<k>`.
 pub const HOLLYWOOD_TERMINAL: &str = "bl-hollywood";
+
+/// Whether `name` is Hollywood's primary or handoff-generation terminal name.
+pub fn is_hollywood_terminal_name(name: &str) -> bool {
+    name == HOLLYWOOD_TERMINAL || name.starts_with("bl-hollywood-")
+}
 
 /// The last headlines kept in state (D15's collapsed layer shows one).
 pub const HEADLINE_CAP: usize = 10;
@@ -94,6 +100,25 @@ pub enum HollywoodKind {
     #[serde(rename = "card.cancelled")]
     CardCancelled {
         card: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    /// Hollywood withdrew its own open card: `role` is who asked, and
+    /// `reason` says why. Refused on a card anyone else proposed and on
+    /// one that is no longer open.
+    #[serde(rename = "card.withdrawn")]
+    CardWithdrawn {
+        card: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    /// A newer card replaced this open one — the two target the same
+    /// fact (a role's identity, a studio setting), so a batch apply can
+    /// never run both. `by_card` is the newer card's seq.
+    #[serde(rename = "card.superseded")]
+    CardSuperseded {
+        card: u64,
+        by_card: u64,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         reason: String,
     },
@@ -219,6 +244,8 @@ impl HollywoodKind {
             HollywoodKind::CardProposed { .. } => "card.proposed",
             HollywoodKind::CardApplied { .. } => "card.applied",
             HollywoodKind::CardCancelled { .. } => "card.cancelled",
+            HollywoodKind::CardWithdrawn { .. } => "card.withdrawn",
+            HollywoodKind::CardSuperseded { .. } => "card.superseded",
             HollywoodKind::CardDone { .. } => "card.done",
             HollywoodKind::CardFailed { .. } => "card.failed",
             HollywoodKind::CardStale { .. } => "card.stale",
@@ -240,8 +267,10 @@ impl HollywoodKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum CardAction {
-    /// A complete `studio new` draft (D19): the cast and brief paths
-    /// point at files in Hollywood's own `drafts/` folder.
+    /// A complete `studio new` draft (D19): the cast and brief point at
+    /// the card's own copies under `cards/c<n>/`, made at propose time.
+    /// A card from before snapshots names Hollywood's `drafts/` folder
+    /// instead and carries no snapshot.
     StudioNew {
         studio: String,
         title: String,
@@ -255,6 +284,10 @@ pub enum CardAction {
         /// that predate the field and on every other shape.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         no_git: bool,
+        /// The proposer's own files and their hashes — the staleness
+        /// check for what `cast` and `brief` were copied from.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        snapshot: Option<CardSnapshot>,
     },
     /// Stop a finished person (`role.closed`) — frees the terminal.
     Close { studio: String, person: String },
@@ -292,9 +325,20 @@ pub enum CardAction {
         fresh: bool,
     },
     /// Change the studio's cast after it started (`studio.cast`), plus a
-    /// `role.recast` for every fixed role the file moves. `cast` points
-    /// at a cast file, like a `studio-new` draft.
-    Cast { studio: String, cast: String },
+    /// `role.recast` for every fixed role the file moves. `cast` is the
+    /// card's own copy under `cards/c<n>/`, made at propose time.
+    Cast {
+        studio: String,
+        cast: String,
+        /// The proposer's own file and its hash, like a `studio-new`
+        /// draft's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        snapshot: Option<CardSnapshot>,
+    },
+    /// Reopen a finished studio (`studio.reopened`): recasts, cast
+    /// changes and new tasks work again. The person's own command is
+    /// `backlot studio reopen`; a card is the way Hollywood asks.
+    ReopenStudio { studio: String },
     /// Change Hollywood's own actor (`[hollywood]` in config plus a
     /// fresh restart so the new agent takes over).
     Setup {
@@ -337,6 +381,7 @@ impl CardAction {
             | CardAction::Recast { studio, .. }
             | CardAction::Restart { studio, .. }
             | CardAction::Cast { studio, .. }
+            | CardAction::ReopenStudio { studio }
             | CardAction::Outward { studio, .. } => studio,
             CardAction::Setup { .. } => "hollywood",
         }
@@ -360,13 +405,14 @@ impl CardAction {
             CardAction::Restart { person, fresh, .. } => {
                 format!("restart {person}{}", if *fresh { " (fresh)" } else { "" })
             }
-            CardAction::Cast { studio, cast } => format!(
+            CardAction::Cast { studio, cast, .. } => format!(
                 "cast {studio} ← {}",
                 std::path::Path::new(cast)
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| cast.clone())
             ),
+            CardAction::ReopenStudio { studio } => format!("reopen studio {studio}"),
             CardAction::Setup { .. } => {
                 let actor = self.setup_actor().expect("Setup yields actor");
                 format!("setup hollywood → {}", crate::recast::identity_text(&actor))
@@ -452,6 +498,9 @@ pub enum CardBase {
     /// changed) — a `cast` card whose settings event has moved since is
     /// stale.
     CastSeq { was: u64 },
+    /// The studio was finished — a `studio reopen` that lands on a
+    /// studio still running is stale.
+    StudioFinished,
     /// Hollywood's configured identity at proposal time (`None` when
     /// `[hollywood]` was not yet set).
     HollywoodIdentity { actor: Option<ActorIdentity> },
@@ -607,6 +656,72 @@ pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>)
                 ))
             }
         }
+        CardBase::StudioFinished => {
+            let CardAction::ReopenStudio { .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            if s.finished.is_some() {
+                None
+            } else {
+                Some(format!("studio '{name}' is not finished"))
+            }
+        }
+    }
+}
+
+/// The action kinds that carry one obvious target, and so supersede an
+/// older open card on the same target rather than sitting beside it —
+/// a batch apply could otherwise run both, the second undoing the
+/// first (field notes §1.3):
+///
+/// - `recast` — one role's identity (a fixed seat or an actor key);
+/// - `restart` — one person's terminal;
+/// - `cast` — one studio's settings;
+/// - `reopen studio` — one studio's finished state;
+/// - `studio-new` — one studio name;
+/// - `setup` — Hollywood's own identity.
+///
+/// A task's state, priority and person lifecycle are tasks' and
+/// people's own; two cards on different targets never conflict, so
+/// nothing else supersedes.
+pub fn supersedes(new: &CardAction, old: &CardAction) -> bool {
+    match (new, old) {
+        (
+            CardAction::Recast {
+                studio: ns,
+                person: np,
+                ..
+            },
+            CardAction::Recast {
+                studio: os,
+                person: op,
+                ..
+            },
+        ) => ns == os && np == op,
+        (
+            CardAction::Restart {
+                studio: ns,
+                person: np,
+                ..
+            },
+            CardAction::Restart {
+                studio: os,
+                person: op,
+                ..
+            },
+        ) => ns == os && np == op,
+        (CardAction::Cast { studio: ns, .. }, CardAction::Cast { studio: os, .. }) => ns == os,
+        (CardAction::ReopenStudio { studio: ns }, CardAction::ReopenStudio { studio: os }) => {
+            ns == os
+        }
+        (CardAction::StudioNew { studio: ns, .. }, CardAction::StudioNew { studio: os, .. }) => {
+            ns == os
+        }
+        (CardAction::Setup { .. }, CardAction::Setup { .. }) => true,
+        _ => false,
     }
 }
 

@@ -16,6 +16,7 @@ mod opening;
 mod s1_compose;
 mod setup;
 mod stage;
+mod switch;
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};

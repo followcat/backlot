@@ -227,6 +227,21 @@ impl App {
         self.scroll_to_panel_row(&rows, index);
     }
 
+    /// Put the dock's cursor on `key`'s block — a keyboard step that
+    /// leaves the dock focused keeps its selection on the studio it
+    /// landed on, scrolled into view.
+    pub(crate) fn panel_select_studio(&mut self, key: &crate::studio::StudioKey) {
+        self.panel.editing = false;
+        self.panel.finish_confirm = None;
+        self.panel.reset_history_nav();
+        let targets = self.panel_targets();
+        let Some(target) = targets.iter().find(|t| t.studio() == Some(key)).cloned() else {
+            return;
+        };
+        self.panel.selected = Some(target);
+        self.panel_reveal_selected();
+    }
+
     /// Move the Lot Dock selection directly to `target` (used when stepping or
     /// clicking entries from the Reader) and reveal it inside the dock body.
     /// Selecting a row of another studio unfolds that studio first, so the row

@@ -65,9 +65,10 @@ impl Pane {
         let open = Arc::clone(&self.open);
         let (out, out_rx) = mpsc::channel(OUT_QUEUE);
         let paced = self.pacing.subscribe();
+        let tick_epoch = self.pacing.tick_epoch();
         self.sync_pacing();
         let task = tokio::spawn(tasks::attach_task_paced(
-            open, params, spec.role, generation, ev, paced,
+            open, params, spec.role, generation, ev, paced, tick_epoch,
         ));
         self.state = State::Opening {
             generation,
@@ -315,8 +316,7 @@ impl Pane {
         self.push_controls();
     }
 
-    /// Test-only: the last layout allocation reported to this pane.
-    #[cfg(test)]
+    /// The last layout allocation reported to this pane.
     pub(crate) fn allocated_size(&self) -> (u16, u16) {
         self.allocated
     }
