@@ -284,7 +284,10 @@ A person shows exactly one state, in this priority:
 1. `needs you · <what>` — a user or director prompt as before (the prompt row keeps `y`/`d`/`p`
    and a non-actor's word is `USER`), or a `needs you` attention that is not a prompt (`■` red).
 2. `asks you · <question>` — the role's newest explicit `tell user --ask` the user has not
-   answered (`?` peach). A plain `tell user` is a report in the conversation, never a question.
+   answered (`?` peach). A plain `tell user` (including `tell user --note`) is a report in the
+   conversation, never a question; the CLI refuses unflagged `tell user` messages from studio
+   roles that contain `?` or `？` outside code spans, fenced blocks, or URL query strings so a
+   question cannot drop silently into a plain report without `--ask` or `--note`.
    The answer is a `tell` back to that role or any later ledger action the role records
    itself — a revised requirement, a report, a delivery, a cast, a review, a new tell — because
    the person often answers in the role's terminal. `ask.acknowledged` is the user's explicit

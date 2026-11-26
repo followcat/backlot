@@ -11,7 +11,7 @@ pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n       backlot report show --studio <s> --file <relpath>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>
        backlot ask acknowledged --person <role> --target <seq>\n       backlot ask --run [--why <text>] (-- <prog> <args...> | \"<cmd>\")";
-pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin) [--ask]\n       backlot tell hollywood \"<text>\" [--text <msg>]";
+pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin) [--ask | --note]\n       backlot tell hollywood \"<text>\" [--text <msg>]";
 pub(crate) const U_PROGRESS: &str =
     "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";
 pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
