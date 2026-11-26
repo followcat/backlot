@@ -99,6 +99,15 @@ pub(crate) fn plan(
             .iter()
             .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
             .collect(),
+        detail_extra: waits
+            .iter()
+            .map(|w| match w {
+                Wait::Decision(item) => {
+                    (super::decision::detail_lines(item).len() as u16).saturating_sub(1)
+                }
+                _ => 0,
+            })
+            .collect(),
         shown: waits.len(),
         hollywood_rule: opts.agent,
         setup_hairline: !opts.agent && breathing,
@@ -132,6 +141,8 @@ pub(crate) struct Plan {
     pub headline: bool,
     /// Per waiting item: `true` draws its detail line.
     pub details: Vec<bool>,
+    /// Additional detail lines beyond the first (used by multi-question design decisions).
+    pub detail_extra: Vec<u16>,
     /// How many waiting rows the scroll window shows — never fewer
     /// than `1` while items exist.
     pub shown: usize,
@@ -175,8 +186,15 @@ impl Plan {
         let waits: u16 = self
             .details
             .iter()
+            .enumerate()
             .take(self.shown)
-            .map(|d| 1 + u16::from(*d))
+            .map(|(i, d)| {
+                1 + if *d {
+                    1 + self.detail_extra.get(i).copied().unwrap_or(0)
+                } else {
+                    0
+                }
+            })
             .sum();
         let talk = self.talk + self.wrap_rows();
         u16::from(self.top_sprocket)
@@ -228,6 +246,16 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
         {
             plan.talk_wraps[idx] -= 1;
         } else if let Some(i) = plan
+            .detail_extra
+            .iter()
+            .enumerate()
+            .rfind(|(i, extra)| {
+                **extra > 0 && plan.details.get(*i).copied().unwrap_or(false) && Some(*i) != keep
+            })
+            .map(|(i, _)| i)
+        {
+            plan.detail_extra[i] -= 1;
+        } else if let Some(i) = plan
             .details
             .iter()
             .enumerate()
@@ -251,6 +279,11 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
             plan.live = false;
         } else if plan.hints {
             plan.hints = false;
+        } else if let Some(i) = keep.filter(|&k| {
+            plan.details.get(k).copied().unwrap_or(false)
+                && plan.detail_extra.get(k).copied().unwrap_or(0) > 0
+        }) {
+            plan.detail_extra[i] -= 1;
         } else if plan.shown > usize::from(!plan.details.is_empty()) {
             plan.shown -= 1;
         } else {

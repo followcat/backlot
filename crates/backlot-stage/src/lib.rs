@@ -219,6 +219,7 @@ mod design_cli_tests;
 #[cfg(test)]
 mod design_doc_tests;
 #[cfg(test)]
+#[cfg(test)]
 mod design_gate_nudge_tests;
 #[cfg(test)]
 mod design_gate_stage_tests;
@@ -297,6 +298,8 @@ mod hsetup_tests;
 mod hstage_tests;
 #[cfg(test)]
 mod hwatch_tests;
+#[cfg(test)]
+mod hwood_read_design_tests;
 #[cfg(test)]
 mod hwood_read_tests;
 #[cfg(test)]

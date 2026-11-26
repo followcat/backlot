@@ -633,6 +633,7 @@ fn a_short_band_gives_the_wrap_back_before_dropping_a_wait() {
         waiting_rule: false,
         headline: false,
         details: vec![false, false],
+        detail_extra: vec![0, 0],
         shown: 2,
         hollywood_rule: false,
         setup_hairline: false,

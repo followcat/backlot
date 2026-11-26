@@ -1,8 +1,10 @@
 //! Hollywood layer unit tests — the row model, the toggle binding
 //! and the renderer at every width. Neutral fixture data only:
 //! `acme-shop`, `beta-tools`, `alice`.
+mod decision_tests;
 mod draw_tests;
 mod keys_tests;
+mod reader_design_tests;
 mod rows_tests;
 mod zones_tests;
 

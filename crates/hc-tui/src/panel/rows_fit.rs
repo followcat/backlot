@@ -280,6 +280,7 @@ pub(super) fn block_height(
         + usize::from(finish_confirm)
         + usize::from(next_step)
         + usize::from(studio.studio.usage.is_some())
+        + super::draw_design::block_line_count(studio.studio)
         + studio.studio.outward_cards.len();
     let (calm, shown) = live_person_plan(studio, panel, current);
     height += usize::from(calm.is_some());

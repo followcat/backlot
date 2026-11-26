@@ -72,9 +72,10 @@ pub(crate) fn reader_tell_target(meta: &ReaderMeta) -> (String, Option<String>) 
             }
             ("producer".to_owned(), None)
         }
-        ReaderOrigin::SheetDeliveries(..) | ReaderOrigin::Records(_) | ReaderOrigin::Card(_) => {
-            ("producer".to_owned(), None)
-        }
+        ReaderOrigin::SheetDeliveries(..)
+        | ReaderOrigin::Records(_)
+        | ReaderOrigin::Card(_)
+        | ReaderOrigin::Design(_) => ("producer".to_owned(), None),
         ReaderOrigin::None => ("producer".to_owned(), None),
     }
 }

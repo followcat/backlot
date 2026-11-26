@@ -43,6 +43,7 @@ impl App {
                 metrics,
             )
         {
+            view.meta.design_section_idx = None;
             return;
         }
 
@@ -78,6 +79,14 @@ impl App {
             crossterm::event::KeyCode::Char('t' | 'i') if plain => {
                 let _ = self.reader_open_compose(false);
             }
+            crossterm::event::KeyCode::Char('r') if plain => {
+                if self.hollywood.view.as_ref().is_some_and(|v| {
+                    v.meta.kind == crate::hollywood::ReaderKind::Design
+                        && !v.meta.design_finalized()
+                }) {
+                    let _ = self.reader_open_compose(false);
+                }
+            }
             crossterm::event::KeyCode::Char('o') if plain => {
                 if let Some(meta) = self.hollywood.view.as_ref().map(|v| v.meta.clone()) {
                     self.reader_run_o(&meta);
@@ -98,6 +107,13 @@ impl App {
                     && self.card_pending_label(Some(&card)).is_none()
                 {
                     self.hollywood_card_apply(&card);
+                } else if self
+                    .hollywood
+                    .view
+                    .as_ref()
+                    .is_some_and(|v| v.meta.design_awaiting_user())
+                {
+                    self.reader_design_sign_off();
                 }
             }
             crossterm::event::KeyCode::Char('x') if plain => {
@@ -108,10 +124,28 @@ impl App {
                 }
             }
             crossterm::event::KeyCode::Left | crossterm::event::KeyCode::Char('[') if plain => {
-                self.reader_step(-1);
+                if self
+                    .hollywood
+                    .view
+                    .as_ref()
+                    .is_some_and(|v| v.meta.kind == crate::hollywood::ReaderKind::Design)
+                {
+                    self.reader_design_step(-1);
+                } else {
+                    self.reader_step(-1);
+                }
             }
             crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char(']') if plain => {
-                self.reader_step(1);
+                if self
+                    .hollywood
+                    .view
+                    .as_ref()
+                    .is_some_and(|v| v.meta.kind == crate::hollywood::ReaderKind::Design)
+                {
+                    self.reader_design_step(1);
+                } else {
+                    self.reader_step(1);
+                }
             }
             _ => {}
         }

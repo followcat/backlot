@@ -71,6 +71,8 @@ pub(crate) enum ConfirmFor {
         key: StudioKey,
         token: Option<String>,
     },
+    /// `design sign [--skip]` confirmation shared across Call Sheet, Lot Dock, and Design Reader.
+    DesignSign { key: StudioKey, skip: bool },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -183,6 +185,43 @@ impl StudioDialog {
     /// Local` when the studio sits on this core.
     pub(crate) fn place(key: &StudioKey) -> String {
         format!("{} · {}", key.id, key.machine.as_deref().unwrap_or("Local"))
+    }
+
+    /// Confirm opening-design sign-off (`backlot design sign [--skip]`),
+    /// shared by Call Sheet, Lot Dock, and Design Reader.
+    pub(crate) fn design_sign(key: &StudioKey, skip: bool, file: Option<&str>) -> StudioDialog {
+        let title = if skip {
+            format!("Skip opening design? · {}", Self::place(key))
+        } else {
+            format!("Sign off opening design? · {}", Self::place(key))
+        };
+        let doc = file.unwrap_or("design doc");
+        let frozen = file.and_then(|f| {
+            if f.ends_with("-final.md") {
+                Some(f.to_owned())
+            } else {
+                f.strip_suffix(".md").map(|stem| format!("{stem}-final.md"))
+            }
+        });
+        let freeze_note = match frozen.as_deref() {
+            Some(final_file) => format!("freeze `{final_file}` from `{doc}`"),
+            None => format!("freeze `{doc}`"),
+        };
+        let body = if skip {
+            format!(
+                "Mode: skip remaining opening design rounds — {freeze_note} and allow execution to begin?"
+            )
+        } else {
+            format!("Mode: sign off opening design — {freeze_note} and unlock execution?")
+        };
+        Self::confirm(
+            title,
+            body,
+            ConfirmFor::DesignSign {
+                key: key.clone(),
+                skip,
+            },
+        )
     }
 
     /// The D9 override confirm (§2.2): a director-routed prompt the

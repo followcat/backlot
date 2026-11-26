@@ -136,6 +136,22 @@ pub(super) fn focused_hint_pairs(
         }
         Some(Target::Task(..)) => [("v", "sheet"), ("+-", "pri"), ("i", "tell")],
         Some(Target::OutwardCard(..)) => [("a/y", "apply"), ("x/d", "cancel"), ("⏎", "show")],
+        Some(Target::Design(key)) => {
+            match super::data::studio(machines, key)
+                .and_then(|st| super::draw_design::active_design(st.studio))
+            {
+                Some(d)
+                    if d.suggest_skip
+                        || d.phase == backlot_model::design::DesignPhase::SuggestSkip =>
+                {
+                    [("r", "discuss"), ("o", "read"), ("a", "skip")]
+                }
+                Some(d) if d.waiting_user || d.phase.is_waiting_user() => {
+                    [("r", "reply"), ("o", "read"), ("a", "sign")]
+                }
+                _ => [("o", "read"), ("m", "menu"), ("esc", esc_verb)],
+            }
+        }
         Some(Target::Studio(_)) => [("⏎", "focus"), ("m", "menu"), ("esc", esc_verb)],
         Some(Target::Block(_) | Target::Strip(_)) => {
             [("⏎", "expand"), ("m", "menu"), ("esc", esc_verb)]

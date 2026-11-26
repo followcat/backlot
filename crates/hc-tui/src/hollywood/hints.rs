@@ -166,19 +166,37 @@ pub(crate) fn pairs_for_row(
             .to_vec();
     }
     let mask = slots(selected, waits, agent, hollywood_asking);
-    let mut full: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut full: Vec<(&'static str, &'static str)> = if let Some(Target::Decision(..)) = selected {
+        let skip = waits
+            .iter()
+            .find(|w| selected == Some(&w.target()))
+            .is_some_and(|w| matches!(w, Wait::Decision(item) if item.design.suggest_skip));
+        let mut pairs = vec![
+            ("o", "read"),
+            ("r", if skip { "discuss" } else { "reply" }),
+            ("a", if skip { "skip" } else { "sign" }),
+        ];
+        if agent {
+            pairs.push(("i", "tell"));
+        }
+        pairs
+    } else {
+        Vec::new()
+    };
     let mut compact: Vec<(&'static str, &'static str)> = Vec::new();
     let mut compact_keys = String::new();
-    for (i, lit) in mask.iter().enumerate() {
-        if !lit {
-            continue;
+    if full.is_empty() {
+        for (i, lit) in mask.iter().enumerate() {
+            if !lit {
+                continue;
+            }
+            let (key, word) = SLOTS[i];
+            full.push((key, word));
+            if !compact_keys.is_empty() {
+                compact_keys.push(' ');
+            }
+            compact_keys.push_str(key);
         }
-        let (key, word) = SLOTS[i];
-        full.push((key, word));
-        if !compact_keys.is_empty() {
-            compact_keys.push(' ');
-        }
-        compact_keys.push_str(key);
     }
     let compact_str: &'static str = if compact_keys.is_empty() {
         ""

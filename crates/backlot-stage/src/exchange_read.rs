@@ -20,6 +20,15 @@ const SNIPPET_READ_CAP: u64 = 4096;
 /// outside `dir`.
 pub(crate) fn read_snippet(dir: &Path, raw: &str) -> Option<String> {
     let rel = crate::hwood_read::report_relpath(Path::new(raw)).ok()?;
+    let under_exchange = rel.components().next().is_some_and(|c| {
+        matches!(
+            c,
+            std::path::Component::Normal(root) if root == "messages" || root == "reports"
+        )
+    });
+    if !under_exchange {
+        return None;
+    }
     let root = dir.canonicalize().ok()?;
     let real = dir.join(&rel).canonicalize().ok()?;
     if !real.starts_with(&root) || !real.is_file() {

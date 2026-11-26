@@ -4,6 +4,7 @@
 mod accent_tests;
 mod config_tests;
 mod data_tests;
+mod design_tests;
 mod draw_tests;
 mod exchange_tests;
 mod fold_render_tests;

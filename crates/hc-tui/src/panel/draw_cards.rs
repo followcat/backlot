@@ -132,11 +132,19 @@ pub(super) fn draw_strip(
             if user { palette.red } else { palette.peach },
         ));
     }
-    if studio.studio.tasks_total > 0 || focused_terminal {
+    let has_design = super::draw_design::active_design(studio.studio).is_some();
+    if studio.studio.tasks_total > 0 || (focused_terminal && !has_design) {
         parts.push((
             format!("{}/{}", studio.studio.tasks_done, studio.studio.tasks_total),
             palette.overlay0,
         ));
+    }
+    if let Some((badge, color)) = super::draw_design::strip_badge(
+        studio.studio,
+        rect.width.saturating_sub(2) as usize,
+        palette,
+    ) {
+        parts.push((badge, color));
     }
     let tail = put_parts_right(buf, rect, &parts);
     let gap = u16::from(!parts.is_empty());

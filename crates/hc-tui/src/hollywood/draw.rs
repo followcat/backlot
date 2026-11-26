@@ -201,6 +201,7 @@ fn render_band(
                 | Target::Role(..)
                 | Target::Tell(..)
                 | Target::Upgrade(..)
+                | Target::Decision(..)
                 | Target::Stage(..)
                 | Target::Card(..)
                 | Target::OutwardCard(..)
@@ -332,7 +333,11 @@ fn render_band(
                     continue;
                 }
                 let detail = plan.details.get(index).copied().unwrap_or(false);
-                let h = 1 + u16::from(detail);
+                let h = 1 + if detail {
+                    1 + plan.detail_extra.get(index).copied().unwrap_or(0)
+                } else {
+                    0
+                };
                 let rect = Rect::new(area.x, y, area.width, h);
                 band::draw_row(
                     buf,

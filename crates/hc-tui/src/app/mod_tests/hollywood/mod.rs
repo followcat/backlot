@@ -5,6 +5,7 @@
 //! `beta-tools`, `alice`, `host-a`).
 mod actions;
 mod cursor;
+mod decision_tests;
 mod entry;
 mod finish_key;
 mod hints;

@@ -142,6 +142,20 @@ impl App {
                     glyph: "!",
                     launch: Launch::Surface(Surface::CallSheet),
                 }),
+                Wait::Decision(item) => rows.push(HelpRow {
+                    label: format!(
+                        "Design decision {} · {}",
+                        item.studio.id,
+                        if item.design.suggest_skip {
+                            "discuss or skip"
+                        } else {
+                            "reply or sign"
+                        }
+                    ),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "◆",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
                 Wait::NoRequirement(item) => rows.push(HelpRow {
                     label: format!("New studio {} · tell the producer", item.studio.id),
                     hint: self.sheet_hint("↵"),

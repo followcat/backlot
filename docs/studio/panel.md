@@ -40,7 +40,9 @@ focused jumps back to the last row and never closes the dock.
 | `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
 | `i` / `/` | Compose on the selected studio's `›` tell input (`/` seeds `/`, `Tab` completes `/verb`). While composing: `↑`/`↓` step per-studio `user` message history (`StudioSummary.exchange` + session submits, saving/restoring any draft, consecutive repeats collapsed), `Enter` sends and rests, `Esc` rests keeping the draft |
 | `Space` | Open or close the three-line drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold line; on a studio header, fold/unfold the whole block |
-| `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
+| `o` | On an opening-design row: open `design/v<N>.md` (`backlot report show --file …`) in the `Design` Reader. Otherwise: reopen a closed resumable person (`backlot reopen … --as user`) |
+| `r` | On an opening-design row or studio awaiting user design reply: focus the studio's `›` producer tell line (or run `backlot design open` when `SuggestSkip`) |
+| `a` | On an opening-design row: open the confirm modal (`sign off` vs `skip` + frozen file) and send `backlot design sign [--skip]` on confirm |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
 | `p` | Peek the person's terminal |
 | `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
@@ -137,6 +139,13 @@ honest about focus (hidden when unfocused). Every border cell of the **selected 
 from `rows_fold::selected_studio`) draws in `palette.accent` whether or not the lot owns the keys;
 every other studio keeps `surface1`.
 
+- **Opening-design rows & 16-col strip badge:** when a studio has an active pre-signed
+  `StudioSummary.design`, its expanded block (and active folded card) shows `◆ design · R<r> · you`
+  (`proposal` / `review` / `summary`, or `◆ design · skip suggested · you`), up to 3 `Q1..Q3`
+  question previews (or `skip_reason` / `summary`), and the action footer `r reply   o read   a sign`
+  (`r discuss  o read  a skip` on `SuggestSkip`). In the 16-col collapsed strip, active design
+  discussions render a single-line warm-peach `◆R<r> ?` (or `◆?` on `SuggestSkip` / tight widths)
+  without wrapping. Non-active (`Idle` / `Signed`) studios render zero extra rows.
 - **Selected-studio folding and compact rows:** in a lot with two or more studios, only the
   selected studio draws in full (the studio holding the `▌` cursor, else the `▸` current studio,
   else the first studio). Any non-current **ready**, **calm**, **finished**, **stage-down**, or
@@ -223,7 +232,7 @@ The summary projection paints at once; `status --json` and `records --json` fill
 it, fetched off the event loop on the studio's own machine — locally through
 `std::env::current_exe()`, remotely through `RemoteRunner`. A reply for a sheet already
 closed or reopened is dropped. `o` on a delivery or check line streams its file through
-`backlot report show` — a local file for a local studio, the same command remotely — into the **Lot Reader** (`j`/`k`/`Space`/`b`/`Ctrl+D`/`Ctrl+U`/`g`/`G` scroll, `←`/`→`/`[`/`]` step files, `t`/`i` compose inline sharing the dock's `›` draft and `↑`/`↓` history plus `Tab /verb`, `o` focuses/reopens, `p` peeks read-only, `y` copies raw text, `?` opens help, `Enter`/`Esc`/`q` close back to the sheet). A click outside the frame closes the sheet.
+`backlot report show` — a local file for a local studio, the same command remotely, including `.md` artifacts under `design/` and `plan/` — into the **Lot Reader** (`j`/`k`/`Space`/`b`/`Ctrl+D`/`Ctrl+U`/`g`/`G` scroll, `←`/`→`/`[`/`]` step files or jump across `## R<r>` / `### §R<r>.<W|D|P|U>` anchors on `design/` documents, `t`/`i` compose inline sharing the dock's `›` draft and `↑`/`↓` history plus `Tab /verb`, `o` focuses/reopens, `p` peeks read-only, `y` copies raw text, `?` opens help, `Enter`/`Esc`/`q` close back to the sheet). Opening a studio opening design document renders the `Design` Reader variant (`■ DESIGN v<N> · R<r> · <studio>`, Row 2 phase badge, round, and file path); while in `WaitingUser` or `SuggestSkip`, `r` replies to `producer` and `a` confirms design sign-off (`backlot design sign [--skip]`), while finalized `design/v<N>-final.md` (`Signed`) documents omit `[a] sign off`. A click outside the frame closes the sheet.
 
 **Lot Reader from the dock:** `Enter` or a click on any `✦` / `›` exchange line (and `m → Records`) opens the same adaptive Reader card beside the undimmed Lot Dock (`▌` tracks `←`/`→` or `[`/`]` stepping in place, and clicks on beside `✦`/`›` lines switch in place). Action strips adapt cleanly down to compact 80-column chips (`[t] tell`, `[o] focus/reopen`, `[p] peek`, `[v] sheet`, `[y] copy`, `? keys`), while `y` copies raw UTF-8 without answering prompts and `d` stays unbound. Pressing `t`/`i` or clicking `[t]` opens the inline composer backed by the studio's `›` draft and `↑`/`↓` history (`Esc` leaves compose keeping any draft; a second `Esc` closes the Reader with the draft still mirrored in the dock).
 

@@ -11,6 +11,7 @@
 
 mod band;
 mod chips;
+mod decision;
 mod draw;
 mod frames;
 mod handoff_ui;
@@ -22,6 +23,7 @@ mod plan;
 mod reader_chips;
 mod reader_chrome;
 mod reader_compose;
+mod reader_design;
 mod reader_md;
 mod reader_meta;
 mod reader_wrap;
@@ -45,13 +47,16 @@ pub(crate) use plan::expanded_extent;
 #[cfg(test)]
 pub(crate) use plan::expanded_height;
 pub(crate) use reader_compose::{InlineTellState, ReaderComposeOpts, reader_tell_target};
+pub(crate) use reader_design::version_from_file;
+#[cfg(test)]
+pub(crate) use reader_md::{DesignSection, parse_design_sections};
 #[cfg(test)]
 pub(crate) use reader_meta::age_label;
 pub(crate) use reader_meta::{
     ReaderKind, ReaderMeta, ReaderOAction, ReaderOrigin, find_studio_role, hollywood_state_word,
     role_state_word,
 };
-pub(crate) use reader_wrap::wrap_plain;
+pub(crate) use reader_wrap::{render_body_lines_with_sections, wrap_plain};
 pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
     hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,

@@ -64,7 +64,10 @@ pub(super) fn folded_roles(studio: &StudioSummary) -> Vec<&backlot_model::summar
 /// active/alert live role, group dividers, and `BlockBottom`.
 pub(super) fn folded_block_height(studio: &StudioSummary) -> usize {
     let roles = folded_roles(studio);
-    2 + usize::from(studio.needs_upgrade) + roles.len() + super::rows_fit::divider_count_for(&roles)
+    2 + usize::from(studio.needs_upgrade)
+        + super::draw_design::folded_line_count(studio)
+        + roles.len()
+        + super::rows_fit::divider_count_for(&roles)
 }
 
 /// 1-line compact studio categories in `Expanded` mode when a non-current

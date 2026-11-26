@@ -86,7 +86,7 @@ pub(crate) fn draw_row(
             if detail {
                 draw_detail(
                     buf,
-                    Rect::new(rect.x, rect.y + 1, rect.width, 1),
+                    Rect::new(rect.x, rect.y + 1, rect.width, rect.height - 1),
                     &waits[*i],
                     hollywood,
                     selected,
@@ -401,6 +401,41 @@ fn draw_detail(
                 .bg(bg)
                 .add_modifier(Modifier::BOLD),
         );
+        return;
+    }
+    if let Wait::Decision(item) = wait {
+        let lines = super::decision::detail_lines(item);
+        for (idx, line) in lines.into_iter().take(rect.height as usize).enumerate() {
+            let y = rect.y + idx as u16;
+            if idx > 0 {
+                if selected {
+                    put_text(
+                        buf,
+                        rect.x,
+                        y,
+                        1,
+                        "▌",
+                        Style::default().fg(palette.accent).bg(bg),
+                    );
+                }
+                put_text(
+                    buf,
+                    rect.x + MARGIN,
+                    y,
+                    1,
+                    "▎",
+                    Style::default().fg(colour).bg(bg),
+                );
+            }
+            put_text(
+                buf,
+                x,
+                y,
+                width,
+                &truncate_end(&line, width as usize),
+                Style::default().fg(palette.subtext0).bg(bg),
+            );
+        }
         return;
     }
     if let Some(text) = super::items::detail_text(wait) {
