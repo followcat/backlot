@@ -10,6 +10,17 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+
+## 0.4.19 — 2026-11-27
+
+### Changed
+
+- **Redesigned studio-mode layout, status vocabulary, pill bucketing, and opaque studio chrome.** Unified Cast and Lot role rows onto a single shared `InlineState` line (`RoleBadge`, aligned status word, age/detail, and CJK-safe truncation) while moving runner/model/effort metadata to the center studio header (`HeaderKind::Role`) and preserving role-group `├──┤` dividers. Deduplicated live studios from the left `machines` tree (retaining non-studio workspaces, `stage down`, `finished`, `Archived`, single `backlot <v> · ● ok` status, and bottom-left clickable `? keys`), compressed non-current ready/calm/finished/down studios to 1 borderless row and idle/standby roles in the current studio to `CalmSummary` while the sidebar is open, and removed `actors 0/4` and unfocused Lot footer hints (`─` hairline + structured 3-pair hints appear only when focused). Replaced the monolithic red lot pill with a bucketed pill (`✦ <S> · !<B> · ?<A> · <C>c · ✓<R> ready · alt+y` — counting `Wait::Upgrade` in the blocking `!B` bucket, red only when blocking waits exist, clickable buckets jumping directly to matching Call Sheet items, and `Alt+Y` landing on the first blocking wait or `Compose`), and unified all bundled RGB themes in `!plain` / `!source = "herdr"` mode onto opaque `elevation.surface` chrome (`docs/studio/panel.md`, `docs/studio/hollywood.md`, `docs/theme.md`, `docs/parity.md`).
+
+### Fixed
+
+- **Studio-role `backlot tell user` question guard, `--note`, and `--ask` CLI pass-through.** Running `backlot tell user` as a studio role (`producer`, `director`, `writer`, `actor-<task>-c<n>`) with `?` or `？` outside inline code spans, fenced code blocks, and URL query strings (`?key=`) now refuses with exit code 2 unless `--ask` or `--note` is given, adds `--note` for plain-info `tell user` messages (mutually exclusive with `--ask`), preserves `--ask` on CLI `tell user` calls so `message.queued` records `purpose = "ask"` and `RoleSummary.asks` surfaces the question, and updates `producer.md`, `director.md`, `writer.md`, `hollywood-cli.md`, and `docs/studio/` (`guide.md`, `ledger.md`, `panel.md`, `design.md`).
+
 ## 0.4.18 — 2026-11-27
 
 ### Fixed
@@ -22,7 +33,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-- **Opening design hard gating and lifecycle integration (`validate`, `steps`, `wanted`, `nudge`, `notices`).** When `design_gate = "required"`, `validate` now refuses `task.created`, `task.cast`, `plan.published`, and `dispatch` (`Refusal::DesignNotSigned`) until the current requirement version is signed off (`design.signed`), enforces `--refs` on `design.entry` (`supplement`) to name existing message or design entry `seq`s, and keeps `design_gate = "off"` behavior byte-identical; `next_steps` projects every `DesignPhase` and post-sign derivation/dispatch obligation; `wanted_roles` keeps `writer` live across active design rounds (`waiting_proposal` through `waiting_user`) and post-sign plan derivation; `nudge` skips user-owned design phases (`suggest_skip`, `waiting_user`) while timing role slots; and `notices` / `stale` drive the full `req.version` -> `proposal` -> `buildability` -> `summary` / `supplement` -> `design.signed` (`approved` / `skipped`) flow (`design_gate` remains `off` by default until role prompts land).
 - **Opening design event model, `DesignState`, `design_gate`, and `StudioSummary.design` (`backlot-model`).** Added `design.opened` (`DesignOpened`), `design.entry` (`DesignEntry` with `DesignSlot`, `EntrySource`, and up to 3 `DesignQuestion`s), and `design.signed` (`DesignSigned` with `SignMode`) as known ledger kinds, reduced into `DesignState` / `DesignPhase` (retaining signed versions in `design_history` on `req.version` changes); added `design_gate = "required" | "off"` on `studio.created`, `studio.cast`, and `cast.toml` (defaulting to `off` for existing and new studios until role prompts land); projected active or finalized design state into `StudioSummary.design` (with `waiting_user` for `?N` placement, capped fields, and omitted when inactive); and enforced role and phase validation rules for the new design events (`docs/studio/ledger.md`).
 - **Forward-compatible read-only unknown ledger events (`EventKind::Unknown`, write guard, stage pause, TUI banner).** Ledgers with valid JSON lines at `v <= LEDGER_VERSION` and an unknown `kind` now load cleanly into `EventKind::Unknown { raw_kind }` (preserving `seq`, `ts_ms`, `by`, counting toward `next_seq`, preserving raw lines byte-for-byte on rewrite or `studio migrate`, and ignoring unknown payloads in state reduction); `store::append_locked` refuses every write with `this ledger has records from a newer backlot (<kinds>); upgrade backlot`; `backlot stage` pauses read-only for that studio while continuing sibling studios and projecting `needs_upgrade: true` + `unknown_kinds` in `plugin.backlot.summary`; and the Lot, Call Sheet, and studio frames display `"upgrade backlot"` (`docs/studio/ledger.md`).
 

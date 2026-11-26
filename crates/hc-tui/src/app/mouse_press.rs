@@ -23,6 +23,7 @@ impl App {
         }
         if contains(hits.sidebar_toggle, point) {
             self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
+            self.panel.sidebar_collapsed = self.shell_state.sidebar_collapsed;
             self.sidebar_collapsed_manual = true;
             self.persist_chrome_preferences();
             return;
@@ -111,9 +112,11 @@ impl App {
             self.studio.others_expanded = !self.studio.others_expanded;
             return;
         }
-        // The sidebar's `menu` button opens `Ctrl+B ?` (S5 §2) —
-        // studio mode only; in `--plain` herdr's dead hit stays dead.
-        if !self.plain && contains(hits.global_launcher, point) {
+        // The sidebar's `menu` button (or bottom-left `? keys`) opens `Ctrl+B ?`
+        // (S5 §2) — studio mode only; in `--plain` herdr's dead hit stays dead.
+        if !self.plain
+            && (contains(hits.global_launcher, point) || contains(hits.sidebar_help, point))
+        {
             self.help = true;
             self.help_state = crate::chrome::help::HelpState::default();
             return;
@@ -146,9 +149,20 @@ impl App {
             return;
         }
         // The lot pill owns its reserved segment before the tab bar's
-        // own hits — it opens the Hollywood bar like `alt+y`.
+        // own hits — bucket clicks jump straight to that bucket; other
+        // clicks toggle the Call Sheet with smart landing.
         if contains(hits.lot_pill, point) {
-            self.hollywood_toggle();
+            if self.hollywood.mode == crate::hollywood::LayerMode::Expanded {
+                self.hollywood_toggle();
+            } else {
+                let action = hits
+                    .lot_pill_segments
+                    .iter()
+                    .find(|(rect, _)| contains(*rect, point))
+                    .map(|(_, action)| *action)
+                    .unwrap_or(crate::chrome::lot::PillAction::Default);
+                self.hollywood_enter_expanded_at(action);
+            }
             return;
         }
         // The studio header's name focuses the dock and sets `StudioFocus`

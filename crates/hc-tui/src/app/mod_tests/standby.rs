@@ -98,7 +98,15 @@ async fn standby_writer_disallows_peek_and_focus_offers_recast_and_ignores_count
         );
     }
 
-    // Selecting standby writer in dock: `p` and `Enter` show short unavailable reasons.
+    // With left sidebar open, standby writer is summarized inside CalmSummary.
+    let dock_open = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
+    assert!(dock_open.contains("Ⓦ standby"), "{dock_open}");
+
+    // When left sidebar collapses, Lot expands all roles so standby writer
+    // can be selected directly; `p` and `Enter` show short unavailable reasons.
+    app.shell_state.sidebar_collapsed = true;
+    app.panel.sidebar_collapsed = true;
+    draw_to(&mut app, 120, 40);
     app.panel.focused = true;
     app.panel.selected = Some(Target::Person(key_acme.clone(), "writer".into()));
     app.notice = None;

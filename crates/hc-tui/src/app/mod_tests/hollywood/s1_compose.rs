@@ -356,7 +356,7 @@ async fn compose_footer_hints_adapt_with_waits_and_width() {
     with_waits.area = (140, 24);
     alt_y(&mut with_waits);
     let wide = screen_lines(&draw_to(&mut with_waits, 140, 24)).join("\n");
-    assert!(wide.contains("⏎ send   ↑↓ history   tab waiting   esc rows   alt+y close"));
+    assert!(wide.contains("⏎ send  ↑↓ history  tab waiting  esc rows  alt+y close"));
     let mid = screen_lines(&draw_to(&mut with_waits, 52, 24)).join("\n");
     assert!(mid.contains("⏎ send  ↑↓ hist  tab waits  esc rows"));
     let tight = screen_lines(&draw_to(&mut with_waits, 30, 24)).join("\n");
@@ -366,7 +366,7 @@ async fn compose_footer_hints_adapt_with_waits_and_width() {
     no_waits.area = (140, 24);
     alt_y(&mut no_waits);
     let wide = screen_lines(&draw_to(&mut no_waits, 140, 24)).join("\n");
-    assert!(wide.contains("⏎ send   ↑↓ history   tab studios   esc rows   alt+y close"));
+    assert!(wide.contains("⏎ send  ↑↓ history  tab studios  esc rows  alt+y close"));
     let mid = screen_lines(&draw_to(&mut no_waits, 52, 24)).join("\n");
     assert!(mid.contains("⏎ send  ↑↓ hist  tab studios  esc rows"));
     let tight = screen_lines(&draw_to(&mut no_waits, 30, 24)).join("\n");

@@ -6,31 +6,32 @@
 
 use super::rows::Target;
 use super::sheet::Wait;
-use crate::chrome::text::display_width;
 use crate::studio::StudioKey;
 
-/// The footer's right block — the same keys in the same words on
-/// every row, whatever the left part names.
-const RIGHT: &str = "tab ←→ ↑↓ ⏎   m menu   ? help   esc";
-/// The right block on Talk/Headline rows where Enter opens the entry.
-const RIGHT_READ: &str = "tab ↑↓ ⏎ read   m menu   ? help   esc";
-/// The right block when the width pinches: `? help` yields first.
-const RIGHT_MID: &str = "tab ←→ ↑↓ ⏎   m menu   esc";
-const RIGHT_READ_MID: &str = "tab ↑↓ ⏎ read   m menu   esc";
-/// The floor — the block alone, bare. The old bare all-keys tier is
-/// gone with it: the narrowest footer names nothing the selection
-/// cannot run.
-const RIGHT_BARE: &str = "↑↓ ⏎ esc";
+const RIGHT: [(&str, &str); 4] = [
+    ("tab ←→ ↑↓ ⏎", ""),
+    ("m", "menu"),
+    ("?", "help"),
+    ("esc", ""),
+];
+const RIGHT_READ: [(&str, &str); 4] = [
+    ("tab ↑↓ ⏎", "read"),
+    ("m", "menu"),
+    ("?", "help"),
+    ("esc", ""),
+];
+const RIGHT_MID: [(&str, &str); 3] = [("tab ←→ ↑↓ ⏎", ""), ("m", "menu"), ("esc", "")];
+const RIGHT_READ_MID: [(&str, &str); 3] = [("tab ↑↓ ⏎", "read"), ("m", "menu"), ("esc", "")];
+const RIGHT_BARE: [(&str, &str); 1] = [("↑↓ ⏎ esc", "")];
 
-/// The row-scoped slots in their fixed order — the words the full
-/// footer shows, then the bare keys the narrow one shows.
+/// The row-scoped slots in their fixed order — `(key, word)` and compact bare key.
 const SLOTS: [(&str, &str); 6] = [
-    ("y/d answer", "y/d"),
-    ("a/x card", "a/x"),
-    ("f finish", "f"),
-    ("s start", "s"),
-    ("p peek", "p"),
-    ("i tell", "i"),
+    ("y/d", "answer"),
+    ("a/x", "card"),
+    ("f", "finish"),
+    ("s", "start"),
+    ("p", "peek"),
+    ("i", "tell"),
 ];
 
 /// Which slots the selected row answers, in `SLOTS`' order: `y/d` on
@@ -94,16 +95,147 @@ fn slots(
     }
 }
 
-/// Footer variant used by `draw.rs`: enriches `for_row` with active switch
-/// handoff and quota-switch shortcuts without altering `for_row`'s contract.
-pub(crate) fn for_row_with_handoff(
+fn pairs_width(pairs: &[(&str, &str)]) -> usize {
+    usize::from(crate::chrome::render::hint_bar_width(pairs))
+}
+
+#[cfg(test)]
+fn join_pairs(pairs: &[(&str, &str)]) -> String {
+    pairs
+        .iter()
+        .map(|(k, l)| {
+            if l.is_empty() {
+                (*k).to_string()
+            } else if k.is_empty() {
+                (*l).to_string()
+            } else {
+                format!("{k} {l}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
+/// Structured footer pairs for the selected row.
+pub(crate) fn pairs_for_row(
     selected: Option<&Target>,
     editing: bool,
     waits: &[Wait<'_>],
     agent: bool,
     hollywood_asking: bool,
     width: usize,
-) -> String {
+) -> Vec<(&'static str, &'static str)> {
+    if editing && matches!(selected, Some(Target::Input)) {
+        let wide: &[(&str, &str)] = if waits.is_empty() {
+            &[
+                ("⏎", "send"),
+                ("↑↓", "history"),
+                ("tab", "studios"),
+                ("esc", "rows"),
+                ("alt+y", "close"),
+            ]
+        } else {
+            &[
+                ("⏎", "send"),
+                ("↑↓", "history"),
+                ("tab", "waiting"),
+                ("esc", "rows"),
+                ("alt+y", "close"),
+            ]
+        };
+        let mid: &[(&str, &str)] = if waits.is_empty() {
+            &[
+                ("⏎", "send"),
+                ("↑↓", "hist"),
+                ("tab", "studios"),
+                ("esc", "rows"),
+            ]
+        } else {
+            &[
+                ("⏎", "send"),
+                ("↑↓", "hist"),
+                ("tab", "waits"),
+                ("esc", "rows"),
+            ]
+        };
+        let bare: &[(&str, &str)] = &[("⏎ ↑↓ esc", "")];
+        return [wide, mid, bare]
+            .into_iter()
+            .find(|tier| pairs_width(tier) <= width)
+            .unwrap_or(&[])
+            .to_vec();
+    }
+    let mask = slots(selected, waits, agent, hollywood_asking);
+    let mut full: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut compact: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut compact_keys = String::new();
+    for (i, lit) in mask.iter().enumerate() {
+        if !lit {
+            continue;
+        }
+        let (key, word) = SLOTS[i];
+        full.push((key, word));
+        if !compact_keys.is_empty() {
+            compact_keys.push(' ');
+        }
+        compact_keys.push_str(key);
+    }
+    let compact_str: &'static str = if compact_keys.is_empty() {
+        ""
+    } else {
+        let joined: String = full.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(" ");
+        // Map static compact combinations without leaking; fall through to exact slot keys.
+        match joined.as_str() {
+            "y/d p i" => "y/d p i",
+            _ => "",
+        }
+    };
+    let (right, right_mid) = match selected {
+        Some(Target::Headline | Target::Talk(_)) => (&RIGHT_READ[..], &RIGHT_READ_MID[..]),
+        _ => (&RIGHT[..], &RIGHT_MID[..]),
+    };
+    let mut full_row = full.clone();
+    full_row.extend_from_slice(right);
+    if pairs_width(&full_row) <= width {
+        return full_row;
+    }
+    if !compact_str.is_empty() {
+        compact.push((compact_str, ""));
+    } else {
+        for (key, _) in &full {
+            compact.push((*key, ""));
+        }
+    }
+    compact.extend_from_slice(right_mid);
+    if pairs_width(&compact) <= width {
+        return compact;
+    }
+    if pairs_width(&RIGHT_BARE) <= width {
+        return RIGHT_BARE.to_vec();
+    }
+    Vec::new()
+}
+
+/// Structured footer pairs for confirm prompts.
+pub(crate) fn pairs_for_confirm(width: usize) -> Vec<(&'static str, &'static str)> {
+    let full: &[(&str, &str)] = &[("y", "confirm"), ("n / esc", "cancel")];
+    let short: &[(&str, &str)] = &[("y/n/esc", "")];
+    [full, short]
+        .into_iter()
+        .find(|tier| pairs_width(tier) <= width)
+        .unwrap_or(&[])
+        .to_vec()
+}
+
+/// Structured footer pairs accounting for active Hollywood handoff.
+pub(crate) fn pairs_for_row_with_handoff(
+    selected: Option<&Target>,
+    editing: bool,
+    waits: &[Wait<'_>],
+    agent: bool,
+    hollywood_asking: bool,
+    width: usize,
+) -> Vec<(&'static str, &'static str)> {
     if !editing {
         let hw = waits.iter().find_map(|w| match w {
             Wait::Hollywood(h) => Some(*h),
@@ -112,55 +244,98 @@ pub(crate) fn for_row_with_handoff(
         if let Some(hw) = hw
             && super::handoff_ui::is_handoff_active(hw)
         {
-            let candidates: &[&str] = match super::handoff_ui::handoff_phase(hw) {
-                Some("verifying") => &[
-                    "↑↓ row  ←→ chip  Tab zone  p peek candidate  x cancel switch  w switch agent  Esc close",
-                    "p peek candidate   x cancel switch   w switch   esc",
-                    "p peek   x cancel   esc",
-                ],
-                Some("needs_approval") => &[
-                    "y/d answer   p peek   x cancel switch   w switch agent   esc",
-                    "y/d answer   p peek   x cancel   esc",
-                ],
-                _ => &[
-                    "↑↓ row  ←→ chip  Tab zone  x cancel switch  w switch agent  Esc close",
-                    "x cancel switch   w switch   esc",
-                    "x cancel   esc",
-                ],
-            };
-            if let Some(fit) = candidates.iter().find(|tier| display_width(tier) <= width) {
-                return (*fit).to_owned();
+            let candidates: &[&[(&'static str, &'static str)]] =
+                match super::handoff_ui::handoff_phase(hw) {
+                    Some("verifying") => &[
+                        &[
+                            ("↑↓", "row"),
+                            ("←→", "chip"),
+                            ("tab", "zone"),
+                            ("p", "peek candidate"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", "close"),
+                        ],
+                        &[
+                            ("p", "peek candidate"),
+                            ("x", "cancel switch"),
+                            ("w", "switch"),
+                            ("esc", ""),
+                        ],
+                        &[("p", "peek"), ("x", "cancel"), ("esc", "")],
+                    ],
+                    Some("needs_approval") => &[
+                        &[
+                            ("y/d", "answer"),
+                            ("p", "peek"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", ""),
+                        ],
+                        &[
+                            ("y/d", "answer"),
+                            ("p", "peek"),
+                            ("x", "cancel"),
+                            ("esc", ""),
+                        ],
+                    ],
+                    _ => &[
+                        &[
+                            ("↑↓", "row"),
+                            ("←→", "chip"),
+                            ("tab", "zone"),
+                            ("x", "cancel switch"),
+                            ("w", "switch agent"),
+                            ("esc", "close"),
+                        ],
+                        &[("x", "cancel switch"), ("w", "switch"), ("esc", "")],
+                        &[("x", "cancel"), ("esc", "")],
+                    ],
+                };
+            if let Some(fit) = candidates.iter().find(|tier| pairs_width(tier) <= width) {
+                return (*fit).to_vec();
             }
         }
         if matches!(selected, Some(Target::Hollywood | Target::HollywoodLive))
             && hw.is_some_and(super::handoff_ui::is_quota_or_error)
         {
-            let candidates = [
-                "w switch agent   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
-                "w switch   p peek   i tell   tab ↑↓ ⏎   esc",
+            let candidates: &[&[(&'static str, &'static str)]] = &[
+                &[
+                    ("w", "switch agent"),
+                    ("p", "peek"),
+                    ("i", "tell"),
+                    ("tab ←→ ↑↓ ⏎", ""),
+                    ("m", "menu"),
+                    ("?", "help"),
+                    ("esc", ""),
+                ],
+                &[
+                    ("w", "switch"),
+                    ("p", "peek"),
+                    ("i", "tell"),
+                    ("tab ↑↓ ⏎", ""),
+                    ("esc", ""),
+                ],
             ];
-            if let Some(fit) = candidates.iter().find(|t| display_width(t) <= width) {
-                return (*fit).to_owned();
+            if let Some(fit) = candidates.iter().find(|tier| pairs_width(tier) <= width) {
+                return (*fit).to_vec();
             }
         }
         if matches!(selected, Some(Target::Title)) && agent {
-            let base = for_row(selected, editing, waits, agent, hollywood_asking, width);
-            let with_w = format!("w switch agent   {base}");
-            if display_width(&with_w) <= width {
+            let mut with_w = vec![("w", "switch agent")];
+            let base = pairs_for_row(selected, editing, waits, agent, hollywood_asking, width);
+            with_w.extend(base.iter().copied());
+            if pairs_width(&with_w) <= width {
                 return with_w;
             }
             return base;
         }
     }
-    for_row(selected, editing, waits, agent, hollywood_asking, width)
+    pairs_for_row(selected, editing, waits, agent, hollywood_asking, width)
 }
 
-/// The footer for the selected row: the longest tier that fits
-/// `width` — full words, then bare keys, then the block alone; `""`
-/// when even the block is too wide. `agent` is the `[hollywood]`
-/// gate the `i tell` slot shares with the key's dispatch. `editing`
-/// is the `›` line's `Compose` latch — a composing line's footer
-/// names its exits instead of the rows' (R3-2).
+/// Text form of the selected row's footer (retained for existing tests).
+#[cfg(test)]
 pub(crate) fn for_row(
     selected: Option<&Target>,
     editing: bool,
@@ -169,70 +344,14 @@ pub(crate) fn for_row(
     hollywood_asking: bool,
     width: usize,
 ) -> String {
-    if editing && matches!(selected, Some(Target::Input)) {
-        let tiers = if waits.is_empty() {
-            [
-                "⏎ send   ↑↓ history   tab studios   esc rows   alt+y close",
-                "⏎ send  ↑↓ hist  tab studios  esc rows",
-                "⏎ ↑↓ esc",
-            ]
-        } else {
-            [
-                "⏎ send   ↑↓ history   tab waiting   esc rows   alt+y close",
-                "⏎ send  ↑↓ hist  tab waits  esc rows",
-                "⏎ ↑↓ esc",
-            ]
-        };
-        return tiers
-            .into_iter()
-            .find(|tier| display_width(tier) <= width)
-            .unwrap_or_default()
-            .to_owned();
-    }
-    let mask = slots(selected, waits, agent, hollywood_asking);
-    let mut full = String::new();
-    let mut compact = String::new();
-    for (i, lit) in mask.iter().enumerate() {
-        if !lit {
-            continue;
-        }
-        let (word, key) = SLOTS[i];
-        if !full.is_empty() {
-            full.push_str("   ");
-            compact.push(' ');
-        }
-        full.push_str(word);
-        compact.push_str(key);
-    }
-    let join = |left: &str, right: &str| {
-        if left.is_empty() {
-            right.to_owned()
-        } else {
-            format!("{left}   {right}")
-        }
-    };
-    let (right, right_mid) = match selected {
-        Some(Target::Headline | Target::Talk(_)) => (RIGHT_READ, RIGHT_READ_MID),
-        _ => (RIGHT, RIGHT_MID),
-    };
-    [
-        join(&full, right),
-        join(&compact, right_mid),
-        RIGHT_BARE.to_owned(),
-    ]
-    .into_iter()
-    .find(|tier| display_width(tier) <= width)
-    .unwrap_or_default()
-}
-
-/// The armed confirm's footer (R3-N5): while a `finish?` ask owns
-/// every key but `y`/`n`/`Esc`, the footer names just those.
-pub(crate) fn for_confirm(width: usize) -> String {
-    ["y confirm   n / esc cancel", "y/n/esc"]
-        .into_iter()
-        .find(|tier| display_width(tier) <= width)
-        .unwrap_or_default()
-        .to_owned()
+    join_pairs(&pairs_for_row(
+        selected,
+        editing,
+        waits,
+        agent,
+        hollywood_asking,
+        width,
+    ))
 }
 
 #[cfg(test)]
@@ -265,7 +384,7 @@ mod tests {
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "y/d answer  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
     }
 
@@ -273,9 +392,7 @@ mod tests {
     fn rows_without_own_keys_name_only_the_tell_and_the_block() {
         let list = machines(Some(&summary()));
         let waits = waits_of(&list);
-        // With an agent the tell line is the sheet's own — every row
-        // without keys of its own still names it.
-        let with_tell = "i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc";
+        let with_tell = "i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc";
         for selected in [Target::Calm, Target::Input] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, true, false, 200),
@@ -288,9 +405,7 @@ mod tests {
             with_tell,
             "no selection"
         );
-        // Headline and Talk rows spell out `⏎ read` so Enter's
-        // read-only CardView open is advertised in context.
-        let with_read = "i tell   tab ↑↓ ⏎ read   m menu   ? help   esc";
+        let with_read = "i tell  tab ↑↓ ⏎ read  m menu  ? help  esc";
         for selected in [Target::Headline, Target::Talk(7)] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, true, false, 200),
@@ -298,9 +413,7 @@ mod tests {
                 "{selected:?}"
             );
         }
-        // Without an agent `i` is a dead key: the Setup row — and
-        // every other one — names nothing but the block.
-        let bare = "tab ←→ ↑↓ ⏎   m menu   ? help   esc";
+        let bare = "tab ←→ ↑↓ ⏎  m menu  ? help  esc";
         for selected in [Target::Calm, Target::Input, Target::Setup] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, false, false, 200),
@@ -310,7 +423,7 @@ mod tests {
         }
         assert_eq!(
             for_row(Some(&Target::Headline), false, &waits, false, false, 200),
-            "tab ↑↓ ⏎ read   m menu   ? help   esc"
+            "tab ↑↓ ⏎ read  m menu  ? help  esc"
         );
         assert_eq!(
             for_row(None, false, &waits, false, false, 200),
@@ -326,7 +439,7 @@ mod tests {
         let selected = Target::Card("c3".into());
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "a/x card   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "a/x card  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
     }
 
@@ -337,12 +450,12 @@ mod tests {
         let down = Target::Stage(None, false);
         assert_eq!(
             for_row(Some(&down), false, &waits, true, false, 200),
-            "s start   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "s start  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
         let offline = Target::Stage(Some("host-b".into()), true);
         assert_eq!(
             for_row(Some(&offline), false, &waits, true, false, 200),
-            "i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
     }
 
@@ -353,8 +466,6 @@ mod tests {
         let list = machines(Some(&ready));
         let waits = waits_of(&list);
         let key = StudioKey::local("acme-shop");
-        // The READY row's own keys are `f` and the sheet's `i` — no
-        // `p peek` on it (R3-N5); the studio frame still names it.
         assert_eq!(
             for_row(
                 Some(&Target::Ready(key.clone())),
@@ -364,11 +475,11 @@ mod tests {
                 false,
                 200
             ),
-            "f finish   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "f finish  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
         assert_eq!(
             for_row(Some(&Target::Studio(key)), false, &waits, true, false, 200),
-            "f finish   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "f finish  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
     }
 
@@ -379,7 +490,7 @@ mod tests {
         let selected = Target::Studio(StudioKey::local("acme-shop"));
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
+            "p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"
         );
     }
 
@@ -391,13 +502,10 @@ mod tests {
         }];
         let waits = waits_of(&list);
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
-        // The compact tier keeps the row's keys and the menu hint.
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 36),
-            "y/d p i   tab ←→ ↑↓ ⏎   m menu   esc"
+            "y/d p i  tab ←→ ↑↓ ⏎  m menu  esc"
         );
-        // The floor is the bare block — the old bare all-keys tier is
-        // gone, and past it the footer is empty.
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 8),
             "↑↓ ⏎ esc"

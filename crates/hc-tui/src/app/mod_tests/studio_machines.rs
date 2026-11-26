@@ -170,7 +170,7 @@ async fn the_endpoint_sidebar_keeps_the_cast_under_the_machine_tree() {
     assert!(sidebar.contains("acme-shop · Local"), "{sidebar}");
     assert!(sidebar.contains("Ⓟ"), "{sidebar}");
     assert!(sidebar.contains("Ⓓ"), "{sidebar}");
-    assert!(sidebar.contains("alice task-1"), "{sidebar}");
+    assert!(sidebar.contains("Ⓐ task-1"), "{sidebar}");
     assert!(sidebar.contains("others 1"), "{sidebar}");
     assert!(!sidebar.contains("agents"), "{sidebar}");
     // The draggable section split is gone, as in the one-machine path.

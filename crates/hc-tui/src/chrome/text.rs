@@ -39,6 +39,7 @@ fn take_prefix_width(text: &str, max_width: usize) -> String {
 /// whitespace; a word wider than the line (CJK text with no spaces, a
 /// long name) is split by character width. Widths count with
 /// [`display_width`], so a wide CJK character never overflows.
+#[cfg(test)]
 pub(crate) fn wrap_text(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return Vec::new();

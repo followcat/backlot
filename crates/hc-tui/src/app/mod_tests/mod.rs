@@ -76,6 +76,7 @@ mod standby;
 mod studio;
 mod studio_cache;
 mod studio_follow;
+mod studio_layout_matrix;
 mod studio_machines;
 mod studio_mouse;
 mod studio_notify;

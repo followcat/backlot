@@ -343,11 +343,11 @@ async fn dock_compose_footer_hints_show_history() {
     key(&mut app, hc_vt::Key::Char('i'));
     let wide = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(
-        wide.contains("⏎ send · ↑↓ history · esc done"),
+        wide.contains("⏎ send  ↑↓ history  esc done"),
         "wide: {wide}"
     );
     let mid = screen_lines(&draw_to(&mut app, 28, 24)).join("\n");
-    assert!(mid.contains("⏎ ↑↓ · esc"), "mid: {mid}");
+    assert!(mid.contains("⏎ ↑↓  esc"), "mid: {mid}");
     let tight = screen_lines(&draw_to(&mut app, 9, 24)).join("\n");
     assert!(tight.contains("esc"), "tight: {tight}");
 }

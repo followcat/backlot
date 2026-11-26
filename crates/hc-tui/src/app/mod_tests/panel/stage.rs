@@ -91,13 +91,17 @@ async fn s_on_a_studio_row_starts_its_machines_stage() {
     key(&mut app, hc_vt::Key::Char('s'));
     assert_eq!(stage_start_pending(&app), Some(Some("host-b".into())));
 
-    // And `s` on the block's stage row is the same dispatch.
+    // And `s` on the expanded block's stage row is the same dispatch.
     let mut app = app_with_two_machines();
     let (_recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
     app.area = (160, 24);
     drop_terminal(&mut app, "host-b/t9");
     open_panel(&mut app);
+    app.panel.expanded_blocks.insert(StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    });
     app.panel.selected = Some(Target::Studio(StudioKey {
         machine: Some("host-b".into()),
         id: "beta-tools".into(),
@@ -116,6 +120,10 @@ async fn enter_on_the_stage_row_starts_it() {
     app.area = (160, 24);
     drop_terminal(&mut app, "host-b/t9");
     open_panel(&mut app);
+    app.panel.expanded_blocks.insert(StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    });
     app.panel.selected = Some(Target::Studio(StudioKey {
         machine: Some("host-b".into()),
         id: "beta-tools".into(),

@@ -13,8 +13,20 @@ pub(crate) fn workspace_entries_filtered(
     collapsed_groups: &HashSet<String>,
     hide_stage_space: bool,
 ) -> Vec<WorkspaceEntry> {
+    workspace_entries_for_sidebar(snapshot, collapsed_groups, hide_stage_space, None)
+}
+
+/// Workspace entries visible in the sidebar: filters `backlot` stage spaces
+/// when requested and excludes live studio IDs owned by Cast/Lot.
+pub(crate) fn workspace_entries_for_sidebar(
+    snapshot: &ClientShellSnapshot,
+    collapsed_groups: &HashSet<String>,
+    hide_stage_space: bool,
+    hidden_studios: Option<&HashSet<String>>,
+) -> Vec<WorkspaceEntry> {
     let visible = |workspace: &crate::chrome::snapshot::ClientShellWorkspace| {
         !(hide_stage_space && crate::chrome::snapshot::is_backlot_stage_space(workspace))
+            && !hidden_studios.is_some_and(|set| set.contains(&workspace.label))
     };
     let mut members = HashMap::<&str, Vec<usize>>::new();
     for (index, workspace) in snapshot.workspaces.iter().enumerate() {

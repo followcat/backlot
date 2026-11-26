@@ -9,6 +9,7 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use super::Panel;
 use super::data::StudioRef;
+use super::draw_compact::{calm_summary_parts, is_active_or_alert_role};
 use super::rows::*;
 use super::rows_fold::{BlockState, accepted_fold_ids, folded_block_height, selected_studio};
 use crate::studio::StudioKey;
@@ -97,17 +98,23 @@ pub(super) fn role_group(role: &str) -> RoleGroup {
     }
 }
 
-/// How many thin rules a block draws: one between each pair of
-/// adjacent non-empty role groups, so an empty group leaves no rule.
-pub(super) fn divider_count(studio: &StudioSummary) -> usize {
+/// How many thin rules a block draws across a specific role list.
+pub(super) fn divider_count_for(roles: &[&RoleSummary]) -> usize {
     let mut seen = [false; 4];
-    for role in live_roles(studio) {
+    for role in roles {
         seen[role_group(&role.role).index()] = true;
     }
     seen.iter()
         .filter(|present| **present)
         .count()
         .saturating_sub(1)
+}
+
+/// How many thin rules a block draws: one between each pair of
+/// adjacent non-empty role groups, so an empty group leaves no rule.
+#[allow(dead_code)]
+pub(super) fn divider_count(studio: &StudioSummary) -> usize {
+    divider_count_for(&live_roles(studio))
 }
 
 /// The studio's non-closed roles in display order: `producer`,
@@ -175,11 +182,9 @@ pub(super) fn fold_count(studio: &StudioSummary) -> usize {
     accepted_fold_ids(studio).len()
 }
 
-/// A person's line count: itself plus its cue/failed line and an
-/// open drawer — as tall as the drawer's own lines, one more when
-/// the stage's answer line rides along.
+/// A person's line count: itself plus an open `Space` drawer.
 pub(super) fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
-    let mut height = 1 + usize::from(super::rows::person_line_kind(role).is_some());
+    let mut height = 1;
     if panel
         .drawer
         .as_ref()
@@ -222,29 +227,66 @@ pub(super) fn closed_height(studio: StudioRef<'_>, panel: &Panel, closed_open: b
     height
 }
 
+/// Partition a `Full` studio's live roles into an optional 1-line calm/standby
+/// summary (when `!panel.sidebar_collapsed` on the `current` studio, since Left
+/// Cast already shows every role) and individual `Row::Person` roles.
+pub(super) fn live_person_plan<'a>(
+    studio: StudioRef<'a>,
+    panel: &Panel,
+    current: Option<&StudioKey>,
+) -> (Option<(usize, String)>, Vec<&'a RoleSummary>) {
+    let roles = live_roles(studio.studio);
+    if panel.sidebar_collapsed || current != Some(&studio.key()) {
+        return (None, roles);
+    }
+    let key = studio.key();
+    let mut calm = Vec::new();
+    let mut shown = Vec::new();
+    for role in roles {
+        let drawer_open = panel
+            .drawer
+            .as_ref()
+            .is_some_and(|d| *d == Target::Person(key.clone(), role.role.clone()));
+        if is_active_or_alert_role(role) || drawer_open {
+            shown.push(role);
+        } else {
+            calm.push(role);
+        }
+    }
+    (calm_summary_parts(&calm), shown)
+}
+
 /// An expanded block's height without talk rows: top + bottom
 /// borders, compose divider + `›` (or reopen line), owed/report/confirm/
-/// next/usage lines, live people, task section, and closed section.
+/// next/usage lines, calm summary + live people, role dividers, task section,
+/// and closed section.
 pub(super) fn block_height(
     studio: StudioRef<'_>,
     panel: &Panel,
+    current: Option<&StudioKey>,
     owed: bool,
     accepted_open: bool,
     closed_open: bool,
 ) -> usize {
     let has_input_divider = !(studio.studio.state == "finished" && !studio.studio.ready_to_finish);
+    let report_pending = !studio.studio.needs_upgrade && super::data::report_pending(studio.studio);
+    let finish_confirm =
+        !studio.studio.needs_upgrade && panel.finish_confirm.as_ref() == Some(&studio.key());
+    let next_step = !studio.studio.needs_upgrade && super::data::next_step(studio.studio).is_some();
     let mut height = 3
         + usize::from(has_input_divider)
         + usize::from(owed)
-        + usize::from(super::data::report_pending(studio.studio))
-        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()))
-        + usize::from(super::data::next_step(studio.studio).is_some())
+        + usize::from(report_pending)
+        + usize::from(finish_confirm)
+        + usize::from(next_step)
         + usize::from(studio.studio.usage.is_some())
         + studio.studio.outward_cards.len();
-    for role in live_roles(studio.studio) {
+    let (calm, shown) = live_person_plan(studio, panel, current);
+    height += usize::from(calm.is_some());
+    for role in &shown {
         height += person_height(studio, role, panel);
     }
-    height += divider_count(studio.studio);
+    height += divider_count_for(&shown);
     height += tasks_height(studio, panel, accepted_open);
     height += closed_height(studio, panel, closed_open);
     height
@@ -288,11 +330,15 @@ pub(super) fn talk_budgets(
                     BlockState::Full => block_height(
                         *studio,
                         panel,
+                        current,
                         ctx(*studio),
                         panel.accepted_open(&key),
                         panel.closed_open(&key),
                     ),
                     BlockState::Folded => folded_block_height(studio.studio),
+                    BlockState::Compact(_) => {
+                        1 + usize::from(panel.finish_confirm.as_ref() == Some(&key))
+                    }
                     BlockState::Stacked => 1,
                 }
             })
@@ -314,17 +360,11 @@ pub(super) fn talk_budgets(
 }
 
 /// The collapsed strip's role lines: live roles that are working or
-/// carry an attention — the strip is never blank while the studio
-/// has something to say (A4.3).
+/// demand attention (prompt/asks/needs/stuck/failed/lost/queued).
 pub(super) fn strip_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
     studio
         .roles
         .iter()
-        .filter(|r| {
-            r.state != "closed"
-                && (r.attention.is_some()
-                    || r.work == Some(backlot_model::summary::Work::Working)
-                    || r.work == Some(backlot_model::summary::Work::Blocked))
-        })
+        .filter(|r| r.state != "closed" && is_active_or_alert_role(r))
         .collect()
 }

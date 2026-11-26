@@ -317,6 +317,9 @@ pub(crate) fn render_sidebar(
         "«",
         Style::default().fg(palette.overlay0),
     );
+    if !config.plain {
+        super::render::render_sidebar_help(buffer, area, palette, hits);
+    }
 }
 
 #[path = "sidebar_rows.rs"]

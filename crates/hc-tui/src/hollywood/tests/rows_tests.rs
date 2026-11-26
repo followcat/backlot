@@ -644,6 +644,11 @@ fn a_studio_needing_upgrade_emits_a_single_line_wait_in_call_sheet() {
         })
         .collect();
     assert_eq!(upgrade_waits.len(), 1, "waits count = {}", waits.len());
+    assert_eq!(
+        crate::hollywood::WaitBucket::of(upgrade_waits[0]),
+        crate::hollywood::WaitBucket::Blocking,
+        "Wait::Upgrade must count in the Blocking (!N) pill bucket"
+    );
     assert!(
         !waits
             .iter()

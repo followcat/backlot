@@ -17,16 +17,22 @@
 /// A studio row's state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StudioKind {
-    /// Live, with no sidebar space — dim, but the studio exists.
+    /// Live, with no sidebar space — kept for enum parity; omitted in studio mode.
+    #[allow(dead_code)]
     Live,
     /// The machine's stage is down: `stage down`, Enter starts it.
     StageDown,
 }
 
-/// Every machine's extra rows, keyed like the sidebar's endpoints.
+/// Every machine's extra rows and active studio IDs hidden from the
+/// left `machines` tree (since Cast/Lot already show live studios).
 #[derive(Debug, Default)]
 pub(crate) struct Tree {
     pub(crate) rows: std::collections::BTreeMap<super::snapshot::ClientEndpointId, Vec<Row>>,
+    pub(crate) live_studios: std::collections::BTreeMap<
+        super::snapshot::ClientEndpointId,
+        std::collections::HashSet<String>,
+    >,
 }
 
 impl Tree {
@@ -127,17 +133,17 @@ pub(crate) fn rows(machine: &Machine<'_>) -> Vec<Row> {
         if studio.state == StudioState::Finished {
             continue;
         }
+        if machine.stage_running {
+            // Live active studios live in Cast + Lot; only `stage down`
+            // studios appear in the left `machines` tree.
+            continue;
+        }
         if machine.space_labels.contains(&studio.id) {
-            // The workspace row already lists it and focuses its person.
             continue;
         }
         out.push(Row::Studio {
             id: studio.id.to_owned(),
-            kind: if machine.stage_running {
-                StudioKind::Live
-            } else {
-                StudioKind::StageDown
-            },
+            kind: StudioKind::StageDown,
         });
     }
     let finished: Vec<&str> = machine
