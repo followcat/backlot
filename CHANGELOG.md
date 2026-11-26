@@ -10,6 +10,14 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **Redesigned studio-mode layout, status vocabulary, pill bucketing, and opaque studio chrome.** Unified Cast and Lot role rows onto a single shared `InlineState` line (`RoleBadge`, aligned status word, age/detail, and CJK-safe truncation) while moving runner/model/effort metadata to the center studio header (`HeaderKind::Role`) and preserving role-group `├──┤` dividers. Deduplicated live studios from the left `machines` tree (retaining non-studio workspaces, `stage down`, `finished`, `Archived`, single `backlot <v> · ● ok` status, and bottom-left clickable `? keys`), compressed non-current ready/calm/finished/down studios to 1 borderless row and idle/standby roles in the current studio to `CalmSummary` while the sidebar is open, and removed `actors 0/4` and unfocused Lot footer hints (`─` hairline + structured 3-pair hints appear only when focused). Replaced the monolithic red lot pill with a bucketed pill (`✦ <S> · !<B> · ?<A> · <C>c · ✓<R> ready · alt+y` — counting `Wait::Upgrade` in the blocking `!B` bucket, red only when blocking waits exist, clickable buckets jumping directly to matching Call Sheet items, and `Alt+Y` landing on the first blocking wait or `Compose`), and unified all bundled RGB themes in `!plain` / `!source = "herdr"` mode onto opaque `elevation.surface` chrome (`docs/studio/panel.md`, `docs/studio/hollywood.md`, `docs/theme.md`, `docs/parity.md`).
+
+### Fixed
+
+- **Studio-role `backlot tell user` question guard, `--note`, and `--ask` CLI pass-through.** Running `backlot tell user` as a studio role (`producer`, `director`, `writer`, `actor-<task>-c<n>`) with `?` or `？` outside inline code spans, fenced code blocks, and URL query strings (`?key=`) now refuses with exit code 2 unless `--ask` or `--note` is given, adds `--note` for plain-info `tell user` messages (mutually exclusive with `--ask`), preserves `--ask` on CLI `tell user` calls so `message.queued` records `purpose = "ask"` and `RoleSummary.asks` surfaces the question, and updates `producer.md`, `director.md`, `writer.md`, `hollywood-cli.md`, and `docs/studio/` (`guide.md`, `ledger.md`, `panel.md`, `design.md`).
+
 ## 0.4.18 — 2026-11-27
 
 ### Fixed

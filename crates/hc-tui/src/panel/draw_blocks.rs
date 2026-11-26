@@ -8,11 +8,11 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
-use super::rows::{Owed, PersonLine};
+use super::rows::Owed;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
-use crate::studio::glyphs::{self, Health, Person, PriorityMark};
+use crate::studio::glyphs::{self, Health, Person};
 
 /// The frame's colour: `accent` only while Lot owns focus and this
 /// studio is selected, `border_muted` for every other block.
@@ -65,9 +65,9 @@ pub(super) fn draw_top(
     );
     // The studio-wide actor cap beside the progress: `actors 2/4` once
     // the document carries one — older documents read 0 and show none.
-    if studio.studio.actors_cap > 0 {
+    if studio.studio.actors_live > 0 && studio.studio.actors_cap > 0 {
         progress.push_str(&format!(
-            " actors {}/{}",
+            " · {}/{}",
             studio.studio.actors_live, studio.studio.actors_cap
         ));
     }
@@ -268,23 +268,8 @@ pub(super) fn draw_usage(
     );
 }
 
-/// The state word's style: `USER` is a red badge, `dir` a peach tag
-/// on `surface0` (D9) — the rest are the mark's bare colour.
-pub(super) fn word_style(mark: Person, palette: &Palette) -> Style {
-    match mark {
-        Person::UserPrompt => Style::default()
-            .fg(glyphs::contrast_fg(palette))
-            .bg(palette.red)
-            .add_modifier(Modifier::BOLD),
-        Person::DirPrompt => Style::default().fg(palette.peach).bg(palette.surface0),
-        _ => mark.style(palette),
-    }
-}
-
-/// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
-/// — no model and no runner (the cast already shows them), so the name,
-/// task, flag and state word get the row's width. The mark, the state
-/// word and the priority flag all read the shared vocabulary.
+/// One person inside a block: strict single-line row shared with Cast —
+/// `│ <mark> <role_badge>[ <flag>]  <state>[ <age>][ · <detail…>] │`.
 pub(super) fn draw_person(
     buf: &mut Buffer,
     rect: Rect,
@@ -295,77 +280,17 @@ pub(super) fn draw_person(
     palette: &Palette,
 ) {
     draw_inner(buf, rect, frame);
-    let mark = Person::of(role);
-    let closed = matches!(role.state.as_str(), "closed" | "standby");
-    put_text(
+    crate::studio::role_row::render_role_row(
         buf,
+        rect,
         rect.x + 2,
-        rect.y,
-        1,
-        mark.glyph(spin),
-        mark.style(palette),
-    );
-    // `name · task ↑` left — the state word keeps the right edge, and
-    // the name may run up to it: no runner tag and no model spend cells.
-    let state = mark.role_word(role, now_ms);
-    let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
-    let state_width = display_width(&state) as u16 + u16::from(badge) * 2;
-    let flag = role.priority.and_then(PriorityMark::of);
-    let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
-    let mut label = glyphs::role_label(role);
-    if let Some(task) = &role.task
-        && !matches!(
-            glyphs::RoleBadge::of_role(&role.role),
-            Some(glyphs::RoleBadge::Actor)
-        )
-    {
-        label.push_str(" · ");
-        label.push_str(task);
-    }
-    let name_width = rect.width.saturating_sub(5 + state_width);
-    let name_text = truncate_end(&label, name_width.saturating_sub(flag_width) as usize);
-    let drawn_name_width = display_width(&name_text) as u16;
-    crate::chrome::render::put_role_badged_text(
-        buf,
         rect.x + 4,
-        rect.y,
-        name_width.saturating_sub(flag_width),
-        &name_text,
-        Style::default().fg(if closed {
-            palette.overlay0
-        } else {
-            palette.text
-        }),
+        rect.right().saturating_sub(1),
+        role,
+        spin,
+        now_ms,
+        None,
         palette,
-    );
-    if let Some(flag) = flag {
-        put_text(
-            buf,
-            rect.x + 4 + drawn_name_width + 1,
-            rect.y,
-            1,
-            flag.glyph(),
-            Style::default().fg(flag.color(palette)),
-        );
-    }
-    let (word, word_x) = if badge {
-        (
-            format!(" {state} "),
-            rect.x + rect.width.saturating_sub(1 + state_width),
-        )
-    } else {
-        (
-            state.clone(),
-            rect.x + rect.width.saturating_sub(1 + display_width(&state) as u16),
-        )
-    };
-    put_text(
-        buf,
-        word_x,
-        rect.y,
-        state_width,
-        &word,
-        word_style(mark, palette),
     );
 }
 
@@ -388,7 +313,17 @@ pub(super) fn draw_input(
     palette: &Palette,
 ) -> Option<crate::chrome::help::CursorState> {
     let elev = palette.elevation();
-    let field_bg = elev.raised_field;
+    let active_field = selected || composing;
+    let field_bg = if active_field {
+        elev.raised_field
+    } else {
+        elev.surface
+    };
+    let ph_fg = if active_field {
+        elev.muted_raised
+    } else {
+        elev.muted_surface
+    };
     draw_inner(buf, rect, frame);
     if rect.width > 2 {
         let inner = Rect::new(rect.x + 1, rect.y, rect.width.saturating_sub(2), 1);
@@ -415,7 +350,7 @@ pub(super) fn draw_input(
     } else if selected {
         Style::default().fg(palette.accent).bg(field_bg)
     } else {
-        Style::default().fg(elev.muted_raised).bg(field_bg)
+        Style::default().fg(ph_fg).bg(field_bg)
     };
     put_text(buf, rect.x + 2, rect.y, 1, "›", mark);
     let badge = cue
@@ -443,7 +378,7 @@ pub(super) fn draw_input(
                 width,
                 &truncate_end("tell producer · / actions", width as usize),
                 Style::default()
-                    .fg(elev.muted_raised)
+                    .fg(ph_fg)
                     .bg(field_bg)
                     .add_modifier(Modifier::ITALIC),
             );
@@ -457,7 +392,7 @@ pub(super) fn draw_input(
             width,
             &truncate_end("tell producer · / actions", width as usize),
             Style::default()
-                .fg(elev.muted_raised)
+                .fg(ph_fg)
                 .bg(field_bg)
                 .add_modifier(Modifier::ITALIC),
         );
@@ -470,11 +405,7 @@ pub(super) fn draw_input(
             width,
             &truncate_end(draft.as_str(), width as usize),
             Style::default()
-                .fg(if selected {
-                    palette.subtext0
-                } else {
-                    elev.muted_raised
-                })
+                .fg(if selected { palette.subtext0 } else { ph_fg })
                 .bg(field_bg),
         );
         None
@@ -557,86 +488,6 @@ pub(super) fn draw_talk(
             style,
         );
     }
-}
-
-/// A person's extra line at the name column: the one shown state's
-/// detail. A user-owned prompt keeps `[y/d/p]`, a director's prompt
-/// reads `! prompt · director reviewing`, and a needs-you attention,
-/// an unanswered question or a stuck episode reads its plain words.
-/// `Failed` shows the last turn's error.
-pub(super) fn draw_person_line(
-    buf: &mut Buffer,
-    rect: Rect,
-    role: &RoleSummary,
-    kind: &PersonLine,
-    now_ms: u64,
-    frame: Style,
-    palette: &Palette,
-) {
-    draw_inner(buf, rect, frame);
-    let (text, style) = match kind {
-        PersonLine::Cue => {
-            let mark = Person::of(role);
-            match mark {
-                Person::DirPrompt => (
-                    "! prompt · director reviewing".to_string(),
-                    Style::default().fg(palette.overlay0),
-                ),
-                // A runner that cannot answer its own prompt sends
-                // nothing for `y`/`d`, so the cue offers Enter instead.
-                Person::UserPrompt if !role.can_answer_prompt => {
-                    let detail = role
-                        .attention_detail
-                        .as_deref()
-                        .or(role.attention.as_deref())
-                        .unwrap_or_default();
-                    (
-                        format!("! {detail} · answer in its terminal (Enter)"),
-                        Person::UserPrompt.style(palette),
-                    )
-                }
-                Person::UserPrompt => {
-                    let detail = role
-                        .attention_detail
-                        .as_deref()
-                        .or(role.attention.as_deref())
-                        .unwrap_or_default();
-                    (
-                        format!("! {detail} [y/d/p]"),
-                        Person::UserPrompt.style(palette),
-                    )
-                }
-                _ => (Person::state_text(role), mark.style(palette)),
-            }
-        }
-        PersonLine::Failed => (
-            role.failed
-                .as_deref()
-                .map(|f| format!("! last turn failed: {f}"))
-                .unwrap_or_default(),
-            Person::Failed.style(palette),
-        ),
-        PersonLine::Working => (
-            super::working_line::fit_working_line(
-                role,
-                now_ms,
-                rect.width.saturating_sub(5) as usize,
-            ),
-            Style::default().fg(palette.subtext0),
-        ),
-        PersonLine::Standby => (
-            crate::studio::standby_hint(&role.role).to_string(),
-            Style::default().fg(palette.overlay0),
-        ),
-    };
-    put_text(
-        buf,
-        rect.x + 4,
-        rect.y,
-        rect.width.saturating_sub(5),
-        &truncate_end(&text, rect.width.saturating_sub(5) as usize),
-        style,
-    );
 }
 
 /// One open outward push/PR card inside an expanded block:

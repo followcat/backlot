@@ -143,8 +143,7 @@ impl Person {
     pub(crate) fn glyph(self, spin: usize) -> &'static str {
         match self {
             Person::Working => SPINNER[spin % SPINNER.len()],
-            Person::Idle => "○",
-            Person::Ready => "◦",
+            Person::Idle | Person::Ready => "○",
             Person::Slot => "◌",
             Person::Standby => " ",
             Person::UserPrompt | Person::DirPrompt => "×",
@@ -188,11 +187,12 @@ impl Person {
         }
     }
 
-    /// The state word for a role — the plain [`Person::word`], except
-    /// a live role that has sat at its prompt past `IDLE_SHOWN_MS`
-    /// reads `idle <n>m` instead of `waiting`.
+    /// The state word for a role — unified [`Person::word`], except
+    /// a live idle role that has sat at its prompt past `IDLE_SHOWN_MS`
+    /// reads `idle <n>m`.
+    #[allow(dead_code)]
     pub(crate) fn role_word(self, role: &RoleSummary, now_ms: u64) -> String {
-        if self == Person::Idle
+        if matches!(self, Person::Idle | Person::Ready)
             && let Some(since) = role.idle_since_ms
             && now_ms.saturating_sub(since) >= backlot_model::summary::IDLE_SHOWN_MS
         {
@@ -201,12 +201,12 @@ impl Person {
         self.word().to_string()
     }
 
-    /// The short state word shown at a row's right edge.
+    /// The short state word shared by Cast and Lot rows.
     pub(crate) fn word(self) -> &'static str {
         match self {
             Person::Working => "working",
-            Person::Idle | Person::Slot => "waiting",
-            Person::Ready => "ready",
+            Person::Idle | Person::Ready => "idle",
+            Person::Slot => "queued",
             Person::UserPrompt => "USER",
             Person::DirPrompt => "dir",
             Person::NeedsYou => "needs you",
@@ -218,125 +218,14 @@ impl Person {
             Person::Standby => "standby",
         }
     }
-
-    /// The one state the person's row reads, in plain words — the
-    /// same priority [`Person::of`] uses: `needs you · <what>`,
-    /// `asks you · <question>`, `stuck · <reason>`, `working · <doing>`,
-    /// `waiting`, `ready`, then the terminal states.
-    pub(crate) fn state_text(role: &RoleSummary) -> String {
-        let detail = || {
-            role.attention_detail
-                .as_deref()
-                .or(role.attention.as_deref())
-                .unwrap_or("a prompt")
-        };
-        match Person::of(role) {
-            Person::UserPrompt | Person::DirPrompt | Person::NeedsYou => {
-                format!("needs you · {}", detail())
-            }
-            Person::Asks => role
-                .asks
-                .as_deref()
-                .map(|q| format!("asks you · {q}"))
-                .unwrap_or_else(|| "asks you".into()),
-            Person::Stuck => format!("stuck · {}", detail()),
-            Person::Working => match role
-                .doing
-                .as_deref()
-                .filter(|d| *d != "idle")
-                .or_else(|| role.running.as_ref().map(|r| r.cmd.as_str()))
-            {
-                Some(doing) => format!("working · {doing}"),
-                None => "working".into(),
-            },
-            Person::Idle => match role.doing.as_deref().filter(|d| *d != "idle") {
-                Some(doing) => format!("waiting · {doing}"),
-                None => "waiting".into(),
-            },
-            Person::Slot => role
-                .doing
-                .clone()
-                .unwrap_or_else(|| "waiting for a slot".into()),
-            Person::Ready => "ready".into(),
-            other => other.word().into(),
-        }
-    }
 }
 
-/// A role's one-cell circled badge. The glyph is the same everywhere
-/// the TUI labels a role; the colour is the role's fixed theme token.
-/// The characters are East-Asian-ambiguous: a terminal that draws
-/// ambiguous characters wide will shift the cells after them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RoleBadge {
-    Producer,
-    Director,
-    Writer,
-    Actor,
-}
+pub(crate) use super::role_row::{RoleBadge, role_label};
 
-impl RoleBadge {
-    /// The ledger role key's badge — `producer`, `director`, `writer`
-    /// and anything under `actor`.
-    pub(crate) fn of_role(role: &str) -> Option<RoleBadge> {
-        match role {
-            "producer" => Some(RoleBadge::Producer),
-            "director" => Some(RoleBadge::Director),
-            "writer" => Some(RoleBadge::Writer),
-            _ if role.starts_with("actor") => Some(RoleBadge::Actor),
-            _ => None,
-        }
-    }
-
-    /// The badge a glyph stands for — the drawing helper reads a label
-    /// back to the role it colours.
-    pub(crate) fn of_glyph(glyph: char) -> Option<RoleBadge> {
-        match glyph {
-            'Ⓟ' => Some(RoleBadge::Producer),
-            'Ⓓ' => Some(RoleBadge::Director),
-            'Ⓦ' => Some(RoleBadge::Writer),
-            'Ⓐ' => Some(RoleBadge::Actor),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn glyph(self) -> &'static str {
-        match self {
-            RoleBadge::Producer => "Ⓟ",
-            RoleBadge::Director => "Ⓓ",
-            RoleBadge::Writer => "Ⓦ",
-            RoleBadge::Actor => "Ⓐ",
-        }
-    }
-
-    /// The role's fixed theme token: producer `mauve`, director `blue`,
-    /// writer `teal`, actor `peach`.
-    pub(crate) fn color(self, palette: &Palette) -> Color {
-        match self {
-            RoleBadge::Producer => palette.mauve,
-            RoleBadge::Director => palette.blue,
-            RoleBadge::Writer => palette.teal,
-            RoleBadge::Actor => palette.peach,
-        }
-    }
-}
-
-/// A role's compact label: the badge for a fixed role, `Ⓐ <task>` for
-/// an actor, and the role's own name when it is neither. Plain-text
-/// CLI output never uses this.
-pub(crate) fn role_label(role: &RoleSummary) -> String {
-    let Some(badge) = RoleBadge::of_role(&role.role) else {
-        return role.name.clone();
-    };
-    match (badge, role.task.as_deref()) {
-        (RoleBadge::Actor, Some(task)) => format!("{} {task}", badge.glyph()),
-        _ => badge.glyph().to_string(),
-    }
-}
-
-/// The short model form the cast and the lot share: drop a
+/// The short model form for top headers and drawers: drop a
 /// `<provider>/` prefix and a leading `claude-`, cut to at most 10
 /// cells with `…`.
+#[allow(dead_code)]
 pub(crate) fn short_model(model: &str) -> String {
     let tail = model.rsplit('/').next().unwrap_or(model);
     crate::chrome::text::truncate_end(tail.strip_prefix("claude-").unwrap_or(tail), 10)

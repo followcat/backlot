@@ -120,7 +120,7 @@ async fn a_document_with_studios_latches_studio_mode_and_the_cast() {
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
     assert!(text.contains("1/3"), "{text}");
-    assert!(text.contains("alice task-1"), "{text}");
+    assert!(text.contains("Ⓐ task-1"), "{text}");
     // The panel carries bordered studio blocks.
     app.panel.mode = PanelMode::Expanded;
     let backend = draw_to(&mut app, 120, 24);

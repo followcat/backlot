@@ -78,7 +78,6 @@ fn every_state_has_its_own_mark_and_color() {
     let marks = [
         Person::Working,
         Person::Idle,
-        Person::Ready,
         Person::Slot,
         Person::UserPrompt,
         Person::DirPrompt,
@@ -120,7 +119,22 @@ fn the_working_mark_changes_between_frames() {
 #[test]
 fn expanded_block_draws_frame_people_and_state_words() {
     let summary = summary();
-    let panel = panel(PanelMode::Expanded);
+    // With open sidebar on the current studio, CalmSummary collapses calm
+    // director+writer, leaving producer | actors (1) + InputDivider (1) = 2 rules.
+    let open_panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 26, 30);
+    let (buf, _) = draw(area, Some(&summary), &open_panel, Some("acme-shop"));
+    let open_dividers = (area.y..area.y + area.height)
+        .filter(|&y| buf[(area.x + 1, y)].symbol() == "├")
+        .count();
+    assert_eq!(
+        open_dividers, 2,
+        "open sidebar collapses calm director/writer"
+    );
+
+    // Collapsed left sidebar expands every live group in the Lot.
+    let mut panel = panel(PanelMode::Expanded);
+    panel.sidebar_collapsed = true;
     for width in [26u16, 22, 40] {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
@@ -131,7 +145,8 @@ fn expanded_block_draws_frame_people_and_state_words() {
         // The id truncates with `…` at w22 — the spec's ellipsis
         // rule, not a clip.
         assert!(text.contains("acme"), "w{width}: {text}");
-        assert!(text.contains("working"), "w{width}: {text}");
+        let work_word = if width < 24 { "work" } else { "working" };
+        assert!(text.contains(work_word), "w{width}: {text}");
         assert!(text.contains("Ⓐ task-1"), "w{width}: {text}");
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
         // Three role-group rules separate producer / director / writer /
@@ -228,7 +243,7 @@ fn a_person_row_shows_no_runner_and_no_model() {
     value["studios"][0]["roles"][3]["model"] = serde_json::json!("unmistakable-model");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 44, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -240,10 +255,10 @@ fn a_person_row_shows_no_runner_and_no_model() {
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
     assert!(line.contains("Ⓐ task-1"), "{line}");
-    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(line.contains("working · writes code"), "{line}");
+    // Neither runner nor model leaks onto regular lot rows.
     assert!(!line.contains("agent-a"), "{line}");
     assert!(!line.contains("unmistakable-model"), "{line}");
-    assert!(!line.contains("writes code"), "{line}");
 }
 
 /// The space the runner/model badge used to take now belongs to the
@@ -268,9 +283,10 @@ fn a_long_name_uses_the_cells_the_badge_used_to_take() {
     assert!(line.contains("Ⓐ t1234567890123456789"), "{line}");
 }
 
-/// L4: a narrow row keeps the state word at the right edge.
+/// Narrow rows keep the state word visible, switching `working` to
+/// `work` below 24 cols so state never drops off the line.
 #[test]
-fn a_narrow_row_keeps_the_state() {
+fn a_narrow_row_keeps_the_state_and_drops_runner() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 22, 30);
@@ -284,7 +300,8 @@ fn a_narrow_row_keeps_the_state() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(line.contains("work"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
 }
 
 /// Every role label is its one-cell badge, coloured by the role's
@@ -378,9 +395,9 @@ fn role_groups_are_split_by_thin_rules() {
     assert_eq!(rules, 1);
 }
 
-/// A long task keeps every cell it needs and never shoves the state off.
+/// A long task keeps the cells available and never pushes state off.
 #[test]
-fn a_long_task_keeps_its_cells() {
+fn a_long_task_keeps_its_cells_and_omits_runner() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
     let summary: Summary = serde_json::from_value(value).unwrap();
@@ -398,7 +415,7 @@ fn a_long_task_keeps_its_cells() {
         .collect::<String>();
     assert!(line.contains("Ⓐ task-1234567890"), "{line}");
     assert!(!line.contains("agent-a"), "{line}");
-    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(line.contains("working"), "{line}");
 }
 
 /// S2: a newer install puts one dim line at the foot of the lot.
@@ -419,12 +436,12 @@ fn a_newer_install_draws_the_restart_line_at_the_foot() {
 }
 
 #[test]
-fn an_attention_adds_a_bang_line_under_the_person() {
+fn an_attention_renders_inline_on_the_person_row() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 48, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -433,18 +450,18 @@ fn an_attention_adds_a_bang_line_under_the_person() {
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
     let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
     assert!(line.contains("needs you · needs permission"), "{line}");
 }
 
 #[test]
-fn a_failed_role_draws_its_failed_line_when_no_attention() {
+fn a_failed_role_draws_failed_inline_when_no_attention() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["failed"] = serde_json::json!("rate_limit");
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
+    let area = Rect::new(0, 0, 48, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
@@ -453,9 +470,9 @@ fn a_failed_role_draws_its_failed_line_when_no_attention() {
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
     let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .map(|x| buf[(x, alice.y)].symbol())
         .collect::<String>();
-    assert!(line.contains("! last turn failed: rate_limit"), "{line}");
+    assert!(line.contains("failed · rate_limit"), "{line}");
 }
 
 #[test]
@@ -497,8 +514,6 @@ fn short_height_stacks_other_blocks_to_single_lines() {
 
 #[test]
 fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
-    // Two studios + a 2-entry cast (`cast_entries = 2` in `draw`)
-    // light both nav hints (wide-01).
     let mut value = summary_json();
     let mut second = value["studios"][0].clone();
     second["id"] = serde_json::json!("second-studio");
@@ -506,30 +521,31 @@ fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
     let two_studios: Summary = serde_json::from_value(value).unwrap();
     let unfocused = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 32, 20);
+    // Unfocused Lot keeps its bottom footer blank rather than repeating alt+PgUp/PgDn shortcuts.
     let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(last.contains("alt"), "{last}");
-    assert!(last.contains("studio"), "{last}");
-    assert!(last.contains("role"), "{last}");
-    // One studio alone drops the `studio` hint — the key has
-    // nowhere to go.
-    let one = summary();
-    let (buf, _) = draw(area, Some(&one), &unfocused, None);
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(!last.contains("studio"), "{last}");
-    assert!(last.contains("role"), "{last}");
-    // Focused panel shows its own keys.
+    assert!(
+        last.trim_end() == "│",
+        "unfocused footer stays blank: {last}"
+    );
+    // Focused panel shows the border-muted hairline and up to 3 verbful hints.
     let mut focused = panel(PanelMode::Expanded);
     focused.focused = true;
     let (buf, _) = draw(area, Some(&two_studios), &focused, None);
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(last.contains('m'), "{last}");
-    assert!(last.contains('?'), "{last}");
-    // Under 8 rows the line is dropped.
+    let rows = lines(&buf, area);
+    let sep = &rows[area.height as usize - 2];
+    let last = &rows[area.height as usize - 1];
+    assert!(
+        sep.contains("───"),
+        "missing focused footer separator: {sep}"
+    );
+    assert!(last.contains("↑↓ move"), "{last}");
+    assert!(last.contains("m menu"), "{last}");
+    assert!(last.contains("esc leave"), "{last}");
+    // Under 8 rows the focused footer (separator + hints) is dropped.
     let area = Rect::new(0, 0, 30, 7);
-    let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
+    let (buf, _) = draw(area, Some(&two_studios), &focused, None);
     let text = lines(&buf, area).join("\n");
-    assert!(!text.contains("studio  ←"), "{text}");
     assert!(!text.contains("m menu"), "{text}");
 }
 
@@ -553,17 +569,15 @@ fn an_expanded_block_draws_its_input_line() {
 }
 
 #[test]
-fn collapsed_strip_draws_health_id_machine_and_attention() {
+fn collapsed_strip_draws_health_id_and_attention_without_single_machine_suffix() {
     let summary = summary();
     let panel = panel(PanelMode::Collapsed);
     let area = Rect::new(0, 0, 16, 12);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("lot"), "{text}");
-    // `● acme-shop·loc` — health, the id and the machine's three
-    // chars; no tasks and no waiting still say something (A4.3).
-    assert!(text.contains("acme-shop·loc"), "{text}");
-    assert!(text.contains('●'), "{text}");
+    assert!(text.contains("● acme-shop"), "{text}");
+    assert!(!text.contains("·loc"), "single-machine omits ·loc: {text}");
     assert!(
         hits.rows
             .iter()
@@ -576,20 +590,33 @@ fn collapsed_strip_draws_health_id_machine_and_attention() {
         .cloned()
         .unwrap();
     assert!(!strip.contains('!'), "{strip}");
-    // With attention `!n` joins the tail.
+    // Single-machine omits ·loc so `acme-shop  !1` fits cleanly at width 16;
+    // narrower strips keep `!1` and truncate `id` with `…`.
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     value["studios"][0]["waiting"] = serde_json::json!(1);
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let (buf, _) = draw(area, Some(&summary), &panel, None);
-    // `!1` takes tail room, so the id truncates to `acme-…·loc`.
     let strip = lines(&buf, area)
         .iter()
-        .find(|l| l.contains("·loc"))
+        .find(|l| l.contains("acme"))
         .cloned()
         .unwrap();
     assert!(strip.contains("!1"), "{strip}");
-    assert!(strip.contains('…'), "{strip}");
+    assert!(
+        !strip.contains("·loc"),
+        "single-machine omits ·loc: {strip}"
+    );
+
+    let narrow = Rect::new(0, 0, 13, 12);
+    let (nbuf, _) = draw(narrow, Some(&summary), &panel, None);
+    let nstrip = lines(&nbuf, narrow)
+        .iter()
+        .find(|l| l.contains("acme"))
+        .cloned()
+        .unwrap();
+    assert!(nstrip.contains("!1"), "{nstrip}");
+    assert!(nstrip.contains('…'), "{nstrip}");
 }
 
 #[test]
@@ -847,7 +874,22 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let area = Rect::new(0, 0, 16, 12);
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("◦2 ✓1"), "calm role counts render: {text}");
+    assert!(
+        text.contains("● acme-shop 1/5"),
+        "1-line calm strip: {text}"
+    );
+    assert!(
+        !text.contains("○2 ✓1"),
+        "calm strip is strictly 1 line: {text}"
+    );
+
+    // Ready-to-finish renders `✓ acme-shop 1/5` on 1 line as well.
+    let mut ready_val = value.clone();
+    ready_val["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    let ready_summary: Summary = serde_json::from_value(ready_val).unwrap();
+    let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
+    let ready_text = lines(&buf, area).join("\n");
+    assert!(ready_text.contains("✓ acme-shop 1/5"), "{ready_text}");
 
     // Stage down renders a concise stage cue instead of blank space.
     let mut down_buf = Buffer::empty(area);
@@ -875,13 +917,14 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let down_text = lines(&down_buf, area).join("\n");
     assert!(down_text.contains("◌ stage down"), "{down_text}");
 
-    // Ready to finish renders `✓ ready`.
+    // Ready to finish renders compact `✓ acme-shop 1/5` on 1 line as well.
     let mut ready_val = value;
     ready_val["studios"][0]["ready_to_finish"] = serde_json::json!(true);
     let ready_summary: Summary = serde_json::from_value(ready_val).unwrap();
     let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
     let ready_text = lines(&buf, area).join("\n");
-    assert!(ready_text.contains("✓ ready"), "{ready_text}");
+    assert!(ready_text.contains("✓ acme-shop 1/5"), "{ready_text}");
+    assert!(!ready_text.contains("✓ ready"), "{ready_text}");
 }
 
 #[test]
@@ -994,10 +1037,17 @@ fn the_mark_paints_only_where_a_studio_workspace_points() {
 /// studio cycles ≥2 cast entries — a solo cast drops the hint.
 #[test]
 fn a_solo_cast_drops_the_role_hint() {
+    assert_eq!(
+        keys().footer_tiers(false, true),
+        vec!["↑↓ role".to_string()]
+    );
+    assert!(keys().footer_tiers(false, false).is_empty());
+
+    // Unfocused Lot never draws shortcut hints in its footer regardless of cast size.
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
-    for (cast_entries, want) in [(2usize, true), (0, false)] {
+    for cast_entries in [2usize, 0] {
         let mut buf = Buffer::empty(area);
         render(
             &mut buf,
@@ -1021,14 +1071,14 @@ fn a_solo_cast_drops_the_role_hint() {
             1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("↑↓ role"), want, "{cast_entries}: {last}");
+        assert!(!last.contains("↑↓ role"), "{cast_entries}: {last}");
     }
 }
 
-/// wide-01: the unfocused footer's `alt PgUp/PgDn studio` names a navigation
-/// that exists — a lone studio drops the half, two studios keep it.
+/// Unfocused Lot keeps its bottom footer row blank (`elev.surface`),
+/// eliminating footer clutter alongside the main pane.
 #[test]
-fn a_lone_studio_drops_the_studio_hint() {
+fn unfocused_lot_leaves_bottom_footer_blank() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 32, 20);
@@ -1041,7 +1091,9 @@ fn a_lone_studio_drops_the_studio_hint() {
             },
         ]
     };
-    for (list, want) in [(machines(Some(&summary)), false), (two(), true)] {
+    let pal = palette();
+    let elev = pal.elevation();
+    for list in [machines(Some(&summary)), two()] {
         let mut buf = Buffer::empty(area);
         render(
             &mut buf,
@@ -1053,7 +1105,7 @@ fn a_lone_studio_drops_the_studio_hint() {
             panel.mode,
             None,
             None,
-            0,
+            2,
             None,
             &keys(),
             None,
@@ -1061,36 +1113,19 @@ fn a_lone_studio_drops_the_studio_hint() {
             false,
             true,
             &Default::default(),
-            &palette(),
+            &pal,
             1,
         );
+        let fy = area.y + area.height - 1;
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("alt PgUp/PgDn studio"), want, "{last}");
+        assert!(
+            last.trim_end() == "│",
+            "expected blank bottom row: {last:?}"
+        );
+        for x in (area.x + 1)..area.right() {
+            assert_eq!(buf[(x, fy)].bg, elev.surface, "x={x}");
+        }
     }
-    let mut buf = Buffer::empty(area);
-    render(
-        &mut buf,
-        area,
-        &two(),
-        |_| true,
-        |_| true,
-        &panel,
-        panel.mode,
-        None,
-        None,
-        2,
-        None,
-        &keys(),
-        None,
-        false,
-        false,
-        true,
-        &Default::default(),
-        &palette(),
-        1,
-    );
-    let last = &lines(&buf, area)[area.height as usize - 1];
-    assert_eq!(last, "│ alt PgUp/PgDn studio  ↑↓ role");
 }
 
 #[test]

@@ -3,12 +3,7 @@
 backlot has a look of its own, so you can tell it from hc-tui and Herdr at a glance: the built-in `backlot` theme,
 marquee gold on midnight blue with cream text. It is the default.
 
-The backlot theme is opaque: its sidebar, top studio header, Lot dock, and Call Sheet share the same tonal
-surface with a one-column muted rule on the inner edges (unless `[theme.custom] sidebar_bg` overrides the sidebar),
-and its overlays — popups, the wizard, notice and release cards, the Call Sheet — fill their
-default-background cells with the theme surface or panel colour. A translucent terminal therefore never shows the window behind
-the UI. With `[theme] source = "herdr"` (or any built-in Herdr theme) the reference look is unchanged, translucency
-included.
+Every bundled RGB theme in studio mode (`!plain` and without `[theme] source = "herdr"`) is opaque across all four chrome frames: its left sidebar, top studio header, Lot dock, and Call Sheet share the same `elevation.surface` separated by one-column `border_muted` rules (unless `[theme.custom] sidebar_bg` overrides the sidebar, or the 16-color `terminal` theme falls back to terminal default), while the center terminal pane keeps `Color::Reset` and modal overlays fill default-background cells with `elevation.overlay`. A translucent terminal therefore never shows through the studio chrome, whereas `backlot --plain` and `[theme] source = "herdr"` keep Herdr's translucent sidebar (`Color::Reset`) and `panel_bg` top bar unchanged.
 
 The theme is read from backlot's own config, `~/.config/backlot/config.toml` (`$XDG_CONFIG_HOME/backlot/config.toml`
 when that is set), not from your Herdr config. With no `[theme]` table there, or no file, you get `backlot`.

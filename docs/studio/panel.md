@@ -137,24 +137,27 @@ honest about focus (hidden when unfocused). Every border cell of the **selected 
 from `rows_fold::selected_studio`) draws in `palette.accent` whether or not the lot owns the keys;
 every other studio keeps `surface1`.
 
-- **Selected-studio folding:** in a lot with two or more studios, only the selected studio draws
-  in full (the studio holding the `▌` cursor, else the `▸` current studio, else the first studio);
-  every unselected studio folds to its top border, one single-line row per live role (no subheaders,
-  detail/working/cue lines, tasks, closed seats, talk or `›`), and its bottom border — keeping its
-  header health mark and `!n` badge. Stepping into a folded studio (`j`/`k`, arrows, `Ctrl+K`/`J`
-  or `Alt+←`/`→`) or clicking its header or a role row selects and unfolds it (folding the studio
-  left) while keeping the cursor on the same row and scrolled into view. A single-studio lot never
-  folds, manual `Space` collapse (`╶` stacked row) or expand overrides still hold, and unselected
-  studios fall back to one-line `╶` stacked rows when even folded blocks exceed the body height.
-  Talk budgets go to the selected full block only.
+- **Selected-studio folding and compact rows:** in a lot with two or more studios, only the
+  selected studio draws in full (the studio holding the `▌` cursor, else the `▸` current studio,
+  else the first studio). Any non-current **ready**, **calm**, **finished**, **stage-down**, or
+  **offline** studio with no active/alert roles compresses to one borderless row (`✓ gamma-web 5/5 ready`,
+  `· calm-dev 1/2 calm`, `✓ omega 4/4 finished`, `◌ stage down`, `× offline`), while active non-current
+  studios draw a compact folded card (top border with health/`!n`, one 1-line row per active/alert
+  role, bottom border). Inside the current studio's expanded card, calm `idle` and `standby` live roles
+  fold into one `CalmSummary` row (`○ <n> idle · Ⓦ standby`) whenever the left Cast sidebar is
+  open, expanding back to full role rows when the sidebar is collapsed. Stepping into any folded or
+  compact studio or clicking its row selects and unfolds it while keeping it scrolled into view. A
+  single-studio lot never folds, manual `Space` collapse (`╶` stacked row) or expand overrides
+  still hold, and unselected studios fall back to one-line `╶` stacked rows when blocks exceed the
+  body height. Talk budgets go to the selected full block only.
 
 - The studio id sits in the top border (` ▸ <id> ` for the selected studio: a bold padded
   `accent` background chip with contrast `panel_bg` foreground, truncating cleanly before the
   health/progress tail when narrow; `subtext0` or focused `text` on unselected blocks). The first
   row inside is the **header**: a health glyph — `●` live, `◌` stage stopped, `×` offline or a
-  ledger error, `✓` finished — then `r<version> · <done>/<total>`, `actors <live>/<cap>` and
-  `!<waiting>` in the blocked colour when above zero. On stacked rows (`╶`) and the collapsed strip, the selected
-  studio's label uses bold `accent`.
+  ledger error, `✓` finished — then `r<version>·<done>/<total>`, `· <live>/<cap>` only when live
+  actors exceed zero (idle `0/4` is omitted), and `!<waiting>` in the blocked colour when above zero.
+  On stacked rows (`╶`), compact rows, and the collapsed strip, the selected studio's label uses bold `accent`.
 - The **owed-step** line under it says where the next step is owed in role names —
   `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and
   machine-offline forms say so instead.
@@ -168,24 +171,12 @@ every other studio keeps `surface1`.
 - Role groups are split by a thin `├──┤` rule in the frame's colour — the producer, then
   the director, then the writer, then all actors together; an empty group draws no rule,
   and a folded or stacked block follows the same grouping.
-- A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
-  a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
-  prompt, and the state word right-aligned. The row carries no runner and no model — the
-  cast shows both — so the name, task and flag may use every cell up to the state word.
-  The name truncates only when it alone overflows. A user-owned
-  prompt adds a cue line
-  `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
-  has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a
-  director-owned one reads `! prompt · director reviewing`. A
-  needs-you attention, an unanswered question or a stuck episode adds its own
-  `needs you · …` / `asks you · …` / `stuck · …` line; an `info` attention adds none and shows
-  only in the drawer and the sheet, dimmed.
-- A **working** person with no prompt/attention/failure detail row adds one dim row underneath (`x + 4`):
-  `working <dur> · "<progress>" <age> ago · <running> <dur>` (elapsed time from client wall clock at draw time,
-  newest `role.progress` text, and deepest active descendant command from `RoleSummary.running` while
-  `work == working`; `RoleSummary.doing` stays unchanged for older clients). Absent parts omit their `·` separator;
-  narrow panels fit in order: full line → shorten `<progress>` inside quotes with `…` → drop `<running>` →
-  shorten or drop `<progress>` → truncate `working <dur>`. Non-working roles keep their existing single line.
+- A **person** is always **one line** sharing Cast and Lot's unified `InlineState` renderer (`RoleBadge`
+  `Ⓟ`/`Ⓓ`/`Ⓦ`/`Ⓐ` + priority flag + name/task + aligned semantic mark, state word, optional age, and
+  CJK-safe truncated `· <detail>` tail). Runner and model metadata (`runner · model (effort)`) lives
+  exclusively in the center studio header (`HeaderKind::Role`), never on Cast or Lot rows, and working
+  roles keep all details inline without a separate `working <dur>` subline. When narrowed or CJK-heavy,
+  the state word keeps its alignment and name/detail truncate at character boundaries with `…`.
 - **Task rows** list work no live actor carries — uncast, dependency-gated (`waits t0`),
   paused (`=`), blocked or at rework cap, and accepted (`✓`) — each as `· <task> <title>`.
   Two or more accepted unrepresented tasks fold into `✓ <n> done · <ids>` (ids fitted to the width
@@ -196,11 +187,13 @@ every other studio keeps `surface1`.
   studio; when open, closed seats render underneath and `o` reopens a resumable seat as usual.
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
-- **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
-  their configured labels (`alt PgUp/PgDn studio  ↑↓ role`). Focused while composing on `›`:
-  `⏎ send · ↑↓ history · esc done` (or `⏎ ↑↓ · esc` / `esc` when narrower). Focused in
-  Resting: the row's own keys (`⏎ compose  i tell  / verb  m  esc`, etc.; `esc back` over an
-  overlay). Dropped under 8 rows.
+- **Footer & header hints:** when unfocused, the Lot dock leaves its bottom row blank on `elevation.surface`
+  (no static `alt PgUp/PgDn studio  ↑↓ role` chrome) and shows only `<focus_lot> focus` in its header
+  without repeating Call Sheet keys. When focused, it swaps the header hint to `esc leave` (`esc back`
+  over an overlay) and draws a `border_muted` hairline (`─`) above up to 3 structured verbful hint
+  pairs via `put_hint_bar` (for example while composing on `›`: `⏎ send  ↑↓ history  esc done`).
+  Both hairline and footer hints drop below 8 rows. Unfocused `›` compose inputs stay on `elevation.surface`,
+  lifting to `raised_field` only while actively composing.
 - **Restart to update:** while a source says a newer `backlot` is installed than the
   running client, one dim line closes the lot:
   `backlot <new> installed — restart the client to update (q, then backlot)`. The sources
@@ -368,26 +361,27 @@ is derived from the `backlot` documents (the same needs-you list above), keyed s
 
 ## The cast
 
-In studio mode the sidebar's agents section is the current studio's cast instead (see
-[guide.md](guide.md)). The cast never sits blank while studios exist: the current studio's cast
-shows when one is known; with none current but exactly one live studio in the lot, that studio's
-cast shows and the header names it; with more than one live studio and none current the body is
-one dim line, `select a studio (Enter on it)`. Header: `cast · <studio id>` on the left,
-`<n>/<total>` on the right — the
-studio's position in document order. One entry per person, in the summary's order, two rows each:
-mark, name and task with the runner right-aligned; then the terminal's title — falling back to
-`doing`, then the state word — with the model right-aligned in short form. The shown state takes row
-two in the blocked colour (`needs you · …`, `asks you · …`, `stuck · …`); a failed turn with no
-attention says `last turn failed`. Either takes the whole row, model included, so it stays
-readable at the default width. An `info` attention never takes the row. The person
-whose terminal is focused gets the active-row background on both rows and an accent `▌` in the
-first column. Closed people stay listed, dimmed, after the live ones.
+In studio mode the left sidebar deduplicates active live studios from the `machines` workspace tree
+(retaining non-studio workspaces, `stage down`, `finished (<n>)`, `Archived (<n>)`, and the stage
+row `backlot <v> · ● ok`), places a clickable `? keys` affordance at bottom-left beside `«`, and
+shows the current studio's cast instead of Herdr's plain agents list (see [guide.md](guide.md)).
+The cast never sits blank while studios exist: the current studio's cast shows when one is known;
+with none current but exactly one live studio in the lot, that studio's cast shows and the header
+names it; with more than one live studio and none current the body is one dim line,
+`select a studio (Enter on it)`. Header: `cast · <studio id>` on the left, `<n>/<total>` on the
+right — the studio's position in document order.
+
+One entry per person, in the summary's order, rendered on **one line** using the same `InlineState`
+formatter as the Lot dock (`RoleBadge` + mark, name/task, and aligned semantic state word / age /
+`· <detail>`, truncating CJK safely with `…` and omitting runner/model tags). An `info` attention
+stays hidden from the row. The person whose terminal is focused gets the active-row background and
+an accent `▌` in the first column. Closed people fold behind `┄ closed (n) ┄` (or render dimmed
+after live roles when opened).
 
 After the people, a `shells` header groups the studio's **shells** — the user's own terminals
-opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). Two rows each like a person: a
-dim `$` (or the agent status when the shell runs one), `shell <n>`, the program on the right;
-then the terminal title and the working directory's last component. The role keys reach them
-after the people.
+opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). One line each: a dim `$` (or the
+agent status when the shell runs one), `shell <n>`, the program, and the terminal title/cwd. The
+role keys reach them after the people.
 
 At the bottom one row `others <n> ▸` expands in place to herdr's own agent rows — every terminal
 that is neither a studio person, a studio shell, the stage nor Hollywood (what hc-tui, wherdr or

@@ -6,12 +6,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::sidebar_render::workspace_entries_filtered;
+use super::sidebar_render::workspace_entries_for_sidebar;
 use super::snapshot::{ClientEndpointId, ClientShellEndpoint};
 use super::studio_tree::{SidebarRow, Tree};
 
 /// Every selectable left-tree row, in draw order, for the sidebar a
-/// studio-mode client draws: each endpoint's machine row, its spaces
+/// studio-mode client draws: each endpoint's machine row, its non-studio spaces
 /// (unless the endpoint is collapsed), then its extra studio rows.
 /// Plain mode never builds it — herdr's tree has no backlot studio
 /// rows and no cursor.
@@ -35,8 +35,9 @@ pub(crate) fn rows(
                 collapsed_groups,
                 remote_collapsed_groups,
             );
+            let hidden = tree.and_then(|t| t.live_studios.get(&endpoint.endpoint_id));
             out.extend(
-                workspace_entries_filtered(snapshot, groups, hide_stage_space)
+                workspace_entries_for_sidebar(snapshot, groups, hide_stage_space, hidden)
                     .into_iter()
                     .map(|entry| SidebarRow::Workspace {
                         endpoint: endpoint.endpoint_id.clone(),

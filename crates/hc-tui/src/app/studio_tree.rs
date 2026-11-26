@@ -228,6 +228,16 @@ impl App {
                 finished_open,
                 archived_count,
             });
+            if stage_running {
+                let live: std::collections::HashSet<String> = studios
+                    .iter()
+                    .filter(|s| s.state == studio_tree::StudioState::Live)
+                    .map(|s| s.id.to_owned())
+                    .collect();
+                if !live.is_empty() {
+                    tree.live_studios.insert(endpoint.endpoint_id.clone(), live);
+                }
+            }
             if !rows.is_empty() {
                 tree.rows.insert(endpoint.endpoint_id.clone(), rows);
             }

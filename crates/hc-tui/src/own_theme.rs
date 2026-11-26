@@ -66,6 +66,8 @@ pub struct Shell {
     pub(crate) path: Option<PathBuf>,
     /// True while backlot's own `[theme]` is in force.
     pub(crate) own: bool,
+    /// True when `[theme] source = "herdr"` was configured explicitly.
+    pub(crate) source_herdr: bool,
 }
 
 impl Shell {
@@ -74,6 +76,7 @@ impl Shell {
         Shell {
             path: Some(path),
             own: false,
+            source_herdr: false,
         }
     }
 
@@ -108,6 +111,7 @@ impl Shell {
             return Shell {
                 path: Some(path.clone()),
                 own: false,
+                source_herdr: true,
             };
         };
         // herdr's `[theme]` is out of play: neither its diagnostics nor
@@ -123,6 +127,7 @@ impl Shell {
         Shell {
             path: Some(path.clone()),
             own: true,
+            source_herdr: false,
         }
     }
 }
