@@ -49,9 +49,9 @@ pub(crate) use rows::{
     hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
-pub(crate) use view::{CardView, render_view_with_compose};
+pub(crate) use view::{CardView, ReaderRenderOpts, render_view_with_opts};
 #[cfg(test)]
-pub(crate) use view::{render_view, render_view_at};
+pub(crate) use view::{render_view, render_view_at, render_view_with_compose};
 
 use crate::chrome::text_editor::TextEditor;
 

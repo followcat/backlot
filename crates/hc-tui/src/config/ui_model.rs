@@ -26,6 +26,15 @@ pub enum StatusIndicatorStyle {
     Symbols,
 }
 
+/// Modal backdrop dimming treatment (`ui.popup_backdrop`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PopupBackdrop {
+    #[default]
+    Dim,
+    None,
+}
+
 impl StatusIndicatorStyle {
     pub fn as_str(self) -> &'static str {
         match self {

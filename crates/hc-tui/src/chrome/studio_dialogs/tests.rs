@@ -172,7 +172,7 @@ fn archived_list_hint_and_buttons_sit_on_distinct_rows() {
         let mut buf = Buffer::empty(area);
         let band = Rect::new(0, 0, band_cols, 36);
         let hits = render(&mut buf, band, &d, &palette).unwrap();
-        assert_eq!(hits.area.width, dialog_width(band_cols));
+        assert_eq!(hits.area.width, dialog_width(band_cols) + 6);
         let rendered = text_of(&buf, hits.area);
         let rows: Vec<&str> = rendered.lines().collect();
         let hint_row = rows

@@ -25,71 +25,6 @@ pub(crate) struct Confirm {
     pub title: String,
     pub detail: String,
 }
-pub(crate) fn panel(
-    b: &mut Buffer,
-    a: Rect,
-    c: ratatui::style::Color,
-    bg: ratatui::style::Color,
-) -> Option<Rect> {
-    if a.width < 2 || a.height < 2 {
-        return None;
-    }
-    let background = Style::default().bg(bg).remove_modifier(Modifier::DIM);
-    let border = Style::default().fg(c).bg(bg).remove_modifier(Modifier::DIM);
-    // The fill patches: the S3/S5 popups that must not keep the
-    // covered rows' modifiers `Clear` their area before calling this —
-    // the herdr-parity surfaces keep the patch fill.
-    for y in a.y..a.bottom() {
-        for x in a.x..a.right() {
-            b[(x, y)].set_symbol(" ").set_style(background);
-        }
-    }
-    for x in a.x..a.right() {
-        b[(x, a.y)]
-            .set_symbol(if x == a.x {
-                "┌"
-            } else if x + 1 == a.right() {
-                "┐"
-            } else {
-                "─"
-            })
-            .set_style(border);
-        let y = a.bottom() - 1;
-        b[(x, y)]
-            .set_symbol(if x == a.x {
-                "└"
-            } else if x + 1 == a.right() {
-                "┘"
-            } else {
-                "─"
-            })
-            .set_style(border);
-    }
-    for y in a.y + 1..a.bottom() - 1 {
-        b[(a.x, y)].set_symbol("│").set_style(border);
-        b[(a.right() - 1, y)].set_symbol("│").set_style(border);
-    }
-    Some(Rect::new(a.x + 1, a.y + 1, a.width - 2, a.height - 2))
-}
-
-pub(crate) fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
-    popup_with_width_cap(a, w, h, 4)
-}
-
-fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect> {
-    let w = w.min(a.width.saturating_sub(width_cap));
-    let h = h.min(a.height.saturating_sub(2));
-    if w < 4 || h < 4 {
-        return None;
-    }
-    Some(Rect::new(
-        a.x + (a.width - w) / 2,
-        a.y + (a.height - h) / 2,
-        w,
-        h,
-    ))
-}
-
 pub(crate) fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
     b.set_style(r, s);
     let w = display_width(t).min(r.width);
@@ -114,15 +49,35 @@ pub(crate) fn row(i: Rect, ws: &[u16], gap: u16, off: u16) -> Vec<Rect> {
 }
 
 pub(crate) fn contrast(p: &Palette) -> ratatui::style::Color {
-    match p.panel_bg {
-        ratatui::style::Color::Reset => p.surface_dim,
-        c => c,
+    if p.panel_bg == ratatui::style::Color::Reset {
+        p.surface_dim
+    } else {
+        super::popup_frame::contrast(p)
     }
 }
 
-pub(crate) fn render_rename(b: &mut Buffer, v: &Rename, p: &Palette) -> Option<DialogRender> {
-    let q = popup(b.area, 56, 7)?;
-    let i = panel(b, q, p.accent, p.panel_bg)?;
+pub(crate) fn render_rename_with_shadow(
+    b: &mut Buffer,
+    v: &Rename,
+    p: &Palette,
+    shadow: bool,
+) -> Option<DialogRender> {
+    let geom = super::popup_frame::open_centered(
+        b,
+        b.area,
+        54,
+        5,
+        4,
+        4,
+        p.accent,
+        super::popup_frame::PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let q = geom.outer;
+    let i = geom.inner;
+    let bg = super::popup_frame::overlay_bg(p);
+    let field_bg = p.elevation().raised_on_overlay;
     put_text(
         b,
         i.x,
@@ -131,16 +86,16 @@ pub(crate) fn render_rename(b: &mut Buffer, v: &Rename, p: &Palette) -> Option<D
         v.title,
         Style::default()
             .fg(p.text)
-            .bg(p.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     let input = Rect::new(i.x, i.y + 2, i.width, 1);
-    b.set_style(input, Style::default().fg(p.text).bg(p.surface0));
+    b.set_style(input, Style::default().fg(p.text).bg(field_bg));
     let cursor = text_editor::render(
         b,
         Rect::new(input.x + 1, input.y, input.width.saturating_sub(1), 1),
         &v.input,
-        Style::default().fg(p.text).bg(p.surface0),
+        Style::default().fg(p.text).bg(field_bg),
     );
     let rs = row(i, &[8, 10, 12], 2, 3);
     let [save, clear, cancel] = rs.as_slice() else {
@@ -157,7 +112,7 @@ pub(crate) fn render_rename(b: &mut Buffer, v: &Rename, p: &Palette) -> Option<D
     );
     let n = Style::default()
         .fg(p.text)
-        .bg(p.surface0)
+        .bg(field_bg)
         .add_modifier(Modifier::BOLD);
     button(b, *clear, " ^c clear ", n);
     button(b, *cancel, " esc cancel ", n);
@@ -170,9 +125,28 @@ pub(crate) fn render_rename(b: &mut Buffer, v: &Rename, p: &Palette) -> Option<D
     })
 }
 
-pub(crate) fn render_confirm(b: &mut Buffer, c: &Confirm, p: &Palette) -> Option<DialogRender> {
-    let q = popup(b.area, 64, 6)?;
-    let i = panel(b, q, p.red, p.panel_bg)?;
+pub(crate) fn render_confirm_with_shadow(
+    b: &mut Buffer,
+    c: &Confirm,
+    p: &Palette,
+    shadow: bool,
+) -> Option<DialogRender> {
+    let geom = super::popup_frame::open_centered(
+        b,
+        b.area,
+        62,
+        4,
+        4,
+        4,
+        p.red,
+        super::popup_frame::PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let q = geom.outer;
+    let i = geom.inner;
+    let bg = super::popup_frame::overlay_bg(p);
+    let field_bg = p.elevation().raised_on_overlay;
     put_text(
         b,
         i.x,
@@ -181,7 +155,7 @@ pub(crate) fn render_confirm(b: &mut Buffer, c: &Confirm, p: &Palette) -> Option
         &format!(" {}", c.title),
         Style::default()
             .fg(p.red)
-            .bg(p.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     put_text(
@@ -190,7 +164,7 @@ pub(crate) fn render_confirm(b: &mut Buffer, c: &Confirm, p: &Palette) -> Option
         i.y + 1,
         i.width,
         &format!(" {}", c.detail),
-        Style::default().fg(p.text).bg(p.panel_bg),
+        Style::default().fg(p.text).bg(bg),
     );
     let rs = row(i, &[13, 12], 2, 3);
     let [ok, cancel] = rs.as_slice() else {
@@ -211,7 +185,7 @@ pub(crate) fn render_confirm(b: &mut Buffer, c: &Confirm, p: &Palette) -> Option
         " esc cancel ",
         Style::default()
             .fg(p.text)
-            .bg(p.surface0)
+            .bg(field_bg)
             .add_modifier(Modifier::BOLD),
     );
     Some(DialogRender {

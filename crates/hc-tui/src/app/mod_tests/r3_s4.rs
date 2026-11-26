@@ -239,19 +239,18 @@ async fn unified_reader_geometry_matches_across_callsheet_dock_and_sheet() {
     let narrow_dock = app.hollywood_hits.view.as_ref().unwrap().area;
 
     assert_eq!(narrow_cs, narrow_dock);
-    assert_eq!(narrow_cs.width, 52);
-    assert_eq!(narrow_cs.height, 22);
+    assert_eq!(narrow_cs.width, 54);
+    assert_eq!(narrow_cs.height, 24);
 }
 
 #[tokio::test]
 async fn reader_dims_panes_and_sidebar_while_keeping_beside_dock_undimmed() {
-    use ratatui::style::Modifier;
-
     let mut app = s4_app();
     app.area = (160, 40);
     app.panel.mode = PanelMode::Expanded;
     app.panel.focused = true;
     app.hollywood.mode = LayerMode::Collapsed;
+    let base = draw_to(&mut app, 160, 40);
     app.hollywood.view = Some(CardView {
         card: None,
         title: "acme-shop #1".into(),
@@ -264,20 +263,22 @@ async fn reader_dims_panes_and_sidebar_while_keeping_beside_dock_undimmed() {
     let buf = backend.buffer();
     let dock = app.panel_hits.area;
     assert!(!dock.is_empty());
-    // Pane/sidebar cell outside the Reader card and dock must be DIM.
-    assert!(
-        buf[(0, 0)].modifier.contains(Modifier::DIM),
+    // Pane/sidebar cell outside the Reader card and dock must be dimmed via elevation.
+    let elev = app.shell.palette.elevation();
+    assert_ne!(
+        buf[(0, 0)].bg,
+        base.buffer()[(0, 0)].bg,
         "sidebar should be dimmed behind Reader"
     );
-    assert!(
-        buf[(26, 2)].modifier.contains(Modifier::DIM),
+    assert_eq!(
+        buf[(26, 2)].bg,
+        elev.dim_bg.unwrap(),
         "pane surface outside Reader card should be dimmed"
     );
     // Beside Lot Dock cells must stay undimmed.
-    assert!(
-        !buf[(dock.x + 1, dock.y + 1)]
-            .modifier
-            .contains(Modifier::DIM),
+    assert_eq!(
+        buf[(dock.x + 1, dock.y + 1)].bg,
+        base.buffer()[(dock.x + 1, dock.y + 1)].bg,
         "beside Lot Dock must stay undimmed while Reader is open"
     );
 }

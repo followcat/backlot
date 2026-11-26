@@ -4,14 +4,16 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
-use super::super::dialogs::{button, contrast, panel};
+use super::super::dialogs::{button, contrast};
 use super::super::palette::Palette;
+use super::super::popup_frame::overlay_bg;
 use super::super::render::{display_width, put_text};
 use super::super::text::truncate_end;
 use super::super::text_editor;
-use super::{DialogHits, cancel_button, centered, dialog_width, dim_line, send_button, title_line};
+use super::{
+    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+};
 use crate::studio_dialog::{BodyEditor, DialogField};
 
 /// The reason dialog (§2.1) — one `reason:` line, Enter submits.
@@ -20,10 +22,11 @@ pub(super) fn render_reason(
     band: Rect,
     d: &crate::studio_dialog::ReasonDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
-    let q = centered(band, dialog_width(band.width), 8)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, dialog_width(band.width), 8, palette, shadow)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     title_line(b, i, &d.title, palette);
     let input = Rect::new(i.x, i.y + 2, i.width.saturating_sub(1), 1);
     put_text(
@@ -32,18 +35,15 @@ pub(super) fn render_reason(
         i.y + 2,
         9,
         " reason: ",
-        Style::default().fg(palette.subtext0).bg(palette.panel_bg),
+        Style::default().fg(palette.subtext0).bg(bg),
     );
     let field = Rect::new(i.x + 9, i.y + 2, i.width.saturating_sub(10), 1);
-    b.set_style(
-        field,
-        Style::default().fg(palette.text).bg(palette.surface0),
-    );
+    b.set_style(field, Style::default().fg(palette.text).bg(raised));
     let cursor = text_editor::render(
         b,
         field,
         &d.reason,
-        Style::default().fg(palette.text).bg(palette.surface0),
+        Style::default().fg(palette.text).bg(raised),
     );
     let _ = input;
     if let Some(error) = &d.error {
@@ -72,6 +72,7 @@ pub(super) fn render_confirm(
     band: Rect,
     d: &crate::studio_dialog::ConfirmDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     // Wrap the body at the inner width so nothing clips (A8.x rule:
@@ -116,9 +117,9 @@ pub(super) fn render_confirm(
     let height = (lines.len() as u16)
         .saturating_add(6)
         .min(band.height.saturating_sub(2));
-    let q = centered(band, width, height)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, width, height, palette, shadow)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     put_text(
         b,
         i.x,
@@ -127,7 +128,7 @@ pub(super) fn render_confirm(
         &truncate_end(&format!(" {}", d.title), i.width as usize),
         Style::default()
             .fg(palette.accent)
-            .bg(palette.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     for (n, line) in lines.iter().enumerate() {
@@ -141,7 +142,7 @@ pub(super) fn render_confirm(
             y,
             i.width,
             &format!(" {line}"),
-            Style::default().fg(palette.text).bg(palette.panel_bg),
+            Style::default().fg(palette.text).bg(bg),
         );
     }
     let rs = super::super::dialogs::row(i, &[19, 13], 2, i.height.saturating_sub(2));
@@ -149,7 +150,7 @@ pub(super) fn render_confirm(
         return None;
     };
     let ok_style = if d.loading {
-        Style::default().fg(palette.overlay0).bg(palette.surface0)
+        Style::default().fg(palette.overlay0).bg(raised)
     } else {
         Style::default()
             .fg(contrast(palette))
@@ -213,17 +214,18 @@ pub(super) fn render_tell(
     band: Rect,
     d: &crate::studio_dialog::TellDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
-    let q = centered(band, dialog_width(band.width), 9)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, dialog_width(band.width), 9, palette, shadow)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     title_line(b, i, &d.title, palette);
     let body = Rect::new(i.x, i.y + 1, i.width, 4);
     let mut cursor = render_body(
         b,
         body,
         &d.body,
-        Style::default().fg(palette.text).bg(palette.surface0),
+        Style::default().fg(palette.text).bg(raised),
         palette,
     );
     if let Some(error) = &d.error {
@@ -233,7 +235,7 @@ pub(super) fn render_tell(
             i.y + 5,
             i.width,
             &truncate_end(&format!(" ! {error}"), i.width as usize),
-            Style::default().fg(palette.red).bg(palette.panel_bg),
+            Style::default().fg(palette.red).bg(bg),
         );
     } else {
         dim_line(
@@ -271,17 +273,21 @@ pub(super) fn render_revise(
     band: Rect,
     d: &crate::studio_dialog::ReviseDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let body_rows = 10u16.min(band.height.saturating_sub(9)).max(3);
     let height = body_rows + 8;
-    let q = centered(
+    let (q, i) = centered_panel(
+        b,
         band,
         width,
         height.min(band.height.saturating_sub(2)).max(9),
+        palette,
+        shadow,
     )?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     title_line(b, i, &d.title, palette);
     let body = Rect::new(
         i.x,
@@ -296,12 +302,12 @@ pub(super) fn render_revise(
                 b,
                 body,
                 editor,
-                Style::default().fg(palette.text).bg(palette.surface0),
+                Style::default().fg(palette.text).bg(raised),
                 palette,
             );
         }
         None => {
-            b.set_style(body, Style::default().bg(palette.surface0));
+            b.set_style(body, Style::default().bg(raised));
             dim_line(
                 b,
                 body.x,
@@ -319,7 +325,7 @@ pub(super) fn render_revise(
         summary_y,
         19.min(i.width),
         " Summary of changes: ",
-        Style::default().fg(palette.subtext0).bg(palette.panel_bg),
+        Style::default().fg(palette.subtext0).bg(bg),
     );
     let summary = Rect::new(
         i.x + 20.min(i.width.saturating_sub(1)),
@@ -327,15 +333,12 @@ pub(super) fn render_revise(
         i.width.saturating_sub(20),
         1,
     );
-    b.set_style(
-        summary,
-        Style::default().fg(palette.text).bg(palette.surface0),
-    );
+    b.set_style(summary, Style::default().fg(palette.text).bg(raised));
     if let Some(c) = text_editor::render(
         b,
         summary,
         &d.summary,
-        Style::default().fg(palette.text).bg(palette.surface0),
+        Style::default().fg(palette.text).bg(raised),
     ) && d.field == DialogField::Summary
     {
         cursor = Some(c);
@@ -348,7 +351,7 @@ pub(super) fn render_revise(
             hint_y,
             i.width,
             &truncate_end(&format!(" ! {error}"), i.width as usize),
-            Style::default().fg(palette.red).bg(palette.panel_bg),
+            Style::default().fg(palette.red).bg(bg),
         ),
         None => {
             let hint = if d.local {

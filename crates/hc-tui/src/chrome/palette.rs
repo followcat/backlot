@@ -93,6 +93,11 @@ impl Palette {
         apply_overrides(&mut self, custom);
         self
     }
+
+    /// Derived surface, overlay, raised, dim, and drop-shadow colors for this palette.
+    pub(crate) fn elevation(&self) -> super::elevation::Elevation {
+        super::elevation::Elevation::from_palette(self)
+    }
 }
 
 impl ModeThemeColors {

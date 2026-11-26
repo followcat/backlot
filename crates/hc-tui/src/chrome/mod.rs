@@ -9,6 +9,9 @@ pub(crate) mod config_diagnostic;
 pub(crate) mod copy_feedback;
 pub mod detect;
 pub(crate) mod dialogs;
+pub(crate) mod elevation;
+#[cfg(test)]
+mod elevation_tests;
 pub mod endpoint_agents;
 pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
@@ -32,6 +35,10 @@ pub(crate) mod overlay;
 pub mod palette;
 pub mod panes;
 pub mod panes_draw;
+pub(crate) mod popup_frame;
+#[cfg(test)]
+mod popup_frame_tests;
+pub(crate) mod popup_geometry;
 pub(crate) mod release_notes;
 pub mod render;
 pub mod scroll;
@@ -54,12 +61,13 @@ pub(crate) mod title_text;
 pub mod tokens;
 pub(crate) mod update_modal;
 pub(crate) mod update_status;
+pub(crate) mod wide;
 pub mod workspace;
 
 use std::path::PathBuf;
 
 use crate::config::{
-    AgentPanelSortConfig, AgentsSidebarConfig, LiveKeybindConfig, PaneBordersConfig,
+    AgentPanelSortConfig, AgentsSidebarConfig, LiveKeybindConfig, PaneBordersConfig, PopupBackdrop,
     SidebarCollapsedModeConfig, SpacesSidebarConfig, StatusIndicatorStyle, TabBarPositionConfig,
     ToastDelivery, ToastHerdrPosition,
 };
@@ -83,6 +91,8 @@ pub struct ClientShellConfig {
     pub agent_panel_sort: AgentPanelSortConfig,
     pub agent_panel_space_headers: bool,
     pub status_indicators: StatusIndicatorStyle,
+    pub popup_backdrop: PopupBackdrop,
+    pub popup_shadow: bool,
     pub theme_name: String,
     pub theme_runtime: ThemeRuntimeConfig,
     pub palette: Palette,
@@ -177,6 +187,8 @@ impl ClientShellConfig {
             agent_panel_sort: ui.agent_panel_sort,
             agent_panel_space_headers: ui.agent_panel_space_headers,
             status_indicators: ui.status_indicators,
+            popup_backdrop: ui.popup_backdrop,
+            popup_shadow: ui.popup_shadow,
             theme_name,
             theme_runtime,
             palette: resolved,

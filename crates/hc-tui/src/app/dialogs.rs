@@ -443,18 +443,25 @@ impl App {
             self.dialog_hits = Default::default();
             return;
         };
-        use ratatui::style::Modifier;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &self.shell.palette,
+            self.shell.popup_backdrop,
+            None,
+        );
         self.dialog_hits = match &dialog.body {
-            Body::Rename(rename) => {
-                crate::chrome::dialogs::render_rename(buf, rename, &self.shell.palette)
-            }
-            Body::Confirm(confirm) => {
-                crate::chrome::dialogs::render_confirm(buf, confirm, &self.shell.palette)
-            }
+            Body::Rename(rename) => crate::chrome::dialogs::render_rename_with_shadow(
+                buf,
+                rename,
+                &self.shell.palette,
+                self.shell.popup_shadow,
+            ),
+            Body::Confirm(confirm) => crate::chrome::dialogs::render_confirm_with_shadow(
+                buf,
+                confirm,
+                &self.shell.palette,
+                self.shell.popup_shadow,
+            ),
         }
         .unwrap_or_default();
         let pos = self

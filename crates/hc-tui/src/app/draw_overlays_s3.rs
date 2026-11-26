@@ -1,28 +1,7 @@
 //! The S3 overlay pair — the action toast card and the native studio
-//! dialogs — plus the dim pass every modal shares.
+//! dialogs.
 
 use super::*;
-
-/// The dim every modal paints under itself, optionally leaving `exclude`
-/// (e.g. a beside Lot Dock behind the Reader) undimmed.
-pub(in crate::app) fn dim_cells_except(buf: &mut Buffer, exclude: Option<Rect>) {
-    let area = buf.area;
-    for y in area.y..area.bottom() {
-        for x in area.x..area.right() {
-            if exclude.is_some_and(|r| r.contains(ratatui::layout::Position::new(x, y))) {
-                continue;
-            }
-            let cell = &mut buf[(x, y)];
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
-    }
-}
-
-/// The dim every modal paints under itself.
-pub(in crate::app) fn dim_cells(buf: &mut Buffer) {
-    dim_cells_except(buf, None);
-}
 
 /// S3's action toast (§3): the pending reply's card under the notice
 /// slot; its chip — `copy cmd` on a failure, `start stage` on the
@@ -135,7 +114,12 @@ pub(super) fn draw_reader(
         && !app.hollywood.expanded()
         && !app.panel_hits.area.is_empty())
     .then_some(app.panel_hits.area);
-    dim_cells_except(buf, exclude);
+    crate::chrome::popup_frame::dim_backdrop(
+        buf,
+        &app.shell.palette,
+        app.shell.popup_backdrop,
+        exclude,
+    );
     let surface = app.backlot_modal_surface(area, layout, 64);
     let compose_info = app.reader_compose_draw_ctx(from_sheet);
     let compose_opts =
@@ -146,14 +130,17 @@ pub(super) fn draw_reader(
                 studio: *studio,
             },
         );
-    let ren = crate::hollywood::render_view_with_compose(
+    let ren = crate::hollywood::render_view_with_opts(
         buf,
         surface,
         view,
         pending,
-        compose_opts,
         &app.shell.palette,
-        crate::update_state::now_ms(),
+        crate::hollywood::ReaderRenderOpts {
+            compose: compose_opts,
+            now_ms: crate::update_state::now_ms(),
+            shadow: app.shell.popup_shadow,
+        },
     );
     if let Some(cursor) = ren.cursor.as_ref() {
         app.want_cursor = CursorWish {
@@ -180,12 +167,18 @@ pub(super) fn draw_studio_dialog(
     layout: &crate::chrome::snapshot::ClientShellLayout,
 ) -> bool {
     app.studio_dialog_hits = if let Some(d) = app.studio_dialog.as_ref() {
-        dim_cells(buf);
-        crate::chrome::studio_dialogs::render(
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        crate::chrome::studio_dialogs::render_with_shadow(
             buf,
             app.backlot_modal_surface(area, layout, 64),
             d,
             &app.shell.palette,
+            app.shell.popup_shadow,
         )
         .unwrap_or_default()
     } else {

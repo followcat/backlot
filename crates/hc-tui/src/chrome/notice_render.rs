@@ -11,7 +11,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -34,7 +34,7 @@ pub(crate) fn render_mobile_notice_banner(
             .saturating_sub(1u16.saturating_add(warning_offset));
     let rect = Rect::new(area.x, y, area.width, 1);
     let background = palette.surface0;
-    Clear.render(rect, buffer);
+    super::wide::clear_overlay(buffer, rect);
     buffer.set_style(rect, Style::default().bg(background));
     let mut x = rect.x;
     for (text, style) in [
@@ -110,7 +110,7 @@ pub(crate) fn render_notification_card(
     }
     .clamp(area.y, max_y);
     let rect = Rect::new(x, y, width, height);
-    Clear.render(rect, buffer);
+    super::wide::clear_overlay(buffer, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(palette.overlay0))
@@ -269,7 +269,7 @@ pub(crate) fn render_action_toast(
     let max_y = area.bottom().saturating_sub(height).max(area.y);
     let y = area.y.saturating_add(top_offset).clamp(area.y, max_y);
     let rect = Rect::new(x, y, width, height);
-    Clear.render(rect, buffer);
+    super::wide::clear_overlay(buffer, rect);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if fail { palette.red } else { palette.overlay0 }))

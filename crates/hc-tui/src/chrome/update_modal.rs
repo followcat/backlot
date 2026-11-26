@@ -9,8 +9,9 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Paragraph, Widget};
 
-use super::dialogs::{button, contrast, panel, popup, row};
+use super::dialogs::{button, contrast, row};
 use super::palette::Palette;
+use super::popup_frame::{PopupChrome, open_centered, overlay_bg};
 use super::release_notes::{Stream, stream_lines};
 use super::render::{display_width, put_text};
 use super::scroll::{ScrollMetrics, render_scrollbar_buffer};
@@ -111,10 +112,30 @@ fn stack(inner: Rect, footer: bool, actions: bool) -> Stack {
 }
 
 /// Draws the card over `buf` and returns its hit map; `None` when the
-/// terminal is too small for even the bare card.
+#[cfg(test)]
 pub(crate) fn render(buf: &mut Buffer, view: &ModalView<'_>, p: &Palette) -> Option<ModalRender> {
-    let outer = popup(buf.area, MODAL_SIZE.0, MODAL_SIZE.1)?;
-    let inner = panel(buf, outer, p.accent, p.panel_bg)?;
+    render_with_shadow(buf, view, p, true)
+}
+
+pub(crate) fn render_with_shadow(
+    buf: &mut Buffer,
+    view: &ModalView<'_>,
+    p: &Palette,
+    shadow: bool,
+) -> Option<ModalRender> {
+    let geom = open_centered(
+        buf,
+        buf.area,
+        MODAL_SIZE.0.saturating_sub(6),
+        MODAL_SIZE.1.saturating_sub(4),
+        4,
+        4,
+        p.accent,
+        PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let inner = geom.inner;
     let mut out = ModalRender::default();
     if inner.height < 8 || inner.width < 20 {
         return Some(out);
@@ -142,7 +163,7 @@ fn draw_header(
     let title = Rect::new(header.x + 1, header.y, header.width.saturating_sub(2), 1);
     let subtitle = Rect::new(title.x, header.y + 1, title.width, 1);
     let base = Style::default()
-        .bg(p.panel_bg)
+        .bg(overlay_bg(p))
         .remove_modifier(Modifier::DIM);
     put_text(
         buf,
@@ -266,7 +287,7 @@ fn draw_body(
 
 fn draw_footer(buf: &mut Buffer, area: Rect, p: &Palette) {
     let base = Style::default()
-        .bg(p.panel_bg)
+        .bg(overlay_bg(p))
         .remove_modifier(Modifier::DIM);
     let label = " scroll ";
     put_text(buf, area.x, area.y, area.width, label, base.fg(p.overlay0));

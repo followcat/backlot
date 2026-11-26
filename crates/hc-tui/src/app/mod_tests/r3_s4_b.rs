@@ -4,8 +4,6 @@
 
 use std::time::Instant;
 
-use ratatui::style::Modifier;
-
 use super::r3_s4::{mouse, s4_app};
 use super::*;
 use crate::app::action_tracker::ActionToast;
@@ -75,10 +73,12 @@ async fn modals_dim_backdrop_and_suppress_underlying_cursors_and_highlights() {
             palette.selection_bg,
             "{label}: Dock selection_bg suppressed"
         );
-        assert!(
-            buf[(dock_x + 4, alice_row_y)]
-                .modifier
-                .contains(Modifier::DIM),
+        let mut probe = ratatui::buffer::Cell::default();
+        probe.set_bg(palette.panel_bg);
+        palette.elevation().dim_cell(&mut probe, &palette);
+        assert_eq!(
+            buf[(dock_x + 4, alice_row_y)].bg,
+            probe.bg,
             "{label}: backdrop dimmed"
         );
         // Call Sheet `›` input row drops accent `›` and `▌` bar (whether
@@ -209,8 +209,15 @@ async fn backlot_peek_renders_clean_studio_title_while_plain_peek_is_untouched()
         !text.contains("enter keeps it as a tab"),
         "Backlot peek omits contradictory Herdr subtitle: {text}"
     );
-    assert!(
-        drawn.buffer()[(0, 0)].modifier.contains(Modifier::DIM),
+    let mut probe = ratatui::buffer::Cell::default();
+    probe.set_bg(app.shell.palette.sidebar_bg);
+    app.shell
+        .palette
+        .elevation()
+        .dim_cell(&mut probe, &app.shell.palette);
+    assert_eq!(
+        drawn.buffer()[(0, 0)].bg,
+        probe.bg,
         "Backlot peek dims backdrop"
     );
 
@@ -224,7 +231,7 @@ async fn backlot_peek_renders_clean_studio_title_while_plain_peek_is_untouched()
     );
     assert_eq!(title, "beta-tools · host-b · alice");
 
-    // 3. Plain Herdr peek (`open_peek` directly) keeps Herdr's subtitle & geometry.
+    // 3. Plain Herdr peek (`open_peek` directly) keeps Herdr's subtitle & respects `popup_backdrop`.
     app.close_peek();
     app.hollywood.mode = LayerMode::Hidden;
     app.panel.mode = PanelMode::Closed;
@@ -238,9 +245,80 @@ async fn backlot_peek_renders_clean_studio_title_while_plain_peek_is_untouched()
         plain_text.contains("enter keeps it as a tab, esc closes"),
         "{plain_text}"
     );
+    let mut plain_probe = ratatui::buffer::Cell::default();
+    plain_probe.set_bg(app.shell.palette.sidebar_bg);
+    app.shell
+        .palette
+        .elevation()
+        .dim_cell(&mut plain_probe, &app.shell.palette);
+    assert_eq!(plain_drawn.buffer()[(0, 0)].bg, plain_probe.bg);
+    app.shell.popup_backdrop = crate::config::PopupBackdrop::None;
+    let plain_no_dim = draw_to(&mut app, 120, 36);
+    assert_eq!(
+        plain_no_dim.buffer()[(0, 0)].bg,
+        app.shell.palette.sidebar_bg
+    );
+}
+
+#[tokio::test]
+async fn popup_backdrop_none_and_shadow_false_and_hit_area_gutter_vs_shadow() {
+    let mut app = s4_app();
+    app.area = (160, 47);
+    let base = draw_to(&mut app, 160, 47);
+    let elev = app.shell.palette.elevation();
+    let shadow_bg = elev.shadow.expect("rgb shadow");
+
+    // 1. Default depth on launcher: dim backdrop + gutter + shadow; hit rect includes gutter, not shadow.
+    app.help = true;
+    let on = draw_to(&mut app, 160, 47);
+    let help_area = app.help_hits.area;
+    assert_ne!(on.buffer()[(0, 0)].bg, base.buffer()[(0, 0)].bg);
+    assert_eq!(
+        on.buffer()[(help_area.right(), help_area.y + 1)].bg,
+        shadow_bg
+    );
+
+    // 2. [ui] popup_backdrop = "none" & popup_shadow = false disable dim and drop shadow.
+    app.shell.popup_backdrop = crate::config::PopupBackdrop::None;
+    app.shell.popup_shadow = false;
+    let off = draw_to(&mut app, 160, 47);
+    assert_eq!(off.buffer()[(0, 0)].bg, base.buffer()[(0, 0)].bg);
+    assert_ne!(
+        off.buffer()[(help_area.right(), help_area.y + 1)].bg,
+        shadow_bg
+    );
+
+    // 3. Delta 4 hit area on Reader: clicking gutter stays open; clicking shadow dismisses.
+    app.help = false;
+    app.shell.popup_backdrop = crate::config::PopupBackdrop::Dim;
+    app.shell.popup_shadow = true;
+    app.hollywood.mode = LayerMode::Expanded;
+    app.hollywood.view = Some(crate::hollywood::CardView {
+        card: None,
+        title: "acme-shop #1".into(),
+        lines: vec!["body".into()],
+        ..crate::hollywood::CardView::default()
+    });
+    draw_to(&mut app, 160, 47);
+    let reader_area = app.hollywood_hits.view.as_ref().expect("reader").area;
+    // Left gutter column is inside `reader_area` -> click must NOT dismiss.
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        reader_area.x,
+        reader_area.y,
+    ));
     assert!(
-        !plain_drawn.buffer()[(0, 0)]
-            .modifier
-            .contains(Modifier::DIM)
+        app.hollywood.view.is_some(),
+        "gutter click must stay inside modal hit box"
+    );
+    // Right drop shadow sits at `reader_area.right()` -> outside hit box -> click dismisses.
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        reader_area.right(),
+        reader_area.y + 1,
+    ));
+    assert!(
+        app.hollywood.view.is_none(),
+        "shadow click must dismiss modal"
     );
 }

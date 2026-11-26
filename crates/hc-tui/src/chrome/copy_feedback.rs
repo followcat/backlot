@@ -8,7 +8,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 
 use crate::chrome::palette::Palette;
 use crate::config::ToastClipboardPosition;
@@ -88,7 +88,7 @@ pub(crate) fn render_copy_feedback_buffer(
         return feedback_area;
     }
 
-    Clear.render(feedback_area, buffer);
+    super::wide::clear_overlay(buffer, feedback_area);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(palette.green))
