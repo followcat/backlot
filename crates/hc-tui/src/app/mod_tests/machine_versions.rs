@@ -112,6 +112,11 @@ fn dead_remote_runner() -> crate::panel::RemoteRunner {
 async fn each_machine_shows_its_backlot_version() {
     let mut app = versioned_app(&older());
     app.area = (120, 36);
+    // Room for both versions on host-b's line whatever their length: at
+    // the default width a two-digit patch (`backlot 0.4.10 hc 0.1.0`)
+    // no longer fits and the hc half is dropped, which is the layout's
+    // choice, not what this test is about.
+    app.sidebar_width = 34;
     let backend = draw_to(&mut app, 120, 36);
     let sidebar = sidebar_text(&backend);
     // Local's line reads the running binary's version; host-b's doc
