@@ -62,6 +62,7 @@ fn ctx<'a>(env: &'a BTreeMap<String, String>) -> LaunchCtx<'a> {
         stage_env: env,
         role: "actor-t1-c1",
         checks: &[],
+        answer_trust: true,
     }
 }
 

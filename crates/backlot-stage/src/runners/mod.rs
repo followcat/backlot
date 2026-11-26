@@ -245,6 +245,9 @@ pub struct LaunchCtx<'a> {
     /// The studio's declared checks, verbatim — the rules their
     /// `run` strings become. Only claude uses it today.
     pub checks: &'a [backlot_model::event::CheckDecl],
+    /// Whether `[stage] answer_trust` is on — adapters that trust
+    /// the role's work area at launch (`agy`) omit trust when `false`.
+    pub answer_trust: bool,
 }
 
 /// A role that cannot start, as `attention.raised` records it.

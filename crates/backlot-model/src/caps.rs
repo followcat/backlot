@@ -440,7 +440,7 @@ pub static AGY: RunnerCaps = RunnerCaps {
     resume_keeps_prompt: false,
     resume: Resume::Argv(&["--conversation"]),
     discovery: Discovery::MapThenSqlite,
-    folder_trust: FolderTrust::Unmeasured,
+    folder_trust: FolderTrust::LaunchHandles,
     prompt_detection: PromptDetection {
         block: true,
         hook: false,
