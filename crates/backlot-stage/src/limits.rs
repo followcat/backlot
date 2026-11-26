@@ -123,15 +123,7 @@ impl Stage {
                     return Ok(());
                 }
                 if hit.escalate_now {
-                    self.escalate_rate_limit(
-                        dir,
-                        role,
-                        attn.seq,
-                        text,
-                        "weekly or monthly limit".into(),
-                        "weekly or monthly limit exhausted",
-                    )
-                    .await?;
+                    self.escalate_rate_limit(dir, attn.seq, "weekly or monthly limit exhausted")?;
                     return Ok(());
                 }
                 let pace = self
@@ -147,13 +139,9 @@ impl Stage {
                     if now_ms >= pace.due_ms {
                         self.escalate_rate_limit(
                             dir,
-                            role,
                             attn.seq,
-                            text,
-                            "reset passed without movement".into(),
                             "rate-limit reset passed without movement; needs the user",
-                        )
-                        .await?;
+                        )?;
                     }
                     return Ok(());
                 }
@@ -195,16 +183,12 @@ impl Stage {
                     rl::Step::Escalate => {
                         self.escalate_rate_limit(
                             dir,
-                            role,
                             attn.seq,
-                            text,
-                            format!("auto-retries exhausted after {}", rl::MAX_RETRIES),
                             &format!(
                                 "rate limited after {} auto-retries; needs the user",
                                 rl::MAX_RETRIES
                             ),
-                        )
-                        .await?;
+                        )?;
                         eprintln!(
                             "stage: {role} rate limit escalated after {} auto-retries",
                             rl::MAX_RETRIES
@@ -280,13 +264,10 @@ impl Stage {
     /// The rate-limit escalation flips the same open attention to
     /// the person: one stall keeps one attention, so Hollywood hears
     /// about the episode once.
-    async fn escalate_rate_limit(
+    fn escalate_rate_limit(
         &self,
         dir: &std::path::Path,
-        _role: &str,
         seq: u64,
-        _text: &str,
-        _cleared: String,
         detail: &str,
     ) -> Result<(), Fail> {
         record(
