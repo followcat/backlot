@@ -214,6 +214,7 @@ mod design_capture_hook_tests;
 #[cfg(test)]
 mod design_capture_tests;
 #[cfg(test)]
+#[cfg(test)]
 mod design_cli_tests;
 #[cfg(test)]
 mod design_doc_tests;
