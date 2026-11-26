@@ -57,10 +57,14 @@ pub(crate) fn prompt_hook_active(
 }
 
 impl Stage {
-    /// Mark `(studio, role)`'s open ask as touched by a stage write to
-    /// its terminal (keys, delivered message/notice, or `continue`),
-    /// so a turn started by that write cannot clear the ask.
+    /// Mark `(studio, role)`'s open ask or producer's open `WaitingUser`
+    /// design phase as touched by a stage write to its terminal (keys,
+    /// delivered message/notice, or `continue`), so a turn started by
+    /// that write cannot clear the ask or record as user input.
     pub(crate) fn taint_ask(&self, studio: &str, state: &StudioState, role: &str) {
+        if role == "producer" {
+            self.taint_design(studio, state);
+        }
         let Some(ask) = open_ask(state, role) else {
             return;
         };

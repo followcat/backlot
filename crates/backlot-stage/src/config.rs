@@ -241,6 +241,18 @@ impl Default for StageCfg {
     }
 }
 
+/// The `[design]` section: switches for opening-design input capture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DesignCfg {
+    pub hook_capture: bool,
+}
+
+impl Default for DesignCfg {
+    fn default() -> Self {
+        DesignCfg { hook_capture: true }
+    }
+}
+
 /// The user config's path: `$XDG_CONFIG_HOME/backlot/config.toml`,
 /// `~/.config/backlot/config.toml` without it — the file the panel
 /// already reads; `[hollywood]` sits beside its sections.
@@ -360,6 +372,66 @@ pub fn stage(env: &BTreeMap<String, String>) -> Result<StageCfg, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(StageCfg::default()),
         Err(e) => Err(format!("config.toml: {e}")),
     }
+}
+
+fn design_hook_capture_in(text: &str) -> Result<Option<bool>, String> {
+    let parsed: toml::Value = toml::from_str(text).map_err(|e| match e.span() {
+        Some(span) => format!("config.toml: malformed at {}", line_col(text, span.start)),
+        None => "config.toml: malformed".to_string(),
+    })?;
+    let Some(section) = parsed.get("design") else {
+        return Ok(None);
+    };
+    let table = section
+        .as_table()
+        .ok_or_else(|| "config.toml: design is not a table".to_string())?;
+    match table.get("hook_capture") {
+        None => Ok(None),
+        Some(v) => v
+            .as_bool()
+            .map(Some)
+            .ok_or_else(|| "config.toml: design.hook_capture is not a boolean".to_string()),
+    }
+}
+
+fn read_opt_config(path: &Path) -> Result<String, String> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("config.toml: {e}")),
+    }
+}
+
+/// The `[design]` section inside `text` (`hook_capture` defaults to true).
+pub fn design_in(text: &str) -> Result<DesignCfg, String> {
+    Ok(DesignCfg {
+        hook_capture: design_hook_capture_in(text)?.unwrap_or(true),
+    })
+}
+
+/// Read layered `[design]` configuration: user config first, then `<state_dir>/config.toml`.
+pub(crate) fn design_layered(
+    state_dir: Option<&Path>,
+    env: &BTreeMap<String, String>,
+) -> Result<DesignCfg, String> {
+    let user_opt = design_hook_capture_in(&read_opt_config(&config_path(env))?)?;
+    let core_opt = match state_dir {
+        Some(sd) => design_hook_capture_in(&read_opt_config(&sd.join("config.toml"))?)?,
+        None => None,
+    };
+    Ok(DesignCfg {
+        hook_capture: core_opt.or(user_opt).unwrap_or(true),
+    })
+}
+
+/// Read layered `[design]` configuration using `BACKLOT_STATE_DIR` (when set)
+/// and the user config.
+pub fn design(env: &BTreeMap<String, String>) -> Result<DesignCfg, String> {
+    let state_dir = env
+        .get("BACKLOT_STATE_DIR")
+        .filter(|s| !s.is_empty())
+        .map(Path::new);
+    design_layered(state_dir, env)
 }
 
 #[cfg(test)]

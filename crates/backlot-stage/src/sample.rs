@@ -128,7 +128,19 @@ impl Stage {
             session,
             signal_tail.as_deref(),
             work,
-        )
+        )?;
+        if w.role == "producer" {
+            self.check_design_capture(
+                studio,
+                w.dir,
+                w.state,
+                w.runner,
+                session,
+                signal_tail.as_deref(),
+                work,
+            )?;
+        }
+        Ok(())
     }
 
     /// `attention.raised` with the screen saved to

@@ -86,6 +86,7 @@ pub(crate) fn verify_pending_entries<E>(
 /// on approval) after `events.jsonl` commits. Render/write errors are logged
 /// to stderr and never turn a committed append into `Err`.
 pub(crate) fn sync_on_append(dir: &Path, state: &StudioState, stamped: &[Event]) {
+    crate::design_capture::clear_pending_on_append(dir, state, stamped);
     if let Err(err) = try_sync_on_append(dir, state, stamped) {
         eprintln!("{}", sync_warning(&err));
     }
