@@ -132,5 +132,6 @@ fn standby_mark_is_dim_blank_without_activity_or_attention() {
     assert_eq!(mark.still(), " ");
     assert_eq!(mark.color(&palette), palette.overlay0);
     assert_eq!(mark.word(), "standby");
-    assert_eq!(Person::state_text(&writer), "standby");
+    assert_eq!(Person::inline_state(&writer, 1).word, "standby");
+    assert_eq!(Person::inline_state(&writer, 1).detail, None);
 }

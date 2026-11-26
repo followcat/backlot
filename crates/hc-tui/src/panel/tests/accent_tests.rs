@@ -175,13 +175,13 @@ fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
 
     // Focusing the lot paints the selected `acme-shop` frame accent + chip and `▌` on selected row.
     panel.focused = true;
-    panel.selected = Some(Target::Person("acme-shop".into(), "producer".into()));
+    panel.selected = Some(Target::Person("acme-shop".into(), "actor-t4-c1".into()));
     let (focused_buf, hits) = draw_cur(area, &summary, &panel, Some("acme-shop"), &palette);
-    let prod_y = hit_y(
+    let actor_y = hit_y(
         &hits,
-        &Target::Person("acme-shop".into(), "producer".into()),
+        &Target::Person("acme-shop".into(), "actor-t4-c1".into()),
     );
-    assert_eq!(focused_buf[(area.x + 2, prod_y)].symbol(), "▌");
+    assert_eq!(focused_buf[(area.x + 2, actor_y)].symbol(), "▌");
     assert_border_fg(
         &focused_buf,
         area,

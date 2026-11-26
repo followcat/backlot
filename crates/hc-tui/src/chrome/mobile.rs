@@ -70,7 +70,8 @@ pub(crate) fn render_mobile_header(
         return;
     }
     let palette = &config.palette;
-    buffer.set_style(area, Style::default().bg(palette.panel_bg));
+    let bar_bg = super::overlay::chrome_bg(config);
+    buffer.set_style(area, Style::default().bg(bar_bg));
     let button_width = MOBILE_BUTTON_WIDTH.min(area.width);
     let button = Rect::new(
         area.right().saturating_sub(button_width),
@@ -116,7 +117,7 @@ pub(crate) fn render_mobile_header(
     render_header_status(buffer, status, snapshot, config, lot);
     if pill_w > 0 {
         let lot = lot.unwrap();
-        hits.lot_pill = super::lot::render_pill(
+        super::lot::render_pill_recorded(
             buffer,
             Rect::new(
                 status
@@ -131,6 +132,7 @@ pub(crate) fn render_mobile_header(
             lot.agent,
             lot.spin,
             palette,
+            hits,
         );
     }
     render_header_button(buffer, button, snapshot, config);
@@ -152,6 +154,7 @@ fn render_header_status(
         return;
     }
     let palette = &config.palette;
+    let bar_bg = super::overlay::chrome_bg(config);
     // A studio workspace's label is its header text — `acme-shop ›
     // actor-a t1` — with no tab status: the workspace's tabs are its
     // cast, not herdr tabs.
@@ -164,7 +167,7 @@ fn render_header_status(
             &format!(" {}", super::lot::header_text(header)),
             Style::default()
                 .fg(palette.text)
-                .bg(palette.panel_bg)
+                .bg(bar_bg)
                 .add_modifier(Modifier::BOLD),
         );
         if area.height > 1 {
@@ -189,7 +192,7 @@ fn render_header_status(
             area.y,
             area.width,
             " no workspace",
-            Style::default().fg(palette.text).bg(palette.panel_bg),
+            Style::default().fg(palette.text).bg(bar_bg),
         );
         return;
     };
@@ -207,7 +210,7 @@ fn render_header_status(
         ),
         Style::default()
             .fg(status_color(workspace.agent_status, palette))
-            .bg(palette.panel_bg),
+            .bg(bar_bg),
     );
     put_text(
         buffer,
@@ -217,7 +220,7 @@ fn render_header_status(
         &super::text::truncate_end(&workspace.label, usize::from(name_width.saturating_sub(4))),
         Style::default()
             .fg(palette.text)
-            .bg(palette.panel_bg)
+            .bg(bar_bg)
             .add_modifier(Modifier::BOLD),
     );
     put_text(
@@ -226,7 +229,7 @@ fn render_header_status(
         area.y,
         tab_width.saturating_sub(1),
         &tab_status,
-        Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+        Style::default().fg(palette.overlay1).bg(bar_bg),
     );
     if area.height > 1 {
         render_agent_summary(

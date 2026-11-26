@@ -13,7 +13,7 @@ use backlot_model::req_results::{
     RestartResult, TaskPriorityResult, TaskStateResult, TellResult,
 };
 
-use crate::args::{Cmd, TextSource};
+use crate::args::Cmd;
 use crate::cli::{Caller, Env, Fail};
 use crate::commands;
 use crate::store;
@@ -39,7 +39,7 @@ impl Drop for TempStageFile {
 /// `tell <role> "<text>"` from an in-memory string (used by `plugin.backlot.req`).
 pub(crate) fn tell_text(
     base: &Path,
-    env: &Env,
+    _env: &Env,
     caller: &Caller,
     role: String,
     text: &str,
@@ -57,31 +57,38 @@ pub(crate) fn tell_text(
     std::fs::write(&stage_path, text)
         .map_err(|e| Fail::refused(format!("cannot stage tell body: {e}")))?;
     let _guard = TempStageFile(stage_path.clone());
-    tell_file(base, env, caller, role, stage_path)
+    // `tell_text` serves `plugin.backlot.req` (UI/doc bridge) and is exempt from the CLI question guard.
+    tell_file_inner(base, caller, role, stage_path, false, false, false)
 }
 
-/// `tell <role> --file <path>` shared between CLI and `tell_text`.
+/// `tell <role> --file <path>` shared between CLI and doc verbs.
 pub(crate) fn tell_file(
     base: &Path,
-    env: &Env,
+    _env: &Env,
     caller: &Caller,
     role: String,
     file: PathBuf,
+    ask: bool,
+    note: bool,
+) -> Result<TellResult, Fail> {
+    tell_file_inner(base, caller, role, file, ask, note, true)
+}
+
+fn tell_file_inner(
+    base: &Path,
+    caller: &Caller,
+    role: String,
+    file: PathBuf,
+    ask: bool,
+    note: bool,
+    guard: bool,
 ) -> Result<TellResult, Fail> {
     let dir = store::studio_dir(base, &caller.studio);
     let msg_file = file.clone();
     let is_user_to_producer = caller.role == "user" && role == "producer";
     let caller_by = caller.by();
-    let built = commands::build(
-        caller,
-        Cmd::Tell {
-            role: role.clone(),
-            source: TextSource::File(file),
-            ask: false,
-        },
-        env,
-        base,
-    )?;
+    // Keep identity/lock rules aligned with `commands::build` while letting `tell_text` skip the guard.
+    let built = commands::tell_cmd(caller, &role, file, ask, note, guard)?;
     let events = store::append_many(&dir, move |state, seq| {
         let first = built(state, seq)?;
         let mut out = vec![first];

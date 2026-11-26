@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use backlot_model::summary::{RoleSummary, StudioSummary};
 
 pub(crate) mod glyphs;
+pub(crate) mod role_row;
 
 use crate::panel::data::MachineSummary;
 

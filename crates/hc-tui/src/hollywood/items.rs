@@ -5,6 +5,44 @@
 use super::rows::Live;
 use super::sheet::{PromptItem, ReadyItem, RoleItem, StageItem, StudioItem, Wait, machine_label};
 
+/// The four Call Sheet urgency buckets surfaced by the Lot Pill (`S3 §4.1`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WaitBucket {
+    /// Permission prompt, blocked/needs-you role, user-prompting Hollywood, or down/offline stage.
+    Blocking,
+    /// Open role question, non-blocking Hollywood wait, or studio awaiting initial direction.
+    Asks,
+    /// Open Hollywood or outward push/PR action card.
+    Cards,
+    /// Finish-ready studio awaiting wrap-up confirmation.
+    Ready,
+}
+
+impl WaitBucket {
+    pub(crate) fn of(wait: &Wait<'_>) -> Self {
+        match wait {
+            Wait::Prompt(_) | Wait::Stage(_) | Wait::Upgrade(_) => Self::Blocking,
+            Wait::Role(item) => {
+                if item.asks {
+                    Self::Asks
+                } else {
+                    Self::Blocking
+                }
+            }
+            Wait::Hollywood(hollywood) => {
+                if hollywood.attention_user {
+                    Self::Blocking
+                } else {
+                    Self::Asks
+                }
+            }
+            Wait::NoRequirement(_) => Self::Asks,
+            Wait::Card(_) | Wait::Outward(_) => Self::Cards,
+            Wait::Ready(_) => Self::Ready,
+        }
+    }
+}
+
 /// One action chip's label and its key — `allow y` draws ` allow y `.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Chip {
@@ -284,12 +322,16 @@ pub(crate) fn any_user_urgent(waits: &[Wait<'_>]) -> bool {
     waits.iter().any(|w| {
         matches!(w, Wait::Prompt(_) | Wait::Stage(_))
             || matches!(w, Wait::Role(r) if !r.asks)
-            || matches!(w, Wait::Hollywood(h) if h.attention_user
-            || super::handoff_ui::is_quota_or_error(h)
             || matches!(
-                super::handoff_ui::handoff_phase(h),
-                Some("needs_approval" | "rolled_back")
-            ))
+                w,
+                Wait::Hollywood(h)
+                    if h.attention_user
+                        || super::handoff_ui::is_quota_or_error(h)
+                        || matches!(
+                            super::handoff_ui::handoff_phase(h),
+                            Some("needs_approval" | "rolled_back")
+                        )
+            )
     })
 }
 

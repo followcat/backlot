@@ -17,6 +17,7 @@ impl App {
             A::Settings => self.open_settings_overlay(),
             A::ToggleSidebar => {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
+                self.panel.sidebar_collapsed = self.shell_state.sidebar_collapsed;
                 self.sidebar_collapsed_manual = true;
                 self.persist_chrome_preferences();
             }

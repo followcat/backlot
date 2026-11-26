@@ -172,7 +172,10 @@ fn height_functions_agree_with_emitted_rows() {
                 p.closed_folds.clear();
             }
             let owed = |_: crate::panel::data::StudioRef<'_>| true;
-            let states = block_states(&refs, &p, None, body_height, &owed);
+            let compact = |s: crate::panel::data::StudioRef<'_>| {
+                crate::panel::draw_compact::compact_kind(s.studio, true, true)
+            };
+            let states = block_states(&refs, &p, None, body_height, &compact, &owed);
             let budgets = talk_budgets(&refs, &states, &p, None, body_height, 0, &owed);
             let all = rows(&list, |_| true, |_| true, &p, p.mode, None, body_height);
 
@@ -189,6 +192,7 @@ fn height_functions_agree_with_emitted_rows() {
                         let expected = block_height(
                             *studio,
                             &p,
+                            None,
                             owed(*studio),
                             p.accepted_open(&key),
                             p.closed_open(&key),
@@ -203,6 +207,14 @@ fn height_functions_agree_with_emitted_rows() {
                         assert_eq!(
                             emitted.len(),
                             folded_block_height(studio.studio),
+                            "body={body_height}, open={open_folds}"
+                        );
+                    }
+                    BlockState::Compact(_) => {
+                        let expected = 1 + usize::from(p.finish_confirm.as_ref() == Some(&key));
+                        assert_eq!(
+                            emitted.len(),
+                            expected,
                             "body={body_height}, open={open_folds}"
                         );
                     }

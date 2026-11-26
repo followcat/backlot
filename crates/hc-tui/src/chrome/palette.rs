@@ -287,6 +287,27 @@ impl ThemeRuntimeConfig {
             .then(|| config.ui.accent.clone()),
         }
     }
+
+    /// Whether `[theme.custom]` (or active dark/light mode custom overrides)
+    /// explicitly specifies `sidebar_bg`.
+    pub(crate) fn has_explicit_sidebar_bg(&self, appearance: Option<HostAppearance>) -> bool {
+        let base = self
+            .custom
+            .as_ref()
+            .and_then(|c| c.sidebar_bg.as_ref())
+            .is_some();
+        let mode = if self.auto_switch {
+            match appearance.unwrap_or(HostAppearance::Dark) {
+                HostAppearance::Dark => self.custom.as_ref().and_then(|c| c.dark.as_ref()),
+                HostAppearance::Light => self.custom.as_ref().and_then(|c| c.light.as_ref()),
+            }
+            .and_then(|m| m.sidebar_bg.as_ref())
+            .is_some()
+        } else {
+            false
+        };
+        base || mode
+    }
 }
 
 pub(crate) fn resolve_palette_for_theme_name(

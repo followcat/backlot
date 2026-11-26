@@ -1,14 +1,14 @@
 //! The cast's renderer: divider and ` <id>` header in the
-//! agents section's slots, then the rows under `chrome/scroll`'s list
-//! metrics — same scroll model as herdr's agents list, so the wheel
-//! and the scrollbar take no new code.
+//! agents section's slots, then the 1-line rows under `chrome/scroll`'s
+//! list metrics — same scroll model as herdr's agents list.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
+use backlot_model::summary::RoleSummary;
+
 use super::CastView;
-use super::person;
 use super::rows::{CastRow, cast_rows};
 use crate::chrome::ClientShellConfig;
 use crate::chrome::palette::Palette;
@@ -109,45 +109,15 @@ pub(crate) fn render_cast(
         .iter()
         .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
     {
-        let compact_total: usize = rows
-            .iter()
-            .map(|row| match row {
-                CastRow::Person { role, .. } if !row.focused() => person::COMPACT_LINES,
-                CastRow::Person { role, .. } => person::full_height(role, view, body.width),
-                _ => row.lines(),
-            })
-            .sum::<u16>() as usize;
-        if compact_total > body.height as usize {
+        let total: usize = rows.iter().map(|row| row.lines() as usize).sum();
+        if total > body.height as usize {
             rows.retain(|r| !matches!(r, CastRow::ClosedDivider { .. }));
         }
     }
 
-    // Heights depend on width (wrapped roles) and on whether every role
-    // fits: when they do not, only the focused role keeps its full
-    // height and the rest fall back to two rows. The scrollbar takes a
-    // column, so a second pass reflows at the narrower width.
-    let height_at = |width: u16| -> Vec<u16> {
-        let full: Vec<u16> = rows
-            .iter()
-            .map(|row| match row {
-                CastRow::Person { role, .. } => person::full_height(role, view, width),
-                _ => row.lines(),
-            })
-            .collect();
-        let total: usize = full.iter().map(|height| *height as usize).sum();
-        if total <= body.height as usize {
-            return full;
-        }
-        rows.iter()
-            .zip(full)
-            .map(|(row, height)| match row {
-                CastRow::Person { .. } if !row.focused() => person::COMPACT_LINES,
-                _ => height,
-            })
-            .collect()
-    };
+    let heights: Vec<u16> = rows.iter().map(|row| row.lines()).collect();
+    // The cast packs its entries: one line per person, two per shell, no gap.
     let gaps = vec![0u16; rows.len().saturating_sub(1)];
-    let mut heights = height_at(body.width);
     let target = std::mem::take(reveal_focused_agent)
         .then(|| rows.iter().position(|row| row.focused()))
         .flatten();
@@ -160,19 +130,14 @@ pub(crate) fn render_cast(
             target,
         );
     }
-    let mut metrics = list_scroll_metrics(&heights, &gaps, body.height, *cast_scroll);
-    let mut content_width = body.width;
-    if metrics.max_offset_from_bottom > 0 && body.width > 1 {
-        content_width = body.width - 1;
-        heights = height_at(content_width);
-        metrics = list_scroll_metrics(&heights, &gaps, body.height, *cast_scroll);
-    }
+    let metrics = list_scroll_metrics(&heights, &gaps, body.height, *cast_scroll);
     hits.agent_max_scroll = metrics.max_offset_from_bottom;
     hits.agent_scroll_metrics = Some(metrics);
     *cast_scroll = metrics
         .max_offset_from_bottom
         .saturating_sub(metrics.offset_from_bottom);
     let show_bar = metrics.max_offset_from_bottom > 0 && body.width > 1;
+    let content_width = if show_bar { body.width - 1 } else { body.width };
     let mut y = body.y;
     for (index, row) in rows.iter().enumerate().skip(*cast_scroll) {
         let height = heights[index].min(body.height);
@@ -185,8 +150,7 @@ pub(crate) fn render_cast(
                 if let Some(terminal) = &role.terminal {
                     hits.agents.push((rect, terminal.clone()));
                 }
-                let full = heights[index] > person::COMPACT_LINES;
-                person::draw(buffer, rect, role, *focused, full, view, palette);
+                draw_person(buffer, rect, role, *focused, view, palette);
             }
             CastRow::ClosedDivider { count } => {
                 super::simple::draw_closed_divider(buffer, rect, *count, palette);
@@ -246,6 +210,48 @@ pub(crate) fn render_cast(
         hits.agent_scrollbar = track;
         render_list_scrollbar(buffer, track, metrics, palette);
     }
+}
+
+/// A person's single-line entry: focus bar `▎`, mark, role badge,
+/// priority flag, unified inline state word/age, and truncated detail.
+fn draw_person(
+    buffer: &mut Buffer,
+    rect: Rect,
+    role: &RoleSummary,
+    focused: bool,
+    view: &CastView<'_>,
+    palette: &Palette,
+) {
+    if rect.height == 0 {
+        return;
+    }
+    if focused {
+        buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            1,
+            "▎",
+            Style::default().fg(palette.overlay1),
+        );
+    }
+    let title = role
+        .terminal
+        .as_deref()
+        .and_then(|t| view.titles.get(t).and_then(|v| v.as_deref()));
+    crate::studio::role_row::render_role_row(
+        buffer,
+        rect,
+        rect.x + 1,
+        rect.x + 3,
+        rect.right(),
+        role,
+        view.spin,
+        view.now_ms,
+        title,
+        palette,
+    );
 }
 
 /// A shell's two rows, laid out like a person's: a dim `$` (or the

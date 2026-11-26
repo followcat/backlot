@@ -393,9 +393,10 @@ async fn the_lot_pill_sits_at_the_bar_s_right_end_and_opens_on_click() {
     let backend = draw_to(&mut app, 120, 24);
     let top = &screen_lines(&backend)[0];
     assert!(top.contains("✦"), "the lot pill: {top}");
-    // The two open cards are on the needs-you list, so the pill's
-    // urgent count names them.
-    assert!(top.contains("!2 you"), "the needs-you count: {top}");
+    // The two open cards appear in the cards bucket, not as blocking red `!`.
+    assert!(top.contains("2 cards"), "the cards bucket count: {top}");
+    assert_eq!(app.studio.lot.counts.blocking, 0);
+    assert_eq!(app.studio.lot.counts.cards, 2);
     let pill = app.hit_map.lot_pill;
     assert_eq!(pill.height, 1);
     assert_eq!(pill.x + pill.width, 120, "the right end of the row");

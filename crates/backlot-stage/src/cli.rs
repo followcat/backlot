@@ -536,13 +536,18 @@ pub(crate) fn exec_event(
         _ => None,
     };
     if let Some(res) = match cmd {
-        Cmd::Tell { role, source, .. } if h_mirror.is_none() => {
+        Cmd::Tell {
+            role,
+            source,
+            ask,
+            note,
+        } if h_mirror.is_none() => {
             let file = match source {
                 crate::args::TextSource::File(p) => p,
                 _ => return Err(Fail::refused("internal: unresolved message source")),
             };
             Some(crate::verbs::format_tell(&crate::verbs::tell_file(
-                base, env, &caller, role, file,
+                base, env, &caller, role, file, ask, note,
             )?))
         }
         Cmd::AttentionClear { target } => Some(crate::verbs::format_attention_clear(

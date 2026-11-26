@@ -758,6 +758,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     let mut src = Source::default();
     let mut text = None;
     let mut ask = false;
+    let mut note = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_TELL)));
@@ -770,6 +771,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         }
         match arg.as_str() {
             "--ask" => ask = true,
+            "--note" => note = true,
             _ if arg.starts_with('-') => {
                 return Err(usage(format!("unexpected argument '{arg}'"), U_TELL));
             }
@@ -782,6 +784,12 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     // its own ledger, no file, no studio. `--text` answers the same
     // line without a positional word (G2).
     if role.as_deref() == Some("hollywood") {
+        if ask || note {
+            return Err(usage(
+                "--ask and --note do not apply to tell hollywood",
+                U_TELL,
+            ));
+        }
         if src.file.is_some() || src.stdin {
             return Err(usage(
                 "--file and --stdin do not apply to tell hollywood",
@@ -803,12 +811,16 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     if let Some(extra) = text {
         return Err(usage(format!("unexpected argument '{extra}'"), U_TELL));
     }
+    if ask && note {
+        return Err(usage("pick at most one of --ask and --note", U_TELL));
+    }
     Ok((
         std::mem::take(common),
         Cmd::Tell {
             role: role.ok_or_else(|| usage("missing role", U_TELL))?,
             source: src.one(U_TELL)?,
             ask,
+            note,
         },
     ))
 }

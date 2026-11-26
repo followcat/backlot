@@ -607,7 +607,7 @@ fn custom_push_in_cast_toml_and_agy_hook_classification() {
     ));
 
     // agy settings omit static git push / gh pr deny rules.
-    let settings = String::from_utf8(agy::settings_content(None).unwrap()).unwrap();
+    let settings = String::from_utf8(agy::settings_content(None, None).unwrap()).unwrap();
     assert!(!settings.contains("command(git push)"), "{settings}");
     assert!(!settings.contains("command(gh pr)"), "{settings}");
     assert!(settings.contains("command(gh release)"), "{settings}");

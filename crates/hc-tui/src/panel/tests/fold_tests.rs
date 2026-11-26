@@ -144,7 +144,6 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
             Row::BlockTop { .. } => "BlockTop",
             Row::Person { .. } => "Person",
             Row::BlockBottom(_) => "BlockBottom",
-            Row::PersonLine { .. } => "PersonLine",
             Row::Divider { .. } => "Divider",
             Row::Owed { .. } => "Owed",
             Row::Usage { .. } => "Usage",
@@ -157,18 +156,8 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
         .collect();
     assert_eq!(
         tags,
-        vec![
-            "BlockTop",
-            "Person",
-            "Divider",
-            "Person",
-            "Divider",
-            "Person",
-            "Divider",
-            "Person",
-            "BlockBottom"
-        ],
-        "unselected blog must fold to header + 4 live roles + bottom: {blog:?}"
+        vec!["BlockTop", "Person", "Divider", "Person", "BlockBottom"],
+        "unselected active blog folds to header + active/alert roles with divider + bottom: {blog:?}"
     );
     let blog_roles: Vec<&str> = blog
         .iter()
@@ -177,10 +166,7 @@ fn cursor_in_first_studio_folds_second_to_header_live_roles_and_bottom() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        blog_roles,
-        vec!["producer", "director", "writer", "actor-t1-c1"]
-    );
+    assert_eq!(blog_roles, vec!["director", "actor-t1-c1"]);
     let acme = studio_rows(&all, "acme-shop");
     assert!(
         acme.iter().any(|r| matches!(r, Row::Input { .. })),
@@ -218,16 +204,8 @@ fn moving_cursor_to_second_studio_folds_first_and_unfolds_second() {
         .collect();
     assert_eq!(
         acme_tags,
-        vec![
-            "BlockTop",
-            "Person",
-            "Divider",
-            "Person",
-            "Divider",
-            "Person",
-            "BlockBottom"
-        ],
-        "acme-shop must fold when cursor is in blog: {acme:?}"
+        vec!["BlockTop", "Person", "BlockBottom"],
+        "acme-shop must fold to active role only when cursor is in blog: {acme:?}"
     );
     let blog = studio_rows(&all, "blog");
     assert!(
@@ -239,8 +217,8 @@ fn moving_cursor_to_second_studio_folds_first_and_unfolds_second() {
         "{blog:?}"
     );
     assert!(
-        blog.iter().any(|r| matches!(r, Row::PersonLine { .. })),
-        "unfolded blog keeps PersonLine: {blog:?}"
+        blog.iter().any(|r| matches!(r, Row::Person { .. })),
+        "unfolded blog keeps Person rows: {blog:?}"
     );
 }
 

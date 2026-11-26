@@ -104,6 +104,8 @@ pub enum Cmd {
         source: TextSource,
         /// `--ask`: a `tell user` that is a question awaiting the person.
         ask: bool,
+        /// `--note`: explicitly send a `tell user` with `?` as plain information.
+        note: bool,
     },
     /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
     Progress {

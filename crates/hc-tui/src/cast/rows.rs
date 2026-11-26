@@ -44,11 +44,12 @@ pub(crate) enum CastRow<'a> {
 }
 
 impl CastRow<'_> {
-    /// Display lines — two per person or shell, one for the group
+    /// Display lines — one per person, two per shell, one for group
     /// headers, the agent row's own token rows.
     pub(crate) fn lines(&self) -> u16 {
         match self {
-            CastRow::Person { .. } | CastRow::Shell { .. } => 2,
+            CastRow::Person { .. } => 1,
+            CastRow::Shell { .. } => 2,
             CastRow::ClosedDivider { .. }
             | CastRow::Shells
             | CastRow::Others { .. }

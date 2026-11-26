@@ -14,16 +14,23 @@ async fn alt_l_hint_shows_in_lot_header_help_and_launcher() {
     app.panel.mode = PanelMode::Expanded;
 
     // 1. Lot header at default dock widths (140 -> 38 cols, 120 -> 36 cols)
-    // shows both alt+l and alt+y / ctrl+b i.
+    // shows `alt+l focus` (no `alt+y / ctrl+b i` sheet hint in Lot header).
     for (cols, rows) in [(140u16, 40u16), (120, 24)] {
         app.area = (cols, rows);
         let screen = screen_lines(&draw_to(&mut app, cols, rows)).join("\n");
         let header = screen.lines().next().unwrap_or_default();
-        assert!(header.contains("lot · 1"), "{cols}x{rows} header: {header}");
-        assert!(header.contains("alt+l"), "{cols}x{rows} header: {header}");
+        let lot_header = header.rsplit('│').next().unwrap_or_default();
         assert!(
-            header.contains("alt+y / ctrl+b i"),
+            lot_header.contains("lot · 1"),
             "{cols}x{rows} header: {header}"
+        );
+        assert!(
+            lot_header.contains("alt+l focus"),
+            "{cols}x{rows} header: {header}"
+        );
+        assert!(
+            !lot_header.contains("alt+y"),
+            "{cols}x{rows} lot header should not repeat alt+y: {header}"
         );
     }
 
@@ -75,10 +82,12 @@ async fn alt_l_hint_shows_in_lot_header_help_and_launcher() {
     let (config, notice) = crate::panel::load(&path);
     assert!(notice.is_none());
     app.set_panel_config(config, notice, &path);
+    app.panel.focused = false;
     app.area = (140, 40);
     let screen = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
     let header = screen.lines().next().unwrap_or_default();
-    assert!(header.contains("alt+o"), "rebound header: {header}");
+    let lot_header = header.rsplit('│').next().unwrap_or_default();
+    assert!(lot_header.contains("alt+o"), "rebound lot header: {header}");
 
     std::fs::write(&path, "[keys]\nfocus_lot = \"\"\n").unwrap();
     let (config, notice) = crate::panel::load(&path);
@@ -86,6 +95,10 @@ async fn alt_l_hint_shows_in_lot_header_help_and_launcher() {
     app.set_panel_config(config, notice, &path);
     let screen = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
     let header = screen.lines().next().unwrap_or_default();
-    assert!(!header.contains("alt+l"), "unbound header: {header}");
-    assert!(header.contains("alt+y / ctrl+b i sheet"), "{header}");
+    let lot_header = header.rsplit('│').next().unwrap_or_default();
+    assert!(!lot_header.contains("alt+l"), "unbound header: {header}");
+    assert!(
+        !lot_header.contains("alt+y"),
+        "unbound header omits removed alt+y hint: {header}"
+    );
 }

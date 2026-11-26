@@ -205,17 +205,20 @@ async fn a_step_from_the_machines_tree_keeps_the_tree_focused() {
     assert_eq!(app.focused.as_deref(), Some("t7"), "the pane swapped");
     assert!(app.tree_focused(), "the tree kept the keys");
     let row = app.tree_focus.clone().expect("a tree row");
-    let on_night_owl = app.tree_rows().iter().position(|r| r == &row).map(|_| row);
-    assert!(on_night_owl.is_some());
     assert!(
-        matches!(
-            on_night_owl.unwrap(),
+        app.tree_rows().contains(&row),
+        "cursor remains on a valid tree row"
+    );
+    // Live studios are deduplicated into Cast/Lot rather than shown in the left tree.
+    assert!(
+        !app.tree_rows().iter().any(|r| matches!(
+            r,
             crate::chrome::studio_tree::SidebarRow::Studio {
-                row: crate::chrome::studio_tree::Row::Studio { ref id, .. },
+                row: crate::chrome::studio_tree::Row::Studio { id, .. },
                 ..
             } if id == "night-owl"
-        ),
-        "the cursor sits on the studio it landed on"
+        )),
+        "live studios stay deduplicated from the left tree"
     );
 }
 
@@ -250,19 +253,18 @@ async fn enter_on_a_tree_row_still_lands_the_member_and_leaves_the_tree() {
     app.area = (120, 28);
     draw_to(&mut app, 120, 28);
     press_tree_chord(&mut app);
+    // Non-studio workspace `space-t99` stays in the left tree and Enter switches to `t99`.
     let row = app
         .tree_rows()
         .into_iter()
         .find(|row| {
             matches!(
                 row,
-                crate::chrome::studio_tree::SidebarRow::Studio {
-                    row: crate::chrome::studio_tree::Row::Studio { id, .. },
-                    ..
-                } if id == "night-owl"
+                crate::chrome::studio_tree::SidebarRow::Workspace { workspace_id, .. }
+                    if workspace_id == "space-t99" || workspace_id.ends_with(":space-t99")
             )
         })
-        .expect("night-owl's studio row");
+        .expect("t99 workspace row");
     app.tree_focus = Some(row);
     app.on_input(
         UiEvent::Key(term_key(
@@ -272,11 +274,10 @@ async fn enter_on_a_tree_row_still_lands_the_member_and_leaves_the_tree() {
         )),
         app.area.0,
     );
-    assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(
         app.focused.as_deref(),
-        Some("t7"),
-        "Enter lands the producer (nobody remembered)"
+        Some("t99"),
+        "Enter focuses the tree workspace's terminal"
     );
     assert!(!app.tree_focused(), "Enter leaves the tree for the pane");
 }

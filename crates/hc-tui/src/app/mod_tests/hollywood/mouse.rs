@@ -3,6 +3,7 @@
 //! input line opens for editing, the wheel scrolls and a press
 //! outside leaves the panel open for whatever is under it.
 use super::*;
+use crate::studio::StudioKey;
 
 #[tokio::test]
 async fn a_click_on_the_lot_pill_expands_the_layer() {
@@ -485,4 +486,93 @@ async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
             "user"
         ]]
     );
+}
+
+#[tokio::test]
+async fn lot_pill_segments_jump_to_clicked_bucket_and_alt_y_lands_on_blocking() {
+    let mut app = app_with_hollywood();
+    let mut value = summary_json();
+    value["studios"][0]["roles"][1]["attention"] = "needs permission".into();
+    value["studios"][0]["roles"][1]["attention_seq"] = serde_json::json!(7);
+    value["studios"][0]["roles"][1]["attention_user"] = true.into();
+    value["studios"][0]["roles"][0]["work"] = "waiting".into();
+    value["studios"][0]["roles"][0]["asks"] = "ship now?".into();
+    value["studios"][0]["ready_to_finish"] = true.into();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (160, 44);
+    draw_to(&mut app, 160, 44);
+
+    assert_eq!(app.studio.lot.counts.blocking, 1);
+    assert_eq!(app.studio.lot.counts.asks, 1);
+    assert_eq!(app.studio.lot.counts.cards, 2);
+    assert_eq!(app.studio.lot.counts.ready, 1);
+
+    let click_bucket = |app: &mut App, bucket: crate::chrome::lot::PillAction| {
+        app.hollywood.mode = LayerMode::Collapsed;
+        draw_to(app, 160, 44);
+        let rect = app
+            .hit_map
+            .lot_pill_segments
+            .iter()
+            .find(|(_, a)| *a == bucket)
+            .map(|(r, _)| *r)
+            .unwrap_or_else(|| panic!("missing pill segment {bucket:?}"));
+        app.on_mouse(mouse(
+            MouseEventKind::Down(MouseButton::Left),
+            rect.x,
+            rect.y,
+        ));
+    };
+
+    // `!1` -> first blocking item (`Resting`), `?1` -> asks role, `2c` -> first card, `✓1` -> ready.
+    click_bucket(&mut app, crate::chrome::lot::PillAction::Asks);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Role(
+            StudioKey::local("acme-shop"),
+            "producer".into()
+        ))
+    );
+    assert!(!app.hollywood.editing);
+
+    click_bucket(&mut app, crate::chrome::lot::PillAction::Cards);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert!(!app.hollywood.editing);
+
+    click_bucket(&mut app, crate::chrome::lot::PillAction::Ready);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Ready(StudioKey::local("acme-shop")))
+    );
+    assert!(!app.hollywood.editing);
+
+    click_bucket(&mut app, crate::chrome::lot::PillAction::Blocking);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Prompt(
+            StudioKey::local("acme-shop"),
+            "actor-alice".into()
+        ))
+    );
+    assert!(!app.hollywood.editing);
+
+    // Smart `Alt+Y` with `blocking > 0` lands on the 1st blocking item (`Resting`).
+    app.hollywood.mode = LayerMode::Collapsed;
+    alt_y(&mut app);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Prompt(
+            StudioKey::local("acme-shop"),
+            "actor-alice".into()
+        ))
+    );
+    assert!(!app.hollywood.editing);
 }

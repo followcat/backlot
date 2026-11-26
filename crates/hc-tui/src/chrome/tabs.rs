@@ -27,7 +27,8 @@ pub(crate) fn render_tab_bar(
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
-    buffer.set_style(area, Style::default().bg(palette.panel_bg));
+    let bar_bg = super::overlay::chrome_bg(config);
+    buffer.set_style(area, Style::default().bg(bar_bg));
     let tabs = snapshot
         .tabs
         .iter()
@@ -185,7 +186,7 @@ pub(crate) fn render_tab_bar(
             area.y,
             hits.new_tab.width,
             " + ",
-            Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+            Style::default().fg(palette.overlay1).bg(bar_bg),
         );
     }
 
@@ -232,7 +233,7 @@ pub(crate) fn render_tab_bar(
             Style::default().fg(palette.accent),
         );
     }
-    render_tab_bar_status(buffer, area, snapshot, palette);
+    render_tab_bar_status(buffer, area, snapshot, palette, bar_bg);
 }
 
 pub(crate) fn tab_bar_status_width(snapshot: &ClientShellSnapshot) -> u16 {
@@ -271,6 +272,7 @@ fn render_tab_bar_status(
     area: Rect,
     snapshot: &ClientShellSnapshot,
     palette: &super::palette::Palette,
+    bar_bg: ratatui::style::Color,
 ) {
     let Some(status) = tab_bar_status_area(snapshot, area) else {
         return;
@@ -285,7 +287,7 @@ fn render_tab_bar_status(
                 area.y,
                 separator_width,
                 &snapshot.tab_bar_right_separator,
-                Style::default().fg(palette.overlay0).bg(palette.panel_bg),
+                Style::default().fg(palette.overlay0).bg(bar_bg),
             );
             x = x.saturating_add(separator_width);
         }
@@ -296,7 +298,7 @@ fn render_tab_bar_status(
                 .bg(palette.accent)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(palette.overlay1).bg(palette.panel_bg)
+            Style::default().fg(palette.overlay1).bg(bar_bg)
         };
         put_text(buffer, x, area.y, width, &segment.text, style);
         x = x.saturating_add(width);

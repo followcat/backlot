@@ -77,6 +77,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         );
     }
     let collapsed = app.shell_state.sidebar_collapsed;
+    app.panel.sidebar_collapsed = collapsed;
     let layout = app.chrome_layout(area.width, area.height);
     // U1: studio mode replaces the agents section with the current
     // studio's cast — borrowed views only, every machine's summaries.
@@ -102,6 +103,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             app.studio.others_expanded,
             cast_focused,
             app.panel.spin,
+            crate::update_state::now_ms(),
         )
     });
     if let Some(view) = cast.as_mut() {

@@ -295,6 +295,7 @@ fn the_cast_shows_the_only_live_studio_and_hints_otherwise() {
         false,
         None,
         0,
+        1,
     );
     assert!(cast.studio.is_some(), "the only live studio shows");
     assert!(!cast.hint);
@@ -325,6 +326,7 @@ fn the_cast_shows_the_only_live_studio_and_hints_otherwise() {
         false,
         None,
         0,
+        1,
     );
     assert!(cast.studio.is_none(), "two studios need a choice");
     assert!(cast.hint, "the hint answers for them");
