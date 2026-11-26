@@ -176,8 +176,8 @@ band line). Without a table the frames still draw and the band shows the setup l
 of the waiting rows — `⏎ hollywood setup` opens the in-TUI setup dialog. Everything it changes
 goes through `backlot` commands run as the
 user — `approve`, `stage start`, `card apply`, `card cancel`, `card show`,
-`studio finish`, `tell hollywood`, `hollywood setup` — off the event loop, failures surfacing as notices where
-you are looking. The only client-local state is the mode, the selection, the scroll offsets
+`studio finish`, `tell hollywood`, `hollywood setup`, `design sign`, `design open`, and `report show` — off the event loop, failures surfacing as notices where
+you are looking (on server clients, `design-sign`, `design-start-round`, and `tell` route over `plugin.backlot.req`; see [requests.md](requests.md) for `StudioSummary.design` fields and queue verbs, and [design.md](design.md#opening-design-discussion) for design lifecycle rules). The only client-local state is the mode, the selection, the scroll offsets
 and the input line's text.
 
 ## Configuring Hollywood's agent
@@ -546,3 +546,4 @@ read-only set — `smart` alone governs it. `backlot guide` is on every list, th
 ## What is not here yet
 
 - **H5**: a real agent under an approved run — everything above is runner-agnostic and fake-tested.
+- **Mobile (`wherdr`) opening design UI**: `backlot/1` (`StudioSummary.design`), `design/*` report reads, and the `plugin.backlot.req` actions (`design-sign`, `design-start-round`, `tell`) are implemented on the hub, while `wherdr` client cards and buttons are not built yet.

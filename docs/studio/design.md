@@ -205,12 +205,13 @@ If an actor goes quiet without delivering, the stage reminds it once and then ra
 Normal path:
 
 1. The user and producer settle the goal and constraints. The producer records requirement version 1.
-2. The producer starts the writer. They agree on a plan and acceptance list, and the writer publishes it.
-3. The producer dispatches to the director.
-4. The director splits the work into tasks that can each be delivered on their own, and casts actors from the candidates.
-5. Each actor works in its own area and delivers.
-6. The director reviews against the plan and acceptance list, requests rework or accepts, and integrates.
-7. At nodes, the director reports to the producer, and the producer reports to the user.
+2. When `design_gate = "required"` (default on new studios), an opening design discussion runs across Round 1+ (`writer` proposal, `director` buildability review, `producer` convergence summary and questions, and user `design.signed` — or a user-confirmed `--suggest-skip`) before any `plan`, `dispatch`, or `task` is allowed (see [Opening design discussion](#opening-design-discussion)).
+3. Once the requirement version's design is signed (or when `design_gate = "off"`), the producer starts the writer. They agree on a formal plan and acceptance list (citing `design v<N> §R<r>.*` when signed off normally), and the writer publishes it.
+4. The producer dispatches to the director.
+5. The director splits the work into tasks that can each be delivered on their own, and casts actors from the candidates.
+6. Each actor works in its own area and delivers.
+7. The director reviews against the plan and acceptance list, requests rework or accepts, and integrates.
+8. At nodes, the director reports to the producer, and the producer reports to the user.
 
 Light path: the producer dispatches one task directly to one actor, or does the job itself — `task new`, `cast` and
 `review` are the producer's and director's to run, so `backlot … --as producer` runs the whole path. A producer's cast
@@ -220,6 +221,24 @@ two paths can be compared on real work.
 When everything is accepted the user decides and finishes the studio themselves; the producer reports
 it ready and what is still theirs to do, and never runs the finish. `backlot studio finish` records
 `studio.finished` and the studio stops scheduling — only a person explicitly reopened is desired again.
+
+## Opening design discussion
+
+When `design_gate` is `"required"` (the default for newly created studios; set `design_gate = "off"` in `cast.toml` or via `backlot studio cast set` to disable per studio, while existing studios whose `studio.created` lacks `design_gate` stay `"off"`), every new requirement version passes through a single user-gated design lifecycle before planning, dispatch, or task creation is allowed:
+
+- **State machine (`DesignPhase`):**
+  1. `idle`: a `req.version` was recorded, no round is open yet.
+  2. `suggest_skip`: `design.opened` with `suggest_skip = true` (optional `reason`, allowed only for tiny fixes or an already-finalized external plan). The person either accepts skipping (`design.signed` with `mode = "skipped"`) or rejects skipping (`backlot design open` / remote `design-start-round`), moving to Round 1 (`waiting_proposal`).
+  3. `waiting_proposal`: Round `r` opened; the `writer` posts `design.entry` (`slot = "proposal"`).
+  4. `waiting_buildability`: the `director` posts `design.entry` (`slot = "buildability"`).
+  5. `waiting_summary`: the `producer` posts `design.entry` (`slot = "summary"`) with 0–3 structured `DesignQuestion`s (`id`, `prompt`, `recommendation`, optional `section_ref`).
+  6. `waiting_user`: the studio waits on the person. The person may sign off (`design.signed`), reply via `backlot tell producer` / producer terminal (appending `design.entry` `slot = "user_input"` with `source = "tell" | "hook" | "producer_note"`), or address `writer` / `director` for an in-round `design.entry` (`slot = "supplement"`, requiring `--refs <seq>` pointing at existing message or design entry `seq`s). Once `user_input` follows the round's `summary`, `producer` or `user` may advance with `backlot design next` (`design.opened`, `round = r + 1`, `waiting_proposal`).
+  7. `signed`: `design.signed` (`user` only, refused in `roles` and `proc_guard`/`BACKLOT_*` when called by any agent role) closes the active requirement version with `mode = "approved"` or `"skipped"`.
+
+- **Hard gate & reset:** While `design_gate == required` and `design_phase != signed`, `validate` refuses `plan.published`, `dispatch`, `task.created`, and `task.cast` (`Refusal::DesignNotSigned`). Recording a new `req.version` resets any unsigned active `DesignState` back to `idle` while preserving signed versions in `design_history`.
+- **Steps, wanted roles, and nudges:** `steps::next_steps` emits an owed step for each active phase (`open design`, `design proposal`, `design buildability`, `design summary`, `sign off or open next round`, `reject skip`, plus post-sign `derive plan from design` and `dispatch`). `wanted_roles` keeps `writer` alive through active rounds and post-sign plan derivation; `nudge` times role-owned slots and never nudges user-owned `suggest_skip` or `waiting_user`.
+- **Immutable section files, assembly, and freeze (`design_doc.rs`):** Non-empty entry bodies stage as `PendingFile` and write to immutable files under `design/v<N>/r<round>-<seq>-<slug>.md` (`proposal`, `buildability`, `summary`, `user_input`, `supplement`). Under `events.lock`, commits atomically rewrite `design/v<N>.md` (temp file + `sync_data` + rename) with `# Design discussion · req v<N>[: <summary>]`, `## R<r>`, deterministic section headings (`### §R<r>.W`, `### §R<r>.D`, `### §R<r>.P`, `### §R<r>.U`, `### §R<r>.W+` / `### §R<r>.D+`, plus `#### Questions`), and trailing `## Sign-off (#<seq>)` when signed. `approved` sign-off idempotently freezes `design/v<N>-final.md` (matching `design/v<N>.md` at sign-off; a mismatched existing `-final.md` refuses); `skipped` creates no `-final.md`.
+- **Producer terminal capture:** Unless `[design] hook_capture = false` is set in `<state_dir>/config.toml` or `~/.config/backlot/config.toml`, `backlot hook` captures non-empty, non-`[backlot]` producer terminal prompts strictly while `design_gate == required` and `phase == waiting_user` on supported runners (`claude`, `devin` `UserPromptSubmit`, `agy` `PreInvocation`) into `<studio>/design/.hook-capture.jsonl`. Stage terminal writes (`deliver`, key sends, lifecycle actions) taint and suppress spurious capture; when capture is disabled or unsupported, untainted producer turns create `<studio>/design/.pending-user-note.json`, refusing `backlot design next` until `backlot design note --from user` (or `tell producer`) lands.
 
 ## Stop conditions
 
@@ -371,7 +390,14 @@ headline and its open cards. It appears only while `[hollywood]` is configured. 
 `backlot/1`) `card` for a `card.proposed` Hollywood wrote itself — so the band can draw a proposal as a reply and the
 Reader can open it as a card. Independently of `[hollywood]`, each
 `StudioSummary` projects up to eight open outward push/PR cards (`outward_cards` with command, rule, why, remote URL,
-and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike; when a studio's ledger contains unknown event kinds at `v <= LEDGER_VERSION`, the stage pauses read-only for that studio and marks its summary entry with `needs_upgrade: true` and `unknown_kinds` (omitted on normal studios) so the TUI and `wherdr` display `"upgrade backlot"`.
+and commit summary) so both the Call Sheet and Studio Dock show them in agent and non-agent modes alike; when
+`design_gate = "required"` and the current requirement version's opening design is beyond `idle`, it also carries an
+optional `design` (`DesignSummary`: `version`, `round`, `phase`, `waiting_user`, `suggest_skip`, `skip_reason`,
+`doc_file`, capped `summary`, up to 3 capped `questions`, `waiting_since_ms`), slimming to header fields (`summary:
+null`, `questions: []`) once `signed` and all tasks for that version have been cast; and when a studio's ledger
+contains unknown event kinds at `v <= LEDGER_VERSION`, the stage pauses read-only for that studio and marks its
+summary entry with `needs_upgrade: true` and `unknown_kinds` (omitted on normal studios) so clients display
+`"upgrade backlot"`.
 
 ## Hollywood
 
@@ -455,6 +481,23 @@ refresh keeps the last inventory for the next pass.
 The panel shows a one-line "stage stopped" while keeping the last document on screen. `s`, Enter
 or a click on the line runs `backlot stage start` on that machine — the stage runs as its own
 process either way.
+
+## Forward compatibility (#185)
+
+Adding new ledger event kinds (such as `design.*`) uses a two-step rollout so older `backlot` processes never
+corrupt a newer ledger or misallocate `seq`:
+
+1. **Step 1 — tolerate unknown kinds read-only:** `v <= LEDGER_VERSION` lines with unrecognised `kind` strings
+   deserialise as `EventKind::Unknown { raw_kind }` (`ledger.md`), keeping `seq`, `ts_ms`, and `by`, advancing
+   `next_seq`, ignoring payloads during state reduction, and preserving raw JSON lines byte-for-byte during `studio
+   migrate` or ledger rewrites. Read commands keep working; `store::append_locked` refuses writes with `"this ledger
+   has records from a newer backlot (<kinds>); upgrade backlot"`; `backlot stage` pauses read-only for that studio
+   while continuing sibling studios; and `StudioSummary` sets `needs_upgrade: true` + `unknown_kinds`. Lines with
+   `v > LEDGER_VERSION` remain a corrupt-ledger error.
+2. **Step 2 — enable new writers after Step 1 lands everywhere:** deploy Step 1 to every machine reading the shared
+   state directories before rolling out binaries that write `design.*` events and default new studios to `design_gate =
+   "required"`. Any remaining older host safely pauses read-only with an upgrade notice instead of colliding on `seq` or
+   spurious wakeups.
 
 ## Studio panel
 

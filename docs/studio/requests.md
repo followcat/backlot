@@ -1,6 +1,6 @@
 # Request, Result, and Catalog Documents (`plugin.backlot.*` & `backlot-cat`)
 
-Clients (`backlot` TUI/CLI remotes and `wherdr`) drive person actions over the stage's `hc` session using compare-and-set (`doc.get` / `doc.set`) on three fixed documents matching `hc`'s name rule (`^[a-z0-9_][a-z0-9_.-]{0,31}$`):
+Clients (`backlot` TUI/CLI remotes and `hc` document clients) drive person actions over the stage's `hc` session using compare-and-set (`doc.get` / `doc.set`) on three fixed documents matching `hc`'s name rule (`^[a-z0-9_][a-z0-9_.-]{0,31}$`):
 
 | Document | Writer | Purpose |
 | --- | --- | --- |
@@ -90,6 +90,17 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 - Never publishes secrets (`[hollywood].key` is omitted).
 - Published at stage start and republished whenever any catalog field (`runners`, `hollywood_cfg`, `default_cast`, `archived`, `server_id`, `home`) changes.
 
+### `backlot` summary projection (`backlot/1`)
+
+The stage publishes the live studio summary under document `backlot` (`schema: "backlot/1"`). Two additive, backward-compatible extensions on each `StudioSummary` entry support forward compatibility and the opening design discussion (missing fields default safely on older readers):
+
+- **`needs_upgrade` (`bool`, default `false`) & `unknown_kinds` (`string[]`):** present only when a studio's ledger contains `EventKind::Unknown` records at `v <= LEDGER_VERSION`. Clients display `"upgrade backlot"` and keep that studio read-only.
+- **`design` (`DesignSummary?`, omitted when `null`):** present when `design_gate == "required"` and the current `requirement_version` has opened or signed design state (`phase != "idle"`). Fields:
+  - `version` (`u32`), `round` (`u32`), `phase` (`"idle" | "suggest_skip" | "waiting_proposal" | "waiting_buildability" | "waiting_summary" | "waiting_user" | "signed"`)
+  - `waiting_user` (`bool`, `true` in `"waiting_user"` or `"suggest_skip"` — routes Call Sheet `DECISION` items to the warm `?N` asks bucket rather than blocking `!B`)
+  - `suggest_skip` (`bool`), `skip_reason` (`string?`), `doc_file` (`"design/v<N>.md"`), `summary` (`string?`), `questions` (up to `3` `{ id, prompt, recommendation, section_ref? }`), `waiting_since_ms` (`u64?`, set only while `waiting_user == true`)
+  - `summary`, `skip_reason`, `doc_file`, and question strings are capped at 96 characters (`CAP = 96`); the complete Markdown lives in `doc_file` (`design/v<N>.md`, or `design/v<N>-final.md` after `approved` sign-off). Once `phase == "signed"` and all tasks for `version` have a cast, `design` shrinks to header fields (`summary: null`, `questions: []`).
+
 ---
 
 ## Supported Actions & Results (`B1a`)
@@ -114,6 +125,10 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 | `hollywood-switch` | `runner`, `model`, `effort?`, `timeout_s?`, `force?` | `action` (`queued`), `handoff?` (`HandoffSummary`) |
 | `hollywood-switch-cancel` | — | `action` (`cancel-requested`), `handoff?` (`HandoffSummary`) |
 | `hollywood-switch-status` | — | `active` (`bool`), `handoff?` (`HandoffSummary`) |
+| `design-sign` | `studio`, `skip?`, `reason?`, `note?` | `studio`, `version`, `round`, `mode` (`approved` \| `skipped`), `doc_file`, `seq` |
+| `design-start-round` | `studio` | `studio`, `version`, `round`, `doc_file`, `seq` |
+
+During `waiting_user`, a `tell` targeting `producer` also appends a `design.entry` (`slot: "user_input"`, `source: "tell"`) and updates `design/v<N>.md`. `design-sign` and `design-start-round` execute with `by: { role: "user", via: "doc" }`, satisfying the user-only sign-off gate.
 
 ### Studio lifecycle (`B1b`)
 

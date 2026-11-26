@@ -86,8 +86,8 @@ prints `already at ledger v1`.
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
 | `outward.requested` | role, optional task, `command`, `cwd`, `argv`, optional `why` — explicit `backlot ask --run` card request |
 | `outward.completed` | `card`, `source_seq`, `outcome` (`Succeeded`/`Failed`/`TimedOut`/`Denied`/`Stale`), optional `exit_code`, `output_tail`, optional `log_file` — `stage` only |
-| `design.opened` | `version`, `round`, `suggest_skip`, optional `reason`, `doc_file` — `producer` or `user` |
-| `design.entry` | `version`, `round`, `slot` (`proposal` / `buildability` / `summary` / `user_input` / `supplement`), `file`, optional `source` (`tell` / `hook` / `producer_note`), `refs`, `questions` |
+| `design.opened` | `version`, `round`, `suggest_skip` (`bool`, omitted when `false`), optional `reason`, `doc_file` — `producer` or `user` |
+| `design.entry` | `version`, `round`, `slot` (`proposal` / `buildability` / `summary` / `user_input` / `supplement`), `file`, optional `source` (`tell` / `hook` / `producer_note`), `refs` (`u64[]`, omitted when empty), `questions` (`DesignQuestion[]`: `{ id, prompt, recommendation, section_ref? }`, up to 3, omitted when empty) |
 | `design.signed` | `version`, `round`, `mode` (`approved` / `skipped`), `doc_file`, optional `note` — `user` only |
 | `correction` | target event, changed fields, reason |
 
@@ -276,13 +276,22 @@ the answering event, so a finished studio shows no open question (L6).
 `design.opened`, `design.entry`, and `design.signed` record the opening design discussion per
 requirement version when `design_gate` is `required` (`required` by default for new studios;
 existing studios without `design_gate` on `studio.created` stay `off`, and `design_gate = "off"`
-disables it per studio). `design.opened` (`producer` or `user`) starts Round 1, posts a skip
-suggestion, or opens
-Round `N+1` once `user_input` follows the previous round's summary; `design.entry` writes one slot
-in order (`proposal` by `writer`, `buildability` by `director`, `summary` with 0–3 questions by
-`producer`, `user_input` by `user`/`producer`/`stage`, and `supplement` by `writer`/`director`);
-and `design.signed` (`user` only) closes the version as `approved` or `skipped`. A new
-`req.version` resets any unsigned active design and preserves signed versions in `design_history`.
+disables it per studio). `design.opened` (`producer` or `user`) starts Round 1 (`round: 1`,
+`suggest_skip: false`), posts a skip suggestion (`round: 1`, `suggest_skip: true`, optional
+non-empty `reason`), replaces an open `suggest_skip` with Round 1, or opens Round `N+1` once
+`user_input` follows the previous round's summary (`round` matches the prior round `+ 1`,
+`doc_file` names `design/v<version>.md`). `design.entry` writes one immutable section file (`file`
+under `design/v<version>/`) for one slot in order: `proposal` (`writer`, from `waiting_proposal`),
+`buildability` (`director`, from `waiting_buildability`), `summary` (`producer`, from
+`waiting_summary`, with `0..=3` `questions` whose `id`, `prompt`, and `recommendation` are
+non-empty and optional `section_ref` is non-empty when set), `user_input` (`user`, `producer`, or
+`stage`, with `source`: `tell` / `hook` / `producer_note`, in `waiting_user`), and `supplement`
+(`writer` or `director` during `waiting_user` with non-empty `refs` pointing to existing `messages`
+or `design.entry` `seq`s). `design.signed` (`user` only — refused from role terminals and `roles.rs`)
+closes the active requirement version as `approved` (from `waiting_user`, freezing
+`design/v<version>-final.md`) or `skipped` (from `suggest_skip` or `waiting_user`, creating no
+`-final.md`). A new `req.version` resets any unsigned active `design` to `idle` and preserves
+signed versions in `design_history`.
 
 ## Hollywood's ledger
 
