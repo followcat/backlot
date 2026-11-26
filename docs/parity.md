@@ -1006,3 +1006,8 @@ Everything else on the compared surfaces still diffs normally.
   before clamping content; hit boxes cover gutter plus border while excluding the drop
   shadow. `[ui] popup_backdrop` (`"dim"` default, or `"none"`) and `[ui] popup_shadow`
   (`true` default, or `false`) remain configurable.
+- **Studio UI tonal surface, Call Sheet zones, and single focus ring.** Deliberate: in studio mode,
+  the Call Sheet, Lot dock, top studio header, and default opaque `backlot` left sidebar share
+  `elevation.surface` separated by `border_muted` rules (`[theme.custom] sidebar_bg` and Herdr
+  translucent `--plain` sidebars stay unchanged), keeping only one `accent` focus ring across
+  Terminal, Lot, Tree, Cast, and Call Sheet (`--plain` mode is untouched for Herdr parity).

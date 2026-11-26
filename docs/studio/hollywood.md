@@ -27,32 +27,40 @@ layout, so toggling it resizes nothing.
   counts turn it red, and narrow widths shrink it through shorter texts. A click or the toggle
   key expands the band.
 - **Expanded** is the **Call Sheet** — the film-strip band dropped from the top over the
-  whole width, at most half the height (sixteen rows on a mobile width): `▄▄`/`▀▀` sprocket
-  rows, the `✦  H O L L Y W O O D` title with the agent's square, role state and runner /
-  model / effort plus the right-hand studio count and `k waiting on you` (red while a prompt
-  or a down stage waits, peach otherwise), then one seven-row frame per studio — the
-  machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
-  machine's `■ live` / `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
-  task counts, the role on set, what it is doing (a broken ledger's error in red), and one
-  `◆` per cast member coloured by its state beside `actors <live>/<cap>` (or `<N> cast` on a
-  document an older stage wrote). A frame whose studio has a plain next step carries
-  `· next: tell the producer what to build`, `· next: director reviewing` or `· next: finish (f)`
-  on its blank row. The last frame is always the dashed
-  **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen
-  puts two per row. Under them the band lists the **waiting items** — the one needs-you list,
-  everything that waits on the user across every machine, sorted by urgency: user-owned prompts
-  first (a director-owned prompt never lists), then roles with a needs-you attention or an
-  unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`, which takes the same
-  `y` allow once / `d` deny / `p` peek / Enter as its live row, or `HOLLYWOOD blocked` without a
-  prompt — studios with no requirement, stopped stages and offline machines that have live
-  studios, then the local core's open cards, then studios ready to finish. Each row carries its
-  action chips and a detail line; only when the list is empty does a calm `✓` row say
-  `nothing waiting on you`. The
-  `tell hollywood` line ends the band — or, without a `[hollywood]` table, the `⏎ hollywood setup`
-  line that opens the setup dialog. Waiting items and the `tell` line are never dropped: the height
-  ladder drops the blanks first, then the unselected details, then the 7-row frames fold into
-  a one-row chip strip, then the headline, then the hints and sprockets — and when the items
-  still outgrow the room the window scrolls and a `i/N` marker says how much is showing.
+  whole width, at most half the height (sixteen rows on a mobile width) over `elevation.surface`
+  with an external 1-row `elevation.shadow` below the bottom sprocket (unless `[ui] popup_shadow = false`
+  or `height < 16`; a beside Lot dock starts below the shadow row): `▄▄`/`▀▀` sprocket rows, the
+  `✦  H O L L Y W O O D` title with the agent's square, role state and runner / model / effort
+  plus the right-hand studio count and `k waiting on you` (red while a prompt, blocked role, or
+  a down stage waits, peach otherwise), then three titled zone rules: `── STUDIOS · <S> ──`,
+  `── WAITING ON YOU · <N> ──` (dropped completely when calm; displays `<top>–<bot>/<N>` on the
+  rule's right end while overflowing), and `── HOLLYWOOD ──` (carrying `<k> earlier · ↵ read` on
+  its right end when older turns fold, or a muted hairline when `[hollywood]` is absent). Under
+  `STUDIOS`, one seven-row frame per studio — active main-pane studio prefixed `▸ ` in bold text
+  with a muted border, selected frame accented on `raised_row`, its own machine's `■ live` /
+  `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>` task counts, the
+  role on set, what it is doing (a broken ledger's error in red), and one `◆` per cast member
+  coloured by its state beside `actors <live>/<cap>` (or `<N> cast` on a document an older stage
+  wrote). A frame whose studio has a plain next step carries `· next: tell the producer what to
+  build`, `· next: director reviewing` or `· next: finish (f)` on its blank row. The last frame
+  is always the dashed **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`,
+  a narrow screen puts two per row. Under `WAITING ON YOU`, the band lists the **waiting items** —
+  the one needs-you list, everything that waits on the user across every machine, sorted by
+  urgency: user-owned prompts first (a director-owned prompt never lists), then roles with a
+  needs-you attention or an unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`,
+  which takes the same `y` allow once / `d` deny / `p` peek / Enter as its live row, or
+  `HOLLYWOOD blocked` without a prompt — studios with no requirement, stopped stages and offline
+  machines that have live studios, then the local core's open cards, then studios ready to finish.
+  Every waiting row carries a persistent col-2 severity `▎` bar, bold colored verb, bold studio id,
+  and an aligned detail line; selecting a row paints `▌▸` on `raised_row` with action chips on
+  the right. Only when the list is empty does a calm `✓` row say `nothing waiting on you`. Under
+  `HOLLYWOOD`, the compose field (`tell hollywood…`) sits on `raised_field` (keeping its italic
+  placeholder even while editing an empty buffer) above a separated two-tone footer hint bar —
+  or, without a `[hollywood]` table, the `⏎ hollywood setup` line. Waiting rows and compose never
+  drop; the 10-step height ladder sheds optional blanks/hairlines, 2->1 line wraps, unselected
+  waiting details, older `Talk` lines (bumping `k earlier` on `HOLLYWOOD`), zone rules,
+  headline/live rows, then folds 7-row frames into the 1-row chip strip ahead of hints and
+  waiting scroll compression.
 
 The start policy is **`collapsed`** by default (`[hollywood] start` — `collapsed`,
 `when_waiting`, or `expanded`), applied once the first settled `backlot` read lands.
@@ -144,16 +152,17 @@ from the screen's wrapping: the whole command for cmd, the question for the othe
 `permission prompt` when the screen cannot name it. The same width-independent picker detection
 and detail reading raise a role's `permission prompt` attention.
 
-The talk above the input keeps only the **recent conversation**: the newest turn (a `user ›` line
-and everything after it up to the next one) and the turn before it — or, with no `user` line, the
-newest two lines. Older lines fold into one dim row, `… <n> earlier · ↵ read`; Enter on it opens
-the newest folded entry in the Lot Reader, and the Reader's `←`/`→` stepping still reaches every
-earlier line. The newest Hollywood line (a report, or a card when no report followed) wraps to at
-most four rows at the band's width, using the same CJK-aware wrap the Reader body uses, so its
-end — the "choose 1", the "only you can publish: …" — is never cut off; every other line stays
-one row, and at a narrow or mobile width the wrap caps at two. When the band is short the wrap
-gives its extra rows back, down to one, before any waiting row is dropped: waiting rows keep
-their priority over talk. Selection, mouse hits and scrolling treat a wrapped line as one row.
+The talk above the input keeps only the **recent conversation**: the newest turn (a `› you` line
+and everything after it up to the next one) and the turn before it — or, with no user line, the
+newest two lines — laid out with a fixed speaker column (`✦ hollywood` / `› you` wide,
+`✦ hw` / `› you` narrow) and right-aligned relative age (swapping for ` ↵ read ` when selected).
+Older turns fold onto the right end of the `── HOLLYWOOD ──` rule as `<k> earlier · ↵ read`;
+Enter on it opens the newest folded entry in the Lot Reader, and the Reader's `←`/`→` stepping
+still reaches every earlier line. Any message wraps to at most two lines at the band's width,
+using the same CJK-aware wrap the Reader body uses, clamping with `…`. When the band is short
+wraps drop from two lines to one (oldest first) and older turns fold onto the `HOLLYWOOD` rule
+before frames compress or waiting rows drop. Selection, mouse hits and scrolling treat a wrapped
+line as one row.
 
 
 Everything the bar draws comes from the published `backlot` summary documents plus the
