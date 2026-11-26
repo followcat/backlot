@@ -102,28 +102,41 @@ fn typed_reaches_pane(app: &mut App) -> bool {
 // ---------- keyboard ownership after a switch ----------
 
 #[tokio::test]
-async fn a_studio_switch_leaves_the_focused_dock() {
+async fn a_studio_step_from_the_focused_dock_keeps_the_dock_and_swaps_the_pane() {
     let mut app = alt_app();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
     app.panel.focused = true;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
+    // The step landed night-owl's remembered member in the main pane —
+    // its producer here — and `StudioFocus` follows it to a role.
+    assert_eq!(app.focused.as_deref(), Some("t7"));
     assert_eq!(
         app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "night-owl"
-        )))
+        Some(crate::studio::StudioFocus::Role(
+            StudioKey::local("night-owl"),
+            "t7".into()
+        ))
     );
-    assert_eq!(app.focused.as_deref(), Some("t1"));
-    assert!(!app.panel_focused(), "the dock handed the keys back");
-    assert!(typed_reaches_pane(&mut app), "typing reaches t1");
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    // The dock still owns the keys, with its cursor on the studio the
+    // step landed on — the person can keep stepping.
+    assert!(app.panel_focused(), "the dock kept the keys");
+    assert_eq!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(&StudioKey::local("night-owl"))
+    );
+    alt(&mut app, hc_vt::Key::PageDown);
+    assert_eq!(app.studio.current, Some("ghost".into()));
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t41"),
+        "ghost's live shell lands"
+    );
 }
 
 #[tokio::test]
-async fn a_studio_switch_leaves_the_docks_input_line() {
+async fn a_studio_switch_leaves_a_composing_docks_input_line() {
     let mut app = alt_app();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
@@ -131,7 +144,7 @@ async fn a_studio_switch_leaves_the_docks_input_line() {
     app.panel.selected = Some(Target::Input(StudioKey::local("acme-shop")));
     app.panel.editing = true;
     assert!(app.panel_editing());
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
     assert!(
         !app.panel_editing(),
@@ -144,14 +157,14 @@ async fn a_studio_switch_leaves_the_docks_input_line() {
 async fn a_studio_switch_collapses_the_call_sheet() {
     let mut app = alt_app();
     app.hollywood.mode = LayerMode::Expanded;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert_eq!(app.focused.as_deref(), Some("t7"));
     assert!(
         !app.hollywood.expanded(),
         "the sheet no longer owns the keys"
     );
-    assert!(typed_reaches_pane(&mut app), "typing reaches t1");
+    assert!(typed_reaches_pane(&mut app), "typing reaches t7");
 }
 
 #[tokio::test]
@@ -159,9 +172,9 @@ async fn a_studio_switch_leaves_the_call_sheets_input() {
     let mut app = alt_app();
     app.hollywood.mode = LayerMode::Expanded;
     app.hollywood.editing = true;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert_eq!(app.focused.as_deref(), Some("t7"));
     assert!(!app.hollywood.editing, "the tell line lost the keys");
     assert!(typed_reaches_pane(&mut app));
 }
@@ -176,9 +189,9 @@ async fn a_studio_switch_closes_an_open_cardview() {
         scroll: 0,
         ..crate::hollywood::CardView::default()
     });
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert_eq!(app.focused.as_deref(), Some("t7"));
     assert!(
         app.hollywood.view.is_none(),
         "no read-only card floats over the pane"
@@ -192,7 +205,7 @@ async fn non_text_modal_overlays_dismiss_on_studio_nav() {
     // dismiss on `Alt+arrows` so navigation works from any non-input surface.
     let mut app = alt_app();
     app.help = true;
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert!(!app.help, "help dismissed");
     assert_eq!(app.studio.current, Some("night-owl".into()));
 }
@@ -234,9 +247,9 @@ async fn the_role_keys_step_from_a_shell_through_its_studios_cast() {
 async fn returning_to_a_studio_lands_on_its_remembered_shell() {
     let mut app = alt_app();
     app.focus_pane("t30".into());
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    alt(&mut app, hc_vt::Key::ArrowLeft);
+    alt(&mut app, hc_vt::Key::PageUp);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
         app.focused.as_deref(),
@@ -250,7 +263,7 @@ async fn a_studio_with_only_live_shells_focuses_one() {
     let mut app = alt_app();
     // ghost's only role is closed — but its shell is live.
     app.focus_pane("t7".into());
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("ghost".into()));
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
@@ -264,60 +277,60 @@ async fn a_studio_with_only_live_shells_focuses_one() {
 // ---------- entry from outside a studio workspace ----------
 
 #[tokio::test]
-async fn alt_right_from_the_stage_workspace_enters_the_current_studio() {
+async fn alt_pagedown_from_the_stage_workspace_enters_the_current_studio() {
     let mut app = alt_app();
     app.focus_pane("t9".into()); // the stage terminal, `backlot` space
     assert!(!app.studio.lot.studio_workspace);
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
         app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "acme-shop"
-        )))
+        Some(crate::studio::StudioFocus::Role(
+            StudioKey::local("acme-shop"),
+            "t1".into()
+        ))
     );
     assert_eq!(
         app.focused.as_deref(),
-        Some("t9"),
-        "first press focuses the studio row without detaching pane"
+        Some("t1"),
+        "the first press enters and lands the studio's member"
     );
     // The next press steps studios.
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t7"));
 }
 
 #[tokio::test]
-async fn alt_right_from_the_hollywood_terminal_enters_the_current_studio() {
+async fn alt_pagedown_from_the_hollywood_terminal_enters_the_current_studio() {
     let mut app = alt_app();
     app.focus_pane("t40".into());
     assert!(!app.studio.lot.studio_workspace);
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
         app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "acme-shop"
-        )))
+        Some(crate::studio::StudioFocus::Role(
+            StudioKey::local("acme-shop"),
+            "t1".into()
+        ))
     );
-    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
 #[tokio::test]
-async fn alt_right_from_a_user_workspace_enters_the_current_studio() {
+async fn alt_pagedown_from_a_user_workspace_enters_the_current_studio() {
     let mut app = alt_app();
     app.focus_pane("t20".into());
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
         app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "acme-shop"
-        )))
+        Some(crate::studio::StudioFocus::Role(
+            StudioKey::local("acme-shop"),
+            "t1".into()
+        ))
     );
-    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
@@ -325,7 +338,7 @@ async fn alt_right_from_a_user_workspace_enters_the_current_studio() {
 async fn outside_a_studio_workspace_role_keys_reach_herdr_while_studio_keys_enter() {
     // Herdr's usual layout: Alt+Left/Right for tabs, Alt+Up/Down for agents.
     // Outside a studio workspace, Alt+Down reaches Herdr's binding while
-    // Alt+Right enters the current studio (shadowing next_tab).
+    // Alt+PgDn enters the current studio.
     let config: crate::config::Config = toml::from_str(
         "[keys]\n\
          previous_tab = 'alt+left'\n\
@@ -352,18 +365,20 @@ async fn outside_a_studio_workspace_role_keys_reach_herdr_while_studio_keys_ente
         "Alt+Up fell through to herdr's previous_agent"
     );
 
-    // From a plain tab workspace, Alt+Right enters the current studio.
+    // From a plain tab workspace, Alt+PgDn enters the current studio
+    // and lands its member.
     app.focus_pane("t20".into());
     assert!(!app.studio.lot.studio_workspace);
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(
         app.studio.focus,
-        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
-            "acme-shop"
-        ))),
-        "Alt+Right entered the current studio from plain workspace"
+        Some(crate::studio::StudioFocus::Role(
+            StudioKey::local("acme-shop"),
+            "t1".into()
+        )),
+        "Alt+PgDn entered the current studio from plain workspace"
     );
-    assert_eq!(app.focused.as_deref(), Some("t20"));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
 // ---------- remote studios ----------
@@ -376,10 +391,10 @@ fn remote_app() -> App {
 }
 
 #[tokio::test]
-async fn alt_right_reaches_the_remote_studio_in_aggregate_order() {
+async fn alt_pagedown_reaches_the_remote_studio_in_aggregate_order() {
     let mut app = remote_app();
     // Local `acme-shop` first, then host-b's `beta-tools`, then wrap.
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(
         app.studio.current,
         Some(StudioKey {
@@ -387,11 +402,13 @@ async fn alt_right_reaches_the_remote_studio_in_aggregate_order() {
             id: "beta-tools".into()
         })
     );
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.focused.as_deref(), Some("host-b/t1"));
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("host-b/t1"),
+        "the remote studio's producer lands"
+    );
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()), "wrapped");
-    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
@@ -436,8 +453,7 @@ async fn focusing_a_remote_shell_moves_the_current_studio() {
 async fn the_header_follows_the_switch_wide_and_mobile() {
     let mut app = alt_app();
     app.area = (120, 24);
-    alt(&mut app, hc_vt::Key::ArrowRight);
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.focused.as_deref(), Some("t7"));
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");

@@ -210,9 +210,18 @@ async fn delete_studio_keyboard_flow_and_force_second_confirm() {
         Box::pin(async move { Ok(report_json(&studio, dry, false, !dry, &[])) })
     }));
 
-    // Keyboard-only: Alt+Right -> Ctrl+B m -> Delete studio… -> Enter.
-    alt(&mut app, hc_vt::Key::ArrowRight);
-    press(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
+    // Keyboard-only: Alt+PgDn steps to night-owl and lands its
+    // producer, so `Ctrl+B m` there opens that role's menu — the delete
+    // lives on the *studio* menu. Leave the dock's cursor on the studio
+    // block and `m` opens the studio's own menu.
+    alt(&mut app, hc_vt::Key::PageDown);
+    assert_eq!(
+        app.studio.current.as_ref().map(|k| k.id.as_str()),
+        Some("night-owl")
+    );
+    app.panel.mode = PanelMode::Expanded;
+    app.panel.focused = true;
+    app.panel_select_studio(&StudioKey::local("night-owl"));
     press(&mut app, hc_vt::Key::Char('m'), hc_vt::Mods::NONE);
     let idx = app
         .menu

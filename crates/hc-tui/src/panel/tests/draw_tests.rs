@@ -912,7 +912,7 @@ fn a_solo_cast_drops_the_role_hint() {
     }
 }
 
-/// wide-01: the unfocused footer's `alt ←→ studio` names a navigation
+/// wide-01: the unfocused footer's `alt PgUp/PgDn studio` names a navigation
 /// that exists — a lone studio drops the half, two studios keep it.
 #[test]
 fn a_lone_studio_drops_the_studio_hint() {
@@ -952,7 +952,7 @@ fn a_lone_studio_drops_the_studio_hint() {
             1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("alt ←→ studio"), want, "{last}");
+        assert_eq!(last.contains("alt PgUp/PgDn studio"), want, "{last}");
     }
     let mut buf = Buffer::empty(area);
     render(
@@ -977,7 +977,7 @@ fn a_lone_studio_drops_the_studio_hint() {
         1,
     );
     let last = &lines(&buf, area)[area.height as usize - 1];
-    assert_eq!(last, "alt ←→ studio  ↑↓ role");
+    assert_eq!(last, "alt PgUp/PgDn studio  ↑↓ role");
 }
 
 /// R3-N2: a director-blocked person is not just its task id in the

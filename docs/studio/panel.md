@@ -197,7 +197,7 @@ every other studio keeps `surface1`.
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
-  their configured labels (`alt ←→ studio  ↑↓ role`). Focused while composing on `›`:
+  their configured labels (`alt PgUp/PgDn studio  ↑↓ role`). Focused while composing on `›`:
   `⏎ send · ↑↓ history · esc done` (or `⏎ ↑↓ · esc` / `esc` when narrower). Focused in
   Resting: the row's own keys (`⏎ compose  i tell  / verb  m  esc`, etc.; `esc back` over an
   overlay). Dropped under 8 rows.
@@ -419,8 +419,8 @@ key = "y"    # the chord tail after the prefix
 width = 36   # expanded column width, clamped to 28-48
 
 [keys]
-previous_studio = "alt+left"
-next_studio = "alt+right"
+previous_studio = "alt+pageup"
+next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"

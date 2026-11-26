@@ -118,6 +118,39 @@ impl App {
         }
     }
 
+    /// Move the cursor onto `key`'s row — a studio step while the tree
+    /// owns the keys keeps them here, on the studio it landed on: the
+    /// studio's workspace row when it has a space, else its extra
+    /// `stage down`/ledger row.
+    pub(crate) fn tree_focus_studio_row(&mut self, key: &StudioKey) {
+        let rows = self.tree_rows();
+        let found = rows.into_iter().find(|row| match row {
+            SidebarRow::Workspace {
+                endpoint,
+                workspace_id,
+            } => self
+                .studio_for_workspace(endpoint, workspace_id)
+                .is_some_and(|ws| &ws == key),
+            SidebarRow::Studio { endpoint, row } => match row {
+                StudioRow::Studio { id, .. } | StudioRow::Finished { id } => {
+                    StudioKey {
+                        machine: machine_of(endpoint),
+                        id: id.clone(),
+                    } == *key
+                }
+                StudioRow::FinishedFold { .. }
+                | StudioRow::Archived { .. }
+                | StudioRow::Unreachable => false,
+            },
+            SidebarRow::Machine(_) => false,
+        });
+        if let Some(row) = found {
+            self.tree_focus = Some(row);
+            self.shell_state.reveal_tree_row = true;
+            self.sched.mark_dirty(Instant::now());
+        }
+    }
+
     /// Move the cursor `delta` rows, and scroll the section to it.
     pub(crate) fn tree_move(&mut self, delta: isize) {
         let rows = self.tree_rows();
