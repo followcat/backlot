@@ -10,6 +10,13 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The cast shows each role in full.** A role's state text and full model (with effort) wrap over up to four rows instead of being cut to the sidebar width; when the people do not all fit, the focused role keeps its height and the rest fall back to two rows.
+- **The lot's person rows drop the runner and the model.** The cast already names them, so the row gives those cells to the name, task and state.
+- **Roles read as one-cell badges.** `Ⓟ producer`, `Ⓓ director`, `Ⓦ writer` and `Ⓐ actor` (with its task) replace the role words in the cast, the lot, the Call Sheet and the Hollywood frames and band, each in its own theme colour; the state glyph is unchanged.
+- **Group rules inside each studio block.** The producer, director, writer and actor groups are separated by a thin `├──┤` rule; an empty group draws none and the cursor steps over the rules.
+
 ## 0.4.10 — 2026-11-26
 
 ### Fixed
@@ -20,10 +27,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **The cast shows each role in full.** A role's state text and full model (with effort) wrap over up to four rows instead of being cut to the sidebar width; when the people do not all fit, the focused role keeps its height and the rest fall back to two rows.
-- **The lot's person rows drop the runner and the model.** The cast already names them, so the row gives those cells to the name, task and state.
-- **Roles read as one-cell badges.** `Ⓟ producer`, `Ⓓ director`, `Ⓦ writer` and `Ⓐ actor` (with its task) replace the role words in the cast, the lot, the Call Sheet and the Hollywood frames and band, each in its own theme colour; the state glyph is unchanged.
-- **Group rules inside each studio block.** The producer, director, writer and actor groups are separated by a thin `├──┤` rule; an empty group draws none and the cursor steps over the rules.
 - **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
 
 ## 0.4.9 — 2026-11-26
