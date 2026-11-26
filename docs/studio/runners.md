@@ -194,6 +194,17 @@ reaching for `BACKLOT_*`, `env -i` or `--ignore-environment` is refused there ou
 Claude Code actually matches these rules — and whether a wrapped `X=y git commit …` slips past them —
 is not yet verified; `limits.md` keeps it for the S9f real-session run.
 
+**A prefix rule sees the command, not its flags — this is a seatbelt, not a sandbox.** Every runner
+here matches an allow rule on the leading words of one plain command, so a rule that names a
+read-only command also permits that command's *write-capable* flags: `rg --pre <cmd>` runs `<cmd>`
+for every file it searches, and `git diff --output=<file>`, `git log --output=<file>` and `git show
+--output=<file>` write to `<file>` (measured: `git log --output=x` creates `x`). The read-only set is
+sized to keep honest forensic commands off the prompts, not to stop a hostile role — the ledger's
+role rules, the guard shims and `git` hooks are the layers that refuse outward writes, and they too
+are a seatbelt over a cooperative agent, not an OS sandbox. `rg` stays in the set because its
+`--pre` misuse is a read tool invoked oddly, not a foothold a role gains over the repo it already
+edits; the honest limit is recorded here so nobody mistakes the allow list for containment.
+
 In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
 command line anchors at the primary working directory per the permissions documentation — it is not
 an absolute path — so the studio dir's leading `/` is dropped and the `//` is written instead. The
@@ -356,13 +367,16 @@ attention.
 
 Devin takes no argv allow list; `--permission-mode smart` stays the gate. The role's shared
 read-only set is written instead into the same per-work-area `permissions.allow` (the member the
-file already carries), as one `Bash(<cmd>)` and one `Bash(<cmd> *)` per command — `git status`,
-`git log`, `git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`,
-`wc`, `head` — so a role's read-only forensics run without a prompt. The splice replaces only
-`allow`; any other `permissions` member (`deny` and the rest) keeps its bytes, and Hollywood, the
-overseer, gets none. Nothing a role's job adds (an actor's commits, the director's merge, a check's
-`run`) is pre-allowed here. This rule set is measured only as far as the file format; whether Devin
-honours `permissions.allow` under `smart` is not yet verified (see `limits.md`).
+file already carries), as one `Exec(<cmd>)` per command in Devin's own rule syntax — `Exec(git
+status)`, `Exec(git log)`, `Exec(git show)`, `Exec(git diff)`, `Exec(git branch --list)`, `Exec(git
+branch --show-current)`, `Exec(ls)`, `Exec(rg)`, `Exec(wc)`, `Exec(head)`. Devin's rules are prefix
+matches (`Exec(ls)` permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single entry per
+command is the whole rule — there is no ` *` form and no `Bash(...)`, unlike claude. The splice
+replaces only `allow`; any other `permissions` member (`deny` and the rest) keeps its bytes, and
+Hollywood, the overseer, gets none. Nothing a role's job adds (an actor's commits, the director's
+merge, a check's `run`) is pre-allowed here. This rule set is measured only as far as the file
+format; whether Devin honours `permissions.allow` under `smart` is not yet verified (see
+`limits.md`).
 
 ## Per-session files (cline)
 

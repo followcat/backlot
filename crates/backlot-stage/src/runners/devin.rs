@@ -21,11 +21,12 @@ pub struct DevinPrep {
     pub config: PathBuf,
     /// `<studio>/roles/<role>/signals.jsonl`.
     pub signals: PathBuf,
-    /// The role's read-only pre-allow rules — `Bash(<cmd> *)` entries
-    /// under `permissions.allow`, in the same rule syntax the work-area
-    /// config already uses (its test fixture carries one). Devin's own
-    /// `--permission-mode smart` stays the gate; these only spare the
-    /// role a prompt for the forensics every role runs.
+    /// The role's read-only pre-allow rules — one `Exec(<cmd>)` entry
+    /// under `permissions.allow`, in Devin's own rule syntax. Devin's
+    /// rules are prefix matches (`Exec(ls)` permits `ls -a`), so there
+    /// is no separate ` *` form. Devin's own `--permission-mode smart`
+    /// stays the gate; these only spare the role a prompt for the
+    /// forensics every role runs.
     pub allow: Vec<String>,
 }
 
@@ -40,18 +41,18 @@ pub(crate) const HOOK_EVENTS: &[&str] = &[
 ];
 
 /// The read-only pre-allow rules a role's `permissions.allow` gets —
-/// one `Bash(<cmd>)` and one `Bash(<cmd> *)` per shared read-only
-/// command ([`super::READ_ONLY`]), the same bare-and-argued pair
-/// claude writes. Nothing a role's job adds (an actor's commits, the
+/// one `Exec(<cmd>)` per shared read-only command ([`super::READ_ONLY`]).
+/// Devin's rules are prefix-matched on the command line (`Exec(ls)`
+/// permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single
+/// entry per command is the whole rule; there is no ` *` form and no
+/// `Bash(...)`. Nothing a role's job adds (an actor's commits, the
 /// director's merge, a check's `run`) is pre-allowed here: Devin
 /// takes no argv allow list and its smart mode governs the rest.
 pub(crate) fn allow_rules() -> Vec<String> {
-    let mut out = Vec::new();
-    for cmd in super::READ_ONLY {
-        out.push(format!("Bash({cmd})"));
-        out.push(format!("Bash({cmd} *)"));
-    }
-    out
+    super::READ_ONLY
+        .iter()
+        .map(|cmd| format!("Exec({cmd})"))
+        .collect()
 }
 
 /// Build or byte-preservingly splice `<cwd>/.devin/config.local.json`:
