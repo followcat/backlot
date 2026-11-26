@@ -17,6 +17,7 @@ use super::{
         NavigatorFilter, NavigatorState, NavigatorTarget, navigator_rows, navigator_selected_index,
     },
     palette::Palette,
+    popup_frame::{PopupChrome, open_from_border_size, overlay_bg},
     render::{display_width, put_right_text, put_text},
     scroll::{self, ScrollMetrics},
     snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellEndpoint},
@@ -38,35 +39,42 @@ fn status_dot(status: AgentStatus) -> &'static str {
     status_icon(status, crate::config::StatusIndicatorStyle::Dots)
 }
 
-pub(crate) fn render_navigator_overlay(
+pub(crate) fn render_navigator_overlay_with_shadow(
     b: &mut Buffer,
     n: &NavigatorState,
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     federated: bool,
     p: &Palette,
+    shadow: bool,
 ) -> Option<NavigatorRender> {
     let a = b.area;
     let width = a.width.saturating_sub(4).min(116);
     let height = a.height.saturating_sub(2).min(42);
-    if width < 4 || height < 9 {
-        return None;
-    }
-    let q = Rect::new(
-        a.x + (a.width - width) / 2,
-        a.y + (a.height - height) / 2,
+    let geom = open_from_border_size(
+        b,
+        a,
         width,
         height,
-    )
-    .intersection(a);
-    let i = super::dialogs::panel(b, q, p.accent, p.panel_bg)?;
+        4,
+        9,
+        p.accent,
+        PopupChrome::BorderJoined,
+        p,
+        shadow,
+    )?;
+    let q = geom.outer;
+    let br = geom.border;
+    let i = geom.inner;
+    let bg = overlay_bg(p);
+    let elev = p.elevation();
     put_text(
         b,
-        q.x + 2,
-        q.y,
-        q.width.saturating_sub(4),
+        br.x + 2,
+        br.y,
+        br.width.saturating_sub(4),
         " Go to ",
-        Style::default().fg(p.accent).bg(p.panel_bg),
+        Style::default().fg(p.accent).bg(bg),
     );
     let rows = navigator_rows(endpoints, active_endpoint_id, n, federated);
     let search = if n.search_focused {
@@ -106,7 +114,7 @@ pub(crate) fn render_navigator_overlay(
         &search,
         Style::default()
             .fg(if n.search_focused { p.text } else { p.overlay0 })
-            .bg(p.panel_bg),
+            .bg(bg),
     );
     let cursor = if n.search_focused {
         text_editor::render(
@@ -118,27 +126,28 @@ pub(crate) fn render_navigator_overlay(
                 1,
             ),
             &n.query,
-            Style::default().fg(p.text).bg(p.panel_bg),
+            Style::default().fg(p.text).bg(bg),
         )
     } else {
         None
     };
-    put_right_text(
-        b,
-        i,
-        i.y,
-        &count,
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
-    );
+    put_right_text(b, i, i.y, &count, Style::default().fg(p.overlay0).bg(bg));
     put_text(
         b,
         i.x,
         i.y + 1,
         i.width,
         &"─".repeat(i.width as usize),
-        Style::default().fg(p.surface1).bg(p.panel_bg),
+        Style::default().fg(elev.border_muted).bg(bg),
     );
-    let body = Rect::new(i.x, i.y + 2, i.width, i.height.saturating_sub(5));
+    let pad_body_x = u16::from(i.width >= 14);
+    let pad_body_y = u16::from(i.height >= 10);
+    let body = Rect::new(
+        i.x + pad_body_x,
+        i.y + 2 + pad_body_y,
+        i.width.saturating_sub(2 * pad_body_x),
+        i.height.saturating_sub(5 + 2 * pad_body_y),
+    );
     let selected = navigator_selected_index(&rows, n).unwrap_or(0);
     let max = rows.len().saturating_sub(body.height as usize);
     let scroll = n
@@ -162,7 +171,7 @@ pub(crate) fn render_navigator_overlay(
             body.y,
             body.width,
             " No matching agents or terminals",
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(bg),
         );
     }
     for (ix, r) in rows
@@ -176,11 +185,7 @@ pub(crate) fn render_navigator_overlay(
         let st = if r.stale {
             Style::default()
                 .fg(p.overlay0)
-                .bg(if ix == selected {
-                    p.surface0
-                } else {
-                    p.panel_bg
-                })
+                .bg(if ix == selected { p.surface0 } else { bg })
                 .add_modifier(Modifier::DIM)
         } else if ix == selected {
             Style::default()
@@ -194,7 +199,7 @@ pub(crate) fn render_navigator_overlay(
                 } else {
                     p.text
                 })
-                .bg(p.panel_bg)
+                .bg(bg)
         };
         let is_pane = matches!(r.target, NavigatorTarget::Pane { .. });
         let connector = if !is_pane {
@@ -258,7 +263,7 @@ pub(crate) fn render_navigator_overlay(
             let status_style = if r.stale || ix == selected {
                 st
             } else {
-                Style::default().fg(status_color(status, p)).bg(p.panel_bg)
+                Style::default().fg(status_color(status, p)).bg(bg)
             };
             put_text(
                 b,
@@ -317,14 +322,11 @@ pub(crate) fn render_navigator_overlay(
             let signal_style = if ix == selected {
                 st
             } else {
-                Style::default()
-                    .fg(color)
-                    .bg(p.panel_bg)
-                    .add_modifier(if r.stale {
-                        Modifier::DIM
-                    } else {
-                        Modifier::empty()
-                    })
+                Style::default().fg(color).bg(bg).add_modifier(if r.stale {
+                    Modifier::DIM
+                } else {
+                    Modifier::empty()
+                })
             };
             put_right_text(b, rect, rect.y, &signal, signal_style);
         } else if r.status.is_none() && !r.meta.is_empty() {
@@ -348,7 +350,7 @@ pub(crate) fn render_navigator_overlay(
             i.bottom() - 3,
             i.width,
             &format!(" {}", r.detail),
-            Style::default().fg(p.subtext0).bg(p.panel_bg),
+            Style::default().fg(p.subtext0).bg(bg),
         );
         put_text(
             b,
@@ -356,7 +358,7 @@ pub(crate) fn render_navigator_overlay(
             i.bottom() - 2,
             i.width,
             &format!(" {}", r.meta),
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(bg),
         );
     }
     put_text(
@@ -369,7 +371,7 @@ pub(crate) fn render_navigator_overlay(
         } else {
             " ↑↓/j/k rows · ←→ workspace · / search · a/b/w/i/d filter · enter open · esc close"
         },
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(bg),
     );
     Some(NavigatorRender {
         area: q,

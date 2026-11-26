@@ -11,6 +11,7 @@ use ratatui::style::{Modifier, Style};
 use super::lines::{Row, lines_for};
 use super::{Sheet, SheetTab};
 use crate::chrome::palette::Palette;
+use crate::chrome::popup_frame::{self, PopupChrome, overlay_bg};
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs;
@@ -51,20 +52,23 @@ pub(crate) fn sheet_rect(band: Rect) -> Rect {
 
 /// The line's colour for its tone — the dock's own words.
 fn row_style(row: Row, palette: &Palette) -> Style {
+    let bg = overlay_bg(palette);
     match row {
-        Row::Text => Style::default().fg(palette.text),
+        Row::Text => Style::default().fg(palette.text).bg(bg),
         Row::Head => Style::default()
             .fg(palette.text)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
-        Row::Dim => Style::default().fg(palette.overlay0),
-        Row::Good => Style::default().fg(palette.green),
-        Row::Bad => Style::default().fg(palette.red),
+        Row::Dim => Style::default().fg(palette.overlay0).bg(bg),
+        Row::Good => Style::default().fg(palette.green).bg(bg),
+        Row::Bad => Style::default().fg(palette.red).bg(bg),
     }
 }
 
 /// Draw the whole sheet: dim the buffer (already done by the caller
 /// like the other modals), the rounded frame, the studio/task title,
 /// the three tabs, the scrolled content and the footer.
+#[cfg(test)]
 pub(crate) fn render(
     buf: &mut Buffer,
     band: Rect,
@@ -72,26 +76,43 @@ pub(crate) fn render(
     summary: Option<&backlot_model::summary::StudioSummary>,
     palette: &Palette,
 ) -> SheetRender {
-    let frame = sheet_rect(band);
-    if frame.width < 4 || frame.height < 4 {
+    render_with_shadow(buf, band, sheet, summary, palette, true)
+}
+
+pub(crate) fn render_with_shadow(
+    buf: &mut Buffer,
+    band: Rect,
+    sheet: &Sheet,
+    summary: Option<&backlot_model::summary::StudioSummary>,
+    palette: &Palette,
+    shadow: bool,
+) -> SheetRender {
+    let desired = sheet_rect(band);
+    if desired.width < 4 || desired.height < 4 {
         return SheetRender {
-            frame,
+            frame: desired,
             body: Rect::default(),
         };
     }
-    // The shared dialog frame — every modal paints the same
-    // `panel_bg` box with an accent border (A6.2). The dimmed
-    // backdrop is the caller's; the dead panes' frozen screens
-    // behind must not keep their modifiers under the panel's patch
-    // fill — clear the sheet's own rect before the frame.
-    crate::chrome::wide::clear_overlay(buf, frame);
-    let Some(_inner) = crate::chrome::dialogs::panel(buf, frame, palette.accent, palette.panel_bg)
-    else {
+    let Some(geom) = popup_frame::open_from_border_size(
+        buf,
+        band,
+        desired.width,
+        desired.height,
+        4,
+        4,
+        palette.accent,
+        PopupChrome::BorderJoined,
+        palette,
+        shadow,
+    ) else {
         return SheetRender {
-            frame,
+            frame: desired,
             body: Rect::default(),
         };
     };
+    let frame = geom.border;
+    let bg = overlay_bg(palette);
 
     // The title: `<studio> · task <id>` in the top border — the task
     // part only when the sheet opened on one.
@@ -109,7 +130,7 @@ pub(crate) fn render(
             &title,
             Style::default()
                 .fg(palette.text)
-                .bg(palette.panel_bg)
+                .bg(bg)
                 .add_modifier(Modifier::BOLD),
         );
     }
@@ -139,17 +160,58 @@ pub(crate) fn render(
                     .bg(palette.accent)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(palette.overlay0)
+                Style::default().fg(palette.overlay0).bg(bg)
             },
         );
         x += w;
     }
 
+    // Flush border-joined divider under tabs when vertical room allows.
+    let edge = Style::default().fg(palette.accent).bg(bg);
+    let div_rule = Style::default().fg(palette.elevation().border_muted).bg(bg);
+    if frame.height >= 6 && frame.width > 2 {
+        let div_y = frame.y + 2;
+        put_text(buf, frame.x, div_y, 1, "├", edge);
+        put_text(
+            buf,
+            frame.x + 1,
+            div_y,
+            frame.width - 2,
+            &"─".repeat(usize::from(frame.width - 2)),
+            div_rule,
+        );
+        put_text(buf, frame.right() - 1, div_y, 1, "┤", edge);
+    }
+
+    let raw_body_y = frame.y + 3;
+    let footer_div_y = frame.bottom().saturating_sub(3);
+    let has_footer_div = frame.height >= 12 && footer_div_y > raw_body_y + 1;
+    if has_footer_div && frame.width > 2 {
+        put_text(buf, frame.x, footer_div_y, 1, "├", edge);
+        put_text(
+            buf,
+            frame.x + 1,
+            footer_div_y,
+            frame.width - 2,
+            &"─".repeat(usize::from(frame.width - 2)),
+            div_rule,
+        );
+        put_text(buf, frame.right() - 1, footer_div_y, 1, "┤", edge);
+    }
+
+    let raw_body_bottom = if has_footer_div {
+        footer_div_y
+    } else {
+        frame.bottom().saturating_sub(2)
+    };
+    let raw_body_h = raw_body_bottom.saturating_sub(raw_body_y);
+    let pad_bx: u16 = if frame.width >= 12 { 2 } else { 1 };
+    let pad_by: u16 = u16::from(raw_body_h >= 6);
     let body = Rect::new(
-        frame.x + 1,
-        frame.y + 3,
-        frame.width - 2,
-        frame.height.saturating_sub(5),
+        frame.x + 1 + pad_bx.saturating_sub(1),
+        raw_body_y + pad_by,
+        frame.width.saturating_sub(2 + 2 * pad_bx.saturating_sub(1)),
+        raw_body_h.saturating_sub(2 * pad_by),
     );
     let lines = lines_for(sheet, summary);
     let scroll = sheet
@@ -195,7 +257,7 @@ pub(crate) fn render(
                 y,
                 1,
                 glyphs::SELECTION_BAR,
-                Style::default().fg(palette.accent),
+                Style::default().fg(palette.accent).bg(palette.selection_bg),
             );
         }
     }
@@ -220,10 +282,13 @@ pub(crate) fn render(
         footer_y,
         fw,
         &footer,
-        Style::default().fg(palette.overlay0),
+        Style::default().fg(palette.overlay0).bg(bg),
     );
 
     // Report reads (`sheet.view`) render through the unified top-level
     // Reader modal in `draw_overlays` (`R3-M2`).
-    SheetRender { frame, body }
+    SheetRender {
+        frame: geom.outer,
+        body,
+    }
 }

@@ -5,12 +5,15 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::super::dialogs::{button, contrast, panel, row};
+use super::super::dialogs::{button, contrast, row};
 use super::super::palette::Palette;
+use super::super::popup_frame::overlay_bg;
 use super::super::render::{display_width, put_right_text, put_text};
 use super::super::text::truncate_end;
 use super::super::text_editor;
-use super::{DialogHits, cancel_button, centered, dialog_width, dim_line, send_button, title_line};
+use super::{
+    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+};
 use crate::studio_dialog::{RestoreDialog, RestoreStep};
 /// The archived list, its name field, and the dry-run plan.
 pub(super) fn render_restore(
@@ -18,6 +21,7 @@ pub(super) fn render_restore(
     band: Rect,
     d: &RestoreDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let height = match d.step {
@@ -25,9 +29,9 @@ pub(super) fn render_restore(
         RestoreStep::Name => 9,
         RestoreStep::Confirm => 18,
     };
-    let q = centered(band, width, height)?;
-    crate::chrome::wide::clear_overlay(b, q);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, width, height, palette, shadow)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     title_line(b, i, &d.title(), palette);
     let mut cursor = None;
     match d.step {
@@ -40,10 +44,10 @@ pub(super) fn render_restore(
                 let style = if selected {
                     Style::default()
                         .fg(palette.text)
-                        .bg(palette.surface0)
+                        .bg(raised)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(palette.text).bg(palette.panel_bg)
+                    Style::default().fg(palette.text).bg(bg)
                 };
                 if selected {
                     b.set_style(Rect::new(i.x, y, i.width, 2), style);
@@ -70,11 +74,9 @@ pub(super) fn render_restore(
                     y + 1,
                     i.width,
                     &truncate_end(&format!("   {detail}"), i.width as usize),
-                    Style::default().fg(palette.subtext0).bg(if selected {
-                        palette.surface0
-                    } else {
-                        palette.panel_bg
-                    }),
+                    Style::default()
+                        .fg(palette.subtext0)
+                        .bg(if selected { raised } else { bg }),
                 );
             }
             dim_line(
@@ -93,18 +95,15 @@ pub(super) fn render_restore(
                 i.y + 2,
                 8.min(i.width),
                 " name: ",
-                Style::default().fg(palette.subtext0).bg(palette.panel_bg),
+                Style::default().fg(palette.subtext0).bg(bg),
             );
             let field = Rect::new(i.x + 7, i.y + 2, i.width.saturating_sub(8), 1);
-            b.set_style(
-                field,
-                Style::default().fg(palette.text).bg(palette.surface0),
-            );
+            b.set_style(field, Style::default().fg(palette.text).bg(raised));
             cursor = text_editor::render(
                 b,
                 field,
                 &d.name,
-                Style::default().fg(palette.text).bg(palette.surface0),
+                Style::default().fg(palette.text).bg(raised),
             );
             if let Some(error) = &d.error {
                 dim_line(b, i.x, i.y + 3, i.width, &format!(" ! {error}"), palette);
@@ -135,7 +134,7 @@ pub(super) fn render_restore(
                     y,
                     i.width,
                     &format!(" {line}"),
-                    Style::default().fg(palette.text).bg(palette.panel_bg),
+                    Style::default().fg(palette.text).bg(bg),
                 );
                 y += 1;
             }
@@ -152,14 +151,14 @@ pub(super) fn render_restore(
         RestoreStep::List => {
             let style = Style::default()
                 .fg(palette.text)
-                .bg(palette.surface0)
+                .bg(raised)
                 .add_modifier(Modifier::BOLD);
             button(b, *ok, " ↵ choose ", style);
         }
         RestoreStep::Name => send_button(b, *ok, " ↵ dry run ", true, palette),
         RestoreStep::Confirm => {
             let style = if d.loading || d.error.is_some() {
-                Style::default().fg(palette.overlay0).bg(palette.surface0)
+                Style::default().fg(palette.overlay0).bg(raised)
             } else {
                 Style::default()
                     .fg(contrast(palette))

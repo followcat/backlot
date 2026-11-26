@@ -1986,7 +1986,7 @@ fn cell_bg_on_row(
 #[tokio::test]
 async fn the_selected_row_highlights_its_text_cells() {
     let (mut app, _) = dialog_app().await;
-    let sel = app.shell.palette.surface0;
+    let sel = app.shell.palette.elevation().raised_on_overlay;
     // Machines pane — the `Local` row's own text carries the selection.
     let backend = draw_to(&mut app, 120, 36);
     let area = app.ns_hits.area;

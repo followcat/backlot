@@ -12,9 +12,11 @@ use crate::chrome::render::{put_right_text, put_text};
 use crate::chrome::text_editor;
 
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
-    b.set_style(body, Style::default().bg(p.panel_bg));
-    let label = Style::default().fg(p.text).bg(p.panel_bg);
-    let dim = Style::default().fg(p.overlay0).bg(p.panel_bg);
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let raised = p.elevation().raised_on_overlay;
+    b.set_style(body, Style::default().bg(overlay_bg));
+    let label = Style::default().fg(p.text).bg(overlay_bg);
+    let dim = Style::default().fg(p.overlay0).bg(overlay_bg);
     let mut y = body.y;
 
     // The chosen target — machine and repo in one line.
@@ -54,14 +56,14 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     let focused = d.field == Step2Field::Id;
     let style = Style::default()
         .fg(p.text)
-        .bg(if focused { p.surface0 } else { p.panel_bg });
+        .bg(if focused { raised } else { overlay_bg });
     b.set_style(field, style);
     let verdict = match id_error(d.id.as_str(), &d.studios) {
         Ok(()) => (
             "✓ available".to_string(),
-            Style::default().fg(p.green).bg(p.panel_bg),
+            Style::default().fg(p.green).bg(overlay_bg),
         ),
-        Err(e) => (format!("× {e}"), Style::default().fg(p.red).bg(p.panel_bg)),
+        Err(e) => (format!("× {e}"), Style::default().fg(p.red).bg(overlay_bg)),
     };
     // The verdict rides the field's right edge when a usable field
     // remains; at narrow widths it drops to its own line instead of
@@ -112,7 +114,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     let focused = d.field == Step2Field::Title;
     let style = Style::default()
         .fg(p.text)
-        .bg(if focused { p.surface0 } else { p.panel_bg });
+        .bg(if focused { raised } else { overlay_bg });
     b.set_style(field, style);
     if let Some(cursor) = text_editor::render(
         b,
@@ -139,7 +141,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     }
     let field = Rect::new(body.x, y, body.width, 1);
     let focused = d.field == Step2Field::Mode;
-    let bg = if focused { p.surface0 } else { p.panel_bg };
+    let bg = if focused { raised } else { overlay_bg };
     b.set_style(field, Style::default().fg(p.text).bg(bg));
     let experimental = d.mode == backlot_model::event::StudioMode::Experimental;
     let on = Style::default().fg(p.accent).bg(bg);
@@ -187,8 +189,10 @@ fn draw_build(
     p: &Palette,
     hits: &mut NsHits,
 ) {
-    let label = Style::default().fg(p.text).bg(p.panel_bg);
-    let dim = Style::default().fg(p.overlay0).bg(p.panel_bg);
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let raised = p.elevation().raised_on_overlay;
+    let label = Style::default().fg(p.text).bg(overlay_bg);
+    let dim = Style::default().fg(p.overlay0).bg(overlay_bg);
     if y >= body.bottom() {
         return;
     }
@@ -209,7 +213,7 @@ fn draw_build(
     let rows = body.bottom().saturating_sub(y).clamp(1, 4);
     let area = Rect::new(body.x, y, body.width, rows);
     let focused = d.field == Step2Field::Build;
-    let bg = if focused { p.surface0 } else { p.panel_bg };
+    let bg = if focused { raised } else { overlay_bg };
     b.set_style(area, Style::default().bg(bg));
     let scroll = d
         .build

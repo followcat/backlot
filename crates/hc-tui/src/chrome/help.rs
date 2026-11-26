@@ -1,6 +1,11 @@
 // Derived from herdr src/client/shell/overlays.rs and state.rs (Apache-2.0).
 use super::{
-    palette::Palette, render::put_text, text::display_width, text_editor, text_editor::TextEditor,
+    dialogs::{button, contrast},
+    palette::Palette,
+    popup_frame::{self, PopupChrome, overlay_bg},
+    render::put_text,
+    text_editor,
+    text_editor::TextEditor,
 };
 use crate::config::LiveKeybindConfig;
 use ratatui::{
@@ -23,6 +28,7 @@ pub(crate) struct HelpState {
 #[derive(Default)]
 pub(crate) struct HelpRender {
     pub area: Rect,
+    pub inner: Rect,
     pub cancel: Rect,
     pub scrollbar: Rect,
     pub metrics: Option<super::scroll::ScrollMetrics>,
@@ -61,13 +67,14 @@ fn help_lines(
         .flat_map(|(_, entries)| entries.iter().map(|(key, _)| key.chars().count()))
         .max()
         .unwrap_or(8);
+    let bg = overlay_bg(palette);
     if groups.is_empty() {
         let message = " no matching keybinds";
         return vec![(
             message.chars().count(),
             Line::from(Span::styled(
                 message,
-                Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+                Style::default().fg(palette.overlay1).bg(bg),
             )),
         )];
     }
@@ -80,7 +87,7 @@ fn help_lines(
                 format!(" {group}"),
                 Style::default()
                     .fg(palette.accent)
-                    .bg(palette.panel_bg)
+                    .bg(bg)
                     .add_modifier(Modifier::BOLD),
             )),
         ));
@@ -94,13 +101,10 @@ fn help_lines(
                         padded_key,
                         Style::default()
                             .fg(palette.mauve)
-                            .bg(palette.panel_bg)
+                            .bg(bg)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(
-                        label.into_owned(),
-                        Style::default().fg(palette.text).bg(palette.panel_bg),
-                    ),
+                    Span::styled(label.into_owned(), Style::default().fg(palette.text).bg(bg)),
                 ]),
             ));
         }
@@ -109,20 +113,34 @@ fn help_lines(
     lines
 }
 
-pub(crate) fn render_help_overlay(
+pub(crate) fn render_help_overlay_with_shadow(
     b: &mut Buffer,
     h: &HelpState,
     k: &LiveKeybindConfig,
     backlot: Option<Vec<crate::keybind_help::KeybindHelpGroup>>,
     p: &Palette,
+    shadow: bool,
 ) -> Option<HelpRender> {
     use ratatui::widgets::{Paragraph, Widget, Wrap};
 
-    let q = popup(b.area, 76, 22)?;
-    let i = panel(b, q, p.accent, p.panel_bg)?;
+    let geom = popup_frame::open_centered(
+        b,
+        b.area,
+        74,
+        20,
+        22,
+        8,
+        p.accent,
+        PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let q = geom.outer;
+    let i = geom.inner;
     if i.width < 20 || i.height < 6 {
         return None;
     }
+    let bg = overlay_bg(p);
     put_text(
         b,
         i.x,
@@ -131,7 +149,7 @@ pub(crate) fn render_help_overlay(
         "keybinds",
         Style::default()
             .fg(p.text)
-            .bg(p.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     let close = Rect::new(i.right() - 13, i.y, 13, 1);
@@ -161,14 +179,14 @@ pub(crate) fn render_help_overlay(
         },
         Style::default()
             .fg(if h.search_focused { p.text } else { p.overlay0 })
-            .bg(p.panel_bg),
+            .bg(bg),
     );
     let cursor = if h.search_focused {
         text_editor::render(
             b,
             Rect::new(i.x + 3, sy, i.width.saturating_sub(3), 1),
             &h.query,
-            Style::default().fg(p.text).bg(p.panel_bg),
+            Style::default().fg(p.text).bg(bg),
         )
     } else {
         None
@@ -244,12 +262,12 @@ pub(crate) fn render_help_overlay(
         for y in track.y..track.bottom() {
             b[(track.x, y)]
                 .set_symbol("▐")
-                .set_style(Style::default().fg(p.overlay0).bg(p.panel_bg));
+                .set_style(Style::default().fg(p.overlay0).bg(bg));
         }
         for y in thumb.top..thumb.top.saturating_add(thumb.len) {
             b[(track.x, y)]
                 .set_symbol("▐")
-                .set_style(Style::default().fg(p.overlay1).bg(p.panel_bg));
+                .set_style(Style::default().fg(p.overlay1).bg(bg));
         }
     }
 
@@ -261,7 +279,7 @@ pub(crate) fn render_help_overlay(
             y,
             i.width,
             &format!(" {key:<7} {label}"),
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(bg),
         );
     }
 
@@ -275,10 +293,11 @@ pub(crate) fn render_help_overlay(
         } else {
             " search / · scroll j/k/↑↓/pgup/pgdn · close esc/enter"
         },
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(bg),
     );
     Some(HelpRender {
         area: q,
+        inner: i,
         cancel: close,
         scrollbar: scrollbar.unwrap_or_default(),
         metrics: Some(metrics),
@@ -286,40 +305,4 @@ pub(crate) fn render_help_overlay(
         cursor,
         ..HelpRender::default()
     })
-}
-pub(crate) fn panel(
-    b: &mut Buffer,
-    a: Rect,
-    c: ratatui::style::Color,
-    bg: ratatui::style::Color,
-) -> Option<Rect> {
-    super::dialogs::panel(b, a, c, bg)
-}
-fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
-    popup_with_width_cap(a, w, h, 4)
-}
-
-pub(crate) fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect> {
-    let w = w.min(a.width.saturating_sub(width_cap));
-    let h = h.min(a.height.saturating_sub(2));
-    if w < 4 || h < 4 {
-        return None;
-    }
-    Some(Rect::new(
-        a.x + (a.width - w) / 2,
-        a.y + (a.height - h) / 2,
-        w,
-        h,
-    ))
-}
-pub(crate) fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
-    b.set_style(r, s);
-    let w = display_width(t).min(usize::from(r.width)) as u16;
-    put_text(b, r.x + (r.width - w) / 2, r.y, w, t, s)
-}
-pub(crate) fn contrast(p: &Palette) -> ratatui::style::Color {
-    match p.panel_bg {
-        ratatui::style::Color::Reset => p.surface_dim,
-        c => c,
-    }
 }

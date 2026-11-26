@@ -92,7 +92,8 @@ pub(crate) fn hint_tiers(col: usize) -> &'static [&'static str] {
 }
 
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
-    b.set_style(body, Style::default().bg(p.panel_bg));
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    b.set_style(body, Style::default().bg(overlay_bg));
     let mut y = body.y;
     let machine = d.machine_label();
 
@@ -108,7 +109,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                     &format!(" Detecting runners on {machine}…"),
                     body.width as usize,
                 ),
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
+                Style::default().fg(p.overlay0).bg(overlay_bg),
             );
             return;
         }
@@ -119,7 +120,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width,
                 &crate::chrome::text::truncate_end(e, body.width as usize - 1),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
             return;
         }
@@ -148,7 +149,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                         &format!(" No runners found on {machine} — checked {RUNNER_NAMES}"),
                         body.width as usize - 1,
                     ),
-                    Style::default().fg(p.peach).bg(p.panel_bg),
+                    Style::default().fg(p.peach).bg(overlay_bg),
                 );
                 put_text(
                     b,
@@ -156,7 +157,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                     y + 1,
                     body.width,
                     " Install a runner there — the stage needs one to seat roles",
-                    Style::default().fg(p.overlay0).bg(p.panel_bg),
+                    Style::default().fg(p.overlay0).bg(overlay_bg),
                 );
                 return;
             }
@@ -167,7 +168,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width,
                 &crate::chrome::text::truncate_end(&head, body.width as usize - 1),
-                Style::default().fg(p.text).bg(p.panel_bg),
+                Style::default().fg(p.text).bg(overlay_bg),
             );
             // The ^E hint rides the right edge only while it clears
             // the head — at narrow widths the head keeps the room.
@@ -179,7 +180,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                     y,
                     edit_hint.len() as u16,
                     edit_hint,
-                    Style::default().fg(p.overlay0).bg(p.panel_bg),
+                    Style::default().fg(p.overlay0).bg(overlay_bg),
                 );
             }
         }
@@ -199,7 +200,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     // The role table header.
     let header = Style::default()
         .fg(p.overlay0)
-        .bg(p.panel_bg)
+        .bg(overlay_bg)
         .add_modifier(Modifier::BOLD);
     let cols = columns(body.width);
     let role_w = role_col_width(body.width);
@@ -301,14 +302,11 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             let active = selected && d.cast.col == col;
             // `e` turned this model cell into a free-text field.
             if active && col == 1 && d.model_edit.is_some() {
-                b.set_style(cell, Style::default().bg(p.surface0));
+                let raised = p.elevation().raised_on_overlay;
+                b.set_style(cell, Style::default().bg(raised));
                 if let Some(edit) = &d.model_edit
-                    && let Some(cursor) = text_editor::render(
-                        b,
-                        cell,
-                        edit,
-                        Style::default().fg(p.text).bg(p.surface0),
-                    )
+                    && let Some(cursor) =
+                        text_editor::render(b, cell, edit, Style::default().fg(p.text).bg(raised))
                 {
                     hits.cursor = Some(cursor);
                 }
@@ -356,7 +354,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             y,
             body.width.saturating_sub(2),
             &crate::chrome::text::truncate_end(&values, room),
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(overlay_bg),
         );
         y += 1;
         if let Some(path) = path
@@ -368,7 +366,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width.saturating_sub(4),
                 &crate::chrome::text::truncate_end(&path, room),
-                Style::default().fg(p.overlay1).bg(p.panel_bg),
+                Style::default().fg(p.overlay1).bg(overlay_bg),
             );
             y += 1;
         }
@@ -383,7 +381,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 " + [a] add candidate   [x] remove   rework cap: 2",
                 body.width.saturating_sub(2) as usize,
             ),
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(overlay_bg),
         );
         // A hand-edited cast's error line sits right under it.
         if let Some(error) = &d.cast.custom_error
@@ -395,7 +393,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y + 1,
                 body.width.saturating_sub(2),
                 &crate::chrome::text::truncate_end(error, body.width as usize - 3),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
         }
     }
@@ -461,9 +459,10 @@ fn draw_model_pick(
         .and_then(|r| r.models.get(row.model))
         .map(String::as_str)
         .unwrap_or_default();
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
     let head_style = Style::default()
         .fg(p.accent)
-        .bg(p.panel_bg)
+        .bg(overlay_bg)
         .add_modifier(Modifier::BOLD);
     let head = crate::chrome::text::truncate_end(
         &format!(" Model for {} · {runner_name}:", row.key),
@@ -492,7 +491,7 @@ fn draw_model_pick(
                 b,
                 Rect::new(x, y, w, 1),
                 &pick.filter,
-                Style::default().fg(p.text).bg(p.panel_bg),
+                Style::default().fg(p.text).bg(overlay_bg),
             )
         {
             hits.cursor = Some(cursor);
@@ -507,7 +506,7 @@ fn draw_model_pick(
             y,
             body.width,
             "nothing matches the filter",
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(overlay_bg),
         );
         return;
     }

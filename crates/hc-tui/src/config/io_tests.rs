@@ -144,3 +144,21 @@ fn displaced_bom_is_recovered_and_string_bom_is_preserved() {
         Some("tokyo-\u{feff}night")
     );
 }
+
+#[test]
+fn ui_popup_backdrop_and_shadow_default_on_and_parse_values() {
+    use crate::config::PopupBackdrop;
+    let def = load_text("");
+    assert_eq!(def.config.ui.popup_backdrop, PopupBackdrop::Dim);
+    assert!(def.config.ui.popup_shadow);
+
+    let off = load_text("[ui]\npopup_backdrop = 'none'\npopup_shadow = false\n");
+    assert!(off.diagnostics.is_empty(), "{:?}", off.diagnostics);
+    assert_eq!(off.config.ui.popup_backdrop, PopupBackdrop::None);
+    assert!(!off.config.ui.popup_shadow);
+
+    let on = load_text("[ui]\npopup_backdrop = 'dim'\npopup_shadow = true\n");
+    assert!(on.diagnostics.is_empty(), "{:?}", on.diagnostics);
+    assert_eq!(on.config.ui.popup_backdrop, PopupBackdrop::Dim);
+    assert!(on.config.ui.popup_shadow);
+}

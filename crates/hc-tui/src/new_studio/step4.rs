@@ -13,6 +13,7 @@ use crate::chrome::render::{put_segment, put_text};
 
 /// A `label: value` line of the summary card.
 fn card_line(b: &mut Buffer, body: Rect, y: u16, p: &Palette, label: &str, value: &str) {
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
     let x = put_segment(
         b,
         body.x + 1,
@@ -21,7 +22,7 @@ fn card_line(b: &mut Buffer, body: Rect, y: u16, p: &Palette, label: &str, value
         &format!("{label:<12}"),
         Style::default()
             .fg(p.overlay0)
-            .bg(p.panel_bg)
+            .bg(overlay_bg)
             .add_modifier(Modifier::BOLD),
     );
     put_segment(
@@ -30,12 +31,14 @@ fn card_line(b: &mut Buffer, body: Rect, y: u16, p: &Palette, label: &str, value
         y,
         body.right(),
         &crate::chrome::text::truncate_end(value, body.right().saturating_sub(x) as usize),
-        Style::default().fg(p.text).bg(p.panel_bg),
+        Style::default().fg(p.text).bg(overlay_bg),
     );
 }
 
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
-    b.set_style(body, Style::default().bg(p.panel_bg));
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let raised = p.elevation().raised_on_overlay;
+    b.set_style(body, Style::default().bg(overlay_bg));
     let machine = d.machine_label();
     let mut y = body.y;
 
@@ -44,17 +47,17 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         Probe::Pending => (
             "…",
             format!("dry-run on {machine}"),
-            Style::default().fg(p.yellow).bg(p.panel_bg),
+            Style::default().fg(p.yellow).bg(overlay_bg),
         ),
         Probe::Done(_) => (
             "✓",
             format!("dry-run passed on {machine}"),
-            Style::default().fg(p.green).bg(p.panel_bg),
+            Style::default().fg(p.green).bg(overlay_bg),
         ),
         Probe::Failed(_) => (
             "×",
             format!("dry-run failed on {machine}"),
-            Style::default().fg(p.red).bg(p.panel_bg),
+            Style::default().fg(p.red).bg(overlay_bg),
         ),
     };
     let x = put_segment(b, body.x + 1, y, body.right(), mark, style);
@@ -82,7 +85,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             y,
             cmd.len() as u16,
             &cmd,
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(overlay_bg),
         );
     }
     y += 1;
@@ -99,7 +102,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width.saturating_sub(1),
                 &crate::chrome::text::truncate_end(line, body.width as usize - 2),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
             y += 1;
         }
@@ -251,7 +254,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             y,
             body.width.saturating_sub(1),
             &format!(" {check} no git (reduced isolation)"),
-            Style::default().fg(p.text).bg(p.panel_bg),
+            Style::default().fg(p.text).bg(overlay_bg),
         );
         hits.push(row, NsHit::NoGitToggle);
         y += 1;
@@ -270,7 +273,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         y,
         1,
         "▸",
-        Style::default().fg(p.accent).bg(p.surface0),
+        Style::default().fg(p.accent).bg(raised),
     );
     let check = if d.start_stage { "[x]" } else { "[ ]" };
     let toggle = format!(" {check} Ensure stage is running on {machine} and focus producer");
@@ -291,7 +294,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         y,
         label_w,
         &crate::chrome::text::truncate_end(&toggle, label_w as usize),
-        Style::default().fg(p.text).bg(p.surface0),
+        Style::default().fg(p.text).bg(raised),
     );
     // The toggle's hit stops at the label's end — the button below
     // owns its own cells, so a click there creates, never toggles.
@@ -325,7 +328,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 &format!("creating studio on {machine}…"),
                 body.width.saturating_sub(1) as usize,
             ),
-            Style::default().fg(p.yellow).bg(p.panel_bg),
+            Style::default().fg(p.yellow).bg(overlay_bg),
         );
     } else if let Some(error) = &d.create_error {
         for line in error.lines().take(3) {
@@ -338,7 +341,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width.saturating_sub(1),
                 &crate::chrome::text::truncate_end(line, body.width as usize - 2),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
             y += 1;
         }

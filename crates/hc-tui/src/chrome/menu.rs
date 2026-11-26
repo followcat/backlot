@@ -11,8 +11,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::dialogs::{contrast, panel};
 use super::palette::Palette;
+use super::popup_frame::{
+    PopupChrome, contrast, overlay_bg, paint_frame_clipped, wrap_border_in_host,
+};
 use super::render::{display_width, put_text};
 use super::text::truncate_end;
 
@@ -243,11 +245,22 @@ pub(crate) fn render_context_menu(
 }
 
 /// Render `menu` horizontally clamped inside `screen.x..max_right`.
+#[cfg(test)]
 pub(crate) fn render_context_menu_in(
     buffer: &mut Buffer,
     menu: &ContextMenu,
     max_right: u16,
     palette: &Palette,
+) -> Option<ContextMenuRender> {
+    render_context_menu_in_with_shadow(buffer, menu, max_right, palette, true)
+}
+
+pub(crate) fn render_context_menu_in_with_shadow(
+    buffer: &mut Buffer,
+    menu: &ContextMenu,
+    max_right: u16,
+    palette: &Palette,
+    shadow: bool,
 ) -> Option<ContextMenuRender> {
     let title = menu.title();
     let title_rows = u16::from(title.is_some());
@@ -282,18 +295,24 @@ pub(crate) fn render_context_menu_in(
             .saturating_add(screen.height.saturating_sub(height)),
     );
     let rect = Rect::new(x, y, width, height);
-    // S5: a studio menu never keeps the covered rows' modifiers — the
-    // panel's fill only patches. The herdr menus keep the patch fill.
-    if matches!(menu.target, ContextMenuTarget::Studio(_)) {
-        crate::chrome::wide::clear_overlay(buffer, rect);
-    }
-    let inner = panel(buffer, rect, palette.accent, palette.panel_bg)?;
+    let clip = Rect::new(screen.x, screen.y, bound_w, screen.height);
+    let geom = paint_frame_clipped(
+        buffer,
+        wrap_border_in_host(clip, rect, PopupChrome::Menu),
+        clip,
+        palette.accent,
+        PopupChrome::Menu,
+        palette,
+        shadow,
+    )?;
+    let inner = geom.inner;
+    let bg = overlay_bg(palette);
     if let Some(title) = title.as_deref()
         && inner.height > 0
     {
         let title_style = Style::default()
             .fg(palette.overlay0)
-            .bg(palette.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD);
         put_text(
             buffer,
@@ -321,11 +340,11 @@ pub(crate) fn render_context_menu_in(
                 .bg(palette.accent)
                 .add_modifier(Modifier::BOLD)
         } else if item.dim.is_some() {
-            Style::default().fg(palette.overlay0).bg(palette.panel_bg)
+            Style::default().fg(palette.overlay0).bg(bg)
         } else if item.teal {
-            Style::default().fg(palette.teal).bg(palette.panel_bg)
+            Style::default().fg(palette.teal).bg(bg)
         } else {
-            Style::default().fg(palette.text).bg(palette.panel_bg)
+            Style::default().fg(palette.text).bg(bg)
         };
         buffer.set_style(row, style);
         let text = match &item.dim {

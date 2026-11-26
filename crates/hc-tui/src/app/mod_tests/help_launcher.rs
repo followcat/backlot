@@ -300,11 +300,11 @@ async fn the_legend_stays_pinned_and_the_sizes_hold() {
     // Centered inside `pane_surface` at desktop widths (132x46 at 160x47,
     // 92x35 at 120x36), falling back to full area on narrow screens.
     for (cols, rows, want) in [
-        (160u16, 47u16, (90u16, 31u16)),
-        (120, 36, (80, 27)),
-        (80, 24, (76, 20)),
-        (60, 24, (58, 20)),
-        (40, 24, (38, 20)),
+        (160u16, 47u16, (96u16, 35u16)),
+        (120, 36, (86, 31)),
+        (80, 24, (80, 22)),
+        (60, 24, (60, 22)),
+        (40, 24, (40, 22)),
     ] {
         draw_to(&mut app, cols, rows);
         assert_eq!(

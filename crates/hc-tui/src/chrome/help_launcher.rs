@@ -10,8 +10,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::help::{self, HelpRender, HelpState};
+use super::dialogs::{button, contrast};
+use super::help::{HelpRender, HelpState};
 use super::palette::Palette;
+use super::popup_frame::{self, PopupChrome, overlay_bg};
 use super::render::put_text;
 use super::scroll::{self, ScrollMetrics};
 use super::text::{display_width, truncate_end};
@@ -39,8 +41,8 @@ pub(crate) fn draw_index(groups: &[HelpGroup]) -> Vec<Option<usize>> {
 
 /// §3's launcher ladder: the listed sizes, linearly interpolated
 /// between them and capped to the band minus a one-cell margin.
-/// Herdr's own keybind overlay keeps its own sizes (D6).
-fn launcher_area(area: Rect) -> Option<Rect> {
+/// Returns the desired interior content size `(cw, ch)`.
+fn launcher_content_size(area: Rect) -> Option<(u16, u16)> {
     const W: [(u16, u16); 5] = [(40, 38), (60, 58), (80, 76), (120, 88), (160, 96)];
     const H: [(u16, u16); 3] = [(24, 20), (36, 28), (47, 32)];
     let w = ladder(&W, area.width).min(area.width.saturating_sub(2));
@@ -48,12 +50,7 @@ fn launcher_area(area: Rect) -> Option<Rect> {
     if w < 4 || h < 4 {
         return None;
     }
-    Some(Rect::new(
-        area.x + (area.width - w) / 2,
-        area.y + (area.height - h) / 2,
-        w,
-        h,
-    ))
+    Some((w.saturating_sub(2), h.saturating_sub(2)))
 }
 
 /// Piecewise-linear interpolation between `points`, clamped at the
@@ -76,6 +73,7 @@ fn ladder(points: &[(u16, u16)], x: u16) -> u16 {
 
 /// The overlay's frame — §3's launcher sizes (96x32 at 160x47,
 /// 88x28 at 120x36, 76x20 at 80x24, 58x20 at 60x24, 38x20 at 40x24).
+#[cfg(test)]
 pub(crate) fn render_launcher(
     b: &mut Buffer,
     area: Rect,
@@ -84,15 +82,37 @@ pub(crate) fn render_launcher(
     legend: &[(String, String)],
     p: &Palette,
 ) -> Option<HelpRender> {
-    let q = launcher_area(area)?;
-    // Clear before the panel's patch-style fill — covered cells
-    // (the sheet's italic `› tell hollywood` row, for one) must not
-    // keep their modifiers under the overlay.
-    crate::chrome::wide::clear_overlay(b, q);
-    let i = help::panel(b, q, p.accent, p.panel_bg)?;
+    render_launcher_with_shadow(b, area, h, groups, legend, p, true)
+}
+
+pub(crate) fn render_launcher_with_shadow(
+    b: &mut Buffer,
+    area: Rect,
+    h: &HelpState,
+    groups: &[HelpGroup],
+    legend: &[(String, String)],
+    p: &Palette,
+    shadow: bool,
+) -> Option<HelpRender> {
+    let (cw, ch) = launcher_content_size(area)?;
+    let geom = popup_frame::open_centered(
+        b,
+        area,
+        cw,
+        ch,
+        22,
+        8,
+        p.accent,
+        PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let q = geom.outer;
+    let i = geom.inner;
     if i.width < 20 || i.height < 6 {
         return None;
     }
+    let bg = overlay_bg(p);
     put_text(
         b,
         i.x,
@@ -101,11 +121,11 @@ pub(crate) fn render_launcher(
         "Actions & Keybinds",
         Style::default()
             .fg(p.text)
-            .bg(p.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     let close = Rect::new(i.right() - 13, i.y, 13, 1);
-    help::button(
+    button(
         b,
         close,
         if h.search_focused {
@@ -114,7 +134,7 @@ pub(crate) fn render_launcher(
             " esc close "
         },
         Style::default()
-            .fg(help::contrast(p))
+            .fg(contrast(p))
             .bg(p.accent)
             .add_modifier(Modifier::BOLD),
     );
@@ -136,7 +156,7 @@ pub(crate) fn render_launcher(
         },
         Style::default()
             .fg(if h.search_focused { p.text } else { p.overlay0 })
-            .bg(p.panel_bg),
+            .bg(bg),
     );
     if applied {
         let hint = " esc clears ";
@@ -149,7 +169,7 @@ pub(crate) fn render_launcher(
                 sy,
                 hint_w,
                 hint,
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
+                Style::default().fg(p.overlay0).bg(bg),
             );
         }
     }
@@ -158,7 +178,7 @@ pub(crate) fn render_launcher(
             b,
             Rect::new(i.x + 3, sy, i.width.saturating_sub(3), 1),
             &h.query,
-            Style::default().fg(p.text).bg(p.panel_bg),
+            Style::default().fg(p.text).bg(bg),
         )
     } else {
         None
@@ -198,6 +218,7 @@ pub(crate) fn render_launcher(
     // names each line; the row hits record its flat row index.
     let mut hits = HelpRender {
         area: q,
+        inner: i,
         cancel: close,
         scrollbar: scrollbar.unwrap_or_default(),
         metrics: Some(metrics),
@@ -224,7 +245,7 @@ pub(crate) fn render_launcher(
                 &format!(" {}", group.title),
                 Style::default()
                     .fg(p.accent)
-                    .bg(p.panel_bg)
+                    .bg(bg)
                     .add_modifier(Modifier::BOLD),
             );
             y += 1;
@@ -257,12 +278,12 @@ pub(crate) fn render_launcher(
         for ty in track.y..track.bottom() {
             b[(track.x, ty)]
                 .set_symbol("▐")
-                .set_style(Style::default().fg(p.overlay0).bg(p.panel_bg));
+                .set_style(Style::default().fg(p.overlay0).bg(bg));
         }
         for ty in thumb.top..thumb.top.saturating_add(thumb.len) {
             b[(track.x, ty)]
                 .set_symbol("▐")
-                .set_style(Style::default().fg(p.overlay1).bg(p.panel_bg));
+                .set_style(Style::default().fg(p.overlay1).bg(bg));
         }
     }
 
@@ -274,7 +295,7 @@ pub(crate) fn render_launcher(
             ly,
             i.width,
             &format!(" {key:<7} {label}"),
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(bg),
         );
     }
 
@@ -295,7 +316,7 @@ pub(crate) fn render_launcher(
                 usize::from(i.width),
             )
         },
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(bg),
     );
     Some(hits)
 }
@@ -311,7 +332,11 @@ fn paint_row(
     selected: bool,
     p: &Palette,
 ) {
-    let bg = if selected { p.selection_bg } else { p.panel_bg };
+    let bg = if selected {
+        p.selection_bg
+    } else {
+        overlay_bg(p)
+    };
     b.set_style(Rect::new(rect.x, y, rect.width, 1), Style::default().bg(bg));
     if selected {
         put_text(b, rect.x, y, 2, "▌▸", Style::default().fg(p.accent).bg(bg));

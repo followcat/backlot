@@ -55,8 +55,20 @@ fn cjk_text_straddling_popup_edges_blanks_halves_and_keeps_borders() {
         super::super::wide::mark_wide_tail_slots(&mut buf);
 
         let pop = Rect::new(offset, 2, 21, 5);
-        let inner = super::super::dialogs::panel(&mut buf, pop, p.accent, p.panel_bg);
-        assert!(inner.is_some());
+        let geom = super::super::popup_frame::PopupGeometry {
+            outer: pop,
+            border: pop,
+            inner: Rect::new(pop.x + 1, pop.y + 1, pop.width - 2, pop.height - 2),
+        };
+        let painted = super::super::popup_frame::paint_frame(
+            &mut buf,
+            geom,
+            p.accent,
+            super::super::popup_frame::PopupChrome::BorderJoined,
+            &p,
+            false,
+        );
+        assert!(painted.is_some());
         super::super::wide::mark_wide_tail_slots(&mut buf);
 
         for y in pop.top()..pop.bottom() {
@@ -143,25 +155,21 @@ fn cjk_text_straddling_hollywood_reader_and_shadow_edges_is_handled_whole() {
         };
         let ren = crate::hollywood::render_view(&mut buf, host, &view, None, &p);
         assert!(!ren.area.is_empty());
-
-        // Simulate a 1-col right shadow edge cleanly on `ren.area.right()`.
-        let shadow_col = Rect::new(ren.area.right(), ren.area.y + 1, 1, ren.area.height);
-        super::super::wide::blank_wide_edges(&mut buf, shadow_col, true);
-        for sy in shadow_col.top()..shadow_col.bottom() {
-            if let Some(cell) = buf.cell_mut((shadow_col.x, sy)) {
-                cell.set_bg(p.panel_bg);
-            }
-        }
         super::super::wide::mark_wide_tail_slots(&mut buf);
 
+        let shadow_col = Rect::new(ren.area.right(), ren.area.y + 1, 1, ren.area.height);
         for y in ren.area.top()..ren.area.bottom() {
-            let lb = &buf[(ren.area.x, y)];
-            assert_ne!(lb.diff_option, CellDiffOption::Skip);
-            assert!(
-                matches!(lb.symbol(), "╭" | "│" | "├" | "╰"),
-                "host_x={host_x} y={y} left={:?}",
-                lb.symbol()
-            );
+            let gutter_x = ren.area.x;
+            assert_ne!(buf[(gutter_x, y)].diff_option, CellDiffOption::Skip);
+            assert_ne!(buf[(gutter_x + 1, y)].diff_option, CellDiffOption::Skip);
+            if y > ren.area.y && y + 1 < ren.area.bottom() {
+                let lb = &buf[(gutter_x + 1, y)];
+                assert!(
+                    matches!(lb.symbol(), "╭" | "│" | "├" | "╰"),
+                    "host_x={host_x} y={y} left={:?}",
+                    lb.symbol()
+                );
+            }
             if ren.area.x > 0 {
                 assert_eq!(buf[(ren.area.x - 1, y)].cell_width(), 1);
             }

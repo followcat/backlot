@@ -197,7 +197,9 @@ pub(super) fn draw_divider(buf: &mut Buffer, area: Rect, y: u16, edge: Style, pa
             y,
             area.width - 2,
             &"─".repeat(usize::from(area.width - 2)),
-            Style::default().fg(palette.surface1),
+            Style::default()
+                .fg(palette.elevation().border_muted)
+                .bg(crate::chrome::popup_frame::overlay_bg(palette)),
         );
     }
     if area.width >= 2 {

@@ -286,7 +286,7 @@ impl NewStudio {
 /// The dialog's outer rect: a centered frame taking most of the
 /// screen — capped so very wide terminals keep margins, and near
 /// full-frame at 80×24 like the mockups.
-pub(crate) fn frame(area: Rect) -> Option<Rect> {
+fn frame_content_size(area: Rect) -> Option<(u16, u16)> {
     let w = area.width.saturating_sub(2).min(96);
     let h = (area.height.saturating_mul(5) / 6)
         .min(area.height.saturating_sub(2))
@@ -294,12 +294,7 @@ pub(crate) fn frame(area: Rect) -> Option<Rect> {
     if w < 24 || h < 10 {
         return None;
     }
-    Some(Rect::new(
-        area.x + (area.width - w) / 2,
-        area.y + (area.height - h) / 2,
-        w,
-        h,
-    ))
+    Some((w.saturating_sub(2), h.saturating_sub(2)))
 }
 
 /// The frame, title row, step tabs and hint row every step shares.
@@ -307,14 +302,29 @@ pub(crate) fn frame(area: Rect) -> Option<Rect> {
 /// tabs/edges registered.
 fn chrome(
     b: &mut Buffer,
-    outer: Rect,
+    band: Rect,
     d: &NewStudio,
     p: &Palette,
     hints: &mut NsHits,
     hint_tiers: &[&str],
+    shadow: bool,
 ) -> Option<Rect> {
-    let inner = crate::chrome::dialogs::panel(b, outer, p.accent, p.panel_bg)?;
-    hints.area = outer;
+    let (cw, ch) = frame_content_size(band)?;
+    let geom = crate::chrome::popup_frame::open_centered(
+        b,
+        band,
+        cw,
+        ch,
+        24,
+        10,
+        p.accent,
+        crate::chrome::popup_frame::PopupChrome::Standard,
+        p,
+        shadow,
+    )?;
+    let inner = geom.inner;
+    let bg = crate::chrome::popup_frame::overlay_bg(p);
+    hints.area = geom.outer;
     // Title: `New studio · [n/4] Step Name` left, `esc …` right.
     // The title is clipped short of the right hint so they never
     // collide at narrow widths.
@@ -332,7 +342,7 @@ fn chrome(
         &crate::chrome::text::truncate_end(&title, title_w as usize),
         Style::default()
             .fg(p.accent)
-            .bg(p.panel_bg)
+            .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
     put_right_text(
@@ -340,7 +350,7 @@ fn chrome(
         inner,
         inner.y,
         esc,
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(bg),
     );
     // Step tabs on the second row — the current one highlighted. When
     // the four tabs cannot all fit the strip collapses to the compact
@@ -367,9 +377,9 @@ fn chrome(
                     .bg(p.accent)
                     .add_modifier(Modifier::BOLD)
             } else if step.index() < d.step.index() {
-                Style::default().fg(p.subtext0).bg(p.panel_bg)
+                Style::default().fg(p.subtext0).bg(bg)
             } else {
-                Style::default().fg(p.overlay0).bg(p.panel_bg)
+                Style::default().fg(p.overlay0).bg(bg)
             };
             put_text(
                 b,
@@ -407,7 +417,7 @@ fn chrome(
         hint_y,
         inner.width,
         hint,
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(bg),
     );
     Some(Rect::new(
         inner.x,
@@ -420,23 +430,38 @@ fn chrome(
 /// The selected-row marker and background — the panel's own
 /// `▸` row convention.
 fn selected_row(b: &mut Buffer, rect: Rect, p: &Palette) {
-    b.set_style(rect, Style::default().bg(p.surface0));
+    b.set_style(rect, Style::default().bg(p.elevation().raised_on_overlay));
 }
 
 /// The bg a row's text cells take: the selection surface when the
 /// row is highlighted, else the panel — the selection must cover
 /// the text, not just the padding around it.
 fn row_text_bg(hot: bool, p: &Palette) -> ratatui::style::Color {
-    if hot { p.surface0 } else { p.panel_bg }
+    if hot {
+        p.elevation().raised_on_overlay
+    } else {
+        crate::chrome::popup_frame::overlay_bg(p)
+    }
 }
 
 /// The dialog's draw: dimmed backdrop is applied by the caller, the
 /// frame is the overlay's own inside `band` (the modal band — the
 /// whole frame minus a beside dock, so the dialog never crosses it),
 /// then the step's body.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> NsHits {
+    render_with_shadow(b, d, p, band, true)
+}
+
+pub(crate) fn render_with_shadow(
+    b: &mut Buffer,
+    d: &NewStudio,
+    p: &Palette,
+    band: Rect,
+    shadow: bool,
+) -> NsHits {
     let mut hits = NsHits::default();
-    let Some(outer) = frame(band) else {
+    if frame_content_size(band).is_none() {
         // Too small to draw the frame — nothing but a one-line cry.
         put_text(
             b,
@@ -447,11 +472,7 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
             Style::default().fg(p.red),
         );
         return hits;
-    };
-    // The dimmed backdrop is the caller's; the dead panes' frozen
-    // screens behind must not keep their modifiers under the panel's
-    // patch fill — clear the dialog's own rect before the frame.
-    crate::chrome::wide::clear_overlay(b, outer);
+    }
     let tiers: &[&str] = match d.step {
         Step::MachineRepo => &[
             "tab pane  ↑↓ move  →/← dir  type to filter  ⏎ pick  ^R re-check  esc cancel",
@@ -477,7 +498,7 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
             "⏎  esc",
         ],
     };
-    let Some(body) = chrome(b, outer, d, p, &mut hits, tiers) else {
+    let Some(body) = chrome(b, band, d, p, &mut hits, tiers, shadow) else {
         return hits;
     };
     match d.step {

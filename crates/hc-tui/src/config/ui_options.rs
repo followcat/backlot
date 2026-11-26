@@ -80,6 +80,10 @@ pub struct UiConfig {
     pub agent_panel_space_headers: bool,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
+    /// Backdrop treatment behind modal popups ("dim" or "none"). Default: "dim".
+    pub popup_backdrop: PopupBackdrop,
+    /// Draw a 1-cell drop shadow around modal popups and context menus. Default: true.
+    pub popup_shadow: bool,
     /// Expanded sidebar row composition.
     pub sidebar: SidebarConfig,
     /// Accent color for highlights, borders, and navigation UI.
@@ -119,6 +123,8 @@ impl Default for UiConfig {
             agent_panel_sort: AgentPanelSortConfig::Priority,
             agent_panel_space_headers: false,
             status_indicators: StatusIndicatorStyle::Dots,
+            popup_backdrop: PopupBackdrop::Dim,
+            popup_shadow: true,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),
         }

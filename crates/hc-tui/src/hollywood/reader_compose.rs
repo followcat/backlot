@@ -96,7 +96,7 @@ pub(super) fn draw_compose_band(
         return (None, None);
     }
     let inner = Rect::new(area.x + 2, row_y, area.width - 4, 1);
-    let bg = Style::default().bg(palette.panel_bg);
+    let bg = Style::default().bg(crate::chrome::popup_frame::overlay_bg(palette));
     buf.set_style(Rect::new(area.x + 1, row_y, area.width - 2, 1), bg);
 
     match state {

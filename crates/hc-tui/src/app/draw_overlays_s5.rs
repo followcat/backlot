@@ -16,7 +16,13 @@ pub(super) fn render_help(
     layout: &crate::chrome::snapshot::ClientShellLayout,
 ) -> crate::chrome::help::HelpRender {
     if !app.help_launcher() {
-        return crate::chrome::help::render_help_overlay(
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        return crate::chrome::help::render_help_overlay_with_shadow(
             buf,
             &app.help_state,
             &app.live,
@@ -30,36 +36,61 @@ pub(super) fn render_help(
                 )
             }),
             &app.shell.palette,
+            app.shell.popup_shadow,
         )
         .unwrap_or_default();
     }
     // S5's action launcher: runnable rows on top, herdr's reference
     // sections under them, the glyph legend pinned. `backlot_modal_surface`
     // centers it inside `pane_surface` (falling back on narrow windows).
+    // When `picker` is open, paint the launcher first, then dim ONCE so
+    // both background and launcher attenuate under the foreground picker
+    // without compounding.
+    let picker_open = app.help_state.picker.is_some();
+    if !picker_open {
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+    }
     let groups = app.help_filtered_groups();
     let legend = app.help_legend();
-    let mut hits = crate::chrome::help_launcher::render_launcher(
+    let mut hits = crate::chrome::help_launcher::render_launcher_with_shadow(
         buf,
         app.backlot_modal_surface(area, layout, 64),
         &app.help_state,
         &groups,
         &legend,
         &app.shell.palette,
+        app.shell.popup_shadow,
     )
     .unwrap_or_default();
     if let Some(picker) = app.help_state.picker.as_ref() {
-        let inside = ratatui::layout::Rect::new(
-            hits.area.x + 1,
-            hits.area.y + 1,
-            hits.area.width.saturating_sub(2),
-            hits.area.height.saturating_sub(2),
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
         );
-        crate::chrome::help_picker::render_picker(
+        let inside = if !hits.inner.is_empty() {
+            hits.inner
+        } else {
+            ratatui::layout::Rect::new(
+                hits.area.x + 1,
+                hits.area.y + 1,
+                hits.area.width.saturating_sub(2),
+                hits.area.height.saturating_sub(2),
+            )
+        };
+        crate::chrome::help_picker::render_picker_with_shadow(
             buf,
             inside,
             picker,
             &mut hits,
             &app.shell.palette,
+            app.shell.popup_shadow,
         );
     }
     hits

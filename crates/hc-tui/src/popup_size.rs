@@ -46,13 +46,15 @@ impl PopupSize {
     }
 }
 
-/// The centered popup rectangles: `outer` including its one-cell border,
-/// `inner` the terminal surface.
+/// The centered popup rectangles: `outer` is the border + optional 1-cell
+/// outer gutter hit box (excluding drop shadow), `frame` is the border box,
+/// and `inner` is the terminal surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupResolvedGeometry {
     pub outer: ratatui::layout::Rect,
+    pub frame: ratatui::layout::Rect,
     pub inner: ratatui::layout::Rect,
-    /// Terminal width: outer minus 3 when wide, else minus 2 — see the
+    /// Terminal width: border width minus 3 when wide, else minus 2 — see the
     /// reference's `terminal_width`.
     pub terminal_cols: u16,
     pub terminal_rows: u16,
@@ -78,27 +80,35 @@ pub fn resolve_popup_geometry(
             .unwrap_or(available / 2)
             .clamp(minimum, available)
     };
-    let outer_width = dimension(width, area.width, MIN_POPUP_WIDTH);
-    let outer_height = dimension(height, area.height, MIN_POPUP_HEIGHT);
-    let outer = ratatui::layout::Rect::new(
-        area.x + (area.width - outer_width) / 2,
-        area.y + (area.height - outer_height) / 2,
-        outer_width,
-        outer_height,
+    let border_width = dimension(width, area.width, MIN_POPUP_WIDTH);
+    let border_height = dimension(height, area.height, MIN_POPUP_HEIGHT);
+    let frame = ratatui::layout::Rect::new(
+        area.x + (area.width - border_width) / 2,
+        area.y + (area.height - border_height) / 2,
+        border_width,
+        border_height,
     );
     let inner = ratatui::layout::Rect::new(
-        outer.x + 1,
-        outer.y + 1,
-        outer.width.saturating_sub(2),
-        outer.height.saturating_sub(2),
+        frame.x + 1,
+        frame.y + 1,
+        frame.width.saturating_sub(2),
+        frame.height.saturating_sub(2),
     );
-    let terminal_cols = if outer.width >= 8 {
-        outer.width - 3
+    let gutter = u16::from(border_width + 2 <= area.width && border_height + 2 <= area.height);
+    let outer = ratatui::layout::Rect::new(
+        frame.x - gutter,
+        frame.y - gutter,
+        frame.width + 2 * gutter,
+        frame.height + 2 * gutter,
+    );
+    let terminal_cols = if frame.width >= 8 {
+        frame.width - 3
     } else {
-        outer.width - 2
+        frame.width - 2
     };
     Some(PopupResolvedGeometry {
         outer,
+        frame,
         inner,
         terminal_cols,
         terminal_rows: inner.height,
