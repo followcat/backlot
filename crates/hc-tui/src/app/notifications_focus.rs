@@ -97,7 +97,9 @@ impl App {
                 self.hollywood.scroll = 0;
                 self.studio.lot.counts.unread = 0;
             }
-            Target::Ready(key) | Target::Tell(key) => self.focus_studio(&key),
+            Target::Ready(key) | Target::Tell(key) | Target::Upgrade(key) => {
+                self.focus_studio(&key)
+            }
             Target::Stage(machine, offline) => {
                 self.studio_notify_stage(&machine, offline);
             }

@@ -47,8 +47,9 @@ part of this step.
 
 Every event has `v`, `seq`, `ts_ms`, `kind`, and `by` (the role and session). `v` is the ledger
 schema version — `1` today. Lines written before versioning carry no `v` and read as `v: 1`;
-a `v` newer than the binary's `LEDGER_VERSION` is refused with an "upgrade backlot" error rather
-than a serde failure. `backlot studio migrate [<studio> | --all] [--dry-run]` walks a studio's
+a `v` newer than the binary's `LEDGER_VERSION` is refused with a corrupt `"ledger event version vN is newer than supported v1; upgrade backlot"` error, and malformed JSON, missing envelope fields (`seq`, `ts_ms`, `by`, `kind`), known kinds with invalid payloads, or `v: 0` return a line-numbered corrupt error (an unterminated trailing line without a newline is ignored on read as a torn write and truncated before any append).
+
+A valid JSON line with `v <= LEDGER_VERSION` and an unknown `kind` (for example a record added by a newer backlot release without bumping `v`) deserializes as `EventKind::Unknown { raw_kind }`, preserving its `seq`, `ts_ms`, and `by` and advancing `last_seq` / `next_seq` past it while ignoring its payload during state reduction. `backlot studio migrate` and any ledger rewrite preserve unknown-kind lines byte-for-byte. While a studio's ledger holds any unknown kind, CLI and stage read commands keep working, every write (`append_locked`) is refused with `"this ledger has records from a newer backlot (<kinds>); upgrade backlot"`, `backlot stage` pauses read-only on that studio (no reconciles, launches, watches, checks, relabels, or terminal sends; sibling studios keep running), and the studio's entry in `plugin.backlot.summary` sets `needs_upgrade: true` and `unknown_kinds` so the TUI Lot, Call Sheet, and studio frames show `"upgrade backlot"`. `backlot studio migrate [<studio> | --all] [--dry-run]` walks a studio's
 log (and, with `--all`, Hollywood's) under the lock, rewrites any unversioned lines to the
 current `v` through the model's step-by-step migration pipeline, keeps a `events.jsonl.v0.bak`
 backup, and verifies the migrated log replays to the same state — a current log is a no-op that

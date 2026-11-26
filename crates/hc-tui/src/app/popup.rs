@@ -19,6 +19,21 @@ pub(super) fn popup_fit(pane: &mut Pane, geometry: crate::popup_size::PopupResol
     pane.allocated(geometry.terminal_cols, geometry.terminal_rows);
 }
 
+fn popup_dimensions(
+    live: &crate::config::LiveKeybindConfig,
+    popup: &PopupState,
+) -> (Option<PopupSize>, Option<PopupSize>) {
+    match popup.key.as_ref().filter(|_| popup.persistent) {
+        Some(key) => super::float_reconcile::resolve_float_size(
+            live,
+            &key.command,
+            popup.width,
+            popup.height,
+        ),
+        None => (popup.width, popup.height),
+    }
+}
+
 /// The reference marks popup-owned terminals so client surfaces can keep
 /// them out of the regular inventory views.
 pub(crate) const POPUP_LABEL: &str = "hc-tui.popup";
@@ -247,15 +262,15 @@ impl App {
             return;
         }
         let mut pane = self.new_pane();
+        let area = self.frame_area();
+        if let Some(geometry) = resolve_popup_geometry(pending.width, pending.height, area) {
+            popup_fit(&mut pane, geometry);
+        }
         pane.want(Some(Spec {
             terminal: terminal.clone(),
             role: Role::Active,
         }));
         pane.on_view(&self.view);
-        let area = self.frame_area();
-        if let Some(geometry) = resolve_popup_geometry(pending.width, pending.height, area) {
-            popup_fit(&mut pane, geometry);
-        }
         self.popup = Some(PopupState {
             pane,
             terminal,
@@ -413,18 +428,31 @@ impl App {
         false
     }
 
-    /// Re-resolve geometry on a host resize and refit the popup attach —
-    /// the reference drops the popup selection on a size change. Hidden
-    /// float leases refit from their stored geometry as well.
+    /// Keep the shown popup and hidden float leases matched to `area` and
+    /// the current bindings; clears popup selection only when the shown
+    /// popup's terminal size changes.
+    pub(super) fn sync_popup_geometry(&mut self, area: Rect) {
+        if let Some(popup) = self.popup.as_mut() {
+            let (width, height) = popup_dimensions(&self.live, popup);
+            popup.width = width;
+            popup.height = height;
+            if let Some(geometry) = resolve_popup_geometry(width, height, area) {
+                let target = (geometry.terminal_cols, geometry.terminal_rows);
+                if popup.pane.allocated_size() != target {
+                    self.popup_selection = None;
+                    popup_fit(&mut popup.pane, geometry);
+                }
+            }
+        }
+        self.floats_resize(area);
+    }
+
+    /// Re-resolve geometry on a host resize or config reload and refit
+    /// both the shown popup and hidden float leases.
     pub(super) fn popup_resize(&mut self) {
         self.popup_selection = None;
         let area = self.frame_area();
-        if let Some(popup) = self.popup.as_mut()
-            && let Some(geometry) = resolve_popup_geometry(popup.width, popup.height, area)
-        {
-            popup_fit(&mut popup.pane, geometry);
-        }
-        self.floats_resize(area);
+        self.sync_popup_geometry(area);
     }
 
     /// Send a host mouse event to the popup terminal — the reference's
@@ -702,11 +730,10 @@ impl App {
             }
         }
         let frame_area = self.frame_area();
-        let Some(geometry) = self
-            .popup
-            .as_ref()
-            .and_then(|p| resolve_popup_geometry(p.width, p.height, frame_area))
-        else {
+        let Some(geometry) = self.popup.as_ref().and_then(|p| {
+            let (width, height) = popup_dimensions(&self.live, p);
+            resolve_popup_geometry(width, height, frame_area)
+        }) else {
             return;
         };
         let persistent = self.popup.as_ref().is_some_and(|p| p.persistent);

@@ -195,6 +195,11 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
+        Wait::Upgrade(_) => vec![Chip {
+            label: "open",
+            key: "↵",
+            primary: true,
+        }],
         Wait::Ready(_) => vec![
             Chip {
                 label: "finish",
@@ -321,6 +326,7 @@ pub(crate) fn glyph_colour(
             palette.accent
         }
         Wait::Hollywood(_) => palette.peach,
+        Wait::Upgrade(_) => palette.peach,
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
         Wait::Stage(_) => palette.peach,
@@ -429,6 +435,26 @@ pub(crate) fn wait_parts(wait: &Wait<'_>, local: &str, multi: bool) -> WaitParts
                     studio: String::new(),
                     rest: "blocked".into(),
                 }
+            }
+        }
+        Wait::Upgrade(StudioItem { machine, studio }) => {
+            let machine = machine_label(*machine, local, multi);
+            let machine = if machine.is_empty() {
+                String::new()
+            } else {
+                format!(" · {machine}")
+            };
+            let reason = if studio.unknown_kinds.is_empty() {
+                "upgrade backlot".to_string()
+            } else {
+                format!("upgrade backlot ({})", studio.unknown_kinds.join(", "))
+            };
+            WaitParts {
+                glyph: "!",
+                verb: "UPGRADE".into(),
+                gap: " ",
+                studio: studio.id.clone(),
+                rest: format!("{machine} · {reason}"),
             }
         }
         Wait::NoRequirement(StudioItem { machine, studio }) => {
@@ -588,7 +614,7 @@ pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
         Wait::Prompt(item) => &item.role.role,
         Wait::Role(item) => &item.role.role,
         Wait::Hollywood(_) => "hollywood",
-        Wait::NoRequirement(item) => &item.studio.id,
+        Wait::NoRequirement(item) | Wait::Upgrade(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
         Wait::Outward(item) => &item.card.id,
@@ -608,7 +634,7 @@ pub(crate) fn ultra_head(wait: &Wait<'_>, _local: &str, _multi: bool) -> String 
         Wait::Role(item) if item.asks => item.role.name.clone(),
         Wait::Role(item) => format!("needs {}", item.role.name),
         Wait::Hollywood(_) => "hollywood".into(),
-        Wait::NoRequirement(item) => item.studio.id.clone(),
+        Wait::NoRequirement(item) | Wait::Upgrade(item) => item.studio.id.clone(),
         _ => String::new(),
     }
 }
