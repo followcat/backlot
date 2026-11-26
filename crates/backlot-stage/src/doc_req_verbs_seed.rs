@@ -361,6 +361,7 @@ pub(crate) fn seed_full_world(base: &Path, env: &Env) -> (u64, u64, u64, u64) {
                         cast: "drafts/beta-tools/cast.toml".into(),
                         brief: "drafts/beta-tools/brief.md".into(),
                         no_git: true,
+                        snapshot: None,
                     },
                     why: "spin up beta".into(),
                     base: CardBase::StudioAbsent,

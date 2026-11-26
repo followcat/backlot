@@ -364,6 +364,13 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::UnfinishedTasks(open))
             }
         }
+        EventKind::StudioReopened { .. } => {
+            require_studio(state)?;
+            if state.finished.is_none() {
+                return Err(Refusal::NotFinished);
+            }
+            Ok(())
+        }
         EventKind::StudioDeleted { .. } => {
             require_studio(state)?;
             if state.finished.is_none() {

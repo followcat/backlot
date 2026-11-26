@@ -2,7 +2,7 @@
 //! CLI prints, and the text a remote ack is rendered into from the
 //! same struct.
 
-use backlot_model::req_results::{StudioFinishResult, StudioNewResult};
+use backlot_model::req_results::{StudioFinishResult, StudioNewResult, StudioReopenResult};
 
 /// The first non-empty line of a message, trimmed and capped at the
 /// 60 characters `studio new --dry-run` restates.
@@ -36,4 +36,8 @@ pub(crate) fn studio_new(r: &StudioNewResult) -> String {
 
 pub(crate) fn studio_finish(r: &StudioFinishResult) -> String {
     format!("event {}: studio.finished", r.seq)
+}
+
+pub(crate) fn studio_reopen(r: &StudioReopenResult) -> String {
+    format!("event {}: studio.reopened", r.seq)
 }

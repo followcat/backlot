@@ -748,6 +748,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
             });
         }
+        EventKind::StudioReopened { reason, card } => {
+            state.finished = None;
+            state.reopened = Some(crate::state::ReopenRecord {
+                seq,
+                reason: reason.clone(),
+                ts_ms: ts,
+                card: card.clone(),
+            });
+        }
         EventKind::StudioDeleted { .. } => {
             for entry in state.roles.values_mut() {
                 entry.live = false;

@@ -186,6 +186,13 @@ pub(super) fn map(
                 force,
             })
         }
+        Cmd::StudioReopen { reason } => {
+            let reason = reason.clone();
+            with_studio(common, env, move |studio| ReqAction::StudioReopen {
+                studio,
+                reason,
+            })
+        }
         Cmd::StudioCast(CastCmd::Show { json }) => {
             let json = *json;
             with_studio(common, env, move |studio| ReqAction::StudioCastShow {

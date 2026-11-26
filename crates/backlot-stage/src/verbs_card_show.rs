@@ -31,9 +31,11 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
             hollywood::stale_hollywood(&card.base, current.as_ref())
         }
         _ => studio_state(base, card.action.studio()).ok().and_then(|s| {
-            hollywood::stale(&card.action, &card.base, s.as_ref()).or_else(|| {
-                crate::hcard_outward::outward_stale(&card.action, &card.base, s.as_ref())
-            })
+            hollywood::stale(&card.action, &card.base, s.as_ref())
+                .or_else(|| {
+                    crate::hcard_outward::outward_stale(&card.action, &card.base, s.as_ref())
+                })
+                .or_else(|| crate::hcard_snapshot::stale(&card.action))
         }),
     };
 
@@ -86,6 +88,7 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
         cast,
         brief,
         no_git,
+        ..
     } = &card.action
     {
         let cast_path = crate::hcard_new::resolve_draft(&hdir, cast);
@@ -113,7 +116,7 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
         None
     };
 
-    let cast_diff = if let CardAction::Cast { studio, cast } = &card.action {
+    let cast_diff = if let CardAction::Cast { studio, cast, .. } = &card.action {
         let path = crate::hcard_new::resolve_draft(&hdir, cast);
         match crate::studio_cast::read(&path) {
             Ok(next) => match crate::hwood::studio_state(base, studio) {
@@ -142,6 +145,7 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
         identity_change,
         studio_new,
         cast_diff,
+        roles_summary: crate::hcard_snapshot::roles_summary(&hdir, &card.action),
     })
 }
 
@@ -154,6 +158,9 @@ pub(crate) fn format_card_show(res: &CardShowResult) -> String {
         let _ = write!(out, " ({detail})");
     }
     let _ = write!(out, "\nproposed by {}", res.by);
+    if let Some(roles) = &res.roles_summary {
+        let _ = write!(out, "\nroles: {roles}");
+    }
     if let Some(draft) = &res.studio_new {
         let _ = write!(
             out,

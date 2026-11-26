@@ -330,13 +330,15 @@ pub(crate) fn latest_ask<'a>(
 
 /// Whether `role`'s `tell user` at `ask_seq` has been answered — by a
 /// user `tell` back, a durable `ask.answered`, a later ledger action by
-/// `role`, or `studio.finished`.
+/// `role`, or `studio.finished`. A reopen does not un-answer it: the
+/// finish answered it, and the reopen is later history.
 pub fn is_ask_answered(state: &StudioState, role: &str, ask_seq: u64) -> bool {
     state
         .messages
         .iter()
         .any(|m| m.from == "user" && m.to == role && m.seq > ask_seq)
         || state.finished.as_ref().is_some_and(|f| f.seq > ask_seq)
+        || state.reopened.as_ref().is_some_and(|r| r.seq > ask_seq)
         || state
             .ask_answers
             .iter()

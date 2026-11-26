@@ -88,7 +88,7 @@ pub(crate) fn card_id(
     Ok((std::mem::take(common), Cmd::Card(cmd)))
 }
 
-fn parse_card_id(v: &str) -> Option<u64> {
+pub(crate) fn parse_card_id(v: &str) -> Option<u64> {
     v.strip_prefix('c').unwrap_or(v).parse::<u64>().ok()
 }
 

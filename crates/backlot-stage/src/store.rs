@@ -322,20 +322,23 @@ impl HasSeq for HollywoodEvent {
     }
 }
 
-/// Append one event under the lock. `build` sees the replayed state
-/// and the seq it will get; it may stage file copies. Order: truncate
-/// a torn tail, build + validate, copy files, write + fsync.
+/// Append one or more events under the lock. `build` sees the replayed
+/// state and the first seq it will get; it may stage file copies per
+/// event. Order: truncate a torn tail, build, validate every event
+/// against the state its predecessors leave, copy files, write + fsync.
+/// A later event's `dest` names must use the seq it is stamped with.
 /// `reduce`, `stamp` and `check` are the ledger's replay, stamping
 /// and append-time rules — the shared core under `append` (studios)
 /// and `append_hollywood`.
 fn append_locked<Ev, New, S, E, V>(
     dir: &Path,
     reduce: impl Fn(&[Ev]) -> S,
-    build: impl FnOnce(&S, u64) -> Result<(New, Vec<PendingFile>), E>,
-    stamp: impl FnOnce(New, u64, u64) -> Ev,
-    check: impl FnOnce(&S, &New) -> Result<(), V>,
+    build: impl FnOnce(&S, u64) -> Result<Vec<(New, Vec<PendingFile>)>, E>,
+    stamp: impl Fn(New, u64, u64) -> Ev,
+    mut check: impl FnMut(&S, &New) -> Result<(), V>,
+    mut apply: impl FnMut(&mut S, &Ev),
     migrate: MigrateFn,
-) -> Result<Ev, StoreError<E, V>>
+) -> Result<Vec<Ev>, StoreError<E, V>>
 where
     Ev: DeserializeOwned + Serialize + HasSeq,
 {
@@ -364,12 +367,29 @@ where
             .set_len(keep)?;
     }
     let (events, _) = parse_log(&bytes[..keep as usize], migrate).map_err(StoreError::Corrupt)?;
-    let state = reduce(&events);
+    let mut state = reduce(&events);
     let next_seq = events.iter().map(|e| e.seq()).max().unwrap_or(0) + 1;
-    let (new, files) = build(&state, next_seq).map_err(StoreError::Build)?;
-    check(&state, &new).map_err(StoreError::Refused)?;
+    let built = build(&state, next_seq).map_err(StoreError::Build)?;
 
-    for pf in &files {
+    // Validate and stamp in order; each event sees the state the ones
+    // before it leave, so a proposal and its supersede can be checked
+    // together. Files copy after everything is valid.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let mut stamped = Vec::with_capacity(built.len());
+    let mut copies: Vec<PendingFile> = Vec::new();
+    for (offset, (new, files)) in built.into_iter().enumerate() {
+        let seq = next_seq + offset as u64;
+        check(&state, &new).map_err(StoreError::Refused)?;
+        let event = stamp(new, seq, now);
+        apply(&mut state, &event);
+        stamped.push(event);
+        copies.extend(files);
+    }
+
+    for pf in &copies {
         let dest = dir.join(&pf.dest);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
@@ -383,24 +403,18 @@ where
         }
     }
 
-    let event = stamp(
-        new,
-        next_seq,
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0),
-    );
-    let mut line = serde_json::to_string(&event)
-        .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
-    line.push('\n');
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&events_path)?;
-    f.write_all(line.as_bytes())?;
+    for event in &stamped {
+        let mut line = serde_json::to_string(event)
+            .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
+        line.push('\n');
+        f.write_all(line.as_bytes())?;
+    }
     f.sync_data()?;
-    Ok(event)
+    Ok(stamped)
 }
 
 /// One studio event into `dir`'s `events.jsonl`.
@@ -408,14 +422,16 @@ pub fn append<E, F>(dir: &Path, build: F) -> Result<Event, StoreError<E>>
 where
     F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
 {
-    append_locked(
+    let mut events = append_locked(
         dir,
         replay,
-        |state, seq| build(state, seq).map(|p| (p.event, p.files)),
+        |state, seq| build(state, seq).map(|p| vec![(p.event, p.files)]),
         |new, seq, ts| new.stamp(seq, ts),
         validate,
+        backlot_model::state::apply,
         backlot_model::migrate::migrate_event_value,
-    )
+    )?;
+    Ok(events.remove(0))
 }
 
 /// One Hollywood event into Hollywood's own `events.jsonl` — the
@@ -427,12 +443,35 @@ pub fn append_hollywood<E, F>(
 where
     F: FnOnce(&HollywoodState, u64) -> Result<HPending, E>,
 {
+    let mut events =
+        append_hollywood_many(dir, move |state, seq| build(state, seq).map(|p| vec![p]))?;
+    Ok(events.remove(0))
+}
+
+/// Several Hollywood events under one lock — a proposal and the
+/// `card.superseded` events that close the cards it replaces. Each
+/// event is validated against what its predecessors leave, so the pair
+/// can never land half-checked.
+pub fn append_hollywood_many<E, F>(
+    dir: &Path,
+    build: F,
+) -> Result<Vec<HollywoodEvent>, StoreError<E, HRefusal>>
+where
+    F: FnOnce(&HollywoodState, u64) -> Result<Vec<HPending>, E>,
+{
     append_locked(
         dir,
         hollywood::replay,
-        |state, seq| build(state, seq).map(|p| (p.event, p.files)),
+        |state, seq| {
+            build(state, seq).map(|v| {
+                v.into_iter()
+                    .map(|p| (p.event, p.files))
+                    .collect::<Vec<_>>()
+            })
+        },
         |new, seq, ts| new.stamp(seq, ts),
         hollywood::validate,
+        hollywood::apply,
         backlot_model::migrate::migrate_hollywood_value,
     )
 }

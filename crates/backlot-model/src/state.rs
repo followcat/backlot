@@ -514,6 +514,19 @@ pub struct FinishRecord {
     pub ts_ms: u64,
 }
 
+/// The `studio.reopened` record — the last time the person brought a
+/// finished studio back.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReopenRecord {
+    pub seq: u64,
+    pub reason: String,
+    pub ts_ms: u64,
+    /// The `c<n>` marker a card's execution carries — the gate's
+    /// "already done" key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CorrectionRecord {
     pub seq: u64,
@@ -611,6 +624,11 @@ pub struct StudioState {
     /// `studio.finished`; `Some` means the studio ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished: Option<FinishRecord>,
+    /// The newest `studio.reopened` — `Some` with `finished` `None`
+    /// while the studio runs again. A finish newer than this is the
+    /// state that counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reopened: Option<ReopenRecord>,
     #[serde(default)]
     pub corrections: Vec<CorrectionRecord>,
     /// The seq of the newest `studio.cast` — the settings event a

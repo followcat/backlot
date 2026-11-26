@@ -732,6 +732,19 @@ pub enum EventKind {
         #[serde(default)]
         reason: String,
     },
+    /// `studio.reopened`: the person reopened a finished studio. Recs
+    /// and cast changes work again, and the fixed seats are wanted as
+    /// before. The `studio.finished` record stays in the log — it is
+    /// the past, and a question it answered stays answered.
+    #[serde(rename = "studio.reopened")]
+    StudioReopened {
+        #[serde(default)]
+        reason: String,
+        /// The `c<n>` marker a card's execution carries, so a restart
+        /// between the append and `card.done` repeats nothing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<String>,
+    },
     /// `studio.deleted`: the user archived the finished studio's
     /// ledger directory under `archive/<id>-<stamp>`.
     #[serde(rename = "studio.deleted")]
@@ -813,6 +826,7 @@ impl EventKind {
             EventKind::RoleProgress { .. } => "role.progress",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
+            EventKind::StudioReopened { .. } => "studio.reopened",
             EventKind::StudioDeleted { .. } => "studio.deleted",
             EventKind::Correction { .. } => "correction",
         }

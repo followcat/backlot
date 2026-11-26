@@ -41,10 +41,14 @@ impl Stage {
             cast,
             brief,
             no_git,
+            ..
         } = &card.action
         else {
             return Step::Fail("not a studio-new card".into());
         };
+        if let Some(reason) = crate::hcard_snapshot::stale(&card.action) {
+            return Step::Stale(reason);
+        }
         let cast_path = resolve_draft(hdir, cast);
         let brief_path = resolve_draft(hdir, brief);
         if let Some(s) = sstate {

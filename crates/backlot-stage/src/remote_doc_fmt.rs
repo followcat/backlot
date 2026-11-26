@@ -3,8 +3,8 @@
 use backlot_model::req_results::{
     AttentionClearResult, CardApplyResult, CardCancelResult, CardShowResult, CloseResult,
     HollywoodSetupResult, RecastResult, ReopenResult, RestartResult, StudioFinishResult,
-    StudioNewResult, StudioPlan, TaskPriorityResult, TaskStateResult, TellHollywoodResult,
-    TellResult,
+    StudioNewResult, StudioPlan, StudioReopenResult, TaskPriorityResult, TaskStateResult,
+    TellHollywoodResult, TellResult,
 };
 use backlot_model::req_wire::{ReqAction, ResAck};
 use serde::de::DeserializeOwned;
@@ -96,6 +96,9 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
         }
         ReqAction::StudioFinish { .. } => {
             crate::studio_fmt::studio_finish(&parse_res::<StudioFinishResult>(&ack)?)
+        }
+        ReqAction::StudioReopen { .. } => {
+            crate::studio_fmt::studio_reopen(&parse_res::<StudioReopenResult>(&ack)?)
         }
         ReqAction::StudioCastShow { json: want, .. } => {
             let res: backlot_model::req_results::StudioCastShowResult = parse_res(&ack)?;

@@ -380,6 +380,7 @@ async fn ack_and_result_size_caps_hold_under_large_payloads() {
                         cast: "drafts/huge/cast.toml".into(),
                         brief: "drafts/huge/brief.md".into(),
                         no_git: true,
+                        snapshot: None,
                     },
                     why: "size test".into(),
                     base: CardBase::StudioAbsent,
