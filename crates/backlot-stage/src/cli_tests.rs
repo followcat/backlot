@@ -108,7 +108,7 @@ fn studio_new_repo_must_be_absolute_and_canonical() {
         backlot_model::EventKind::StudioCreated { repo, .. } => {
             // Same canonicalization the parser ran — /var →
             // /private/var on macOS included.
-            assert_eq!(*repo, repo_dir.canonicalize().unwrap().to_string_lossy());
+            crate::test_support::assert_same_path(repo, &repo_dir);
         }
         other => panic!("wrong event: {other:?}"),
     }

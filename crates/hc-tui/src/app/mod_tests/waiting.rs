@@ -190,7 +190,7 @@ async fn an_idle_agent_with_a_tool_shell_descendant_shows_waiting() {
     serve.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn no_eligible_terminal_opens_no_connection() {
     let (mut app, mut rpc_rx) = waiting_app();
     // A live view with no eligible terminal: the worker must not even
@@ -203,7 +203,7 @@ async fn no_eligible_terminal_opens_no_connection() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn one_listing_serves_every_agent_on_a_machine() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, mut recorded) = mpsc::channel(64);
@@ -435,7 +435,7 @@ async fn a_candidate_shell_keeps_the_fast_cadence() {
     serve.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn an_empty_listing_backs_off_the_next_probe() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, mut recorded) = mpsc::channel(64);
@@ -463,7 +463,7 @@ async fn an_empty_listing_backs_off_the_next_probe() {
     serve.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn an_eligible_terminal_reprobes_on_the_cadence() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, mut recorded) = mpsc::channel(64);
@@ -587,7 +587,7 @@ async fn the_claude_sessions_file_drives_the_exact_layer() {
     serve.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn an_unoffered_method_turns_the_layer_off_quietly() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, mut recorded) = mpsc::channel(64);

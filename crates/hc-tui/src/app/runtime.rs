@@ -182,7 +182,7 @@ impl App {
             .map(|s| (s.width, s.height))
             .unwrap_or(self.area);
         self.on_view();
-        self.sched.mark_dirty(Instant::now());
+        self.sched.mark_dirty(self.now());
         let mut replies_open = true;
         let mut seen_open = true;
         let mut waiting_open = true;
@@ -202,6 +202,8 @@ impl App {
                 self.sched.armed_timer();
             }
             let marks = self.sched.marks();
+            let wake_sleep = wake
+                .map(|deadline| tokio::time::sleep(deadline.saturating_duration_since(self.now())));
             // A wakeup alone is never a draw reason — each arm reports
             // whether it changed state the frame can show. `on_view`,
             // `on_operation` and `show_notice` mark the scheduler
@@ -327,12 +329,12 @@ impl App {
                     }
                 },
                 _ = async {
-                    match wake {
-                        Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
+                    match wake_sleep {
+                        Some(sleep) => sleep.await,
                         None => std::future::pending::<()>().await,
                     }
                 }, if wake.is_some() => {
-                    let now = Instant::now();
+                    let now = self.now();
                     dirty |= self.pane_retry(now);
                     dirty |= self.expire_image_read(now);
                     dirty |= self.install_tick(now);
@@ -346,7 +348,8 @@ impl App {
                 continue;
             }
             self.housekeeping(kind, wake, dirty);
-            self.maybe_draw(term, Instant::now())?;
+            let now = self.now();
+            self.maybe_draw(term, now)?;
             self.post_draw_sync(kind, &mut need_pane_sync);
             self.probe.dirty_marks[kind as usize].fetch_add(
                 self.sched.marks() - marks,
@@ -366,7 +369,7 @@ impl App {
         // the last processed state is the drawn one. The host terminal may
         // already be gone (the window closed), so a failed paint must not
         // skip the releases and shutdown below or fail a clean exit.
-        let now = Instant::now();
+        let now = self.now();
         self.sched.force_due(now);
         let _ = self.maybe_draw(term, now);
         // Detach/quitting while keys are held: the pane's program saw

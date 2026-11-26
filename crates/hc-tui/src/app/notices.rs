@@ -53,13 +53,14 @@ impl App {
         if self.notice.as_ref().is_some_and(|n| n.body == body) {
             return;
         }
+        let now = self.now();
         self.notice = Some(Notice {
             title: title.into(),
             body: body.into(),
-            deadline: Instant::now() + Duration::from_secs(3),
+            deadline: now + Duration::from_secs(3),
             update: false,
         });
-        self.sched.mark_dirty(Instant::now());
+        self.sched.mark_dirty(now);
     }
 
     /// The newer release the passive UI (badge, dot, modebar, toast)
@@ -91,13 +92,14 @@ impl App {
 
     /// The update toast card: accent dot, five seconds, click-to-open.
     pub(super) fn show_update_toast(&mut self, title: &str, body: &str) {
+        let now = self.now();
         self.notice = Some(Notice {
             title: title.into(),
             body: body.into(),
-            deadline: Instant::now() + Duration::from_secs(5),
+            deadline: now + Duration::from_secs(5),
             update: true,
         });
-        self.sched.mark_dirty(Instant::now());
+        self.sched.mark_dirty(now);
     }
 
     /// Best effort — a failed write retries on the next mutation.

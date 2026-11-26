@@ -45,6 +45,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **A card is resolved and checked when it is proposed, not when it is applied.** A `--cast`, `--brief` or `cast` card `--file` is made absolute against Hollywood's working directory, and one that is not there is refused at propose. `propose studio-new` dry-runs the apply against the resolved files, so a card that could not apply is refused. The cast and brief are copied into the card's directory with their hashes; apply reads that snapshot, and a source file edited since makes the card `stale` (`the cast file changed after this card was proposed`). `card list` and `card show` print a one-line roles summary for a card that carries a cast (`docs/studio/hollywood.md`).
 - **The studio name rule is visible.** `[a-z0-9_-]{1,16}` now appears in `studio new`'s usage and in `propose studio-new`'s help, and the refusal names it.
+- **Symlinked working paths and cancelled remote attaches behave consistently across macOS and Linux.** Absolute snapshot inputs normalize through `normalize_resolve` just like relative ones, Cursor session lookup compares canonical `cwd` paths, and cancelling an in-flight `Attach::connect` open aborts immediately instead of waiting out `CLOSE_TIMEOUT`.
 
 ## 0.4.10 — 2026-11-26
 

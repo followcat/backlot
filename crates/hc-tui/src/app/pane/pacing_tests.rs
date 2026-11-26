@@ -39,6 +39,7 @@ struct Rig {
     paced: watch::Sender<bool>,
     attach: Arc<Attach>,
     task: tokio::task::JoinHandle<()>,
+    epoch: tokio::time::Instant,
 }
 
 async fn rig(paced: bool) -> Rig {
@@ -60,9 +61,10 @@ async fn rig(paced: bool) -> Rig {
     );
     let (ev_tx, rx) = mpsc::channel(64);
     let (paced_tx, paced_rx) = watch::channel(paced);
+    let epoch = tokio::time::Instant::now();
     let task_attach = attach.clone();
     let task = tokio::spawn(async move {
-        forward_stream(&task_attach, Role::Observe, 7, &ev_tx, paced_rx).await;
+        forward_stream(&task_attach, Role::Observe, 7, &ev_tx, paced_rx, epoch).await;
     });
     let core = server.await.expect("fake core serve_attach");
     Rig {
@@ -71,6 +73,7 @@ async fn rig(paced: bool) -> Rig {
         paced: paced_tx,
         attach,
         task,
+        epoch,
     }
 }
 
@@ -88,14 +91,14 @@ async fn data(rig: &mut Rig, within: Duration) -> Vec<u8> {
 
 /// Unpaced observers forward chunks without waiting on any tick: a
 /// merged-or-split DATA event must arrive well inside one window.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn unpaced_observe_forwards_data_immediately() {
     let mut rig = rig(false).await;
     rig.core.send_stream(CH, Kind::Data, b"alpha").await;
     rig.core.send_stream(CH, Kind::Data, b"beta").await;
     let mut got = Vec::new();
     while got != b"alphabeta" {
-        got.extend_from_slice(&data(&mut rig, Duration::from_millis(250)).await);
+        got.extend_from_slice(&data(&mut rig, T).await);
     }
     assert_eq!(got, b"alphabeta");
     rig.task.abort();
@@ -104,12 +107,12 @@ async fn unpaced_observe_forwards_data_immediately() {
 /// A paced burst lands inside one grid window and flushes as ONE
 /// merged `PaneEv::Out` — credit stays withheld in `unconsumed` until
 /// the consumer's `attach.consume`.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn paced_observe_coalesces_a_burst_on_the_shared_tick() {
     let mut rig = rig(true).await;
     // Land the whole burst just after a grid edge so the next flush
     // is ~500ms out and every chunk merges into one event.
-    let edge = next_off_tab_tick(tokio::time::Instant::now());
+    let edge = next_off_tab_tick(rig.epoch, tokio::time::Instant::now());
     tokio::time::sleep_until(edge + Duration::from_millis(10)).await;
     let mut want = Vec::new();
     for i in 0..20u8 {
@@ -141,7 +144,7 @@ async fn paced_observe_coalesces_a_burst_on_the_shared_tick() {
 /// Flipping `paced` true→false mid-window flushes the buffer
 /// immediately — a pane coming back on-screen never waits out the
 /// 500ms tick for already-buffered bytes.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn unpacing_flushes_buffered_data_immediately() {
     let mut rig = rig(true).await;
     // This chunk's flush marks a grid edge just passed: the next tick
@@ -166,7 +169,7 @@ async fn unpacing_flushes_buffered_data_immediately() {
 /// wire order; the replacement paint after RESIZE forwards unbuffered
 /// until the `?9001` marker — even across a split marker — while
 /// `paced` still reads true.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn resize_and_close_flush_buffered_data_in_wire_order() {
     let mut rig = rig(true).await;
     rig.core.send_stream(CH, Kind::Data, b"pre").await;
@@ -189,7 +192,7 @@ async fn resize_and_close_flush_buffered_data_in_wire_order() {
     rig.core.send_stream(CH, Kind::Data, b"1l-tail").await;
     let mut paint = Vec::new();
     while paint != b"post-\x1b[?9001l-tail" {
-        paint.extend_from_slice(&data(&mut rig, Duration::from_millis(250)).await);
+        paint.extend_from_slice(&data(&mut rig, T).await);
     }
     assert_eq!(paint, b"post-\x1b[?9001l-tail");
     // The marker ended the bypass: `held` paces again and rides out

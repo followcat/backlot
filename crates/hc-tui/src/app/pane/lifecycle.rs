@@ -65,9 +65,10 @@ impl Pane {
         let open = Arc::clone(&self.open);
         let (out, out_rx) = mpsc::channel(OUT_QUEUE);
         let paced = self.pacing.subscribe();
+        let tick_epoch = self.pacing.tick_epoch();
         self.sync_pacing();
         let task = tokio::spawn(tasks::attach_task_paced(
-            open, params, spec.role, generation, ev, paced,
+            open, params, spec.role, generation, ev, paced, tick_epoch,
         ));
         self.state = State::Opening {
             generation,

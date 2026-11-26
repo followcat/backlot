@@ -60,15 +60,23 @@ pub(super) struct Conn {
 }
 
 /// One claim keeping the connection alive: an open in flight or an
-/// installed attach. `leave` consumes it; its `Drop` is the same.
+/// installed attach. `leave` consumes it cleanly; dropping before
+/// `commit` means an in-flight attach was cancelled.
 pub(super) struct Ticket {
     conn: Option<Arc<Conn>>,
+    cancel_on_drop: bool,
 }
 
 impl Ticket {
+    /// Marks this ticket past cancellation — subsequent drops use graceful `leave`.
+    pub(super) fn commit(&mut self) {
+        self.cancel_on_drop = false;
+    }
+
     /// Ends this claim: `true` when it was the last and the connection
     /// just shut down.
     pub(super) fn leave(mut self) -> bool {
+        self.cancel_on_drop = false;
         match self.conn.take() {
             Some(conn) => conn.leave(),
             None => false,
@@ -79,7 +87,11 @@ impl Ticket {
 impl Drop for Ticket {
     fn drop(&mut self) {
         if let Some(conn) = self.conn.take() {
-            conn.leave();
+            if self.cancel_on_drop {
+                conn.leave_cancelled();
+            } else {
+                conn.leave();
+            }
         }
     }
 }
@@ -231,30 +243,37 @@ impl Conn {
         *count += 1;
         Ok(Ticket {
             conn: Some(Arc::clone(self)),
+            cancel_on_drop: true,
         })
+    }
+
+    fn release_claim(&self) -> bool {
+        let mut count = lock(&self.count);
+        *count -= 1;
+        *count == 0
     }
 
     /// A claim ended: `true` — and shared shutdown — when it was the last.
     fn leave(&self) -> bool {
-        let last = {
-            let mut count = lock(&self.count);
-            *count -= 1;
-            *count == 0
-        };
+        let last = self.release_claim();
         if last {
             self.died(None, false);
         }
         last
     }
 
-    /// `terminal.attach` on the shared wire. The claim keeps the
-    /// connection alive across the call — a last-detach racing the open
-    /// cannot kill the wire under it.
-    pub(super) async fn attach(
-        self: &Arc<Self>,
+    /// A cancelled in-flight open ended: abort immediately when it was the last claim
+    /// rather than sleeping out `CLOSE_TIMEOUT` on an abandoned child.
+    fn leave_cancelled(&self) {
+        if self.release_claim() {
+            self.abort();
+        }
+    }
+
+    async fn attach_inner(
+        &self,
         params: &AttachParams,
-    ) -> Result<Attach, AttachError> {
-        let ticket = self.claim()?;
+    ) -> Result<(AttachResult, bool, bool, bool), AttachError> {
         let caps = Capabilities::new(&self.hello).expect("hello validated at connect");
         if !caps.has_method(method::TERMINAL_ATTACH) {
             return Err(AttachError::Call(CallError::Unsupported {
@@ -288,6 +307,26 @@ impl Conn {
         if result.channel == 0 {
             return Err(AttachError::Protocol("attach returned channel 0".into()));
         }
+        Ok((result, observe, automatic_input, quiet_human_release))
+    }
+
+    /// `terminal.attach` on the shared wire. The claim keeps the
+    /// connection alive across the call — a last-detach racing the open
+    /// cannot kill the wire under it.
+    pub(super) async fn attach(
+        self: &Arc<Self>,
+        params: &AttachParams,
+    ) -> Result<Attach, AttachError> {
+        let mut ticket = self.claim()?;
+        let (result, observe, automatic_input, quiet_human_release) =
+            match self.attach_inner(params).await {
+                Ok(ok) => ok,
+                Err(err) => {
+                    ticket.commit();
+                    return Err(err);
+                }
+            };
+        ticket.commit();
         let stream = Arc::new(Stream::new(Arc::clone(&self.work)));
         let data = Arc::new(DataQueue::new(Arc::clone(&self.work)));
         match lock(&self.channels).install(result.channel, Arc::clone(&stream), Arc::clone(&data)) {
@@ -339,16 +378,30 @@ impl Conn {
     /// channel with the same reason, aborts both halves so the streams
     /// drop (the peer sees stdin EOF) and hands the backend to the
     /// spawned close.
-    pub(super) fn died(&self, reason: Option<String>, eof: bool) {
-        if self.dead.swap(true, Ordering::SeqCst) {
-            return;
-        }
+    fn fail_and_stop(&self, reason: Option<String>) {
         pump::fail(&self.wire.pending, reason.clone());
         self.attach_calls.fail_all(reason.clone());
         lock(&self.channels).fail_all(reason);
         for task in lock(&self.tasks).iter() {
             task.abort();
         }
+    }
+
+    /// Aborts an abandoned connection without graceful close delay, dropping `guard` directly.
+    fn abort(&self) {
+        self.dead.store(true, Ordering::SeqCst);
+        self.fail_and_stop(None);
+        if let Some(task) = lock(&self.close_task).take() {
+            task.abort();
+        }
+        drop(lock(&self.guard).take());
+    }
+
+    pub(super) fn died(&self, reason: Option<String>, eof: bool) {
+        if self.dead.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        self.fail_and_stop(reason);
         if let Some(guard) = lock(&self.guard).take()
             && let Ok(rt) = tokio::runtime::Handle::try_current()
         {
