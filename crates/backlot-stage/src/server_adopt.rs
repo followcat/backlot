@@ -129,6 +129,7 @@ fn discover_hc_sessions(common: &Common, env: &Env) -> Result<Vec<SessionProbe>,
         }
     }
 
+    targets.sort_by(|a, b| a.1.cmp(&b.1));
     if targets.is_empty() {
         return Ok(Vec::new());
     }

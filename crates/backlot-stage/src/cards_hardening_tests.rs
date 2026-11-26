@@ -82,11 +82,10 @@ fn a_relative_cast_path_resolves_at_propose() {
     .expect("a studio-new draft resolves its files");
     // Compare real paths: on macOS the temp dir is reached through the
     // `/var` -> `/private/var` link, so one side may be spelled either way.
-    let real = |p: &std::path::Path| p.canonicalize().unwrap();
-    assert_eq!(real(&files.cast), real(&work.join("cast.toml")));
-    assert_eq!(
-        files.brief.as_deref().map(real),
-        Some(real(&work.join("brief.md")))
+    crate::test_support::assert_same_path(&files.cast, work.join("cast.toml"));
+    crate::test_support::assert_same_path(
+        files.brief.as_deref().expect("brief path"),
+        work.join("brief.md"),
     );
     assert!(files.cast.is_absolute(), "the resolved path is absolute");
 }
@@ -145,12 +144,7 @@ fn propose_studio_new_copies_its_files_into_the_card() {
             let snap_cast = snapshot.cast.as_ref().unwrap();
             // The proposer's own path, absolute.
             // Real paths on both sides (macOS reaches temp through `/var` -> `/private/var`).
-            assert_eq!(
-                std::path::Path::new(&snap_cast.source)
-                    .canonicalize()
-                    .unwrap(),
-                cast_path(&scratch).canonicalize().unwrap()
-            );
+            crate::test_support::assert_same_path(&snap_cast.source, cast_path(&scratch));
             assert_eq!(
                 snap_cast.sha256,
                 backlot_model::hollywood::sha256_hex(FAKE_CAST.as_bytes())

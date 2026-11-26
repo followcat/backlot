@@ -417,15 +417,26 @@ pub(crate) fn session_at(
             else {
                 continue;
             };
-            if at < started_ms || chat_cwd != cwd {
+            if at < started_ms || !same_dir(chat_cwd, cwd) {
                 continue;
             }
-            if best.as_ref().is_none_or(|(b, _)| at > *b) {
+            if best
+                .as_ref()
+                .is_none_or(|(b, bid)| (at, id) > (*b, bid.as_str()))
+            {
                 best = Some((at, id.to_string()));
             }
         }
     }
     best.map(|(_, id)| id)
+}
+
+fn same_dir(a: &str, b: &str) -> bool {
+    a == b
+        || std::fs::canonicalize(a)
+            .ok()
+            .zip(std::fs::canonicalize(b).ok())
+            .is_some_and(|(x, y)| x == y)
 }
 
 /// The subdirectories of `dir`, in no guaranteed order.

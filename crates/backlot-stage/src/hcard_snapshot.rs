@@ -60,11 +60,7 @@ pub(crate) fn resolve_in(cwd: &Path, action: &CardAction) -> Result<Option<Resol
 /// working directory, and `..` is normalised away. A file that does not
 /// exist is refused with the flag that named it.
 fn resolve_file(cwd: &Path, raw: &str, flag: &str) -> Result<PathBuf, Fail> {
-    let abs = if Path::new(raw).is_absolute() {
-        PathBuf::from(raw)
-    } else {
-        crate::guard_git_env::normalize_resolve(cwd, Path::new(raw))
-    };
+    let abs = crate::guard_git_env::normalize_resolve(cwd, Path::new(raw));
     if !abs.is_file() {
         return Err(Fail::usage(format!(
             "{flag}: file not found: {}",
