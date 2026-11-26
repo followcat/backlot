@@ -1029,7 +1029,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     assert_ne!(buf[(chip[0] - 1, frame.y + 1)].bg, palette.peach);
     // The working role is on set, then what it is doing.
     let who = row_of(&buf, area, frame.y + 2);
-    assert!(who.contains("producer"), "{who}");
+    assert!(who.contains("Ⓟ"), "{who}");
     let what = row_of(&buf, area, frame.y + 3);
     assert!(what.contains("review delivery 1"), "{what}");
     // The cast line: one mark each, coloured by role state.
@@ -1179,6 +1179,14 @@ fn the_card_view_draws_over_the_layer() {
     assert!(view_hits.metrics.unwrap().max_offset_from_bottom > 0);
 }
 
+fn border_of(buf: &Buffer, outer: Rect) -> Rect {
+    if outer.width >= 4 && outer.height >= 4 && buf[(outer.x, outer.y)].symbol() == " " {
+        Rect::new(outer.x + 1, outer.y + 1, outer.width - 2, outer.height - 2)
+    } else {
+        outer
+    }
+}
+
 #[test]
 fn the_card_view_has_a_complete_border_and_footer() {
     // §4: the view is a real box — `─` fills the top edge after the
@@ -1195,22 +1203,23 @@ fn the_card_view_has_a_complete_border_and_footer() {
     let mut buf = Buffer::empty(area);
     let palette = palettes()[0].clone();
     let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palette);
-    let top = row_of(&buf, area, view.area.y);
+    let b = border_of(&buf, view.area);
+    let top = row_of(&buf, area, b.y);
     assert!(top.contains('╭') && top.contains('╮'), "top edge: {top}");
     // Everything after the title up to `╮` is `─`.
     let title_end = top.rfind("c4 ").expect("the title is on the top edge") + 3;
     let fill = &top[title_end..top.rfind('╮').unwrap()];
     assert!(fill.chars().all(|c| c == '─'), "top fill: {fill:?}");
     let column = |x: u16| {
-        (view.area.y..view.area.y + view.area.height)
+        (b.y..b.y + b.height)
             .map(|y| buf[(x, y)].symbol())
             .collect::<String>()
     };
-    let left_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
-        .map(|y| buf[(view.area.x, y)].symbol())
+    let left_side: Vec<&str> = (b.y + 1..b.bottom() - 1)
+        .map(|y| buf[(b.x, y)].symbol())
         .collect();
-    let right_side: Vec<&str> = (view.area.y + 1..view.area.bottom() - 1)
-        .map(|y| buf[(view.area.right() - 1, y)].symbol())
+    let right_side: Vec<&str> = (b.y + 1..b.bottom() - 1)
+        .map(|y| buf[(b.right() - 1, y)].symbol())
         .collect();
     assert_eq!(left_side[left_side.len() - 2], "├");
     assert_eq!(right_side[right_side.len() - 2], "┤");
@@ -1231,14 +1240,14 @@ fn the_card_view_has_a_complete_border_and_footer() {
         "right edge: {right_side:?}"
     );
     let _ = column;
-    let action_strip = row_of(&buf, area, view.area.bottom() - 2);
+    let action_strip = row_of(&buf, area, b.bottom() - 2);
     assert!(
         action_strip.contains("[a] apply")
             && action_strip.contains("[x] cancel")
             && action_strip.contains("esc"),
         "action strip: {action_strip}"
     );
-    let bottom = row_of(&buf, area, view.area.bottom() - 1);
+    let bottom = row_of(&buf, area, b.bottom() - 1);
     assert!(
         bottom.contains('╰') && bottom.contains('╯'),
         "bottom: {bottom}"
@@ -1259,7 +1268,8 @@ fn the_card_views_footer_shows_the_pending_mark() {
     let mut buf = Buffer::empty(area);
     let view =
         crate::hollywood::render_view(&mut buf, area, &view, Some("card apply c4"), &palettes()[0]);
-    let strip = row_of(&buf, area, view.area.bottom() - 2);
+    let b = border_of(&buf, view.area);
+    let strip = row_of(&buf, area, b.bottom() - 2);
     assert!(
         strip.contains("■ card apply c4… (a/x locked)"),
         "action strip: {strip}"
@@ -1282,9 +1292,10 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
     let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
-    let top = row_of(&buf, area, view.area.y);
+    let b = border_of(&buf, view.area);
+    let top = row_of(&buf, area, b.y);
     assert!(top.contains("hollywood #7"), "top: {top}");
-    let strip = row_of(&buf, area, view.area.bottom() - 2);
+    let strip = row_of(&buf, area, b.bottom() - 2);
     assert!(
         strip.contains("[y] copy") && strip.contains("esc"),
         "read-only action strip: {strip}"
@@ -1508,16 +1519,12 @@ fn card_view_cjk_title_places_right_corners_at_exact_right_edge() {
     let area = Rect::new(0, 0, 80, 24);
     let mut buf = Buffer::empty(area);
     let rendered = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
-    let right_x = rendered.area.right() - 1;
-    let bottom_y = rendered.area.bottom() - 1;
-    assert_eq!(buf[(right_x, rendered.area.y)].symbol(), "╮");
+    let b = border_of(&buf, rendered.area);
+    let right_x = b.right() - 1;
+    let bottom_y = b.bottom() - 1;
+    assert_eq!(buf[(right_x, b.y)].symbol(), "╮");
     assert_eq!(buf[(right_x, bottom_y)].symbol(), "╯");
-    let top = wide_row_of(
-        &buf,
-        rendered.area.x,
-        rendered.area.right(),
-        rendered.area.y,
-    );
+    let top = wide_row_of(&buf, b.x, b.right(), b.y);
     assert!(
         top.contains("已记录最终需求 v6"),
         "CJK title must not be overwritten by ─ dashes: {top}"
@@ -1588,8 +1595,8 @@ fn card_view_sizes_adaptively_for_short_and_long_notes() {
     let short_rendered =
         crate::hollywood::render_view(&mut buf, area, &short, None, &palettes()[0]);
     assert!(
-        short_rendered.area.height <= 10,
-        "2-line note should render compactly (<=10), got {}",
+        short_rendered.area.height <= 12,
+        "2-line note should render compactly (<=12 including gutter/pad), got {}",
         short_rendered.area.height
     );
 
@@ -1602,9 +1609,14 @@ fn card_view_sizes_adaptively_for_short_and_long_notes() {
     };
     let mut buf = Buffer::empty(area);
     let long_rendered = crate::hollywood::render_view(&mut buf, area, &long, None, &palettes()[0]);
+    let long_border = border_of(&buf, long_rendered.area);
     assert_eq!(
-        long_rendered.area.height, 32,
-        "60-line note at 200x44 should cap at min(32, 44 - 2) = 32"
+        long_border.height, 34,
+        "60-line note at 200x44 should cap border at min(34, 44 - 2) = 34"
+    );
+    assert_eq!(
+        long_rendered.area.height, 36,
+        "1-cell outer gutter wraps the 34-row border"
     );
     assert!(
         !long_rendered.scrollbar.is_empty(),
@@ -1612,9 +1624,9 @@ fn card_view_sizes_adaptively_for_short_and_long_notes() {
     );
     let bottom = wide_row_of(
         &buf,
-        long_rendered.area.x,
-        long_rendered.area.right(),
-        long_rendered.area.bottom() - 1,
+        long_border.x,
+        long_border.right(),
+        long_border.bottom() - 1,
     );
     assert!(
         bottom.contains("lines 1–") && bottom.contains(" of 60"),
@@ -1663,17 +1675,18 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
     );
 
     // Verify heading accent, code surface0, SHA/path teal, and code surface1 display-width pad.
-    let heading_y = rendered.body.y;
-    assert_eq!(buf[(rendered.area.x + 2, heading_y)].fg, palette.accent);
+    let rb = border_of(&buf, rendered.area);
+    let text_x = rb.x + 3;
+    let heading_y = (rendered.body.y..rendered.body.bottom())
+        .find(|&y| buf[(text_x, y)].symbol() == "M")
+        .expect("MixedCase Heading row");
+    assert_eq!(buf[(text_x, heading_y)].fg, palette.accent);
     // Find `▏` row and ensure all content cells up to right pad have `surface1`.
     let code_y = (rendered.body.y..rendered.body.bottom())
-        .find(|&y| buf[(rendered.area.x + 2, y)].symbol() == "▏")
+        .find(|&y| buf[(text_x, y)].symbol() == "▏")
         .expect("fenced code row");
-    assert_eq!(buf[(rendered.area.x + 2, code_y)].bg, palette.surface1);
-    assert_eq!(
-        buf[(rendered.area.right() - 3, code_y)].bg,
-        palette.surface1
-    );
+    assert_eq!(buf[(text_x, code_y)].bg, palette.surface1);
+    assert_eq!(buf[(rb.right() - 4, code_y)].bg, palette.surface1);
 
     // PlainLog skips markdown parsing, highlights error/pass, and uses `↪ ` continuation.
     let log = CardView {
@@ -1690,6 +1703,8 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
     let narrow = Rect::new(0, 0, 60, 24);
     let mut log_buf = Buffer::empty(narrow);
     let log_ren = crate::hollywood::render_view(&mut log_buf, narrow, &log, None, &palette);
+    let lb = border_of(&log_buf, log_ren.area);
+    let log_x = lb.x + 3;
     let log_rows: Vec<String> = (log_ren.body.y..log_ren.body.bottom())
         .map(|y| wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y))
         .collect();
@@ -1703,9 +1718,9 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
         "PlainLog continuation glyph: {log_joined}"
     );
     let err_y = (log_ren.body.y..log_ren.body.bottom())
-        .find(|&y| log_buf[(log_ren.area.x + 2, y)].symbol() == "e")
+        .find(|&y| log_buf[(log_x, y)].symbol() == "e")
         .expect("error line");
-    assert_eq!(log_buf[(log_ren.area.x + 2, err_y)].fg, palette.red);
+    assert_eq!(log_buf[(log_x, err_y)].fg, palette.red);
     let ok_y = (log_ren.body.y..log_ren.body.bottom())
         .find(|&y| {
             wide_row_of(&log_buf, log_ren.body.x, log_ren.body.right(), y)
@@ -1713,7 +1728,7 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
                 .starts_with("test result: ok")
         })
         .expect("ok line");
-    assert_eq!(log_buf[(log_ren.area.x + 2, ok_y)].fg, palette.green);
+    assert_eq!(log_buf[(log_x, ok_y)].fg, palette.green);
 }
 
 #[test]
@@ -1771,10 +1786,11 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut buf = Buffer::empty(area);
     let ren = crate::hollywood::render_view_at(&mut buf, area, &outcome, None, palette, now_ms);
+    let b = border_of(&buf, ren.area);
     assert!(ren.prev_hit.is_some(), "◀ hit rect recorded");
     assert!(ren.next_hit.is_some(), "▶ hit rect recorded");
-    let top_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y);
-    let ctx_row = wide_row_of(&buf, ren.area.x, ren.area.right(), ren.area.y + 1);
+    let top_row = wide_row_of(&buf, b.x, b.right(), b.y);
+    let ctx_row = wide_row_of(&buf, b.x, b.right(), b.y + 1);
     assert!(top_row.contains("■ OUTCOME #12 · acme-shop"), "{top_row}");
     assert!(top_row.contains("◀ 3/6 ▶ · 4m"), "{top_row}");
     assert!(
@@ -1783,14 +1799,14 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     );
     assert!(ctx_row.contains("t1 · reports/12.md"), "{ctx_row}");
     assert_eq!(
-        buf[(ren.area.x, ren.area.y + 2)].symbol(),
+        buf[(b.x, b.y + 2)].symbol(),
         "├",
         "Row 2 header divider present"
     );
-    let sq_x = (ren.area.x..ren.area.right())
-        .find(|&x| buf[(x, ren.area.y + 1)].symbol() == "■")
+    let sq_x = (b.x..b.right())
+        .find(|&x| buf[(x, b.y + 1)].symbol() == "■")
         .expect("working square mark");
-    assert_eq!(buf[(sq_x, ren.area.y + 1)].fg, palette.yellow);
+    assert_eq!(buf[(sq_x, b.y + 1)].fg, palette.yellow);
 
     // 1b. Legacy studio entry with absent optional fields: no `· ·` or stray `→`.
     let legacy = CardView {
@@ -1811,8 +1827,9 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut lbuf = Buffer::empty(area);
     let lren = crate::hollywood::render_view_at(&mut lbuf, area, &legacy, None, palette, now_ms);
-    let ltop = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y);
-    let lctx = wide_row_of(&lbuf, lren.area.x, lren.area.right(), lren.area.y + 1);
+    let lb = border_of(&lbuf, lren.area);
+    let ltop = wide_row_of(&lbuf, lb.x, lb.right(), lb.y);
+    let lctx = wide_row_of(&lbuf, lb.x, lb.right(), lb.y + 1);
     assert!(ltop.contains("■ OUTCOME #12 · acme-shop"), "{ltop}");
     assert!(!ltop.contains("◀"), "{ltop}");
     assert!(lctx.contains("producer"), "{lctx}");
@@ -1847,15 +1864,16 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut hbuf = Buffer::empty(area);
     let hren = crate::hollywood::render_view_at(&mut hbuf, area, &hw, None, palette, now_ms);
-    let htop = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y);
-    let hctx = wide_row_of(&hbuf, hren.area.x, hren.area.right(), hren.area.y + 1);
+    let hb = border_of(&hbuf, hren.area);
+    let htop = wide_row_of(&hbuf, hb.x, hb.right(), hb.y);
+    let hctx = wide_row_of(&hbuf, hb.x, hb.right(), hb.y + 1);
     assert!(htop.contains("■ REPORT #8 · hollywood"), "{htop}");
     assert!(htop.contains("◀ 2/4 ▶ · 2m"), "{htop}");
     assert!(hctx.contains("□ closed"), "{hctx}");
-    let closed_x = (hren.area.x..hren.area.right())
-        .find(|&x| hbuf[(x, hren.area.y + 1)].symbol() == "□")
+    let closed_x = (hb.x..hb.right())
+        .find(|&x| hbuf[(x, hb.y + 1)].symbol() == "□")
         .expect("closed hollow square mark");
-    assert_eq!(hbuf[(closed_x, hren.area.y + 1)].fg, palette.overlay0);
+    assert_eq!(hbuf[(closed_x, hb.y + 1)].fg, palette.overlay0);
 
     // 3. Actionable card (`■ CARD c3 · acme-shop · open`).
     let card = CardView {
@@ -1880,8 +1898,9 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut cbuf = Buffer::empty(area);
     let cren = crate::hollywood::render_view_at(&mut cbuf, area, &card, None, palette, now_ms);
-    let ctop = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y);
-    let cctx = wide_row_of(&cbuf, cren.area.x, cren.area.right(), cren.area.y + 1);
+    let cb = border_of(&cbuf, cren.area);
+    let ctop = wide_row_of(&cbuf, cb.x, cb.right(), cb.y);
+    let cctx = wide_row_of(&cbuf, cb.x, cb.right(), cb.y + 1);
     assert!(ctop.contains("■ CARD c3 · acme-shop · open"), "{ctop}");
     assert!(ctop.contains("◀ 1/2 ▶ · 1m"), "{ctop}");
     assert!(cctx.contains("hollywood proposes: pause t2"), "{cctx}");
@@ -1909,8 +1928,9 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut kbuf = Buffer::empty(area);
     let kren = crate::hollywood::render_view_at(&mut kbuf, area, &check, None, palette, now_ms);
-    let ktop = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y);
-    let kctx = wide_row_of(&kbuf, kren.area.x, kren.area.right(), kren.area.y + 1);
+    let kb = border_of(&kbuf, kren.area);
+    let ktop = wide_row_of(&kbuf, kb.x, kb.right(), kb.y);
+    let kctx = wide_row_of(&kbuf, kb.x, kb.right(), kb.y + 1);
     assert!(ktop.contains("■ loading #13…"), "{ktop}");
     assert!(
         kctx.contains("task t1 · FAIL (exit 1)") && kctx.contains("checks/d1-units.txt"),
@@ -1935,8 +1955,9 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     };
     let mut rbuf = Buffer::empty(area);
     let rren = crate::hollywood::render_view_at(&mut rbuf, area, &records, None, palette, now_ms);
-    let rtop = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y);
-    let rctx = wide_row_of(&rbuf, rren.area.x, rren.area.right(), rren.area.y + 1);
+    let rb = border_of(&rbuf, rren.area);
+    let rtop = wide_row_of(&rbuf, rb.x, rb.right(), rb.y);
+    let rctx = wide_row_of(&rbuf, rb.x, rb.right(), rb.y + 1);
     assert!(rtop.contains("■ RECORDS · acme-shop"), "{rtop}");
     assert!(rtop.contains("host-a"), "{rtop}");
     assert!(rctx.contains("2/3 tasks · 5 roles"), "{rctx}");
@@ -1979,12 +2000,8 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let wide = Rect::new(0, 0, 100, 16);
     let mut wbuf = Buffer::empty(wide);
     let wren = crate::hollywood::render_view(&mut wbuf, wide, &wide_outcome, None, palette);
-    let wstrip = wide_row_of(
-        &wbuf,
-        wren.area.x,
-        wren.area.right(),
-        wren.area.bottom() - 2,
-    );
+    let wb = border_of(&wbuf, wren.area);
+    let wstrip = wide_row_of(&wbuf, wb.x, wb.right(), wb.bottom() - 2);
     assert!(
         wstrip.contains("[t] tell")
             && wstrip.contains("[o] focus")
@@ -2006,18 +2023,15 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
         );
     }
 
-    // Tier 1 medium 52-col card (`avail = 48`): `[t] tell [o] focus [y] copy  ←/→ · esc`.
+    // Tier 1 medium 52-col border (`avail = 48`), +2 gutter = 54 outer: `[t] tell [o] focus [y] copy  ←/→ · esc`.
     let medium_view = make_outcome(vec!["ok".into()]);
     let medium = Rect::new(0, 0, 56, 12);
     let mut mbuf = Buffer::empty(medium);
     let mren = crate::hollywood::render_view(&mut mbuf, medium, &medium_view, None, palette);
-    assert_eq!(mren.area.width, 52);
-    let mstrip = wide_row_of(
-        &mbuf,
-        mren.area.x,
-        mren.area.right(),
-        mren.area.bottom() - 2,
-    );
+    let mb = border_of(&mbuf, mren.area);
+    assert_eq!(mb.width, 52);
+    assert_eq!(mren.area.width, 54);
+    let mstrip = wide_row_of(&mbuf, mb.x, mb.right(), mb.bottom() - 2);
     assert!(
         mstrip.contains("[t] tell")
             && mstrip.contains("[o] focus")
@@ -2030,13 +2044,9 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let narrow = Rect::new(0, 0, 40, 12);
     let mut nbuf = Buffer::empty(narrow);
     let nren = crate::hollywood::render_view(&mut nbuf, narrow, &medium_view, None, palette);
-    assert_eq!(nren.area.width, 40);
-    let nstrip = wide_row_of(
-        &nbuf,
-        nren.area.x,
-        nren.area.right(),
-        nren.area.bottom() - 2,
-    );
+    let nb = border_of(&nbuf, nren.area);
+    assert_eq!(nb.width, 40);
+    let nstrip = wide_row_of(&nbuf, nb.x, nb.right(), nb.bottom() - 2);
     assert!(
         nstrip.contains("[t] [o] [y]") && nstrip.contains("? keys"),
         "narrow fallback strip: {nstrip}"
@@ -2063,12 +2073,8 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let squeezed_card = Rect::new(0, 0, 38, 12);
     let mut cbuf = Buffer::empty(squeezed_card);
     let cren = crate::hollywood::render_view(&mut cbuf, squeezed_card, &card_view, None, palette);
-    let cstrip = wide_row_of(
-        &cbuf,
-        cren.area.x,
-        cren.area.right(),
-        cren.area.bottom() - 2,
-    );
+    let cb = border_of(&cbuf, cren.area);
+    let cstrip = wide_row_of(&cbuf, cb.x, cb.right(), cb.bottom() - 2);
     assert!(
         cstrip.contains("[a] [x] [y]") && cstrip.contains("? keys"),
         "narrow card strip: {cstrip}"
@@ -2082,12 +2088,8 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
         Some("applying card c3"),
         palette,
     );
-    let pstrip = wide_row_of(
-        &pbuf,
-        pren.area.x,
-        pren.area.right(),
-        pren.area.bottom() - 2,
-    );
+    let pb = border_of(&pbuf, pren.area);
+    let pstrip = wide_row_of(&pbuf, pb.x, pb.right(), pb.bottom() - 2);
     assert!(
         pstrip.contains("■ applying card c3… (a/x locked)"),
         "{pstrip}"
@@ -2117,12 +2119,8 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     };
     let mut clbuf = Buffer::empty(wide);
     let clren = crate::hollywood::render_view(&mut clbuf, wide, &closed_view, None, palette);
-    let clstrip = wide_row_of(
-        &clbuf,
-        clren.area.x,
-        clren.area.right(),
-        clren.area.bottom() - 2,
-    );
+    let clb = border_of(&clbuf, clren.area);
+    let clstrip = wide_row_of(&clbuf, clb.x, clb.right(), clb.bottom() - 2);
     assert!(!clstrip.contains("[p]"), "{clstrip}");
     assert!(!clstrip.contains("[o]"), "{clstrip}");
     assert!(
@@ -2148,23 +2146,15 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     };
     let mut rbuf = Buffer::empty(narrow);
     let rren = crate::hollywood::render_view(&mut rbuf, narrow, &records_view, None, palette);
-    let rstrip = wide_row_of(
-        &rbuf,
-        rren.area.x,
-        rren.area.right(),
-        rren.area.bottom() - 2,
-    );
+    let rb = border_of(&rbuf, rren.area);
+    let rstrip = wide_row_of(&rbuf, rb.x, rb.right(), rb.bottom() - 2);
     assert!(rstrip.contains("[y] copy"), "records tier1: {rstrip}");
 
     let tiny = Rect::new(0, 0, 16, 10);
     let mut tbuf = Buffer::empty(tiny);
     let tren = crate::hollywood::render_view(&mut tbuf, tiny, &records_view, None, palette);
-    let tstrip = wide_row_of(
-        &tbuf,
-        tren.area.x,
-        tren.area.right(),
-        tren.area.bottom() - 2,
-    );
+    let tb = border_of(&tbuf, tren.area);
+    let tstrip = wide_row_of(&tbuf, tb.x, tb.right(), tb.bottom() - 2);
     assert!(tstrip.contains("[y]  ? keys"), "records tier2: {tstrip}");
 }
 
@@ -2230,12 +2220,8 @@ fn card_view_inline_compose_states_render_band_and_never_overflow_80x24() {
         palette,
         0,
     );
-    let sline = wide_row_of(
-        &nbuf,
-        sren.area.x,
-        sren.area.right(),
-        sren.area.bottom() - 4,
-    );
+    let sb = border_of(&nbuf, sren.area);
+    let sline = wide_row_of(&nbuf, sb.x, sb.right(), sb.bottom() - 4);
     assert!(sline.contains("■ sending to director…"), "{sline}");
 }
 
@@ -2266,7 +2252,7 @@ fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("? ASKS acme-shop · producer · "), "{text}");
+    assert!(text.contains("? ASKS acme-shop · Ⓟ · "), "{text}");
     assert!(text.contains("— What should we build?"), "{text}");
     assert!(text.contains("· +1"), "{text}");
     assert!(text.contains(" reply r "), "{text}");

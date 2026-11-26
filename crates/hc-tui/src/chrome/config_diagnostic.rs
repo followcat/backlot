@@ -5,7 +5,7 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::Span,
-    widgets::{Clear, Paragraph, Widget},
+    widgets::{Paragraph, Widget},
 };
 
 pub(crate) fn render(
@@ -34,7 +34,7 @@ pub(crate) fn render(
             1,
         );
         covered(rect);
-        Clear.render(rect, buffer);
+        super::wide::clear_overlay(buffer, rect);
         Paragraph::new(Span::styled(text, style)).render(rect, buffer);
     }
 }

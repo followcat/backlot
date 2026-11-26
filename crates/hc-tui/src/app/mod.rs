@@ -640,6 +640,9 @@ pub struct App {
     reaped_exited: Arc<std::sync::Mutex<std::collections::HashSet<(String, u64)>>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
+    monotonic_clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    tab_status_clock: Arc<dyn Fn() -> Option<i64> + Send + Sync>,
+    pane_tick_epoch: tokio::time::Instant,
 }
 
 #[cfg(test)]

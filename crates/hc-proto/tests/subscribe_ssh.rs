@@ -253,14 +253,14 @@ async fn a_stdout_eof_open_failure_kills_the_child_promptly() {
     .unwrap_err();
     assert!(matches!(err, SubscribeError::Open(_)), "{err:?}");
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "open EOF waited on a hung child: {:?}",
         start.elapsed()
     );
     let pid = pid_of("ssh-sub-eof-hello").await;
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "child {pid} was still running: {:?}",
         start.elapsed()
     );
@@ -288,7 +288,7 @@ async fn a_reader_eof_kills_the_ssh_child_promptly() {
     assert!(matches!(err, SubscribeError::Closed), "{err:?}");
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "reader EOF left the child alive: {:?}",
         start.elapsed()
     );

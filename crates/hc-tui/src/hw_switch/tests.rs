@@ -126,3 +126,46 @@ fn switch_picker_prefills_current_highlights_alternative_and_detects_unchanged()
     assert_eq!(quota.model, "auto");
     assert!(!quota.unchanged());
 }
+
+#[test]
+fn popup_chrome_standard_renders_gutter_rounded_corners_and_drop_shadow() {
+    let band = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(band);
+    frozen_screen(&mut buf);
+    let palette = Palette::catppuccin();
+    let elev = palette.elevation();
+    let shadow_bg = elev.shadow.expect("catppuccin has drop-shadow color");
+    let frame_bg = crate::chrome::popup_frame::overlay_bg(&palette);
+
+    let hits =
+        super::render_with_shadow(&mut buf, &HwSwitch::new(None, false), &palette, band, true);
+    let outer = hits.area;
+    assert!(outer.width >= 28 && outer.height >= 10);
+    assert!(outer.right() < band.right() && outer.bottom() < band.bottom());
+
+    // Outer 1-cell gutter uses overlay_bg, with rounded frame immediately inside it.
+    assert_eq!(buf[(outer.x, outer.y)].symbol(), " ");
+    assert_eq!(buf[(outer.x, outer.y)].bg, frame_bg);
+    assert_eq!(buf[(outer.x + 1, outer.y + 1)].symbol(), "╭");
+    assert_eq!(buf[(outer.right() - 2, outer.y + 1)].symbol(), "╮");
+    assert_eq!(buf[(outer.x + 1, outer.bottom() - 2)].symbol(), "╰");
+    assert_eq!(buf[(outer.right() - 2, outer.bottom() - 2)].symbol(), "╯");
+
+    // 1-cell drop shadow sits outside geom.outer (bottom and right, excluding top-right/bottom-left corners).
+    for y in (outer.y + 1)..=outer.bottom() {
+        assert_eq!(
+            buf[(outer.right(), y)].bg,
+            shadow_bg,
+            "right shadow at y={y}"
+        );
+    }
+    for x in (outer.x + 1)..=outer.right() {
+        assert_eq!(
+            buf[(x, outer.bottom())].bg,
+            shadow_bg,
+            "bottom shadow at x={x}"
+        );
+    }
+    assert_ne!(buf[(outer.right(), outer.y)].bg, shadow_bg);
+    assert_ne!(buf[(outer.x, outer.bottom())].bg, shadow_bg);
+}

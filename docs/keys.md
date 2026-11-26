@@ -258,12 +258,14 @@ behind. In a terminal, `backlot studio new --interactive` still asks the same qu
 
 backlot is always in studio mode (start it with `--plain` for the plain multiplexer), so five
 direct keys — no prefix — move between studios and roles or jump straight to the lot. They are
-bound in `~/.config/backlot/config.toml` and default to `Alt+arrow` and `Alt+L`:
+bound in `~/.config/backlot/config.toml` and default to `Alt+PageUp/PageDown`, `Alt+arrow` and
+`Alt+L`. Studios are a vertical list in both the machines tree and the lot, so the studio step
+lives on the page keys; `Alt+Left`/`Alt+Right` stay free for the terminal:
 
 ```toml
 [keys]
-previous_studio = "alt+left"
-next_studio = "alt+right"
+previous_studio = "alt+pageup"
+next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"
@@ -271,7 +273,7 @@ focus_lot = "alt+l"
 
 | Keys | Action |
 |---|---|
-| `Alt+Left`, `Alt+Right` | Previous or next studio in document order. Wraps around. Focuses the member last used there — a role or a shell — else the studio's producer, else its first live role, else its first live shell. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one gets a notice. |
+| `Alt+PageUp`, `Alt+PageDown` | Previous or next studio in document order. Wraps around. Switches the main pane to that studio's last member — a role or a shell — else its producer, else its first live role, else its first live shell. Stepping from a terminal moves the keys to the landed member's terminal; stepping while the lot or the machines tree has the keyboard swaps the pane but leaves that surface focused, its selection on the studio it landed on. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one leaves the pane as it is, quietly (its explicit `Enter` still says `has no live terminal`). |
 | `Alt+Up`, `Alt+Down` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered member. |
 | `Alt+L` | Expand the right-hand lot dock if hidden or collapsed, move keyboard focus to it, and scroll the selection to its last selectable row (e.g. `› tell producer · / actions`) without starting compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressed while already focused (outside compose or confirm), jumps to the last row again without closing. Yields to floats, modals, the Call Sheet, and running compose. |
 
@@ -280,11 +282,12 @@ focus — no pane and no program is resized — and a focused dock, the Call She
 up releases the keys to the pane the switch lands on.
 
 These keys exist only in studio mode — that is, always unless you run `backlot --plain`. They
-win over a Herdr binding on the same key — the usual Herdr config binds `previous_tab = "alt+left"`,
-`previous_agent = "alt+up"` and friends — so set different chords in either file if you want both;
+win over a Herdr binding on the same key — the usual Herdr config binds `previous_agent = "alt+up"`
+and `next_agent = "alt+down"` — so set different chords in either file if you want both;
 `Ctrl+B ?` lists each studio key near the top of its studio group with the Herdr action it shadows
-on your config, and Enter on one runs the navigation. Outside a studio workspace,
-`Alt+Left`/`Alt+Right` enter the current studio; `Alt+Up`/`Alt+Down` own the key
+on your config, and Enter on one runs the navigation. `Alt+Left`/`Alt+Right` are not claimed by
+backlot, so `previous_tab`/`next_tab` and the program keep them. Outside a studio workspace,
+`Alt+PageUp`/`Alt+PageDown` enter the current studio; `Alt+Up`/`Alt+Down` own the key
 only inside a studio workspace — on your own workspaces and on the `backlot` stage workspace the
 role keys fall through to Herdr's `previous_agent`/`next_agent`. With no studio at all, all four
 keys are Herdr's again. Under `--plain` Herdr's
@@ -409,10 +412,7 @@ A locked keyboard sends its keys to the shown float, not to the pane behind it, 
 float. Plain `PageUp` and `PageDown` page the float's scrollback as described under
 [Scrolling a pane](#scrolling-a-pane).
 
-The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
-the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on
-the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent
-while the float is focused and turns muted while the keyboard is locked (`Ctrl+G`).
+Both persistent floats and one-shot popups draw a unified modal frame: the background dims, a 1-cell outer gutter and rounded `╭╮╰╯` border lift the popup onto an elevated surface, and a 1-cell drop shadow sits right and below (Herdr themes still keep terminal-default cells translucent inside the VT area). Persistent floats add a rich title carrying the binding, owning tab, and program, with the hide chord hinted on the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent while focused and turns muted while the keyboard is locked (`Ctrl+G`). You can toggle backdrop dimming and shadows in `~/.config/herdr/config.toml` via `[ui] popup_backdrop` (`"dim"` or `"none"`) and `popup_shadow` (`true` or `false`).
 
 ```text
 ╭ float alt+f — work — zsh          alt+f hide · esc sends to program ╮
@@ -423,8 +423,6 @@ while the float is focused and turns muted while the keyboard is locked (`Ctrl+G
 ╰───────────────────────────────────────────────────────────────────╯
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ```
-
-One-shot popups keep the plain square frame.
 
 ## Pasting text and images
 

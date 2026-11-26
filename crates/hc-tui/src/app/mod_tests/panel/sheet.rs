@@ -447,14 +447,15 @@ async fn the_sheet_draws_inside_the_modal_band_at_every_width() {
         assert!(text.contains("1 Overview & Casts"), "cols {cols}: {text}");
     }
     // At 80 an overlay dock reserves zero beside columns, so the modal
-    // band spans the full 80 columns and the sheet keeps its 76-col width.
+    // band spans the full 80 columns and the sheet wraps its 76x20 border
+    // in a 1-cell outer gutter (78x22).
     app.area = (80, 24);
     draw_to(&mut app, 80, 24);
     let band = app.modal_band(ratatui::layout::Rect::new(0, 0, 80, 24));
     assert_eq!(band.width, 80);
     assert_eq!(
         (app.sheet_hits.frame.width, app.sheet_hits.frame.height),
-        (76, 20)
+        (78, 22)
     );
     assert!(app.sheet_hits.frame.x >= band.x);
     assert!(app.sheet_hits.frame.x + app.sheet_hits.frame.width <= band.x + band.width);

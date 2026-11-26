@@ -11,12 +11,21 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-The leak-checked form points `TMPDIR` at a fresh directory and fails if
-any test leaves a file behind (lock files excepted):
+The leak-checked form points `TMPDIR` at a fresh directory through a
+symlink (`BACKLOT_TEST_TMP_NOLINK=1` opts out) so symlinked-`$TMPDIR`
+issues show up on Linux too, and fails if any test leaves a file
+behind (lock files excepted):
 
 ```sh
 sh scripts/check-test-tmp.sh
 ```
+
+### macOS differences
+
+- **`TMPDIR` is a link** (`/var` → `/private/var`), so compare canonical/real paths (`test_support::same_path` / `assert_same_path`). The `scripts/check-test-tmp.sh` gate now runs with a linked `TMPDIR` on Linux.
+- **Never rely on `read_dir` order:** sort directory listings explicitly whenever order is observable.
+- **The filesystem is case-insensitive:** do not create sibling fixtures or assert paths that differ only by ASCII case.
+- **No wall-clock assertions:** inject clocks or pause Tokio time (`start_paused = true`) instead of sleeping against real wall time.
 
 Every test uses neutral fixtures only: `host-a`/`host-b`, `alice`,
 `/home/user`, `acme-shop`.

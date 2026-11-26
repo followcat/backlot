@@ -1,12 +1,10 @@
 // Fresh code for hc-tui's per-tab floating terminal.
-//! The persistent float's frame dressing: a dimmed backdrop, a drop
-//! shadow, rounded borders, a rich title, and the focused/unfocused
-//! border split. Ephemeral popups keep the reference's plain frame —
-//! `draw_popups` reaches in here only for `popup.persistent` floats.
+//! The persistent float's frame dressing: rich title and the
+//! focused/unfocused border split. Backdrop dimming, outer gutter,
+//! and drop shadows live in `chrome/popup_frame.rs`.
 
-use ratatui::buffer::Buffer;
-use ratatui::layout::{Alignment, Position, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::layout::{Alignment, Rect};
+use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders};
 use unicode_width::UnicodeWidthStr;
@@ -16,45 +14,6 @@ use super::*;
 use crate::chrome::snapshot::ClientEndpointId;
 
 impl App {
-    /// A persistent float is big enough that its surroundings deserve the
-    /// dialog treatment: one pass dims the pane surface it covers — the
-    /// float's own cells repaint after, so only the backdrop keeps `DIM`
-    /// and the sidebar/tab-bar/status chrome outside `pane_surface`
-    /// stays undimmed.
-    pub(super) fn dim_float_backdrop(&self, buf: &mut Buffer) {
-        let area = self.frame_area();
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                let cell = &mut buf[(x, y)];
-                cell.set_style(cell.style().add_modifier(Modifier::DIM));
-            }
-        }
-    }
-
-    /// Classic TUI drop shadow, offset down-right: the right column
-    /// starts one row below `╮` so the top edge stays lit, while the
-    /// bottom row runs flush under the whole bottom edge — including
-    /// under `╰` and `╯`, whose corners would otherwise read as an
-    /// open seam where they meet the staggered strip. Painted with the
-    /// palette's darkest surface as a background change only, so
-    /// covered glyphs stay legible; clipped to the pane surface so the
-    /// sidebar and status chrome never sit under it.
-    pub(super) fn draw_float_shadow(&self, buf: &mut Buffer, outer: Rect) {
-        let clip = self.frame_area();
-        let color = self.shell.palette.surface_dim;
-        let mut shade = |x: u16, y: u16| {
-            if clip.contains(Position::new(x, y)) {
-                buf[(x, y)].set_bg(color);
-            }
-        };
-        for y in outer.top() + 1..=outer.bottom() {
-            shade(outer.right(), y);
-        }
-        for x in outer.left()..=outer.right() {
-            shade(x, outer.bottom());
-        }
-    }
-
     /// The border color: accent while the float owns input. A visible
     /// float loses its keys only while `keyboard_locked` — the lock arm
     /// runs before the popup's — which is the one muted-border state.
@@ -63,7 +22,7 @@ impl App {
         if !persistent || focused {
             self.shell.palette.accent
         } else {
-            self.shell.palette.surface_dim
+            self.shell.palette.elevation().border_muted
         }
     }
 
@@ -71,18 +30,19 @@ impl App {
     /// `float <binding> — <tab>[ — <program>]`, right-aligned hint
     /// `<binding> hide · esc sends to program` while it still fits clear
     /// of the title.
-    pub(super) fn float_block(&self, outer: Rect) -> Block<'static> {
+    pub(super) fn float_block(&self, border: Rect) -> Block<'static> {
         let Some(popup) = self.popup.as_ref() else {
             return Block::default().borders(Borders::ALL);
         };
         let palette = &self.shell.palette;
+        let overlay_bg = crate::chrome::popup_frame::overlay_bg(palette);
         // ratatui lays titles on the border row between the corner
         // glyphs — `inner_w` — and lets a right-aligned title overwrite
         // a left title's tail when they overlap. The hint therefore
         // only renders when both padded titles plus a separator cell
         // fit; the title is then ellipsized into what remains, always
         // leaving a cell clear before ╮.
-        let inner_w = usize::from(outer.width.saturating_sub(2));
+        let inner_w = usize::from(border.width.saturating_sub(2));
         let full_title = self.float_title(popup);
         let hint = self.float_hint(popup, inner_w, &full_title);
         let title_budget = inner_w.saturating_sub(3).saturating_sub(
@@ -96,9 +56,9 @@ impl App {
             .border_style(
                 Style::default()
                     .fg(self.float_border_color(popup.persistent))
-                    .bg(palette.panel_bg),
+                    .bg(overlay_bg),
             )
-            .style(Style::default().bg(palette.panel_bg))
+            .style(Style::default().bg(overlay_bg))
             .title(format!(" {title} "));
         if let Some(hint) = hint {
             block = block.title(Line::from(format!(" {hint} ")).alignment(Alignment::Right));

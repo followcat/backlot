@@ -106,7 +106,11 @@ pub fn slug(cwd: &str) -> String {
 /// prefix form the bundle itself writes — `Shell(backlot)` covers
 /// `backlot status`, `Shell(git add:*)` reaches `git add -A` — and
 /// never a bare command family: `Shell(git:*)` would also allow
-/// `git branch -D`, so it is never emitted (S12a).
+/// `git branch -D`, so it is never emitted (S12a). **Every** role
+/// gets the shared read-only set ([`super::READ_ONLY`]); an actor
+/// adds `git add`/`git commit`, the director `git merge`, and both
+/// every declared check's `run`. Only `git branch`'s two listing
+/// forms are allowed, never the bare family.
 pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
@@ -123,29 +127,26 @@ pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             // without stopping at a prompt.
             "backlot --help",
             "backlot help",
+            // Read-only, compiled into the binary: the docs, no disk
+            // search.
+            "backlot guide",
         ]
         .iter()
         .map(|c| format!("Shell({c}:*)"))
         .collect();
     }
     let mut rules = vec!["Shell(backlot)".to_string()];
+    for cmd in super::READ_ONLY {
+        rules.push(format!("Shell({cmd}:*)"));
+    }
     let is_actor = actor_task(role).is_some();
     if is_actor {
-        for cmd in [
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-        ] {
+        for cmd in ["git add", "git commit"] {
             rules.push(format!("Shell({cmd}:*)"));
         }
     }
     if role == "director" {
-        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
-            rules.push(format!("Shell({cmd}:*)"));
-        }
+        rules.push("Shell(git merge:*)".to_string());
     }
     if is_actor || role == "director" {
         for check in checks {

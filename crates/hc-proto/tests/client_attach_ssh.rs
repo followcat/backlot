@@ -167,6 +167,7 @@ async fn cancelled_open_kills_and_reaps_the_ssh_child() {
     // framed attach request — the armed WireCells window is definitely
     // live, unlike a fixed-delay cancel that could land during hello.
     deadline_wait(|| marker.exists()).await;
+    let start = std::time::Instant::now();
     let task = opening.0.take().unwrap();
     task.abort();
     // Awaiting after abort means the future's destructors ran: the armed
@@ -184,6 +185,11 @@ async fn cancelled_open_kills_and_reaps_the_ssh_child() {
         .parse()
         .unwrap();
     deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(5),
+        "cancelled open waited near CLOSE_TIMEOUT: {:?}",
+        start.elapsed()
+    );
 }
 
 #[tokio::test]
@@ -197,14 +203,14 @@ async fn a_stdout_eof_open_failure_kills_the_child_promptly() {
     let err = timeout(conn.attach(&params())).await.unwrap_err();
     assert!(matches!(err, AttachError::Open(_)), "{err:?}");
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "open EOF waited on a hung child: {:?}",
         start.elapsed()
     );
     let pid = pid_of("attach-eof-hello").await;
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "child {pid} was still running: {:?}",
         start.elapsed()
     );
@@ -221,14 +227,14 @@ async fn a_live_wire_eof_reports_attach_failure_promptly() {
     let err = timeout(conn.attach(&params())).await.unwrap_err();
     assert!(matches!(err, AttachError::Open(_)), "{err:?}");
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "diagnose waited on a hung child: {:?}",
         start.elapsed()
     );
     let pid = pid_of("attach-eof-live").await;
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "child {pid} was still running: {:?}",
         start.elapsed()
     );

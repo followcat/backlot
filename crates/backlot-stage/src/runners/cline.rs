@@ -213,11 +213,13 @@ pub struct ClinePrep {
     pub cwd: PathBuf,
 }
 
-/// The commands a role may run: `backlot` for everyone; an actor's
-/// six git commands; the director's read-only set and `git merge`,
-/// never `git branch`; and for both, each declared check's `run`
-/// verbatim. A rule a single-quoted shell string cannot hold — one
-/// with a quote or a newline — is dropped rather than mangled.
+/// The commands a role may run: `backlot` for everyone, plus the
+/// shared read-only set ([`super::READ_ONLY`]); an actor adds
+/// `git add`/`git commit`, the director `git merge`; and both, each
+/// declared check's `run` verbatim. Only `git branch`'s two listing
+/// forms are allowed, never the bare family. A rule a single-quoted
+/// shell string cannot hold — one with a quote or a newline — is
+/// dropped rather than mangled.
 pub fn allow_commands(role: &str, checks: &[CheckDecl]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let add = |out: &mut Vec<String>, c: &str| {
@@ -235,29 +237,26 @@ pub fn allow_commands(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             "backlot hollywood propose",
             "backlot hollywood report",
             "backlot studio new --dry-run",
+            // Read-only, compiled into the binary: the docs, no disk
+            // search.
+            "backlot guide",
         ] {
             add(&mut out, cmd);
         }
         return out;
     }
     add(&mut out, "backlot");
+    for cmd in super::READ_ONLY {
+        add(&mut out, cmd);
+    }
     let is_actor = actor_task(role).is_some();
     if is_actor {
-        for cmd in [
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-        ] {
+        for cmd in ["git add", "git commit"] {
             add(&mut out, cmd);
         }
     }
     if role == "director" {
-        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
-            add(&mut out, cmd);
-        }
+        add(&mut out, "git merge");
     }
     if is_actor || role == "director" {
         for check in checks {

@@ -12,7 +12,8 @@ fn percent_resolves_against_available() {
 #[test]
 fn default_is_half_the_surface_with_minimums() {
     let geometry = resolve_popup_geometry(None, None, Rect::new(0, 0, 100, 30)).unwrap();
-    assert_eq!(geometry.outer, Rect::new(25, 7, 50, 15));
+    assert_eq!(geometry.frame, Rect::new(25, 7, 50, 15));
+    assert_eq!(geometry.outer, Rect::new(24, 6, 52, 17));
     assert_eq!(geometry.inner, Rect::new(26, 8, 48, 13));
     assert_eq!(geometry.terminal_cols, 47);
     assert_eq!(geometry.terminal_rows, 13);
@@ -26,7 +27,8 @@ fn reference_example_80x40_percent_on_100x30() {
         Rect::new(0, 0, 100, 30),
     )
     .unwrap();
-    assert_eq!(geometry.outer, Rect::new(10, 9, 80, 12));
+    assert_eq!(geometry.frame, Rect::new(10, 9, 80, 12));
+    assert_eq!(geometry.outer, Rect::new(9, 8, 82, 14));
     assert_eq!(geometry.inner, Rect::new(11, 10, 78, 10));
 }
 
@@ -38,6 +40,7 @@ fn requests_clamp_to_the_surface_and_minimums() {
         Rect::new(0, 0, 60, 20),
     )
     .unwrap();
+    assert_eq!(geometry.frame, Rect::new(0, 8, 60, 4));
     assert_eq!(geometry.outer, Rect::new(0, 8, 60, 4));
     let tiny = resolve_popup_geometry(
         Some(PopupSize::Cells(1)),
@@ -45,7 +48,8 @@ fn requests_clamp_to_the_surface_and_minimums() {
         Rect::new(0, 0, 20, 10),
     )
     .unwrap();
-    assert_eq!(tiny.outer, Rect::new(7, 3, 6, 4));
+    assert_eq!(tiny.frame, Rect::new(7, 3, 6, 4));
+    assert_eq!(tiny.outer, Rect::new(6, 2, 8, 6));
     assert_eq!(tiny.terminal_cols, 4);
 }
 

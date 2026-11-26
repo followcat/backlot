@@ -40,12 +40,17 @@ const SIZE_LEASE_CREDIT_STEP: usize = hc_proto::frame::INITIAL_CREDIT as usize /
 pub(super) struct Pacing {
     off_tab: bool,
     tx: tokio::sync::watch::Sender<bool>,
+    epoch: tokio::time::Instant,
 }
 
 impl Default for Pacing {
     fn default() -> Self {
         let (tx, _rx) = tokio::sync::watch::channel(false);
-        Pacing { off_tab: false, tx }
+        Pacing {
+            off_tab: false,
+            tx,
+            epoch: tokio::time::Instant::now(),
+        }
     }
 }
 
@@ -54,9 +59,18 @@ impl Pacing {
     pub(super) fn subscribe(&self) -> tokio::sync::watch::Receiver<bool> {
         self.tx.subscribe()
     }
+
+    pub(super) fn tick_epoch(&self) -> tokio::time::Instant {
+        self.epoch
+    }
 }
 
 impl Pane {
+    /// Set the shared grid epoch used by off-tab observer pacing.
+    pub fn set_tick_epoch(&mut self, epoch: tokio::time::Instant) {
+        self.pacing.epoch = epoch;
+    }
+
     /// `App::sync_observers` marks observers outside the visible set;
     /// visible observers are rendered surfaces and stay live.
     pub(crate) fn set_off_tab(&mut self, off_tab: bool) {
@@ -79,12 +93,13 @@ impl Pane {
 
 /// The next shared-grid instant after `now`: every paced observer
 /// lands on the same tick.
-fn next_off_tab_tick(now: tokio::time::Instant) -> tokio::time::Instant {
-    static EPOCH: std::sync::LazyLock<tokio::time::Instant> =
-        std::sync::LazyLock::new(tokio::time::Instant::now);
-    let elapsed_ms = now.saturating_duration_since(*EPOCH).as_millis() as u64;
+fn next_off_tab_tick(
+    epoch: tokio::time::Instant,
+    now: tokio::time::Instant,
+) -> tokio::time::Instant {
+    let elapsed_ms = now.saturating_duration_since(epoch).as_millis() as u64;
     let step = OFF_TAB_FLUSH_INTERVAL.as_millis() as u64;
-    *EPOCH + Duration::from_millis(((elapsed_ms / step) + 1) * step)
+    epoch + Duration::from_millis(((elapsed_ms / step) + 1) * step)
 }
 
 /// `?9001h`/`?9001l` in `tail + bytes`, carrying the scan tail across
@@ -126,6 +141,7 @@ pub(super) async fn forward_stream(
     generation: u64,
     ev: &mpsc::Sender<PaneEv>,
     mut paced: tokio::sync::watch::Receiver<bool>,
+    tick_epoch: tokio::time::Instant,
 ) {
     // Buffered bytes plus their flush instant ride one state: the
     // tick flushes whatever accumulated since the arm.
@@ -238,7 +254,7 @@ pub(super) async fn forward_stream(
                         } else {
                             buffered.extend_from_slice(&bytes);
                             flush_at.get_or_insert_with(|| {
-                                next_off_tab_tick(tokio::time::Instant::now())
+                                next_off_tab_tick(tick_epoch, tokio::time::Instant::now())
                             });
                             if ev.is_closed() {
                                 return;

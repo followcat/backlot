@@ -94,13 +94,15 @@ fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
         .expect("writer row in dock");
 
     let row1 = line_at(&buf, area, writer_rect.y);
-    assert!(row1.contains("writer"), "{row1}");
+    assert!(row1.contains("Ⓦ"), "{row1}");
     assert!(row1.trim_end().ends_with("standby│"), "{row1}");
     // No activity glyph at mark column (index 2 inside `│ <mark> ...`).
     assert_eq!(buf[(area.x + 2, writer_rect.y)].symbol(), " ");
-    let name_x = row1.find("writer").unwrap() as u16;
-    assert_eq!(buf[(area.x + name_x, writer_rect.y)].fg, palette.overlay0);
-    let state_x = row1.find("standby").unwrap() as u16;
+    // The badge keeps its role colour even on a dim standby row.
+    let col = |row: &str, needle: &str| row[..row.find(needle).unwrap()].chars().count() as u16;
+    let name_x = col(&row1, "Ⓦ");
+    assert_eq!(buf[(area.x + name_x, writer_rect.y)].fg, palette.teal);
+    let state_x = col(&row1, "standby");
     assert_eq!(buf[(area.x + state_x, writer_rect.y)].fg, palette.overlay0);
 
     let row2 = line_at(&buf, area, writer_rect.y + 1);
@@ -108,7 +110,7 @@ fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
         row2.contains("starts when the director plans"),
         "expected writer standby hint line below row, got: {row2}"
     );
-    let hint_x = row2.find("starts").unwrap() as u16;
+    let hint_x = row2[..row2.find("starts").unwrap()].chars().count() as u16;
     assert_eq!(
         buf[(area.x + hint_x, writer_rect.y + 1)].fg,
         palette.overlay0

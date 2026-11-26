@@ -105,7 +105,7 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
                 .collect::<Vec<_>>()
                 .join("/");
             lines.push(if agent.is_empty() {
-                role.name.clone()
+                crate::studio::glyphs::role_label(role)
             } else {
                 agent
             });

@@ -3,7 +3,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
 use super::{Field, HwHit, HwHits, HwSwitch};
 use crate::chrome::palette::Palette;
@@ -14,25 +13,33 @@ use crate::new_studio::{ModelPick, Probe};
 
 const REASSURANCE: &str = "make-before-break: old agent stays live until the new one is ready; brief + recent conversation carry over.";
 
-fn frame(band: Rect, pick_open: bool, has_existing: bool) -> Option<Rect> {
+fn frame_content_size(band: Rect, pick_open: bool, has_existing: bool) -> Option<(u16, u16)> {
     let w = band.width.saturating_sub(4).min(64);
     let base_h = if has_existing { 14 } else { 11 };
     let h = if pick_open { 16 } else { base_h }.min(band.height.saturating_sub(2));
     if w < 26 || h < 8 {
         return None;
     }
-    Some(Rect::new(
-        band.x + (band.width - w) / 2,
-        band.y + (band.height - h) / 2,
-        w,
-        h,
-    ))
+    Some((w.saturating_sub(2), h.saturating_sub(2)))
 }
 
-/// Draw `HwSwitch` centered inside `band`, returning clickable rects and cursor.
+/// Draw `HwSwitch` centered inside `band` (caller dims the backdrop),
+/// returning clickable rects and cursor.
+#[cfg(test)]
 pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> HwHits {
+    render_with_shadow(b, d, p, band, true)
+}
+
+pub(crate) fn render_with_shadow(
+    b: &mut Buffer,
+    d: &HwSwitch,
+    p: &Palette,
+    band: Rect,
+    shadow: bool,
+) -> HwHits {
     let mut hits = HwHits::default();
-    let Some(outer) = frame(band, d.model_pick.is_some(), d.existing.is_some()) else {
+    let Some((cw, ch)) = frame_content_size(band, d.model_pick.is_some(), d.existing.is_some())
+    else {
         put_text(
             b,
             b.area.x,
@@ -43,11 +50,24 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         );
         return hits;
     };
-    Clear.render(outer, b);
-    let Some(inner) = crate::chrome::dialogs::panel(b, outer, p.accent, p.panel_bg) else {
+    let Some(geom) = crate::chrome::popup_frame::open_centered(
+        b,
+        band,
+        cw,
+        ch,
+        26,
+        8,
+        p.accent,
+        crate::chrome::popup_frame::PopupChrome::Standard,
+        p,
+        shadow,
+    ) else {
         return hits;
     };
-    hits.area = outer;
+    let inner = geom.inner;
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let raised = p.elevation().raised_on_overlay;
+    hits.area = geom.outer;
     let title = if d.existing.is_some() {
         " Switch Hollywood's agent "
     } else {
@@ -61,7 +81,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         title,
         Style::default()
             .fg(p.accent)
-            .bg(p.panel_bg)
+            .bg(overlay_bg)
             .add_modifier(Modifier::BOLD),
     );
     put_right_text(
@@ -69,7 +89,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         inner,
         inner.y,
         "esc cancel",
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(overlay_bg),
     );
     let body = Rect::new(
         inner.x + 1,
@@ -89,7 +109,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
                 body.y,
                 body.width,
                 "detecting runners…",
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
+                Style::default().fg(p.overlay0).bg(overlay_bg),
             );
             return hits;
         }
@@ -100,7 +120,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
                 body.y,
                 body.width,
                 &truncate_end(e, body.width as usize),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
             return hits;
         }
@@ -111,7 +131,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
                 body.y,
                 body.width,
                 "no runners installed on this machine",
-                Style::default().fg(p.peach).bg(p.panel_bg),
+                Style::default().fg(p.peach).bg(overlay_bg),
             );
             put_text(
                 b,
@@ -119,7 +139,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
                 body.y + 1,
                 body.width,
                 "install one — `backlot runners` lists what is looked for",
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
+                Style::default().fg(p.overlay0).bg(overlay_bg),
             );
             return hits;
         }
@@ -140,7 +160,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
             y,
             body.width.saturating_sub(1),
             &truncate_end(&label, body.width.saturating_sub(1) as usize),
-            Style::default().fg(p.subtext0).bg(p.panel_bg),
+            Style::default().fg(p.subtext0).bg(overlay_bg),
         );
         y += 1;
     }
@@ -150,9 +170,9 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         }
         let line = Rect::new(body.x, y, body.width, 1);
         let selected = field == d.field;
-        let bg = if selected { p.surface0 } else { p.panel_bg };
+        let bg = if selected { raised } else { overlay_bg };
         if selected {
-            b.set_style(line, Style::default().bg(p.surface0));
+            b.set_style(line, Style::default().bg(raised));
             put_text(b, body.x, y, 1, "▸", Style::default().fg(p.accent).bg(bg));
         }
         if field == Field::Apply {
@@ -197,13 +217,13 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         );
         let cell = Rect::new(body.x + 9, y, body.width.saturating_sub(9), 1);
         if selected && field == Field::Model && d.model_edit.is_some() {
-            b.set_style(cell, Style::default().bg(p.surface0));
+            b.set_style(cell, Style::default().bg(raised));
             if let Some(edit) = &d.model_edit
                 && let Some(cursor) = crate::chrome::text_editor::render(
                     b,
                     cell,
                     edit,
-                    Style::default().fg(p.text).bg(p.surface0),
+                    Style::default().fg(p.text).bg(raised),
                 )
             {
                 hits.cursor = Some(cursor);
@@ -241,7 +261,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
             y,
             body.width.saturating_sub(1),
             &truncate_end(err, body.width.saturating_sub(1) as usize),
-            Style::default().fg(p.red).bg(p.panel_bg),
+            Style::default().fg(p.red).bg(overlay_bg),
         );
         y += 1;
     }
@@ -258,7 +278,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
                 y,
                 body.width.saturating_sub(1),
                 &line_txt,
-                Style::default().fg(p.teal).bg(p.panel_bg),
+                Style::default().fg(p.teal).bg(overlay_bg),
             );
             y += 1;
         }
@@ -277,7 +297,7 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSwitch, p: &Palette, band: Rect) -> H
         inner.bottom().saturating_sub(1),
         inner.width,
         hint,
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(overlay_bg),
     );
     hits
 }
@@ -290,10 +310,12 @@ fn draw_pick(
     p: &Palette,
     hits: &mut HwHits,
 ) {
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let raised = p.elevation().raised_on_overlay;
     let runner = d.runner_row().map(|r| r.runner.as_str()).unwrap_or("-");
     let head_style = Style::default()
         .fg(p.accent)
-        .bg(p.panel_bg)
+        .bg(overlay_bg)
         .add_modifier(Modifier::BOLD);
     let head = truncate_end(
         &format!("Model for hollywood · {runner}:"),
@@ -321,7 +343,7 @@ fn draw_pick(
                 b,
                 Rect::new(x, y, w, 1),
                 &pick.filter,
-                Style::default().fg(p.text).bg(p.panel_bg),
+                Style::default().fg(p.text).bg(overlay_bg),
             )
         {
             hits.cursor = Some(cursor);
@@ -336,7 +358,7 @@ fn draw_pick(
             y,
             body.width,
             "nothing matches the filter",
-            Style::default().fg(p.overlay0).bg(p.panel_bg),
+            Style::default().fg(p.overlay0).bg(overlay_bg),
         );
         return;
     }
@@ -353,9 +375,9 @@ fn draw_pick(
         let i = scroll + vi;
         let line = Rect::new(body.x, y, body.width, 1);
         let selected = i == pick.sel;
-        let bg = if selected { p.surface0 } else { p.panel_bg };
+        let bg = if selected { raised } else { overlay_bg };
         if selected {
-            b.set_style(line, Style::default().bg(p.surface0));
+            b.set_style(line, Style::default().bg(raised));
             put_text(b, body.x, y, 1, "▸", Style::default().fg(p.accent).bg(bg));
         }
         let text = if *option == d.model {

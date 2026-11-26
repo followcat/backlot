@@ -102,9 +102,7 @@ impl FakeGit {
                         // Real git creates the dir and `worktree list`
                         // reports its resolved path.
                         let _ = fs::create_dir_all(dir);
-                        let real = Path::new(dir)
-                            .canonicalize()
-                            .unwrap_or_else(|_| PathBuf::from(dir));
+                        let real = crate::test_support::real_path(dir);
                         self.worktrees
                             .push((real.to_string_lossy().into_owned(), branch.into()));
                         return out(0, String::new(), "Preparing worktree\n".into());
@@ -199,11 +197,11 @@ fn an_existing_area_is_reused() {
         inside: true,
         worktrees: vec![
             (
-                integ.canonicalize().unwrap().display().to_string(),
+                crate::test_support::real_path(&integ).display().to_string(),
                 "backlot/acme-shop/integration".into(),
             ),
             (
-                t1.canonicalize().unwrap().display().to_string(),
+                crate::test_support::real_path(&t1).display().to_string(),
                 "backlot/acme-shop/t1".into(),
             ),
         ],

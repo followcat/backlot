@@ -98,7 +98,15 @@ no per-agent integration beyond the launch flags in `runners.md`.
 | Writer | `backlot plan publish` |
 | Director | `backlot task new`, `backlot cast`, `backlot review`, `backlot report`, `backlot ask` |
 | Actor | `backlot deliver`, `backlot block` |
-| Any | `backlot status`, `backlot progress`, `backlot tell <role>` |
+| Any | `backlot status`, `backlot progress`, `backlot tell <role>`, `backlot guide` |
+
+`backlot guide [<topic>] [--grep <word>]` prints backlot's own docs, compiled into the binary from
+`docs/studio/` (one topic per file) — no studio, ledger or core. Every role prompt says its docs come
+from there and never from a disk search, and the launch pre-allows it like any other `backlot`
+command. The shared read-only command set — `git status`, `git log`, `git show`, `git diff`,
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head` — is pre-allowed for every
+role on every runner that carries an allow list (`runners.md`), so a role's forensic reads never ask a
+person; one plain command per shell call, since a chained or `git -C` form does not match.
 
 The table is enforced, not just followed (S9b): the ledger refuses an event from a role outside its whitelist — an
 actor records only its own task's `task.delivered`, its own `blocked` and purpose-free messages, and `task.delivered`
@@ -585,6 +593,17 @@ runner maps none — with whitespace and box-drawing characters removed, so a wr
 `BACKLOT_`, `env -i` or `--ignore-environment`, and an earlier prompt's line still scrolling above cannot flag the new
 prompt. It flags the attention `needs_user`: no notice to the director, `backlot status` and the panel mark it as the
 user's.
+
+**A prompt the director cannot answer is routed to the person.** An actor's prompt is the director's to answer, but a
+director that is rate-limited, stalled or closed cannot. The deliver pass (`route.rs`) reads the director's open
+`rate limited` / `stalled` attention and its lifecycle — a rate limit outranks a stall, which outranks a closed or
+never-started role — and once the actor's open, director-owned prompt is past a one-minute grace (`ROUTE_GRACE_MS`),
+it clears that attention `routed to the user` and re-raises it `needs_user` with the same saved screen. The detail
+names the reason and the wait — `the director is rate-limited until 12:10; waiting 14m; screen saved to attention/<n>.txt`
+— so the panel and Hollywood's `prompt` notice read as one line. From then it is the user's: the director's
+`backlot approve` is refused like any `needs_user` prompt, and an already-flagged or non-actor prompt is never touched.
+Only the re-raise's own reason text distinguishes a routed prompt in the ledger; the flag is what routes it. The state
+is reloaded before the notices are built, so the new seq lands in the same pass.
 
 ## Guard (D3)
 

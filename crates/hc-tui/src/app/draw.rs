@@ -34,7 +34,6 @@ mod draw_terminal;
 #[path = "draw_tests.rs"]
 mod tests;
 
-pub(in crate::app) use draw_overlays_s3::dim_cells;
 pub(in crate::app) use draw_terminal::{draw_terminal, mark_wide_tail_slots};
 use draw_terminal::{draw_terminal_counted, mark_wide_tail_slots_skipping};
 

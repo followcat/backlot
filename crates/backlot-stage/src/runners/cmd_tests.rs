@@ -55,47 +55,61 @@ fn slug_splits_an_acronym_boundary() {
     assert_eq!(slug("/home/user/acme-shop"), "home-user-acme-shop");
 }
 
-/// `Shell(...)` rules per role: the base `Shell(backlot)`; an
-/// actor's six git commands; the director's read-only set and
-/// `git merge`, never `git branch`; the declared checks verbatim —
-/// and a `run` the rule syntax cannot express is simply never
-/// there.
+/// `Shell(...)` rules per role: the base `Shell(backlot)` plus the
+/// shared read-only set for everyone; an actor's `git add`/`git
+/// commit`, the director's `git merge`; the declared checks verbatim
+/// — and a `run` the rule syntax cannot express is simply never
+/// there. `git branch` is only ever its two listing forms.
 #[test]
 fn rules_per_role() {
     let checks = [
         check("unit", "cargo test --lib"),
         check("lint", "cargo clippy"),
     ];
-    assert_eq!(
-        allow_rules("director", &checks),
-        [
-            "Shell(backlot)",
-            "Shell(git status:*)",
-            "Shell(git diff:*)",
-            "Shell(git log:*)",
-            "Shell(git show:*)",
-            "Shell(git merge:*)",
-            "Shell(cargo test --lib:*)",
-            "Shell(cargo clippy:*)"
-        ]
-    );
-    assert_eq!(
-        allow_rules("actor-t1-c1", &checks),
-        [
-            "Shell(backlot)",
-            "Shell(git add:*)",
-            "Shell(git commit:*)",
-            "Shell(git status:*)",
-            "Shell(git diff:*)",
-            "Shell(git log:*)",
-            "Shell(git show:*)",
-            "Shell(cargo test --lib:*)",
-            "Shell(cargo clippy:*)"
-        ]
-    );
-    // Producer and writer keep the base rule only.
+    let read_only = [
+        "Shell(git status:*)",
+        "Shell(git log:*)",
+        "Shell(git show:*)",
+        "Shell(git diff:*)",
+        "Shell(git branch --list:*)",
+        "Shell(git branch --show-current:*)",
+        "Shell(ls:*)",
+        "Shell(rg:*)",
+        "Shell(wc:*)",
+        "Shell(head:*)",
+    ];
+    let director: Vec<String> = std::iter::once("Shell(backlot)".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain([
+            "Shell(git merge:*)".to_string(),
+            "Shell(cargo test --lib:*)".to_string(),
+            "Shell(cargo clippy:*)".to_string(),
+        ])
+        .collect();
+    assert_eq!(allow_rules("director", &checks), director);
+    let actor: Vec<String> = std::iter::once("Shell(backlot)".to_string())
+        .chain(read_only.iter().map(|r| r.to_string()))
+        .chain([
+            "Shell(git add:*)".to_string(),
+            "Shell(git commit:*)".to_string(),
+            "Shell(cargo test --lib:*)".to_string(),
+            "Shell(cargo clippy:*)".to_string(),
+        ])
+        .collect();
+    assert_eq!(allow_rules("actor-t1-c1", &checks), actor);
+    // Producer and writer keep the base rule plus the read-only set.
     for role in ["producer", "writer"] {
-        assert_eq!(allow_rules(role, &checks), ["Shell(backlot)"], "{role}");
+        let rules = allow_rules(role, &checks);
+        assert_eq!(rules.first().map(String::as_str), Some("Shell(backlot)"));
+        assert!(
+            read_only.iter().all(|r| rules.iter().any(|x| x == r)),
+            "{role} misses a read-only rule: {rules:?}"
+        );
+        assert!(!rules.iter().any(|r| r.contains("git add")), "{role}");
+        assert!(
+            !rules.iter().any(|r| r == "Shell(git branch:*)"),
+            "{role}: no bare branch family"
+        );
     }
     // `(` `)` `*?[]{}`, `\`, `:` and `,` are rule syntax, glob or
     // the rule's own separators — none may reach the file.

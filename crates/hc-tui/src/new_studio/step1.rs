@@ -82,12 +82,13 @@ fn repo_glyph(e: &super::RepoEntry, p: &Palette) -> (&'static str, Style) {
 }
 
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
-    let bg = Style::default().bg(p.panel_bg);
+    let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
+    let bg = Style::default().bg(overlay_bg);
     b.set_style(body, bg);
     let mut y = body.y;
 
     // — Machines —
-    let label_style = Style::default().fg(p.text).bg(p.panel_bg);
+    let label_style = Style::default().fg(p.text).bg(overlay_bg);
     let recheck = if d.refreshing {
         "^R re-check …"
     } else {
@@ -111,7 +112,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         body,
         y,
         recheck,
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
+        Style::default().fg(p.overlay0).bg(overlay_bg),
     );
     y += 1;
     let machine_rows = d.machines.len().min(5);
@@ -174,7 +175,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     let dir = d.repos.dir.as_deref().unwrap_or("…");
     let head_style = Style::default()
         .fg(p.accent)
-        .bg(p.panel_bg)
+        .bg(overlay_bg)
         .add_modifier(Modifier::BOLD);
     let head = truncate(
         &format!(" Repository on {machine}:  {dir}"),
@@ -204,7 +205,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 b,
                 Rect::new(x, y, w, 1),
                 &d.repos.filter,
-                Style::default().fg(p.text).bg(p.panel_bg),
+                Style::default().fg(p.text).bg(overlay_bg),
             )
         {
             hits.cursor = Some(cursor);
@@ -223,7 +224,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width,
                 "listing repositories…",
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
+                Style::default().fg(p.overlay0).bg(overlay_bg),
             );
         }
         Probe::Failed(e) => {
@@ -233,7 +234,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 y,
                 body.width.saturating_sub(1),
                 &truncate(e, body.width as usize - 2),
-                Style::default().fg(p.red).bg(p.panel_bg),
+                Style::default().fg(p.red).bg(overlay_bg),
             );
         }
         Probe::Done(_) => {
@@ -249,7 +250,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                     } else {
                         "nothing matches the filter"
                     },
-                    Style::default().fg(p.overlay0).bg(p.panel_bg),
+                    Style::default().fg(p.overlay0).bg(overlay_bg),
                 );
             }
             // Keep the selection inside the window: scroll so `sel`

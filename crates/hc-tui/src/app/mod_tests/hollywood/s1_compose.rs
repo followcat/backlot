@@ -321,31 +321,31 @@ async fn no_alt_arrow_collision_in_compose() {
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "my draft");
 
-    // Re-enter Call Sheet Compose: Alt+Right switches studio; Alt+Down focuses role.
+    // Re-enter Call Sheet Compose: Alt+PgDn switches studio; Alt+Down focuses role.
     alt_y(&mut app);
     assert!(app.hollywood.editing);
-    key_mods(&mut app, hc_vt::Key::ArrowRight, hc_vt::Mods::ALT);
+    key_mods(&mut app, hc_vt::Key::PageDown, hc_vt::Mods::ALT);
     assert_eq!(
         app.studio.current.as_ref().map(|k| k.id.as_str()),
         Some("beta-tools"),
-        "Alt+Right switches studio"
+        "Alt+PgDn switches studio"
     );
     assert!(!app.hollywood.expanded());
     key_mods(&mut app, hc_vt::Key::ArrowDown, hc_vt::Mods::ALT);
     assert_eq!(app.focused.as_deref(), Some("t2"));
 
-    // 2. Studio Dock Compose: Alt+Left switches studio back, never eaten by history.
+    // 2. Studio Dock Compose: Alt+PgUp switches studio back, never eaten by history.
     prefix(&mut app);
     key(&mut app, hc_vt::Key::Char('y'));
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     key(&mut app, hc_vt::Key::Char('i'));
     assert!(app.panel_editing());
     assert!(matches!(app.panel.selected, Some(PanelTarget::Input(_))));
-    key_mods(&mut app, hc_vt::Key::ArrowLeft, hc_vt::Mods::ALT);
+    key_mods(&mut app, hc_vt::Key::PageUp, hc_vt::Mods::ALT);
     assert_eq!(
         app.studio.current.as_ref().map(|k| k.id.as_str()),
         Some("acme-shop"),
-        "Alt+Left switches studio out of Dock Compose"
+        "Alt+PgUp switches studio out of Dock Compose"
     );
     assert!(!app.panel_editing());
 }

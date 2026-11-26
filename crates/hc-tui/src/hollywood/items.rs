@@ -290,7 +290,11 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 format!("{machine} · ")
             };
             (
-                format!("PROMPT #{seq}  {} · {machine}{}", studio.id, role.name),
+                format!(
+                    "PROMPT #{seq}  {} · {machine}{}",
+                    studio.id,
+                    crate::studio::glyphs::role_label(role)
+                ),
                 "×",
             )
         }
@@ -315,14 +319,18 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                     format!(
                         "ASKS {} · {machine}{}{age} — {}",
                         studio.id,
-                        role.name,
+                        crate::studio::glyphs::role_label(role),
                         first_sentence(question)
                     ),
                     "?",
                 )
             } else {
                 (
-                    format!("NEEDS YOU {} · {machine}{}", studio.id, role.name),
+                    format!(
+                        "NEEDS YOU {} · {machine}{}",
+                        studio.id,
+                        crate::studio::glyphs::role_label(role)
+                    ),
                     "×",
                 )
             }

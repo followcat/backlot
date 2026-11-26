@@ -221,31 +221,7 @@ fn paint_row(
 /// after compositing — rather than while panes draw — keeps overlay writes
 /// over a tail slot emit-ready; stale marks on uncovered cells are cleared
 /// in the same pass.
-pub(in crate::app) fn mark_wide_tail_slots(buf: &mut Buffer) {
-    for y in 0..buf.area.height {
-        mark_row_wide_tail_slots(buf, y);
-    }
-}
-
-fn mark_row_wide_tail_slots(buf: &mut Buffer, y: u16) {
-    let width = buf.area.width;
-    let mut covered_until = 0u16;
-    for x in 0..width {
-        let cell = &mut buf[(x, y)];
-        if x < covered_until {
-            cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip);
-            continue;
-        }
-        if matches!(cell.diff_option, ratatui::buffer::CellDiffOption::Skip) {
-            cell.set_diff_option(ratatui::buffer::CellDiffOption::None);
-            #[allow(deprecated)]
-            {
-                cell.set_skip(false);
-            }
-        }
-        covered_until = covered_until.max(x + cell.cell_width());
-    }
-}
+pub(in crate::app) use crate::chrome::wide::{mark_row_wide_tail_slots, mark_wide_tail_slots};
 
 /// `mark_wide_tail_slots` when no overlay painted: `clean_rects` are
 /// cache-blit pane surfaces whose tail slots are already marked — the
@@ -281,13 +257,7 @@ pub(in crate::app) fn mark_wide_tail_slots_skipping(
             if x < covered_until {
                 cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip);
             } else {
-                if matches!(cell.diff_option, ratatui::buffer::CellDiffOption::Skip) {
-                    cell.set_diff_option(ratatui::buffer::CellDiffOption::None);
-                    #[allow(deprecated)]
-                    {
-                        cell.set_skip(false);
-                    }
-                }
+                crate::chrome::wide::clear_diff_skip(cell);
                 covered_until = covered_until.max(x + cell.cell_width());
             }
             x += 1;

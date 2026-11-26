@@ -246,12 +246,8 @@ pub(super) fn render_overlays_and_cursor(
     }
     app.help_hits = if app.help {
         overlay_painted = true;
-        // Source overlays reconstruct the wire frame as ratatui cells first
-        // (wire.rs u16_to_modifier drops extended underline bits), then dim
-        // the whole background before the panel removes DIM in its own area.
-        super::draw_overlays_s3::dim_cells(buf);
         // S5's launcher or herdr's overlay — `draw_overlays_s5` owns
-        // the branch and the floating picker.
+        // the backdrop dim, the branch, and the floating picker.
         super::draw_overlays_s5::render_help(app, buf, area, layout)
     } else {
         crate::chrome::help::HelpRender::default()
@@ -416,13 +412,18 @@ pub(super) fn render_overlays_and_cursor(
         for cell in &mut buf.content {
             cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         }
-        crate::chrome::navigator_render::render_navigator_overlay(
+        let federated = app.federated_sidebar();
+        let backdrop = app.shell.popup_backdrop;
+        let shadow = app.shell.popup_shadow;
+        crate::chrome::popup_frame::dim_backdrop(buf, &app.shell.palette, backdrop, None);
+        crate::chrome::navigator_render::render_navigator_overlay_with_shadow(
             buf,
             navigator,
             &app.projection.endpoints,
             &app.projection.active_endpoint_id,
-            app.federated_sidebar(),
+            federated,
             &app.shell.palette,
+            shadow,
         )
         .unwrap_or_default()
     } else {
@@ -439,16 +440,31 @@ pub(super) fn render_overlays_and_cursor(
     // The Settings overlay dims its background like help/dialogs.
     app.settings_hits = if let Some(settings) = app.settings.as_ref() {
         overlay_painted = true;
-        super::draw_overlays_s3::dim_cells(buf);
-        crate::chrome::settings_render::render_settings_overlay(buf, settings, &app.shell.palette)
-            .unwrap_or_default()
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        crate::chrome::settings_render::render_settings_overlay_with_shadow(
+            buf,
+            settings,
+            &app.shell.palette,
+            app.shell.popup_shadow,
+        )
+        .unwrap_or_default()
     } else {
         crate::chrome::settings_render::SettingsRender::default()
     };
     // The update card dims the background like the other overlays.
     if let Some(modal) = app.update_modal.as_ref() {
         overlay_painted = true;
-        super::draw_overlays_s3::dim_cells(buf);
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
         let view = crate::app::update_modal::view(
             modal,
             &app.update_state,
@@ -456,7 +472,12 @@ pub(super) fn render_overlays_and_cursor(
             app.update_notes_fetching,
             app.install.as_ref(),
         );
-        let rendered = crate::chrome::update_modal::render(buf, &view, &app.shell.palette);
+        let rendered = crate::chrome::update_modal::render_with_shadow(
+            buf,
+            &view,
+            &app.shell.palette,
+            app.shell.popup_shadow,
+        );
         if let (Some(modal), Some(rendered)) = (app.update_modal.as_mut(), rendered) {
             modal.render = rendered;
         }
@@ -468,12 +489,18 @@ pub(super) fn render_overlays_and_cursor(
     // and its cursor wish owns the host cursor like the fields do.
     app.ns_hits = if let Some(d) = app.new_studio.as_ref() {
         overlay_painted = true;
-        super::draw_overlays_s3::dim_cells(buf);
-        crate::new_studio::render(
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        crate::new_studio::render_with_shadow(
             buf,
             d,
             &app.shell.palette,
             app.backlot_modal_surface(area, layout, 64),
+            app.shell.popup_shadow,
         )
     } else {
         crate::new_studio::NsHits::default()
@@ -491,12 +518,18 @@ pub(super) fn render_overlays_and_cursor(
     // the next press and the host cursor like the fields do.
     app.hw_hits = if let Some(d) = app.hw_switch.as_ref() {
         overlay_painted = true;
-        super::draw_overlays_s3::dim_cells(buf);
-        crate::hw_switch::render(
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        crate::hw_switch::render_with_shadow(
             buf,
             d,
             &app.shell.palette,
             app.backlot_modal_surface(area, layout, 64),
+            app.shell.popup_shadow,
         )
     } else {
         crate::hw_switch::HwHits::default()
@@ -510,22 +543,31 @@ pub(super) fn render_overlays_and_cursor(
         };
     }
     // The Task & Delivery Sheet dims like the other modals and
-    // centres in `backlot_modal_surface`; its keys are the sheet's
-    // own while open.
+    // centres in `backlot_modal_surface` (when `sheet.view` is open,
+    // `draw_reader` below owns the single full-screen dim pass so the
+    // background does not double-dim).
     app.sheet_hits = if let Some(sheet) = app.sheet.as_ref() {
         overlay_painted = true;
-        super::draw_overlays_s3::dim_cells(buf);
+        if sheet.view.is_none() {
+            crate::chrome::popup_frame::dim_backdrop(
+                buf,
+                &app.shell.palette,
+                app.shell.popup_backdrop,
+                None,
+            );
+        }
         let machines = app.panel_summaries();
         let summary = machines
             .iter()
             .flat_map(|m| m.summary.studios.iter())
             .find(|s| s.id == sheet.studio.id);
-        crate::sheet::render(
+        crate::sheet::render_with_shadow(
             buf,
             app.backlot_modal_surface(area, layout, 64),
             sheet,
             summary,
             &app.shell.palette,
+            app.shell.popup_shadow,
         )
     } else {
         crate::sheet::SheetRender::default()
@@ -555,9 +597,13 @@ pub(super) fn render_overlays_and_cursor(
             }
             _ => area.x + area.width,
         };
-        if let Some(rendered) =
-            crate::chrome::menu::render_context_menu_in(buf, menu, max_right, &app.shell.palette)
-        {
+        if let Some(rendered) = crate::chrome::menu::render_context_menu_in_with_shadow(
+            buf,
+            menu,
+            max_right,
+            &app.shell.palette,
+            app.shell.popup_shadow,
+        ) {
             app.hit_map.context_menu_rows = rendered.rows;
         }
         app.want_cursor.pos = None;

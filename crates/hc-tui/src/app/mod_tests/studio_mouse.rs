@@ -4,7 +4,7 @@
 use super::studio::two_studio_app;
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput};
-use crate::panel::PanelMode;
+use crate::panel::{PanelMode, Target};
 
 fn mouse(kind: MouseEventKind, col: u16, row: u16) -> MouseInput {
     MouseInput {
@@ -229,12 +229,39 @@ async fn a_cast_row_right_click_opens_its_role_menu() {
 }
 
 #[tokio::test]
+async fn a_click_on_a_row_under_a_divider_selects_the_person() {
+    let mut app = two_studio_app();
+    app.area = (120, 24);
+    app.panel.mode = PanelMode::Expanded;
+    let drawn = draw_to(&mut app, 120, 24);
+    let buf = drawn.buffer();
+    let (rect, target) = app
+        .panel_hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Person("acme-shop".into(), "actor-alice".into()))
+        .cloned()
+        .expect("alice's row");
+    let above: String = (rect.x..rect.x + rect.width)
+        .map(|x| buf[(x, rect.y - 1)].symbol())
+        .collect();
+    assert!(above.starts_with('├'), "a rule sits above the row: {above}");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        rect.x + 3,
+        rect.y,
+    ));
+    assert_eq!(app.panel.selected, Some(target));
+}
+
+#[tokio::test]
 async fn a_stacked_block_click_expands_it() {
     let mut app = two_studio_app();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
-    // A short body stacks the non-current blocks.
-    draw_to(&mut app, 120, 9);
+    // A body too short for every block stacks the non-current ones;
+    // the first stacked row still fits under the expanded acme-shop.
+    draw_to(&mut app, 120, 10);
     let stacked = app
         .panel_hits
         .rows

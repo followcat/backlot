@@ -14,7 +14,9 @@ use crate::chrome::help::CursorState;
 use crate::new_studio::{ModelPick, Probe, RunnerRow};
 
 mod render;
+#[cfg(test)]
 pub(crate) use render::render;
+pub(crate) use render::render_with_shadow;
 
 #[cfg(test)]
 #[path = "tests.rs"]

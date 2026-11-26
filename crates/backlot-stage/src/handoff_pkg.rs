@@ -142,7 +142,11 @@ fn build_ledger_snapshot(
         }
     }
     out.push_str("```text\n");
-    out.push_str(&hollywood_block(hstate, &Ok(None)));
+    out.push_str(&hollywood_block(
+        hstate,
+        &Ok(None),
+        &std::collections::BTreeMap::new(),
+    ));
     out.push_str("```\n");
     out
 }

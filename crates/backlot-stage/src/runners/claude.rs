@@ -72,17 +72,24 @@ pub fn hollywood_commands() -> &'static [&'static str] {
         "backlot studio new --dry-run",
         "backlot --help",
         "backlot help",
+        // Read-only, compiled into the binary: the overseer's own docs
+        // and every studio's, with no disk search.
+        "backlot guide",
     ]
 }
 
 /// The per-session `--allowedTools` value: `backlot` commands and
 /// reads under the studio's state directory, where the prompts,
 /// messages and requirement files live — plus, per role, the
-/// commands its job needs. An actor gets the six git commands its
-/// loop drives, bare and with arguments, and every declared check's
-/// `run` verbatim; the director reads what it reviews, merges and
-/// runs the same checks — never `git branch`, which would also allow
-/// the deleting `git branch -D`.
+/// commands its job needs. **Every** role gets the shared read-only
+/// set ([`super::READ_ONLY`]) bare and with arguments: the forensics
+/// an actor, the director, the writer or the producer needs to read
+/// a repo, a delivery or its own state, so none of them asks the
+/// person for a `git log` (field notes 1126 §5). On top of that, an
+/// actor gets the write half of its loop (`git add`, `git commit`);
+/// the director merges; both run every declared check's `run`
+/// verbatim. `git branch` is never a bare rule — only its two
+/// listing forms — and `git branch --list x` cannot also delete.
 /// Nothing is written to settings: the rules live only in this
 /// argv. `//` is Claude Code's rule syntax for an absolute path; a
 /// single leading `/` would anchor at the working directory and
@@ -103,23 +110,17 @@ pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) 
         return rules.join(",");
     }
     let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
+    for cmd in super::READ_ONLY {
+        command(&mut rules, cmd);
+    }
     let is_actor = actor_task(role).is_some();
     if is_actor {
-        for cmd in [
-            "git add",
-            "git commit",
-            "git status",
-            "git diff",
-            "git log",
-            "git show",
-        ] {
+        for cmd in ["git add", "git commit"] {
             command(&mut rules, cmd);
         }
     }
     if role == "director" {
-        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
-            command(&mut rules, cmd);
-        }
+        command(&mut rules, "git merge");
     }
     if is_actor || role == "director" {
         for check in checks {

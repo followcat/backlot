@@ -27,6 +27,9 @@ pub enum HRefusal {
         card: u64,
         state: &'static str,
     },
+    /// `card.withdrawn` on a card someone else proposed — Hollywood
+    /// may take back only its own.
+    NotOwnCard(u64),
     /// `role '<r>' cannot do this; <who> can`.
     RoleBound {
         role: String,
@@ -49,6 +52,9 @@ impl fmt::Display for HRefusal {
             }
             HRefusal::CardNotApplied { card, state } => {
                 write!(f, "card 'c{card}' is {state}, not applied")
+            }
+            HRefusal::NotOwnCard(card) => {
+                write!(f, "card 'c{card}' was not proposed by hollywood")
             }
             HRefusal::RoleBound { role, who } => {
                 write!(f, "role '{role}' cannot do this; {who} can")
@@ -129,6 +135,7 @@ fn base_fits(action: &CardAction, base: &CardBase) -> Result<(), HRefusal> {
         (CardAction::Recast { .. }, CardBase::RoleIdentity { .. }) => Ok(()),
         (CardAction::Restart { .. }, CardBase::PersonRestartable) => Ok(()),
         (CardAction::Cast { .. }, CardBase::CastSeq { .. }) => Ok(()),
+        (CardAction::ReopenStudio { .. }, CardBase::StudioFinished) => Ok(()),
         (CardAction::Setup { .. }, CardBase::HollywoodIdentity { .. }) => Ok(()),
         (
             CardAction::Outward {
@@ -166,6 +173,7 @@ fn base_kind(base: &CardBase) -> &'static str {
         CardBase::RoleIdentity { .. } => "role_identity",
         CardBase::PersonRestartable => "person_restartable",
         CardBase::CastSeq { .. } => "cast_seq",
+        CardBase::StudioFinished => "studio_finished",
         CardBase::HollywoodIdentity { .. } => "hollywood_identity",
         CardBase::GitHead { .. } => "git_head",
     }
@@ -183,6 +191,7 @@ fn action_kind(action: &CardAction) -> &'static str {
         CardAction::Recast { .. } => "recast",
         CardAction::Restart { .. } => "restart",
         CardAction::Cast { .. } => "cast",
+        CardAction::ReopenStudio { .. } => "reopen_studio",
         CardAction::Setup { .. } => "setup",
         CardAction::Outward { .. } => "outward",
     }
@@ -218,6 +227,43 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
         HollywoodKind::CardApplied { card } | HollywoodKind::CardCancelled { card, .. } => {
             if role != "user" {
                 return Err(role_bound(role, "the user"));
+            }
+            open_card(state, *card)
+        }
+        // Hollywood may take back only a card it proposed itself, and
+        // only while it is still open — an applied card is the stage's
+        // to execute, and the user's to cancel.
+        HollywoodKind::CardWithdrawn { card, .. } => {
+            if role != HOLLYWOOD {
+                return Err(role_bound(role, "hollywood"));
+            }
+            let Some(c) = state.cards.get(card) else {
+                return Err(HRefusal::NoCard(*card));
+            };
+            if c.state != CardState::Open {
+                return Err(HRefusal::CardClosed {
+                    card: *card,
+                    state: c.state.as_str(),
+                });
+            }
+            if c.by != HOLLYWOOD {
+                return Err(HRefusal::NotOwnCard(*card));
+            }
+            Ok(())
+        }
+        // A supersede is the ledger's own word for two proposals on one
+        // fact — appended with the newer proposal, by whoever proposed
+        // it, so the older can never be applied beside it.
+        HollywoodKind::CardSuperseded { card, by_card, .. } => {
+            if role != HOLLYWOOD && role != "stage" {
+                return Err(role_bound(role, "hollywood or the stage"));
+            }
+            if !state.cards.contains_key(card) || !state.cards.contains_key(by_card) {
+                return Err(HRefusal::NoCard(if !state.cards.contains_key(card) {
+                    *card
+                } else {
+                    *by_card
+                }));
             }
             open_card(state, *card)
         }

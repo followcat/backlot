@@ -140,13 +140,13 @@ impl App {
         open: &mut bool,
     ) -> bool {
         const LIMIT: usize = 16;
-        let mut dirty = self.pane_event(first, Instant::now());
+        let mut dirty = self.pane_event(first, self.now());
         for _ in 1..LIMIT {
-            if !events.is_empty() || wake.is_some_and(|due| Instant::now() >= due) {
+            if !events.is_empty() || wake.is_some_and(|due| self.now() >= due) {
                 break;
             }
             match self.pane_rx.try_recv() {
-                Ok(ev) => dirty |= self.pane_event(ev, Instant::now()),
+                Ok(ev) => dirty |= self.pane_event(ev, self.now()),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     *open = false;
@@ -163,7 +163,7 @@ impl App {
     /// here rather than re-arming the select. `arm_dirty` carries the
     /// select arm's own report — one `mark_dirty` covers both.
     pub(super) fn housekeeping(&mut self, kind: WakeKind, wake: Option<Instant>, arm_dirty: bool) {
-        let now = Instant::now();
+        let now = self.now();
         let mut dirty = arm_dirty;
         let deadline_due = matches!(kind, WakeKind::Deadline) || wake.is_some_and(|due| now >= due);
         // Anti-starvation: a wake that queued after the pane retry's

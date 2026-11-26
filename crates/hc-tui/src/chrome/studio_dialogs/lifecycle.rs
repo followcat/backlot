@@ -4,13 +4,15 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Clear, Widget};
 
-use super::super::dialogs::{panel, row};
+use super::super::dialogs::row;
 use super::super::palette::Palette;
+use super::super::popup_frame::overlay_bg;
 use super::super::render::put_text;
 use super::super::text::truncate_end;
-use super::{DialogHits, cancel_button, centered, dialog_width, dim_line, send_button, title_line};
+use super::{
+    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+};
 use crate::new_studio::Probe;
 use crate::studio_dialog::{CastEditDialog, CastEditStep, RecastDialog, RecastStep, RestartDialog};
 
@@ -20,11 +22,12 @@ pub(super) fn render_restart(
     band: Rect,
     d: &RestartDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let q = centered(band, width, 9)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, width, 9, palette, shadow)?;
+    let bg = overlay_bg(palette);
+    let raised = palette.elevation().raised_on_overlay;
     title_line(b, i, &d.title, palette);
     dim_line(
         b,
@@ -38,12 +41,12 @@ pub(super) fn render_restart(
         let y = i.y + 2 + n as u16;
         let selected = n == d.selected;
         let style = match (&choice.dim, selected) {
-            (Some(_), _) => Style::default().fg(palette.overlay0).bg(palette.panel_bg),
+            (Some(_), _) => Style::default().fg(palette.overlay0).bg(bg),
             (None, true) => Style::default()
                 .fg(palette.text)
-                .bg(palette.surface0)
+                .bg(raised)
                 .add_modifier(Modifier::BOLD),
-            (None, false) => Style::default().fg(palette.subtext0).bg(palette.panel_bg),
+            (None, false) => Style::default().fg(palette.subtext0).bg(bg),
         };
         if selected {
             b.set_style(Rect::new(i.x, y, i.width, 1), style);
@@ -84,11 +87,10 @@ pub(super) fn render_recast(
     band: Rect,
     d: &RecastDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let q = centered(band, width, 16)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, width, 16, palette, shadow)?;
     title_line(b, i, &d.title, palette);
     let step_label = match d.step {
         RecastStep::Runner => "1/3 runner",
@@ -179,7 +181,7 @@ pub(super) fn render_recast(
         &truncate_end(&format!(" {}", d.summary()), i.width as usize),
         Style::default()
             .fg(palette.accent)
-            .bg(palette.panel_bg)
+            .bg(overlay_bg(palette))
             .add_modifier(Modifier::BOLD),
     );
     if let Some(error) = &d.error {
@@ -218,10 +220,12 @@ fn list_line(b: &mut Buffer, i: Rect, y: u16, selected: bool, text: &str, palett
     let style = if selected {
         Style::default()
             .fg(palette.text)
-            .bg(palette.surface0)
+            .bg(palette.elevation().raised_on_overlay)
             .add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(palette.subtext0).bg(palette.panel_bg)
+        Style::default()
+            .fg(palette.subtext0)
+            .bg(overlay_bg(palette))
     };
     if selected {
         b.set_style(Rect::new(i.x, y, i.width, 1), style);
@@ -245,11 +249,11 @@ pub(super) fn render_cast_edit(
     band: Rect,
     d: &CastEditDialog,
     palette: &Palette,
+    shadow: bool,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let q = centered(band, width, 16)?;
-    Clear.render(q, b);
-    let i = panel(b, q, palette.accent, palette.panel_bg)?;
+    let (q, i) = centered_panel(b, band, width, 16, palette, shadow)?;
+    let bg = overlay_bg(palette);
     title_line(b, i, &d.title, palette);
     let step = match d.step {
         CastEditStep::Loading => "reading the cast…",
@@ -288,7 +292,7 @@ pub(super) fn render_cast_edit(
             top + n as u16,
             i.width,
             &format!(" {line}"),
-            Style::default().fg(palette.text).bg(palette.panel_bg),
+            Style::default().fg(palette.text).bg(bg),
         );
     }
     let rs = row(i, &[19, 13], 2, i.height.saturating_sub(2));

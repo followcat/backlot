@@ -5,7 +5,6 @@ use super::*;
 use crate::app::float::FloatKey;
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
 use crate::popup_size::PopupSize;
-use ratatui::style::Modifier;
 use ratatui::widgets::Widget;
 
 fn command_labeled(label: &str, persistent: bool) -> CustomCommandKeybind {
@@ -119,7 +118,7 @@ async fn float_title_shows_binding_tab_program_and_right_hints() {
 async fn float_border_is_accent_when_focused_and_dim_when_locked() {
     let mut app = app_with_shown_float();
     let accent = app.shell.palette.accent;
-    let dim = app.shell.palette.surface_dim;
+    let dim = app.shell.palette.elevation().border_muted;
     let backend = draw_float(&mut app, 100, 30);
     let (x0, y0) = find_cell(&backend, "╭").expect("rounded corner");
     assert_eq!(backend.buffer()[(x0, y0)].fg, accent, "focused border");
@@ -137,80 +136,94 @@ async fn float_border_is_accent_when_focused_and_dim_when_locked() {
 #[tokio::test]
 async fn drop_shadow_sits_one_cell_right_and_below() {
     let mut app = app_with_shown_float();
-    let shadow = app.shell.palette.surface_dim;
+    let shadow = app.shell.palette.elevation().shadow.expect("rgb shadow");
     let backend = draw_float(&mut app, 100, 30);
     let buf = backend.buffer();
     let (x0, y0) = find_cell(&backend, "╭").expect("top-left corner");
     let (x1, _) = find_cell(&backend, "╮").expect("top-right corner");
     let (_, y1) = find_cell(&backend, "╰").expect("bottom-left corner");
+    // 1-cell outer gutter encloses the border box (`x0 - 1..=x1 + 1`, `y0 - 1..=y1 + 1`).
+    let ox0 = x0 - 1;
+    let oy0 = y0 - 1;
+    let ox1 = x1 + 1;
+    let oy1 = y1 + 1;
 
-    // Right column: one cell past the right edge, starting one row down.
-    assert_eq!(buf[(x1 + 1, y0 + 2)].bg, shadow, "right shadow missing");
-    // Bottom row: one row below, running the whole bottom edge.
-    assert_eq!(buf[(x0 + 2, y1 + 1)].bg, shadow, "bottom shadow missing");
+    // Right column: one cell past the outer edge, starting one row down from outer.top.
+    assert_eq!(buf[(ox1 + 1, oy0 + 1)].bg, shadow, "right shadow missing");
+    // Bottom row: one row below outer.bottom, offset by 1 column from outer.left.
+    assert_eq!(buf[(ox0 + 1, oy1 + 1)].bg, shadow, "bottom shadow missing");
     // The diagonal corner under the bottom-right is painted too.
-    assert_eq!(buf[(x1 + 1, y1 + 1)].bg, shadow, "shadow corner missing");
-    // Stagger: the cell beside the top-right corner is not shadowed.
-    assert_ne!(buf[(x1 + 1, y0)].bg, shadow, "shadow ran past the top");
+    assert_eq!(buf[(ox1 + 1, oy1 + 1)].bg, shadow, "shadow corner missing");
+    // Stagger: the cell beside the outer top-right corner is not shadowed.
+    assert_ne!(buf[(ox1 + 1, oy0)].bg, shadow, "shadow ran past the top");
 }
 
 #[tokio::test]
 async fn every_bottom_corner_rests_on_the_shadow() {
     let mut app = app_with_shown_float();
-    let shadow = app.shell.palette.surface_dim;
+    let shadow = app.shell.palette.elevation().shadow.expect("rgb shadow");
     let backend = draw_float(&mut app, 100, 30);
     let buf = backend.buffer();
     let (x0, y0) = find_cell(&backend, "╭").expect("top-left corner");
     let (x1, _) = find_cell(&backend, "╮").expect("top-right corner");
     let (_, y1) = find_cell(&backend, "╰").expect("bottom-left corner");
+    let ox0 = x0 - 1;
+    let oy0 = y0 - 1;
+    let ox1 = x1 + 1;
+    let oy1 = y1 + 1;
 
-    // The seam the screenshot showed: cells under both bottom corners
-    // carry the shadow, so `╰` and `╯` sit on it rather than float
-    // above a one-cell notch.
-    assert_eq!(buf[(x0, y1 + 1)].bg, shadow, "open seam under ╰");
-    assert_eq!(buf[(x1, y1 + 1)].bg, shadow, "open seam under ╯");
-    // Right of ╯ and the diagonal both stay shadowed.
-    assert_eq!(buf[(x1 + 1, y1)].bg, shadow, "right of ╯");
-    assert_eq!(buf[(x1 + 1, y1 + 1)].bg, shadow, "diagonal under ╯");
-    // Top corners keep the offset look: nothing shadows beside ╭/╮
-    // and nothing sits under ╭.
-    assert_ne!(buf[(x1 + 1, y0)].bg, shadow, "right of ╮");
-    assert_ne!(buf[(x0, y0 + 1)].bg, shadow, "under ╭");
-    assert_ne!(buf[(x0 - 1, y0 + 1)].bg, shadow, "left of ╭");
-    assert_ne!(buf[(x0 - 1, y1)].bg, shadow, "left of ╰");
+    // The (1, 1) offset shadow starts under `ox0 + 1` (`x0`) and covers past `ox1 + 1`.
+    assert_ne!(
+        buf[(ox0, oy1 + 1)].bg,
+        shadow,
+        "offset left corner stays unshadowed"
+    );
+    assert_eq!(
+        buf[(x0, oy1 + 1)].bg,
+        shadow,
+        "bottom shadow under border left"
+    );
+    assert_eq!(
+        buf[(ox1, oy1 + 1)].bg,
+        shadow,
+        "bottom shadow under gutter right"
+    );
+    assert_eq!(
+        buf[(ox1 + 1, oy1)].bg,
+        shadow,
+        "right of outer bottom-right"
+    );
+    assert_eq!(
+        buf[(ox1 + 1, oy1 + 1)].bg,
+        shadow,
+        "diagonal under outer bottom-right"
+    );
+    assert_ne!(buf[(ox1 + 1, oy0)].bg, shadow, "right of outer top-right");
+    assert_ne!(buf[(ox0 - 1, oy0)].bg, shadow, "left of outer top-left");
+    assert_ne!(buf[(ox0 - 1, oy1)].bg, shadow, "left of outer bottom-left");
 }
 
 #[tokio::test]
 async fn backdrop_dims_the_pane_surface_around_the_float_only() {
     let mut app = app_with_shown_float();
+    let elev = app.shell.palette.elevation();
+    let dim_bg = elev.dim_bg.expect("rgb dim bg");
     let backend = draw_float(&mut app, 100, 30);
     let buf = backend.buffer();
     let (x0, y0) = find_cell(&backend, "╭").expect("rounded corner");
 
-    // A pane-surface cell left of the float's frame is dimmed.
-    let covered = &buf[(x0 - 1, y0)];
-    assert!(
-        covered.modifier.contains(Modifier::DIM),
-        "backdrop missed DIM at the float's edge"
+    // A pane-surface cell left of the float's outer gutter is attenuated.
+    let covered = &buf[(x0 - 2, y0)];
+    assert_eq!(
+        covered.bg, dim_bg,
+        "backdrop missed elevation dim at the float's edge"
     );
-    // The float's own cells are repainted undimmed.
-    let inside = &buf[(x0, y0)];
-    assert!(
-        !inside.modifier.contains(Modifier::DIM),
-        "the float frame itself was dimmed"
-    );
-    // The sidebar is chrome, not backdrop: untouched.
-    let sidebar = &buf[(0, y0)];
-    assert!(
-        !sidebar.modifier.contains(Modifier::DIM),
-        "the sidebar was dimmed"
-    );
-    // The tab bar row above the pane surface is untouched too.
-    let chrome = &buf[(x0, 0)];
-    assert!(
-        !chrome.modifier.contains(Modifier::DIM),
-        "chrome above the float was dimmed"
-    );
+    // The float's own outer gutter & border are painted with elevated overlay bg.
+    assert_eq!(buf[(x0 - 1, y0)].bg, elev.overlay, "outer gutter fill");
+    assert_eq!(buf[(x0, y0)].bg, elev.overlay, "float border fill");
+    // The sidebar and top tab chrome outside pane_surface stay untouched (not dim_bg / overlay).
+    assert_ne!(buf[(0, y0)].bg, dim_bg, "the sidebar was dimmed");
+    assert_ne!(buf[(x0, 0)].bg, dim_bg, "chrome above the float was dimmed");
 }
 
 #[tokio::test]
@@ -334,16 +347,19 @@ async fn ephemeral_popups_keep_the_plain_frame() {
     app.run_custom_command(&command_labeled("alt+h", false));
     assert!(app.popup_pending.is_some());
     app.on_popup_spawned("t9".into(), 7);
+    let elev = app.shell.palette.elevation();
     let backend = draw_float(&mut app, 100, 30);
-    assert!(
-        find_cell(&backend, "╭").is_none(),
-        "an ephemeral popup got rounded corners"
-    );
-    let (x0, y0) = find_cell(&backend, "┌").expect("square corner");
+    let (x0, y0) = find_cell(&backend, "╭").expect("unified rounded corner");
     let buf = backend.buffer();
-    assert!(
-        !buf[(x0 - 1, y0)].modifier.contains(Modifier::DIM),
-        "an ephemeral popup dimmed its backdrop"
+    assert_eq!(
+        buf[(x0 - 2, y0)].bg,
+        elev.dim_bg.unwrap(),
+        "ephemeral popup shares unified dimmed backdrop"
+    );
+    assert_eq!(
+        buf[(x0 - 1, y0)].bg,
+        elev.overlay,
+        "ephemeral popup gets 1-cell outer gutter"
     );
     assert!(row_text(&backend, y0).contains("popup"), "ephemeral title");
 }
