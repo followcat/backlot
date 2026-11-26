@@ -108,7 +108,7 @@ impl Stage {
         *self.hcfg.borrow_mut() = cfg.clone();
         if !crate::handoff::handoff_blocks_delivery(&hdir) {
             match self
-                .hreconcile(&hdir, cfg.as_ref(), terminals, real_slot_free)
+                .hreconcile(&hdir, cfg.as_ref(), terminals, finished, real_slot_free)
                 .await
             {
                 Err(e @ Fail::Core(_)) => return Err(e),
@@ -151,6 +151,7 @@ impl Stage {
         hdir: &Path,
         cfg: Option<&HollywoodCfg>,
         terminals: &[LiveTerminal],
+        finished: &[LiveTerminal],
         real_slot_free: &mut bool,
     ) -> Result<(), Fail> {
         let now_ms = SystemTime::now()
@@ -159,6 +160,7 @@ impl Stage {
             .unwrap_or(0);
         let role = self.hstate.borrow().role.clone();
         let term = crate::handoff_term::active_hollywood_terminal(&role, terminals);
+        let term_display = term.map(|t| t.name.as_str()).unwrap_or(HOLLYWOOD_TERMINAL);
         for mv in hstage::hplan(cfg, &role, term.is_some(), now_ms, self.started_ms) {
             if matches!(
                 mv,
@@ -175,13 +177,21 @@ impl Stage {
             }
             match mv {
                 HMove::Start | HMove::Revive => {
+                    let term_name = free_hollywood_name(hdir, terminals, finished);
                     let mut actor = hstage::identity(cfg.expect("a start needs the config"));
                     let recast_from = role
                         .actor
                         .as_ref()
                         .filter(|old| !backlot_model::recast::same_identity(old, &actor));
                     match self
-                        .hrun(hdir, &mut actor, None, recast_from, real_slot_free)
+                        .hrun(
+                            hdir,
+                            &term_name,
+                            &mut actor,
+                            None,
+                            recast_from,
+                            real_slot_free,
+                        )
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -197,21 +207,27 @@ impl Stage {
                                     .as_ref()
                                     .and_then(|r| r.fresh.then_some(RESTARTED)),
                             )?;
-                            crate::stagelog::stage_log!(
-                                "started hollywood as {HOLLYWOOD_TERMINAL}"
-                            );
+                            crate::stagelog::stage_log!("started hollywood as {term_name}");
                         }
                         HRun::Defer => {}
                         HRun::Refused(d) => self.hlog(&format!("launch refused: {d}")),
                     }
                 }
                 HMove::ReviveResume => {
+                    let term_name = free_hollywood_name(hdir, terminals, finished);
                     let mut actor = role.actor.clone().unwrap_or_else(|| {
                         hstage::identity(cfg.expect("a resume needs the config"))
                     });
                     let resume = role.session_id.clone();
                     match self
-                        .hrun(hdir, &mut actor, resume.as_deref(), None, real_slot_free)
+                        .hrun(
+                            hdir,
+                            &term_name,
+                            &mut actor,
+                            resume.as_deref(),
+                            None,
+                            real_slot_free,
+                        )
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -223,7 +239,7 @@ impl Stage {
                                 session.or(resume),
                                 Some(RESTARTED),
                             )?;
-                            crate::stagelog::stage_log!("restarted {HOLLYWOOD_TERMINAL}");
+                            crate::stagelog::stage_log!("restarted {term_name}");
                         }
                         HRun::Defer => {}
                         HRun::Refused(d) => self.hlog(&format!("launch refused: {d}")),
@@ -241,7 +257,7 @@ impl Stage {
                     if let Some(t) = term {
                         self.remove(&t.address).await?;
                     }
-                    crate::stagelog::stage_log!("restarting {HOLLYWOOD_TERMINAL}");
+                    crate::stagelog::stage_log!("restarting {term_display}");
                 }
                 HMove::Adopt => {
                     let t = term.expect("adopt needs the live terminal");
@@ -253,10 +269,10 @@ impl Stage {
                         RoleMotion::Started,
                         Some(t.address.clone()),
                         Some(actor.clone()),
-                        runners::session_id(&actor, HOLLYWOOD_TERMINAL),
+                        runners::session_id(&actor, &t.name),
                         Some("adopted after restart"),
                     )?;
-                    crate::stagelog::stage_log!("adopted {HOLLYWOOD_TERMINAL}");
+                    crate::stagelog::stage_log!("adopted {}", t.name);
                 }
                 HMove::Rejoin => {
                     let t = term.expect("rejoin needs the live terminal");
@@ -270,7 +286,7 @@ impl Stage {
                         role.session_id.clone(),
                         Some("recovered"),
                     )?;
-                    crate::stagelog::stage_log!("{HOLLYWOOD_TERMINAL} rejoined");
+                    crate::stagelog::stage_log!("{} rejoined", t.name);
                 }
                 HMove::Lost => {
                     hstage::record_role(
@@ -281,9 +297,10 @@ impl Stage {
                         None,
                         Some("terminal gone"),
                     )?;
-                    crate::stagelog::stage_log!("lost {HOLLYWOOD_TERMINAL}");
+                    crate::stagelog::stage_log!("lost {term_display}");
                 }
                 HMove::ResumeRun => {
+                    let term_name = free_hollywood_name(hdir, terminals, finished);
                     let mut actor = role.actor.clone().unwrap_or_else(|| {
                         hstage::identity(cfg.expect("a resume needs the config"))
                     });
@@ -292,7 +309,14 @@ impl Stage {
                     // previous runner's id.
                     let resume = hstage::resume_session(&role, &actor).map(str::to_string);
                     match self
-                        .hrun(hdir, &mut actor, resume.as_deref(), None, real_slot_free)
+                        .hrun(
+                            hdir,
+                            &term_name,
+                            &mut actor,
+                            resume.as_deref(),
+                            None,
+                            real_slot_free,
+                        )
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -304,7 +328,7 @@ impl Stage {
                                 session.or(resume),
                                 Some("recovered"),
                             )?;
-                            crate::stagelog::stage_log!("resumed {HOLLYWOOD_TERMINAL}");
+                            crate::stagelog::stage_log!("resumed {term_name}");
                         }
                         HRun::Defer => {}
                         HRun::Refused(d) => {
@@ -329,16 +353,14 @@ impl Stage {
                         None,
                         Some("cannot resume"),
                     )?;
-                    crate::stagelog::stage_log!(
-                        "{HOLLYWOOD_TERMINAL} cannot resume — staying down"
-                    );
+                    crate::stagelog::stage_log!("{term_display} cannot resume — staying down");
                 }
                 HMove::Close(reason) => {
                     hstage::record_role(hdir, RoleMotion::Closed, None, None, None, Some(reason))?;
                     if let Some(t) = term {
                         self.remove(&t.address).await?;
                     }
-                    crate::stagelog::stage_log!("closed {HOLLYWOOD_TERMINAL}: {reason}");
+                    crate::stagelog::stage_log!("closed {term_display}: {reason}");
                 }
                 HMove::Drop => {
                     if let Some(t) = term {
@@ -352,12 +374,14 @@ impl Stage {
 
     /// `terminal.run` Hollywood: plan the launch, let
     /// `decide_start` spend the tick's real slot, prep the folder
-    /// and hooks, then run — `bl-hollywood` in `hollywood/` with no
-    /// `backlot.studio` label and no `BACKLOT_STUDIO`. A refused
-    /// run hands the tick's real slot back like a studio's does.
+    /// and hooks, then run — `term_name` (normally `bl-hollywood`, or a free
+    /// `-next`/`-g<k>` name while a `hollywood-previous` tombstone stays in
+    /// `finished`) in `hollywood/` with no `backlot.studio` label and no
+    /// `BACKLOT_STUDIO`.
     async fn hrun(
         &self,
         hdir: &Path,
+        term_name: &str,
         actor: &mut ActorIdentity,
         resume: Option<&str>,
         recast_from: Option<&ActorIdentity>,
@@ -373,7 +397,7 @@ impl Stage {
         let planned = runners::plan(
             actor,
             &runners::LaunchCtx {
-                terminal: HOLLYWOOD_TERMINAL,
+                terminal: term_name,
                 cwd: &cwd,
                 prompt: prompt.as_deref(),
                 resume,
@@ -427,22 +451,24 @@ impl Stage {
                 let labels = BTreeMap::from([
                     ("backlot.role".to_string(), HOLLYWOOD.to_string()),
                     ("herdr.space".to_string(), "backlot".to_string()),
-                    ("herdr.tab".to_string(), HOLLYWOOD_TERMINAL.to_string()),
+                    ("herdr.tab".to_string(), term_name.to_string()),
                     ("herdr.seen".to_string(), "0".to_string()),
                 ]);
                 let run = self
                     .client
-                    .terminal_run(hrun_params(
+                    .terminal_run(hrun_params_named(
                         launch.argv.clone(),
                         cwd,
-                        hrole_env(
+                        hrole_env_named(
                             launch.env.clone(),
                             runner_env,
                             &self.state_dir,
                             &self.exe_dir,
                             &self.path_env,
+                            term_name,
                         ),
                         labels,
+                        term_name,
                     ))
                     .await;
                 match run {
@@ -461,8 +487,28 @@ impl Stage {
     }
 }
 
+/// Pick `bl-hollywood` when no live or finished terminal holds that name;
+/// otherwise choose a free `-next` or `-g<k>` name so restart/resume inside the
+/// `hollywood-previous` 10-minute tombstone window never collides.
+fn free_hollywood_name(
+    hdir: &Path,
+    terminals: &[LiveTerminal],
+    finished: &[LiveTerminal],
+) -> String {
+    let used: BTreeSet<String> = terminals
+        .iter()
+        .chain(finished.iter())
+        .map(|t| t.name.clone())
+        .collect();
+    let generation = crate::handoff::load_handoff(hdir)
+        .ok()
+        .flatten()
+        .map_or(0, |r| r.generation);
+    crate::handoff_term::next_candidate_name(&used, generation)
+}
+
 /// The smallest grid Hollywood's terminal should ever start at: its
-/// answers are read by a person who peeks or focuses `bl-hollywood`, and
+/// answers are read by a person who peeks or focuses Hollywood, and
 /// a narrow grid (21 columns was seen) wraps them into
 /// unreadable strips (H3).
 pub const MIN_COLS: u16 = 100;
@@ -484,17 +530,27 @@ pub fn hsize() -> hc_proto::terminal::InitialSize {
     }
 }
 
-/// The exact `terminal.run` Hollywood's launch sends — the argv, cwd,
-/// env, labels and the initial grid, in one place a test can read.
+/// The exact `terminal.run` Hollywood's launch sends with the default name.
+#[cfg(test)]
 pub(crate) fn hrun_params(
     argv: Vec<String>,
     cwd: String,
     env: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
 ) -> RunParams {
+    hrun_params_named(argv, cwd, env, labels, HOLLYWOOD_TERMINAL)
+}
+
+pub(crate) fn hrun_params_named(
+    argv: Vec<String>,
+    cwd: String,
+    env: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    name: &str,
+) -> RunParams {
     RunParams {
         argv,
-        name: Some(HOLLYWOOD_TERMINAL.to_string()),
+        name: Some(name.to_string()),
         cwd: Some(cwd),
         env,
         labels,
@@ -505,10 +561,8 @@ pub(crate) fn hrun_params(
     }
 }
 
-/// Hollywood's `terminal.run` env: the role's own `BACKLOT_*`
-/// markers (no `BACKLOT_STUDIO`), the runner's map, `[runner_env]`
-/// and a PATH that leads with this exe's directory — `role_env`'s
-/// shape minus the studio keys.
+/// Hollywood's `terminal.run` env with the default `bl-hollywood` terminal marker.
+#[cfg(test)]
 pub(crate) fn hrole_env(
     adapter_env: BTreeMap<String, String>,
     runner_env: BTreeMap<String, String>,
@@ -516,11 +570,29 @@ pub(crate) fn hrole_env(
     exe_dir: &str,
     path_env: &str,
 ) -> BTreeMap<String, String> {
+    hrole_env_named(
+        adapter_env,
+        runner_env,
+        state_dir,
+        exe_dir,
+        path_env,
+        HOLLYWOOD_TERMINAL,
+    )
+}
+
+pub(crate) fn hrole_env_named(
+    adapter_env: BTreeMap<String, String>,
+    runner_env: BTreeMap<String, String>,
+    state_dir: &str,
+    exe_dir: &str,
+    path_env: &str,
+    terminal_name: &str,
+) -> BTreeMap<String, String> {
     let mut env = adapter_env;
     let configured_path = runner_env.get("PATH").cloned();
     env.extend(runner_env);
     env.insert("BACKLOT_ROLE".into(), HOLLYWOOD.into());
-    env.insert("BACKLOT_TERMINAL".into(), HOLLYWOOD_TERMINAL.into());
+    env.insert("BACKLOT_TERMINAL".into(), terminal_name.into());
     env.insert("BACKLOT_STATE_DIR".into(), state_dir.into());
     let role_dir = crate::guard::hollywood_role_dir(state_dir);
     crate::guard::apply_env(

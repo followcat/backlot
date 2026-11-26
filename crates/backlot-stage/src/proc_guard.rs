@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use backlot_model::hollywood::HOLLYWOOD_TERMINAL;
+use backlot_model::hollywood::is_hollywood_terminal_name;
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
@@ -24,7 +24,11 @@ impl RoleAncestor {
         if let Some(r) = self.role.as_deref().filter(|s| !s.is_empty()) {
             return Some(r);
         }
-        if self.terminal.as_deref() == Some(HOLLYWOOD_TERMINAL) {
+        if self
+            .terminal
+            .as_deref()
+            .is_some_and(is_hollywood_terminal_name)
+        {
             return Some(backlot_model::hollywood::HOLLYWOOD);
         }
         if let (Some(term), Some(studio)) = (self.terminal.as_deref(), self.studio.as_deref()) {
@@ -168,7 +172,7 @@ pub(crate) fn find_role_ancestor(start_ppid: u32, read: AncestorRead<'_>) -> Opt
         let is_term = role.is_some()
             || terminal
                 .as_deref()
-                .is_some_and(|t| t == HOLLYWOOD_TERMINAL || t.starts_with("bl-"));
+                .is_some_and(|t| is_hollywood_terminal_name(t) || t.starts_with("bl-"));
         if is_term {
             return Some(RoleAncestor {
                 pid,

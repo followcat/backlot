@@ -22,7 +22,6 @@ use crate::handoff_pkg::{
 use crate::handoff_term::{
     active_hollywood_terminal, apply_handoff_isolation, labels_for_candidate, next_candidate_name,
 };
-use crate::hlife::hrole_env;
 use crate::hstage;
 use crate::live::LiveView;
 use crate::reconcile::LiveTerminal;
@@ -315,14 +314,15 @@ impl Stage {
                     self.rollback_handoff(hdir, rec, &msg, now_ms).await?;
                     return Ok(());
                 }
-                let mut env = hrole_env(
+                let env = crate::hlife::hrole_env_named(
                     launch.env.clone(),
                     runner_env,
                     &self.state_dir,
                     &self.exe_dir,
                     &self.path_env,
+                    &cand_name,
                 );
-                env.insert("BACKLOT_TERMINAL".into(), cand_name.clone());
+                let mut env = env;
                 env.insert("BACKLOT_HANDOFF_ID".into(), rec.id.clone());
                 let labels = labels_for_candidate(&rec.id, &cand_name);
                 let params = hstage_run_params(&cand_name, launch.argv.clone(), cwd, env, labels);

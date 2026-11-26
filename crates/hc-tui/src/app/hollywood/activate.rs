@@ -234,7 +234,9 @@ impl App {
                 terminals.values().find(|t| {
                     t.state == "live"
                         && !t.address.contains('/')
-                        && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
+                        && t.name
+                            .as_deref()
+                            .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
                 })
             })
             .map(|t| t.address.clone())

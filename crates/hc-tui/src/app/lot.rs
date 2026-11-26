@@ -5,8 +5,6 @@
 //! document and the focused terminal's labels, so it can never
 //! disagree with the panel the way the old floating strip did.
 
-use backlot_model::hollywood::HOLLYWOOD_TERMINAL;
-
 use crate::panel::data::MachineSummary;
 
 use crate::chrome::lot::{HeaderKind, Lot, LotCounts, StudioHeader};
@@ -176,7 +174,10 @@ impl super::App {
         if matches!(
             labels.get("backlot.role").map(String::as_str),
             Some("hollywood" | "hollywood-handoff" | "hollywood-previous")
-        ) || terminal.name.as_deref() == Some(HOLLYWOOD_TERMINAL)
+        ) || terminal
+            .name
+            .as_deref()
+            .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
         {
             return Some(StudioHeader {
                 key: None,

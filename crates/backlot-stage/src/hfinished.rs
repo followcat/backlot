@@ -2,7 +2,7 @@
 //! overseer terminal records so restarts or crashes never accumulate
 //! `finished` panes under the `bl-hollywood` tab.
 
-use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL};
+use backlot_model::hollywood::{HOLLYWOOD, is_hollywood_terminal_name};
 use hc_proto::client::CallError;
 
 use crate::act::fatal;
@@ -28,7 +28,7 @@ pub(crate) fn finished_hollywood_at(finished: &[LiveTerminal], now_ms: u64) -> V
             }
             role_label == Some(HOLLYWOOD)
                 || role_label == Some("hollywood-handoff")
-                || term.name == HOLLYWOOD_TERMINAL
+                || is_hollywood_terminal_name(&term.name)
         })
         .map(|term| term.address.clone())
         .collect()
@@ -122,7 +122,8 @@ mod tests {
             fin_term("", "t11", &[("backlot.role", "hollywood")]),
             fin_term("bl-hollywood", "t12", &[("backlot.shell", "1")]),
             fin_term("bl-acme-producer", "t13", &[("backlot.role", "producer")]),
+            fin_term("bl-hollywood-next", "t14", &[]),
         ];
-        assert_eq!(finished_hollywood(&finished), vec!["t10", "t11"]);
+        assert_eq!(finished_hollywood(&finished), vec!["t10", "t11", "t14"]);
     }
 }
