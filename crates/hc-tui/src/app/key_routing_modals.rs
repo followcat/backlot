@@ -29,8 +29,8 @@ impl App {
         }
         // The Hollywood setup dialog owns every key while it is
         // open — even while the Call Sheet stays expanded under it.
-        if self.hw_setup.is_some() {
-            self.hw_setup_key(key);
+        if self.hw_switch.is_some() {
+            self.hw_switch_key(key);
             return true;
         }
         // The Task & Delivery Sheet owns every key while it is open

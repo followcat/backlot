@@ -266,7 +266,7 @@ impl App {
         let text_input_modal = self.dialog.is_some()
             || self.studio_dialog.is_some()
             || self.new_studio.is_some()
-            || self.hw_setup.is_some()
+            || self.hw_switch.is_some()
             || self.settings.is_some()
             || self.update_modal.is_some();
         if !text_input_modal

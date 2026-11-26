@@ -243,13 +243,36 @@ pub(crate) fn restart_hollywood(
 
 /// `hollywood setup`: validates, writes `[hollywood]` to `config.toml`, and returns
 /// `(HollywoodSetupResult, written_path)`.
+#[allow(dead_code)]
 pub(crate) fn hollywood_setup(
     env: &Env,
     cfg: &HollywoodCfg,
 ) -> Result<(HollywoodSetupResult, PathBuf), Fail> {
+    hollywood_setup_checked(None, env, cfg, false)
+}
+
+/// `hollywood setup` with optional live-stage guard (`force_offline` bypasses
+/// the live-Hollywood check so offline repair stays possible).
+pub(crate) fn hollywood_setup_checked(
+    base: Option<&Path>,
+    env: &Env,
+    cfg: &HollywoodCfg,
+    force_offline: bool,
+) -> Result<(HollywoodSetupResult, PathBuf), Fail> {
     if env.get("BACKLOT_ROLE").is_some() {
         return Err(Fail::refused(
             "hollywood setup is the user's — BACKLOT_ROLE is set",
+        ));
+    }
+    if !force_offline
+        && let Some(b) = base
+        && crate::live::LiveView::read(b, crate::live::now_ms()).running
+        && store::load_hstate(&store::hollywood_dir(b))
+            .ok()
+            .is_some_and(|h| h.role.live)
+    {
+        return Err(Fail::refused(
+            "hollywood is live on a running stage — use 'backlot hollywood switch' for a make-before-break handoff (or pass '--force-offline' to edit config.toml anyway)",
         ));
     }
     let was_configured = config::hollywood(&env.vars).ok().flatten().is_some();

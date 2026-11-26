@@ -89,7 +89,7 @@ pub(super) fn dock_live_with_reader(app: &App, area: Rect) -> bool {
         && !app.hollywood.expanded()
         && app.sheet.is_none()
         && app.new_studio.is_none()
-        && app.hw_setup.is_none()
+        && app.hw_switch.is_none()
         && app.studio_dialog.is_none()
         && app.peek.is_none()
         && !app.help

@@ -76,24 +76,50 @@ impl Stage {
             }
         };
         *self.hcfg.borrow_mut() = cfg.clone();
-        match self
-            .hreconcile(&hdir, cfg.as_ref(), terminals, real_slot_free)
-            .await
-        {
-            Err(e @ Fail::Core(_)) => return Err(e),
-            Err(e) => self.hlog(&format!("reconcile: {}", e.message())),
-            Ok(()) => {}
-        }
-        match self.sweep_hollywood_finished(finished).await {
-            Err(e @ Fail::Core(_)) => return Err(e),
-            Err(e) => self.hlog(&format!("sweep: {}", e.message())),
-            Ok(()) => {}
-        }
         if let Err(e) = self.propose_outward(&hdir) {
             self.hlog(&format!("outward: {}", e.message()));
         }
         if let Err(e) = self.hcards(&hdir) {
             self.hlog(&format!("cards: {}", e.message()));
+        }
+        match self
+            .drive_handoff(
+                &hdir,
+                cfg.as_ref(),
+                terminals,
+                finished,
+                real_slot_free,
+                now_ms,
+            )
+            .await
+        {
+            Err(e @ Fail::Core(_)) => return Err(e),
+            Err(e) => self.hlog(&format!("handoff: {}", e.message())),
+            Ok(()) => {}
+        }
+        self.hrefresh(&hdir);
+        let cfg = match config::hollywood(&self.env_vars) {
+            Ok(c) => c,
+            Err(e) => {
+                self.hlog(&e);
+                None
+            }
+        };
+        *self.hcfg.borrow_mut() = cfg.clone();
+        if !crate::handoff::handoff_blocks_delivery(&hdir) {
+            match self
+                .hreconcile(&hdir, cfg.as_ref(), terminals, real_slot_free)
+                .await
+            {
+                Err(e @ Fail::Core(_)) => return Err(e),
+                Err(e) => self.hlog(&format!("reconcile: {}", e.message())),
+                Ok(()) => {}
+            }
+        }
+        match self.sweep_hollywood_finished(finished, now_ms).await {
+            Err(e @ Fail::Core(_)) => return Err(e),
+            Err(e) => self.hlog(&format!("sweep: {}", e.message())),
+            Ok(()) => {}
         }
         let Some(cfg) = &cfg else {
             return Ok(());
@@ -131,8 +157,8 @@ impl Stage {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        let term = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL);
         let role = self.hstate.borrow().role.clone();
+        let term = crate::handoff_term::active_hollywood_terminal(&role, terminals);
         for mv in hstage::hplan(cfg, &role, term.is_some(), now_ms, self.started_ms) {
             if matches!(
                 mv,

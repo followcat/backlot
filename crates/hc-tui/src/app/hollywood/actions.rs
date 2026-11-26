@@ -41,12 +41,41 @@ impl App {
     /// its `y`/`d` answer.
     fn hollywood_asking(&self) -> bool {
         let machines = self.panel_summaries();
+        let hw = crate::hollywood::local_summary(&machines).and_then(|s| s.hollywood.as_ref());
+        if hw.is_some_and(|h| crate::hollywood::handoff_phase(h) == Some("needs_approval")) {
+            return true;
+        }
         crate::hollywood::hollywood_asking(&machines)
     }
 
-    /// `p` on the live row: Hollywood's own screen, read-only.
+    pub(crate) fn hollywood_handoff_active(&self) -> bool {
+        let machines = self.panel_summaries();
+        crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .is_some_and(crate::hollywood::is_handoff_active)
+    }
+
+    pub(crate) fn hw_switch_prefer_alternative(&self) -> bool {
+        let machines = self.panel_summaries();
+        crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .is_some_and(|h| {
+                crate::hollywood::is_quota_or_error(h)
+                    || crate::hollywood::handoff_phase(h) == Some("rolled_back")
+                    || (!h.attention_user && h.work == Some(backlot_model::summary::Work::Blocked))
+            })
+    }
+
+    /// `p` on the live row: during verifying/needs_approval handoff peeks the
+    /// candidate terminal (`peek next p`); otherwise peeks active Hollywood.
     fn hollywood_peek_live(&mut self) {
-        match self.hollywood_terminal() {
+        let addr = if self.hollywood_handoff_active() {
+            self.candidate_hollywood_terminal()
+                .or_else(|| self.hollywood_terminal())
+        } else {
+            self.hollywood_terminal()
+        };
+        match addr {
             Some(terminal) => self.open_peek(terminal),
             None => self.show_notice(
                 "Hollywood",
@@ -247,6 +276,18 @@ impl App {
             }
             (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('p')) => {
                 self.hollywood_peek_live()
+            }
+            (
+                Some(Target::Title | Target::Hollywood | Target::HollywoodLive),
+                KeyCode::Char('w'),
+            ) => {
+                self.hw_switch_open(self.hw_switch_prefer_alternative());
+            }
+            (
+                Some(Target::Title | Target::Hollywood | Target::HollywoodLive),
+                KeyCode::Char('x'),
+            ) if self.hollywood_handoff_active() => {
+                self.run_action(studio_cmds::hollywood_switch_cancel());
             }
             // A role's needs-you or asks row peeks the role itself; a
             // no-requirement studio peeks its producer.

@@ -25,6 +25,7 @@ pub mod event;
 pub mod hollywood;
 mod hollywood_state;
 mod hollywood_summary;
+pub mod hollywood_switch;
 mod hollywood_validate;
 pub mod limits;
 pub mod progress;
@@ -76,6 +77,8 @@ mod hollywood_card_tests;
 mod hollywood_setup_tests;
 #[cfg(test)]
 mod hollywood_summary_tests;
+#[cfg(test)]
+mod hollywood_switch_tests;
 #[cfg(test)]
 mod hollywood_tests;
 #[cfg(test)]

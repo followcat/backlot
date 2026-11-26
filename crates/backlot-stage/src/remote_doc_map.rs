@@ -124,14 +124,35 @@ pub(super) fn map(
             })
         }
         Cmd::TaskState { change, reason } => map_task_state(common, env, *change, reason)?,
-        Cmd::Hollywood(HollywoodCmd::Setup { cfg }) => {
+        Cmd::Hollywood(HollywoodCmd::Setup { cfg, force_offline }) => {
             MappedCmd::Action(ReqAction::HollywoodSetup {
                 runner: cfg.runner.clone(),
                 model: cfg.model.clone(),
                 effort: cfg.effort.clone(),
                 key: cfg.key.clone(),
                 default_cast: cfg.default_cast.clone(),
+                force_offline: *force_offline,
             })
+        }
+        Cmd::Hollywood(HollywoodCmd::Switch {
+            runner,
+            model,
+            effort,
+            timeout_s,
+            force,
+            ..
+        }) => MappedCmd::Action(ReqAction::HollywoodSwitch {
+            runner: runner.clone(),
+            model: model.clone(),
+            effort: effort.clone(),
+            timeout_s: *timeout_s,
+            force: *force,
+        }),
+        Cmd::Hollywood(HollywoodCmd::SwitchCancel { .. }) => {
+            MappedCmd::Action(ReqAction::HollywoodSwitchCancel)
+        }
+        Cmd::Hollywood(HollywoodCmd::SwitchStatus { .. }) => {
+            MappedCmd::Action(ReqAction::HollywoodSwitchStatus)
         }
         Cmd::StudioNew {
             title,

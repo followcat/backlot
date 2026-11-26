@@ -328,6 +328,14 @@ pub(crate) struct Stage {
     /// so dead `bl-hollywood` tombstones from this or an earlier launch
     /// get swept via `terminal.rm` even with no finished studio.
     pub(crate) sweep_hollywood_ticks: std::cell::Cell<u8>,
+    /// Rate/connection/error watch state for active Hollywood.
+    pub(crate) hrate_pace: std::cell::RefCell<Option<crate::ratelimit::RatePace>>,
+    pub(crate) hconn_pace: std::cell::RefCell<Option<crate::connerr::ConnPace>>,
+    pub(crate) herror: std::cell::RefCell<Option<crate::handoff::HBlockedKind>>,
+    /// Retention expiry (unix ms) for the `hollywood-previous` tombstone.
+    pub(crate) hprevious_until_ms: std::cell::Cell<Option<u64>>,
+    /// Cached summary projection of the active or most recent handoff.
+    pub(crate) hlast_handoff: std::cell::RefCell<Option<backlot_model::summary::HandoffSummary>>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -722,6 +730,7 @@ impl Stage {
     pub(crate) fn sweeps_finished(&self) -> bool {
         self.cached.values().any(|state| state.finished.is_some())
             || self.sweep_hollywood_ticks.get() > 0
+            || self.hprevious_until_ms.get().is_some()
     }
 
     /// The `backlot` document's view: cached states, most recently
@@ -729,6 +738,10 @@ impl Stage {
     /// finished ones drop off). A broken studio with no loaded state
     /// still gets a row — its `error` is all the panel can show.
     pub(crate) fn summary_view(&self, doing: &BTreeMap<String, String>) -> Summary {
+        self.summary_view_at(doing, crate::live::now_ms())
+    }
+
+    pub(crate) fn summary_view_at(&self, doing: &BTreeMap<String, String>, now_ms: u64) -> Summary {
         let mut pairs: Vec<(&String, &StudioState)> = self.cached.iter().collect();
         pairs.sort_by_key(|(name, _)| {
             std::cmp::Reverse(self.seen.get(*name).map(|s| s.mtime_ms).unwrap_or(0))
@@ -867,6 +880,75 @@ impl Stage {
                 ));
                 hw.can_answer_prompt = false;
             }
+            if hw.attention.is_none()
+                && let Some(err) = self.herror.borrow().as_ref()
+            {
+                let (reason, detail) = err.attention_fields();
+                hw.attention = Some(reason.to_string());
+                hw.attention_detail = Some(detail);
+                hw.attention_user = true;
+                hw.can_answer_prompt = false;
+            }
+            let hdir = store::hollywood_dir(&self.base);
+            let handoff = self.hlast_handoff.borrow().clone().or_else(|| {
+                crate::handoff::load_handoff(&hdir)
+                    .ok()
+                    .flatten()
+                    .filter(|r| r.visible_in_summary(now_ms))
+                    .map(|r| r.to_summary())
+            });
+            let queued_count = hs
+                .messages
+                .iter()
+                .filter(|m| {
+                    m.to == backlot_model::hollywood::HOLLYWOOD
+                        && !m.delivered
+                        && !m.dropped
+                        && !m.seen
+                })
+                .count() as u32;
+            if queued_count > 0 {
+                let (reason, detail) = if state == "down" {
+                    (
+                        backlot_model::summary::QueueReason::Down,
+                        Some("hollywood is not running".into()),
+                    )
+                } else if let Some(ref h) = handoff
+                    && matches!(
+                        h.phase.as_str(),
+                        "preparing" | "starting" | "verifying" | "needs_approval" | "committing"
+                    )
+                {
+                    let eff = h
+                        .target_effort
+                        .as_deref()
+                        .map(|e| format!("/{e}"))
+                        .unwrap_or_default();
+                    (
+                        backlot_model::summary::QueueReason::Handoff,
+                        Some(format!("{}/{}{eff}", h.target_runner, h.target_model)),
+                    )
+                } else if let Some(err) = self.herror.borrow().as_ref() {
+                    err.queue_reason()
+                } else if self.hprompt.borrow().is_some() || hwork == Some(Work::Blocked) {
+                    (
+                        backlot_model::summary::QueueReason::Prompt,
+                        self.hprompt.borrow().clone(),
+                    )
+                } else if hwork == Some(Work::Working) {
+                    (backlot_model::summary::QueueReason::Busy, hw.doing.clone())
+                } else if now_ms.saturating_sub(hs.role.since_ms) < crate::deliver::MIN_UP_MS {
+                    (backlot_model::summary::QueueReason::Starting, None)
+                } else {
+                    (backlot_model::summary::QueueReason::WaitingQuiet, None)
+                };
+                hw.queue = Some(backlot_model::summary::QueueStatus {
+                    count: queued_count,
+                    reason,
+                    detail,
+                });
+            }
+            hw.handoff = handoff;
             s.hollywood = Some(hw);
         }
         s
@@ -939,6 +1021,11 @@ impl Stage {
             ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             sweep_hollywood_ticks: std::cell::Cell::new(3),
+            hrate_pace: std::cell::RefCell::new(None),
+            hconn_pace: std::cell::RefCell::new(None),
+            herror: std::cell::RefCell::new(None),
+            hprevious_until_ms: std::cell::Cell::new(None),
+            hlast_handoff: std::cell::RefCell::new(None),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
@@ -1078,6 +1165,11 @@ async fn run_impl(
         ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         sweep_hollywood_ticks: std::cell::Cell::new(3),
+        hrate_pace: std::cell::RefCell::new(None),
+        hconn_pace: std::cell::RefCell::new(None),
+        herror: std::cell::RefCell::new(None),
+        hprevious_until_ms: std::cell::Cell::new(None),
+        hlast_handoff: std::cell::RefCell::new(None),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

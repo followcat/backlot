@@ -184,8 +184,8 @@ role navigation cleanly from Compose):
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
-| `c` | Reconfigure the agent — the setup dialog prefilled from `[hollywood]` |
-| `m` | The selected row's context menu (`Change Hollywood's agent…` on the title row opens the runner/model/effort picker) |
+| `w` | Switch Hollywood's agent — opens the unified switch/setup picker prefilled from `[hollywood]` (and prefers an alternative runner when out of quota or blocked) |
+| `m` | The selected row's context menu (`Switch agent…` on the title row opens the unified picker) |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | In Compose: rest on `›` keeping any draft (even when empty). In Resting: collapse to the pill |
@@ -197,14 +197,16 @@ A click outside the expanded bar collapses it to the pill and hands the keys to 
 it. The `+ new studio` frame is the exception: it is a button, and a click opens the
 new-studio dialog directly.
 
-The setup line — or `c` on a configured bar, the dock's `⏎ hollywood setup` row, or the settings
-overseer row — opens the Hollywood setup dialog: a runner picked from `backlot runners --json`
-(installed only), that runner's model catalog with `auto` first (`e` types a free model name),
-and its effort list where the runner has one. `↑`/`↓`/`Tab` move between the rows, `←`/`→` cycle
-a value, `Enter` opens the model list or applies, `Esc` or a click outside closes it — apply runs
-`backlot hollywood setup` for you, so the write and its rules stay the CLI's own. A reconfigure
-prefills the existing table and keeps its `key`/`default_cast` verbatim; a runner change starts a
-new conversation and `memory.md` stays.
+The setup line — or `w` anywhere in the resting Call Sheet, `[switch w]` on a blocked/quota
+Hollywood row, `Switch agent…` from the title/lot menu, the dock's `⏎ hollywood setup` row, or
+the settings overseer row — opens the unified **Hollywood switch/setup picker**: a runner picked
+from `backlot runners --json` (installed only), that runner's model catalog with `auto` first
+(`e` types a free model name), and its effort list where the runner has one. `↑`/`↓`/`Tab` move
+between the rows, `←`/`→` cycle a value, `Enter` opens the model list or applies, `Esc` or a
+click outside closes it. While Hollywood is live on a running stage, applying runs
+`backlot hollywood switch --no-wait` for a **make-before-break handoff** (`p` peeks the
+candidate during verification, `x` cancels before commit, `y`/`d` answers a candidate prompt);
+before initial setup or when the stage is offline, it runs `backlot hollywood setup`.
 
 ## Studio menus and dialogs
 

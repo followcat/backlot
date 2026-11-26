@@ -249,4 +249,37 @@ fn server_control_is_refused_from_a_role_terminal_and_allowed_for_the_person() {
 
     // The person's own shell (no role env, no role ancestry) is unaffected.
     assert!(check_cli_gate_with(CliVerb::ServerControl, &common, &clean_env, &reader, 100).is_ok());
+
+    // Hollywood control (switch / setup) is blocked under a role ancestor or BACKLOT_ROLE.
+    let err = check_cli_gate_with(CliVerb::HollywoodControl, &common, &clean_env, &reader, 300)
+        .unwrap_err();
+    assert!(err.message().contains("role terminal ancestor"), "{err:?}");
+    let err = check_cli_gate_with(CliVerb::HollywoodControl, &common, &role_env, &reader, 100)
+        .unwrap_err();
+    assert!(err.message().contains("BACKLOT_ROLE is set"), "{err:?}");
+    assert!(
+        check_cli_gate_with(CliVerb::HollywoodControl, &common, &clean_env, &reader, 100).is_ok()
+    );
+    assert!(
+        crate::proc_guard::check_segment_self_approval(
+            &[
+                "backlot".into(),
+                "hollywood".into(),
+                "switch".into(),
+                "--runner".into(),
+                "fake".into(),
+                "--model".into(),
+                "m".into(),
+            ],
+            Some("hollywood"),
+        )
+        .is_some()
+    );
+    assert!(
+        crate::proc_guard::check_segment_self_approval(
+            &["backlot".into(), "hollywood".into(), "setup".into()],
+            Some("hollywood"),
+        )
+        .is_some()
+    );
 }

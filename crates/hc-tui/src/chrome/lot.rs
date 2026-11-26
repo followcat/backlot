@@ -30,6 +30,7 @@ pub(crate) struct LotCounts {
     pub cards: usize,
     pub unread: usize,
     pub activity: HollywoodActivity,
+    pub switch_state: Option<crate::hollywood::PillSwitchState>,
 }
 
 /// Which text ladder a terminal width gets — the spec §3 rows.
@@ -124,6 +125,43 @@ fn segments(
     } else {
         "✦"
     };
+    if let Some(sw) = counts.switch_state {
+        use crate::hollywood::PillSwitchState;
+        match sw {
+            PillSwitchState::Switching => {
+                return match tier {
+                    PillTier::Full | PillTier::Wide => {
+                        vec![(format!(" {spark} switching… "), Seg::Unread)]
+                    }
+                    PillTier::Compact | PillTier::Mobile => {
+                        vec![(format!(" {spark}sw… "), Seg::Unread)]
+                    }
+                    PillTier::Tiny => vec![(format!(" {spark}sw "), Seg::Unread)],
+                };
+            }
+            PillSwitchState::NeedsApproval => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![(format!(" {spark} !switch prompt "), Seg::Body)];
+                }
+            }
+            PillSwitchState::QuotaOut { urgent } => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![
+                        (format!(" {spark} "), Seg::Spark),
+                        (format!("!{} (quota) ", count(urgent)), Seg::Body),
+                    ];
+                }
+            }
+            PillSwitchState::AuthError { urgent } => {
+                if matches!(tier, PillTier::Full | PillTier::Wide) {
+                    return vec![
+                        (format!(" {spark} "), Seg::Spark),
+                        (format!("!{} (auth) ", count(urgent)), Seg::Body),
+                    ];
+                }
+            }
+        }
+    }
     if s == 0 && hollywood {
         let (tail, tail_seg) = if n > 0 {
             (format!(" · +{} new ", count(n)), Seg::Unread)
@@ -295,11 +333,26 @@ fn segments(
 /// urgent paints the whole pill `red`, cards or unread replies sit on
 /// `surface0`, the calm pill is `surface_dim` with a green `●`.
 fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
-    if counts.urgent > 0 {
+    let switch_urgent = matches!(
+        counts.switch_state,
+        Some(
+            crate::hollywood::PillSwitchState::NeedsApproval
+                | crate::hollywood::PillSwitchState::QuotaOut { .. }
+                | crate::hollywood::PillSwitchState::AuthError { .. }
+        )
+    );
+    if counts.urgent > 0 || switch_urgent {
         return Style::default()
             .fg(panel_contrast_fg(palette))
             .bg(palette.red)
             .add_modifier(Modifier::BOLD);
+    }
+    if matches!(
+        counts.switch_state,
+        Some(crate::hollywood::PillSwitchState::Switching)
+    ) {
+        let base = Style::default().bg(palette.surface0);
+        return base.fg(palette.accent).add_modifier(Modifier::BOLD);
     }
     if counts.cards > 0 || counts.unread > 0 {
         let base = Style::default().bg(palette.surface0);

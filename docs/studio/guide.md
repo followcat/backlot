@@ -1026,7 +1026,7 @@ backlot priority --task t1 --level high --server host-a --studio acme-shop --as 
 - **Actions via the server queue (`plugin.backlot.req` -> `plugin.backlot.res`):** both the TUI's
   panel/Call Sheet actions and the remote CLI's person verbs (`tell`, `tell hollywood`,
   `card apply`, `card cancel`, `card show`, `attention clear`, `recast`, `restart`, `close`, `reopen`,
-  `priority`, `pause|resume|abandon`, `hollywood setup`) append a timestamped request with CAS
+  `priority`, `pause|resume|abandon`, `hollywood setup`, `hollywood switch`) append a timestamped request with CAS
   (up to 3 retries) and wait up to 5 s for its matching ack. Queue overflow or CAS contention prints
   `server busy`; requests past the server's 60 s window fail with `request expired`; missing replies
   time out with `timed out waiting for ack of '<req_id>' (no reply from server)`.

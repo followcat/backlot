@@ -197,16 +197,8 @@ impl App {
                             studio_cmds::recast(key, &d.role, runner, &model, effort.as_deref())
                         }
                         None => {
-                            let existing = self.current_hollywood_cfg();
-                            let cfg = backlot_stage::config::HollywoodCfg {
-                                runner: runner.to_owned(),
-                                model,
-                                effort,
-                                key: existing.as_ref().and_then(|c| c.key.clone()),
-                                default_cast: existing.and_then(|c| c.default_cast),
-                            };
-                            self.hw_setup_pending = Some(cfg.clone());
-                            studio_cmds::hw_setup(&cfg)
+                            self.hw_switch_open(self.hw_switch_prefer_alternative());
+                            return true;
                         }
                     };
                     self.run_action(action);

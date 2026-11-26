@@ -145,7 +145,8 @@ async fn a_lot_pill_right_click_opens_the_lot_menu() {
             "Open Call Sheet",
             "Toggle Studio Dock",
             "New studio…",
-            "Hollywood settings…"
+            "Hollywood settings…",
+            "Switch agent…"
         ]
     );
 }

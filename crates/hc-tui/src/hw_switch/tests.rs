@@ -1,16 +1,14 @@
-//! Hollywood setup's draw tests — the dialog must `Clear` its rect
-//! after the caller's dim pass and before the panel fill, so a dead
-//! pane's frozen screen (reverse video, foreign colours) never
-//! bleeds through the modal.
+//! Draw & behavior tests for [`HwSwitch`].
 
+use backlot_stage::config::HollywoodCfg;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
-use super::{HwSetup, render};
+use super::{HwSwitch, render};
 use crate::chrome::palette::Palette;
+use crate::new_studio::{Probe, RunnerRow};
 
-/// A dead pane's frozen screen: every cell a reverse-video red `#`.
 fn frozen_screen(buf: &mut Buffer) {
     let style = Style::default()
         .fg(Color::Red)
@@ -22,7 +20,6 @@ fn frozen_screen(buf: &mut Buffer) {
     }
 }
 
-/// Nothing the frozen screen left survives inside the dialog's rect.
 fn assert_no_bleed(buf: &Buffer, area: Rect) {
     for y in area.y..area.bottom() {
         for x in area.x..area.right() {
@@ -46,13 +43,11 @@ fn the_dialog_clears_the_frozen_screen_behind_it() {
     let mut buf = Buffer::empty(band);
     frozen_screen(&mut buf);
     let palette = Palette::catppuccin();
-    let hits = render(&mut buf, &HwSetup::new(None), &palette, band);
+    let hits = render(&mut buf, &HwSwitch::new(None, false), &palette, band);
     assert!(hits.area.width > 0, "the frame must fit the band");
     assert_no_bleed(&buf, hits.area);
 }
 
-/// R3-M13: the footer's hint tiers shorten whole — a hint never
-/// clips mid-word inside the 56-column dialog.
 #[test]
 fn the_footer_names_whole_hint_tiers_never_a_mid_word_cut() {
     let palette = Palette::catppuccin();
@@ -64,7 +59,7 @@ fn the_footer_names_whole_hint_tiers_never_a_mid_word_cut() {
     for width in [80u16, 64, 48, 36] {
         let band = Rect::new(0, 0, width, 24);
         let mut buf = Buffer::empty(band);
-        let hits = render(&mut buf, &HwSetup::new(None), &palette, band);
+        let hits = render(&mut buf, &HwSwitch::new(None, false), &palette, band);
         let text = (hits.area.y..hits.area.bottom())
             .map(|y| {
                 (hits.area.x..hits.area.right())
@@ -81,9 +76,53 @@ fn the_footer_names_whole_hint_tiers_never_a_mid_word_cut() {
         if let Some(footer) = footers.first() {
             assert!(
                 tiers.iter().any(|t| footer.contains(t)),
-                "{width}: {footer:?} is no whole tier"
+                "{width}: {footer:?}"
             );
             assert!(!footer.contains('…'), "{width}: clipped: {footer:?}");
         }
     }
+}
+
+#[test]
+fn switch_picker_prefills_current_highlights_alternative_and_detects_unchanged() {
+    let cfg = HollywoodCfg {
+        runner: "claude".into(),
+        model: "claude-sonnet-5-5".into(),
+        effort: Some("high".into()),
+        key: None,
+        default_cast: None,
+    };
+    let rows = vec![
+        RunnerRow {
+            runner: "claude".into(),
+            status: "found".into(),
+            version: Some("1".into()),
+            path: Some("/usr/bin/claude".into()),
+            needs_path: false,
+            models: vec!["claude-sonnet-5-5".into(), "claude-opus-5-5".into()],
+            efforts: vec!["low".into(), "high".into()],
+        },
+        RunnerRow {
+            runner: "codex".into(),
+            status: "found".into(),
+            version: Some("1".into()),
+            path: Some("/usr/bin/codex".into()),
+            needs_path: false,
+            models: vec!["gpt-6-sol".into()],
+            efforts: vec!["high".into()],
+        },
+    ];
+    let mut normal = HwSwitch::new(Some(cfg.clone()), false);
+    normal.runners = Probe::Done(rows.clone());
+    normal.prefill();
+    assert_eq!(normal.runner_row().unwrap().runner, "claude");
+    assert_eq!(normal.model, "claude-sonnet-5-5");
+    assert!(normal.unchanged());
+
+    let mut quota = HwSwitch::new(Some(cfg), true);
+    quota.runners = Probe::Done(rows);
+    quota.prefill();
+    assert_eq!(quota.runner_row().unwrap().runner, "codex");
+    assert_eq!(quota.model, "auto");
+    assert!(!quota.unchanged());
 }

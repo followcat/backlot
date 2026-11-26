@@ -279,6 +279,8 @@ pub(crate) enum StudioAct {
     HollywoodShow,
     /// Focus the raw `bl-hollywood` terminal.
     FocusHollywood,
+    /// Switch Hollywood's agent by make-before-break handoff (or setup offline).
+    SwitchHollywood,
     /// `report show --file <rel> --studio <s>` — open a studio
     /// exchange entry in `CardView`.
     ReportShow,

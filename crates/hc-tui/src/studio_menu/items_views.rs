@@ -164,6 +164,11 @@ impl StudioMenu {
                 Some('h'),
                 StudioAct::HollywoodSettings,
             ),
+            item(
+                "Switch agent…".to_owned(),
+                Some('w'),
+                StudioAct::SwitchHollywood,
+            ),
         ]
     }
 
@@ -198,9 +203,9 @@ impl StudioMenu {
         item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
     ) -> Vec<StudioItem> {
         let mut out = vec![item(
-            "Change Hollywood's agent…".to_owned(),
-            Some('c'),
-            StudioAct::Recast,
+            "Switch agent…".to_owned(),
+            Some('w'),
+            StudioAct::SwitchHollywood,
         )];
         if self.role.as_ref().is_some_and(|r| r.state == "live") {
             out.push(item(

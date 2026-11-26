@@ -153,8 +153,8 @@ impl App {
         // The Hollywood setup dialog is a modal the same way — its
         // cells and list activate on press, outside cancels, the
         // wheel walks the open model list.
-        if self.hw_setup.is_some() {
-            self.hw_setup_mouse(mouse);
+        if self.hw_switch.is_some() {
+            self.hw_switch_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
             return;
         }

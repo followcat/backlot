@@ -317,6 +317,9 @@ impl App {
                 crate::studio_menu::MenuKind::Hollywood(None) => self.hollywood_headline_open(),
                 _ => {}
             },
+            StudioAct::SwitchHollywood => {
+                self.hw_switch_open(self.hw_switch_prefer_alternative());
+            }
             StudioAct::FocusHollywood => self.hollywood_focus_terminal(),
             StudioAct::ReportShow => {
                 if let (Some(key), crate::studio_menu::MenuKind::StudioTalk(seq), Some(file)) =

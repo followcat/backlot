@@ -7,7 +7,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL, RoleMotion};
+use backlot_model::hollywood::{HOLLYWOOD, RoleMotion};
 use backlot_model::summary::Work;
 use hc_proto::terminal::ReadParams;
 
@@ -34,7 +34,7 @@ impl Stage {
         if !runners::post_launch_session(&actor.runner) {
             return;
         }
-        let Some(term) = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL) else {
+        let Some(term) = crate::handoff_term::active_hollywood_terminal(&role, terminals) else {
             return;
         };
         let home = self
@@ -88,7 +88,8 @@ impl Stage {
             return;
         }
         self.work_looked.borrow_mut().insert(pair.clone(), now_ms);
-        let Some(t) = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL) else {
+        let role = self.hstate.borrow().role.clone();
+        let Some(t) = crate::handoff_term::active_hollywood_terminal(&role, terminals) else {
             return;
         };
         let text = match self
@@ -103,9 +104,21 @@ impl Stage {
             Ok(r) => r.text,
             Err(_) => return,
         };
-        let session = self.hstate.borrow().role.session_id.clone();
+        let session = role.session_id.clone();
         let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
+        let retry_send = {
+            let mut rp = self.hrate_pace.borrow_mut();
+            let mut cp = self.hconn_pace.borrow_mut();
+            let (err, retry) = crate::handoff_term::sample_hollywood_error(
+                t, &text, work, &mut rp, &mut cp, now_ms,
+            );
+            *self.herror.borrow_mut() = err;
+            retry
+        };
+        if let Some(msg) = retry_send {
+            let _ = self.driver.send(&self.client, &t.address, msg).await;
+        }
         let is_q = crate::question::in_episode(runner, work, t.status.as_ref(), &text, None);
         self.hprompt_is_question.set(is_q);
         *self.hprompt.borrow_mut() = if is_q {
@@ -118,6 +131,13 @@ impl Stage {
             pair,
             crate::deliver::Screen::note(prev.as_ref(), text, now_ms),
         );
+        if crate::handoff::load_handoff(hdir)
+            .ok()
+            .flatten()
+            .is_some_and(|h| h.phase == crate::handoff::HandoffPhase::NeedsApproval)
+        {
+            return;
+        }
         self.hanswer(t, runner).await;
     }
 

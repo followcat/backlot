@@ -181,6 +181,7 @@ async fn catalog_publishes_on_start_and_republishes_when_hollywood_cfg_changes()
             effort: Some("high".into()),
             key: Some("alt+y".into()),
             default_cast: None,
+            force_offline: false,
         },
         None,
     )

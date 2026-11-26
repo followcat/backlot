@@ -255,7 +255,7 @@ impl App {
     /// Sheet active highlights, `▌` bars, and secondary cursors (`R3-M2`).
     pub(crate) fn has_active_modal(&self) -> bool {
         self.new_studio.is_some()
-            || self.hw_setup.is_some()
+            || self.hw_switch.is_some()
             || self.sheet.is_some()
             || self.hollywood.view.is_some()
             || self.studio_dialog.is_some()
@@ -275,7 +275,7 @@ impl App {
         self.help
             || self.dialog.is_some()
             || self.new_studio.is_some()
-            || self.hw_setup.is_some()
+            || self.hw_switch.is_some()
             || self.sheet.is_some()
             || self.studio_dialog.is_some()
             || self.hollywood.view.is_some()
