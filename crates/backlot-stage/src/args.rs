@@ -180,6 +180,12 @@ pub enum Cmd {
         /// tasks anyway (L5).
         force: bool,
     },
+    /// `studio reopen --reason <r>`: the person brings a finished
+    /// studio back. The name comes from `--studio`/`BACKLOT_STUDIO`
+    /// like every studio command.
+    StudioReopen {
+        reason: String,
+    },
     /// `studio prune`: remove a finished studio's worktrees and
     /// `backlot/<studio>/*` branches — never its ledger.
     StudioPrune {
@@ -460,6 +466,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "new" => args_studio::studio_new(&mut common, &mut it),
                 "cast" => args_studio::studio_cast(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
+                "reopen" => args_studio::studio_reopen(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),
                 "delete" => args_studio::studio_delete(&mut common, &mut it),
                 "migrate" => args_studio::studio_migrate(&mut common, &mut it),

@@ -17,6 +17,8 @@ pub fn hconfirm(event: &HollywoodEvent) -> String {
         }
         HollywoodKind::CardApplied { card }
         | HollywoodKind::CardCancelled { card, .. }
+        | HollywoodKind::CardWithdrawn { card, .. }
+        | HollywoodKind::CardSuperseded { card, .. }
         | HollywoodKind::CardDone { card, .. }
         | HollywoodKind::CardFailed { card, .. }
         | HollywoodKind::CardStale { card, .. } => format!(" c{card}"),
@@ -59,10 +61,13 @@ fn cfg_line(cfg: &Result<Option<HollywoodCfg>, String>) -> String {
 
 /// The Hollywood block: its runner line, the newest headline, and
 /// every card with its state — `card list` and the `status --all`
-/// trailer share it (D16's list is a superset of this).
+/// trailer share it (D16's list is a superset of this). `roles` maps a
+/// card's seq to the cast summary `card list` prints from the card's
+/// own snapshot; absent, the block is what `status --all` draws.
 pub fn hollywood_block(
     state: &HollywoodState,
     cfg: &Result<Option<HollywoodCfg>, String>,
+    roles: &std::collections::BTreeMap<u64, String>,
 ) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "hollywood ({})", cfg_line(cfg));
@@ -93,9 +98,27 @@ pub fn hollywood_block(
                 let _ = write!(out, " ({})", c.detail);
             }
             let _ = writeln!(out);
+            // A cast card's roles, from its own snapshot.
+            if let Some(roles) = roles.get(&c.seq) {
+                let _ = writeln!(out, "         {roles}");
+            }
         }
     }
     out
+}
+
+/// The cast summary each card with a snapshot carries — seq → line.
+pub fn card_roles(
+    state: &HollywoodState,
+    hdir: &std::path::Path,
+) -> std::collections::BTreeMap<u64, String> {
+    state
+        .cards
+        .values()
+        .filter_map(|c| {
+            crate::hcard_snapshot::roles_summary(hdir, &c.action).map(|line| (c.seq, line))
+        })
+        .collect()
 }
 
 /// The `status --all --json` Hollywood object.
