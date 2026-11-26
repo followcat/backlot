@@ -209,11 +209,11 @@ mod design_cli_tests;
 #[cfg(test)]
 mod design_doc_tests;
 #[cfg(test)]
-mod design_remote_tests;
-#[cfg(test)]
 mod design_gate_nudge_tests;
 #[cfg(test)]
 mod design_gate_stage_tests;
+#[cfg(test)]
+mod design_remote_tests;
 #[cfg(test)]
 mod digest_tests;
 #[cfg(test)]
