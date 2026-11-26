@@ -113,8 +113,8 @@ on a **stage** row `s` runs `backlot stage start` on that machine, and an offlin
 `Enter` reports the watcher's last read; on a **card** row `a` applies, `x` cancels and `s`
 shows the card (`backlot card show` in a read-only view); on a **ready** row `f` asks
 `finish studio? y/n` inline, and `y` runs `backlot studio finish` on the studio's own
-machine; on a **decision** row `o` reads the design doc (`backlot design show`) in Reader, `r`
-focuses producer reply (or runs `backlot design open` on `SuggestSkip`), and `a` opens a confirm
+machine; on a **decision** row `o` opens `design/v<N>.md` in the `Design` Reader (`backlot report show --file …`), `r`
+focuses producer reply (or runs `backlot design open` on `SuggestSkip`), and `a` opens the shared confirm
 dialog naming mode (`sign off` vs `skip`) + frozen file (`design/v<N>-final.md` / `design/v<N>.md`)
 before running `backlot design sign [--skip]`. `i` opens the `tell hollywood` line, `n` opens the new-studio wizard (the bar
 collapses first), `?` opens this help, `Esc` or the toggle collapses the bar. A prompt,
@@ -126,7 +126,7 @@ the wheel scrolls the frames sideways and the waiting rows vertically, and a cli
 collapses the bar to the pill and hands the keys to what is under it — a typed letter lands in
 the pane. Right-click on the title or a row opens the same context menu `m` opens.
 
-`s` (or `Enter`) on a card, headline, or talk row opens it in the **Lot Reader** card: arrows / `j` / `k`, `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U`, `g`/`Home`, and `G`/`End` scroll (while plain `d` stays unbound), `←`/`→` (or `[`/`]` or clicking `◀`/`▶`) step sibling entries, `y` copies raw unwrapped text via OSC 52 without answering prompts, `v` jumps to the studio's Task & Delivery Sheet, `o`/`p` focus or peek a live seat (when present), `t`/`i` open inline compose sharing `hollywood.input` and `↑`/`↓` history on talk/report entries (`Esc` keeps draft), `?` opens key help, and `Esc`/`q` close (on read-only entries `Enter` closes too; on open cards `a`/`x` apply/cancel when unlocked and `Enter` is a no-op).
+`s` (or `Enter`) on a card, headline, or talk row opens it in the **Lot Reader** card: arrows / `j` / `k`, `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U`, `g`/`Home`, and `G`/`End` scroll (while plain `d` stays unbound), `←`/`→` (or `[`/`]` or clicking `◀`/`▶`) step sibling entries (or jump `## R<r>` / `### §R<r>.<W|D|P|U>` sections on `design/` Markdown docs), `y` copies raw unwrapped text via OSC 52 without answering prompts, `v` jumps to the studio's Task & Delivery Sheet, `o`/`p` focus or peek a live seat (when present), `t`/`i` (and `r` on an active `Design` doc) open inline compose sharing `hollywood.input` / studio draft and `↑`/`↓` history (`Esc` keeps draft), `?` opens key help, and `Esc`/`q` close (on read-only entries `Enter` closes too; on open cards `a`/`x` apply/cancel when unlocked and `a` confirms sign-off on waiting `Design` docs; `Enter` on cards is a no-op).
 
 The input line (`Alt+Y` open, `i`, `Enter` on `›`, or a click) sends one line with
 `backlot tell hollywood "<line>"` as the user — never written into Hollywood's terminal. While

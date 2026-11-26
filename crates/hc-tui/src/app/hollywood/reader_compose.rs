@@ -29,7 +29,8 @@ impl ComposeTarget {
             ReaderOrigin::HollywoodExchange(_) => Some(Self::Hollywood),
             ReaderOrigin::StudioExchange(key, _)
             | ReaderOrigin::SheetDeliveries(key, _)
-            | ReaderOrigin::Records(key) => {
+            | ReaderOrigin::Records(key)
+            | ReaderOrigin::Design(key) => {
                 let (target, seed) = reader_tell_target(meta);
                 Some(Self::Studio(key.clone(), target, seed))
             }

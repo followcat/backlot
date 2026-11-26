@@ -4,6 +4,7 @@
 mod decision_tests;
 mod draw_tests;
 mod keys_tests;
+mod reader_design_tests;
 mod rows_tests;
 mod zones_tests;
 

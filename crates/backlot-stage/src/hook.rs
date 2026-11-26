@@ -49,7 +49,7 @@ fn runner_arg(args: &[String]) -> Option<&str> {
 }
 
 /// `s` cut to at most `cap` bytes on a char boundary.
-fn cut(s: &str, cap: usize) -> &str {
+pub(crate) fn cut(s: &str, cap: usize) -> &str {
     if s.len() <= cap {
         return s;
     }
@@ -116,7 +116,7 @@ fn line_for(payload: &serde_json::Value, ts_ms: u64, cap: usize) -> String {
 
 /// One `write` of the line with `O_APPEND`, creating the parent
 /// directory if needed; every failure is ignored.
-fn append(path: &Path, line: &str) {
+pub(crate) fn append(path: &Path, line: &str) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -134,14 +134,23 @@ fn normalize_payload(runner: Option<&str>, payload: &serde_json::Value) -> serde
         return payload.clone();
     }
     let mut obj = serde_json::Map::new();
-    if let Some(ev) = field(payload, "hookEventName").or_else(|| field(payload, "hook_event_name"))
-    {
+    let raw_ev = field(payload, "hookEventName").or_else(|| field(payload, "hook_event_name"));
+    if let Some(ev) = raw_ev {
         let mapped = match ev {
             "PreInvocation" => "UserPromptSubmit",
             "PostInvocation" => "Stop",
             other => other,
         };
         obj.insert("hook_event_name".into(), mapped.into());
+    }
+    if raw_ev == Some("PreInvocation")
+        && payload
+            .get("invocationNum")
+            .and_then(|v| v.as_u64())
+            .is_none_or(|n| n == 0)
+        && let Some(prompt) = field(payload, "lastUserInput")
+    {
+        obj.insert("prompt".into(), prompt.into());
     }
     if let Some(sid) = field(payload, "conversationId").or_else(|| field(payload, "session_id")) {
         obj.insert("session_id".into(), sid.into());
@@ -331,7 +340,7 @@ fn run_io_inner(
     let runner = runner_arg(args);
     let is_agy = runner == Some("agy");
     let file = file_arg(args);
-    if !is_agy && file.is_none() {
+    if !is_agy && file.is_none() && env.get("BACKLOT_ROLE") != Some("producer") {
         return ExitCode::SUCCESS;
     }
     let mut buf = Vec::new();
@@ -353,9 +362,13 @@ fn run_io_inner(
         .unwrap_or(0);
     let normalized = normalize_payload(runner, &payload);
     let line = file.as_ref().map(|_| line_with_cap(&normalized, ts_ms));
+    let capture = crate::design_capture::prepare_hook_capture(env, &normalized, ts_ms);
 
     if !is_agy {
         if let (Some(f), Some(l)) = (file, line) {
+            append(&f, &l);
+        }
+        if let Some((f, l)) = capture {
             append(&f, &l);
         }
         return ExitCode::SUCCESS;
@@ -380,6 +393,9 @@ fn run_io_inner(
             std::thread::sleep(d);
         }
         if let (Some(f), Some(l)) = (file, line) {
+            append(&f, &l);
+        }
+        if let Some((f, l)) = capture {
             append(&f, &l);
         }
         let outcome = match refused_for_worker {

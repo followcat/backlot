@@ -152,6 +152,14 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 ))
             }
         }
+        EventKind::MessageQueued {
+            purpose: Some(purpose),
+            ..
+        } if purpose == "dispatch" => {
+            let studio = require_studio(state)?;
+            crate::design_validate::require_signed(studio, state)?;
+            Ok(())
+        }
         EventKind::MessageQueued { .. } => {
             require_studio(state)?;
             Ok(())
@@ -433,7 +441,8 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             requirement_version,
             ..
         } => {
-            require_studio(state)?;
+            let studio = require_studio(state)?;
+            crate::design_validate::require_signed(studio, state)?;
             if *requirement_version == 0 || *requirement_version > state.requirement_version {
                 return Err(Refusal::UnknownReqVersion(*requirement_version));
             }
@@ -445,16 +454,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             dependencies,
             ..
         } => {
-            require_studio(state)?;
+            let studio = require_studio(state)?;
+            crate::design_validate::require_signed(studio, state)?;
             if state.tasks.contains_key(task) {
                 return Err(Refusal::TaskExists(task.clone()));
             }
             // R14: an experimental studio may dispatch a task straight
             // at the exploration — `requirement_version` 0 pins it to
             // no formal spec. A standard studio keeps requiring one.
-            let no_spec_ok = *requirement_version == 0
-                && state.studio.as_ref().map(|s| s.mode)
-                    == Some(crate::event::StudioMode::Experimental);
+            let no_spec_ok =
+                *requirement_version == 0 && studio.mode == crate::event::StudioMode::Experimental;
             if (*requirement_version == 0 && !no_spec_ok)
                 || *requirement_version > state.requirement_version
             {
@@ -477,6 +486,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             ..
         } => {
             let studio = require_studio(state)?;
+            crate::design_validate::require_signed(studio, state)?;
             let t = require_task(state, task)?;
             check_task_open(t, false)?;
             // Dependencies hold the cast (S9e): the actor's work area

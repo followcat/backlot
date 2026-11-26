@@ -42,25 +42,36 @@ impl App {
             .cloned()
     }
 
-    /// `o` on an opening-design row: load `backlot design show` into the Reader.
+    /// `o` on an opening-design row: open the design document in PR 6's Design Reader (`ReaderKind::Design`).
     pub(in crate::app) fn design_read(&mut self, key: &StudioKey) {
         let Some(design) = self.any_design(key) else {
             return;
         };
-        self.run_action(studio_cmds::design_show(
-            key,
-            &design.doc_file,
-            design.version,
-        ));
+        let file = if design.doc_file.starts_with("design/") {
+            design.doc_file
+        } else {
+            format!("design/v{}.md", design.version)
+        };
+        self.run_action(studio_cmds::design_show(key, &file));
     }
 
-    /// `a` on an opening-design row: open confirmation showing mode (`sign off`
-    /// vs `skip`) and the file that will be frozen before running `design sign`.
+    /// `a` on an opening-design row: open the shared sign-off/skip confirmation modal
+    /// before running `backlot design sign [--skip]`.
     pub(in crate::app) fn design_sign_confirm(&mut self, key: &StudioKey) {
         let Some(design) = self.waiting_design(key) else {
             return;
         };
-        self.studio_dialog = Some(crate::hollywood::design_confirm_dialog(key, &design));
+        let skip = design.suggest_skip || design.phase == DesignPhase::SuggestSkip;
+        let file = if design.doc_file.is_empty() {
+            format!("design/v{}.md", design.version)
+        } else {
+            design.doc_file
+        };
+        self.studio_dialog = Some(crate::studio_dialog::StudioDialog::design_sign(
+            key,
+            skip,
+            Some(&file),
+        ));
     }
 
     /// `r` on a Call Sheet `Wait::Decision`: on `SuggestSkip` runs `design open`

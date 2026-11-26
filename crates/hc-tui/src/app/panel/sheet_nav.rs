@@ -82,7 +82,9 @@ impl App {
             || line.meta.as_ref().is_some_and(|m| m.check_status.is_some())
         {
             ReaderKind::Check
-        } else if file.starts_with("req/") {
+        } else if file.starts_with("design/") {
+            ReaderKind::Design
+        } else if file.starts_with("req/") || file.starts_with("plan/") {
             ReaderKind::Req
         } else {
             ReaderKind::Delivery

@@ -121,13 +121,13 @@ Opening a studio `✦`/`›` report or message (`Enter` on the dock), a Call She
 | `j`/`k`, `↓`/`↑` | Scroll 1 line |
 | `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U` | Page down / page up (`d` stays unbound to avoid prompt muscle memory) |
 | `g`/`Home`, `G`/`End` | Jump to top / bottom |
-| `←`/`→`, `[`/`]` | Step to previous / next sibling entry (header `◀`/`▶` clicks step too; beside dock `▌` follows live) |
-| `t`, `i` | Open inline composer (`[t] tell`), sharing the studio's dock `›` draft and `↑`/`↓` history (`hollywood` uses the Call Sheet draft/history; `Tab` completes `/verb` on studios; `Enter` sends or retries failed sends; `Esc` returns to reading keeping the draft) |
+| `←`/`→`, `[`/`]` | Step to previous / next sibling entry, or jump to previous / next `§R<r>.<W\|D\|P\|U>` section inside a `Design` doc (header `◀`/`▶` clicks step too; beside dock `▌` follows live) |
+| `t`, `i`, `r` | Open inline composer (`[t] tell`, or `[r] reply` targeting `producer` inside an active `Design` doc), sharing the studio's dock `›` draft and `↑`/`↓` history (`hollywood` uses the Call Sheet draft/history; `Tab` completes `/verb` on studios; `Enter` sends or retries failed sends; `Esc` returns to reading keeping the draft) |
 | `o` | Focus the author's live terminal (closing the Reader), or reopen a closed resumable / fixed seat (`□ closed`) |
 | `p` | Peek at the author's live screen read-only (never carrying a prompt; omitted when closed) |
 | `v` | Open the Task & Delivery Sheet for the entry's studio/task (closing the Reader) |
 | `y` | Copy the unwrapped raw UTF-8 source text via OSC 52 (never answers permission prompts) |
-| `a` / `x` | Apply / cancel an open actionable card (locked while pending; inert on read-only views) |
+| `a` / `x` | Apply / cancel an open actionable card, or press `a` on a waiting `Design` doc (`WaitingUser` / `SuggestSkip`) to open sign-off confirmation (inert on finalized `-final.md` / read-only views) |
 | `?` | Open key help (`Ctrl+B ?` also works in reading mode) |
 | `Enter` | Close read-only views (no-op on actionable cards) |
 | `Esc`, `q` | Close inline compose keeping draft (first `Esc`), then close the Reader keeping any draft visible on the dock |

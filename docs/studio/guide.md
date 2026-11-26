@@ -1202,6 +1202,12 @@ claude = "~/.config/backlot/claude.env"        # this runner only
 A file that exists but does not parse or read is `config malformed` — the message names the path
 and the line's position only, never the value beside it.
 
+When a studio enables `design_gate = "required"`, both `<state base>/config.toml` and the user
+config (`~/.config/backlot/config.toml`, with the per-core file taking precedence) accept
+`[design]` with `hook_capture = false` to opt out of verbatim producer terminal prompt capture
+during opening design discussions (`true` by default; with hook capture off or on runners without a
+prompt hook, untainted producer turns require `backlot design note` before `backlot design next`).
+
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
 the factual record, with no score. `--kind <task_kind>` keeps only one task kind's rows (and
 answers plainly when nothing delivered on it). An actor whose deliveries reported usage shows
@@ -1231,6 +1237,9 @@ effort = "high"            # the cast file's effort rule applies
 [client]
 # server = "host-a"        # hub host (or "host-a/backlot"); overridden by BACKLOT_SERVER / --server
 # session = "backlot"      # optional default session when `server` omits `/<session>`
+
+[design]
+# hook_capture = true      # verbatim producer prompt hook capture in WaitingUser (defaults to true)
 ```
 
 A missing file means defaults; a malformed one means defaults plus a notice carrying only the

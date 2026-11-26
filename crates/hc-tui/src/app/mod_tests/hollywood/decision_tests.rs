@@ -20,7 +20,7 @@ fn ns_recorder(show_body: &'static str) -> (Recorded, crate::app::new_studio::Ns
     let sink = calls.clone();
     let runner: crate::app::new_studio::NsRun = Arc::new(move |machine, argv, _stdin| {
         sink.lock().unwrap().push((machine, argv.clone()));
-        let is_show = argv.windows(2).any(|w| w == ["design", "show"]);
+        let is_show = argv.windows(2).any(|w| w == ["report", "show"]);
         Box::pin(async move {
             if is_show {
                 Ok(show_body.to_owned())
@@ -277,13 +277,25 @@ async fn callsheet_decision_keys_a_confirm_cancel_r_reply_suggest_skip_open_and_
     let tell_reply = app.action_rx.recv().await.expect("tell reply");
     app.on_action_reply(tell_reply);
 
-    // 3. `o` runs `design show` and opens Reader with the design markdown.
+    // 3. `o` opens PR 6's Design Reader (`ReaderKind::Design` on `design/v1.md`),
+    // where `a` opens the exact same confirmation dialog.
     select_decision_in_sheet(&mut app);
     key(&mut app, hc_vt::Key::Char('o'));
     let show_reply = app.action_rx.recv().await.expect("show reply");
     app.on_action_reply(show_reply);
     let view = app.hollywood.view.as_ref().expect("`o` must open Reader");
+    assert_eq!(view.meta.kind, crate::hollywood::ReaderKind::Design);
+    assert_eq!(view.meta.file.as_deref(), Some("design/v1.md"));
     assert!(view.raw_body.contains("Proposed monolith."), "{view:?}");
+    key(&mut app, hc_vt::Key::Char('a'));
+    let reader_confirm = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    assert!(
+        reader_confirm.contains("sign off") && reader_confirm.contains("design/v1-final.md"),
+        "Design Reader `a` must open the same confirmation dialog:\n{reader_confirm}"
+    );
+    key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
 
     // 4. On `SuggestSkip`: `a` shows `skip` and runs `design sign --skip`, `r` runs `design open`.
     let mut skip_app = design_app(true, true);
@@ -334,10 +346,10 @@ async fn callsheet_decision_keys_a_confirm_cancel_r_reply_suggest_skip_open_and_
             (
                 None,
                 vec![
-                    "design".into(),
+                    "report".into(),
                     "show".into(),
-                    "--version".into(),
-                    "1".into(),
+                    "--file".into(),
+                    "design/v1.md".into(),
                     "--studio".into(),
                     "beta".into(),
                     "--as".into(),
@@ -403,7 +415,8 @@ async fn dock_decision_keys_r_o_a_and_focused_footer_hints() {
     key(&mut app, hc_vt::Key::Char('o'));
     let r2 = app.action_rx.recv().await.expect("dock show");
     app.on_action_reply(r2);
-    assert!(app.hollywood.view.is_some(), "dock `o` opens Reader");
+    let dock_view = app.hollywood.view.as_ref().expect("dock `o` opens Reader");
+    assert_eq!(dock_view.meta.kind, crate::hollywood::ReaderKind::Design);
     key(&mut app, hc_vt::Key::Escape);
 
     key(&mut app, hc_vt::Key::Char('r'));
@@ -432,10 +445,10 @@ async fn dock_decision_keys_r_o_a_and_focused_footer_hints() {
             (
                 None,
                 vec![
-                    "design".into(),
+                    "report".into(),
                     "show".into(),
-                    "--version".into(),
-                    "1".into(),
+                    "--file".into(),
+                    "design/v1.md".into(),
                     "--studio".into(),
                     "beta".into(),
                     "--as".into(),

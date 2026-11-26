@@ -155,6 +155,7 @@ pub(crate) fn design_next(base: &Path, caller: &Caller) -> Result<DesignStartRou
     let dir = store::studio_dir(base, &caller.studio);
     require_studio_dir(&dir, &caller.studio)?;
     let role = caller.role.clone();
+    let check_dir = dir.clone();
     append_opened(
         &dir,
         caller,
@@ -174,6 +175,11 @@ pub(crate) fn design_next(base: &Path, caller: &Caller) -> Result<DesignStartRou
                 return Err(Fail::refused(format!(
                     "opening design v{version} has no active round; run 'backlot design open' first"
                 )));
+            }
+            if crate::design_capture::has_pending_note(&check_dir, state) {
+                return Err(Fail::refused(
+                    "producer terminal saw unrecorded user input; run 'backlot design note --from user' first",
+                ));
             }
             Ok((version, d.round + 1))
         },

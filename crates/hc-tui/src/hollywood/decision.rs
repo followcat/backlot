@@ -6,8 +6,6 @@ use backlot_model::summary::{DesignSummary, StudioSummary};
 
 use super::items::{Chip, WaitParts};
 use crate::chrome::text::truncate_end;
-use crate::studio::StudioKey;
-use crate::studio_dialog::{ConfirmFor, StudioDialog};
 
 /// One studio whose opening design is waiting on a user decision.
 #[derive(Debug, Clone, Copy)]
@@ -125,36 +123,4 @@ pub(crate) fn detail_lines(item: &DecisionItem<'_>) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .map(|s| vec![s.to_owned()])
         .unwrap_or_default()
-}
-
-/// Confirmation modal built on `a` (`sign off` vs `skip`) naming the frozen file.
-pub(crate) fn confirm_dialog(key: &StudioKey, design: &DesignSummary) -> StudioDialog {
-    let place = StudioDialog::place(key);
-    let frozen = format!("design/v{}-final.md", design.version);
-    let suggest_skip = design.suggest_skip || design.phase == DesignPhase::SuggestSkip;
-    let (title, body) = if suggest_skip {
-        (
-            format!("Skip design · {place}"),
-            format!(
-                "Mode: skip opening design for v{}.\nFreeze: {} (from {}).",
-                design.version, frozen, design.doc_file
-            ),
-        )
-    } else {
-        (
-            format!("Sign off design · {place} R{}", design.round),
-            format!(
-                "Mode: sign off opening design v{} R{}.\nFreeze: {} (from {}).",
-                design.version, design.round, frozen, design.doc_file
-            ),
-        )
-    };
-    StudioDialog::confirm(
-        title,
-        body,
-        ConfirmFor::DesignSign {
-            key: key.clone(),
-            suggest_skip,
-        },
-    )
 }

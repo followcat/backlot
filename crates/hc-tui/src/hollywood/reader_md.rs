@@ -4,6 +4,98 @@
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DesignSection {
+    pub anchor: String,
+    pub label: String,
+    pub raw_line: usize,
+}
+
+/// Extract ordered round/role section anchors (`## R<r>`, `### §R<r>.<W|D|P|U>[+]`,
+/// and `## Sign-off`) from design Markdown outside fenced code blocks.
+pub(crate) fn parse_design_sections(lines: &[String]) -> Vec<DesignSection> {
+    let mut sections = Vec::new();
+    let mut in_fence = false;
+    for (idx, raw) in lines.iter().enumerate() {
+        let line = normalize_line(raw);
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let heading = if let Some(rest) = trimmed.strip_prefix("### ") {
+            Some((3u8, rest.trim()))
+        } else {
+            trimmed.strip_prefix("## ").map(|rest| (2u8, rest.trim()))
+        };
+        if let Some((level, h)) = heading
+            && let Some((anchor, label)) = parse_design_heading_parts(h, level)
+        {
+            sections.push(DesignSection {
+                anchor,
+                label,
+                raw_line: idx,
+            });
+        }
+    }
+    sections
+}
+
+/// Parse an already-stripped `MdBlock::Heading` title into `(anchor, display_label)`.
+pub(super) fn design_section_for_heading(heading: &str) -> Option<(String, String)> {
+    parse_design_heading_parts(heading.trim(), 0)
+}
+
+fn parse_design_heading_parts(h: &str, level: u8) -> Option<(String, String)> {
+    let token = h.split_whitespace().next()?;
+    if level != 3 && is_round_anchor(token) && h == token {
+        return Some((token.to_string(), token.to_string()));
+    }
+    if level != 3 && (token == "Sign-off" || h.starts_with("Sign-off ")) {
+        return Some(("Sign-off".to_string(), "Sign-off".to_string()));
+    }
+    if level != 2 && is_role_anchor(token) {
+        let suffix = match token.as_bytes().iter().rev().find(|b| **b != b'+') {
+            Some(b'W') if token.ends_with('+') => "supplement",
+            Some(b'D') if token.ends_with('+') => "supplement",
+            Some(b'W') => "proposal",
+            Some(b'D') => "review",
+            Some(b'P') => "summary",
+            Some(b'U') => "you",
+            _ => "",
+        };
+        let label = if suffix.is_empty() {
+            token.to_string()
+        } else {
+            format!("{token} {suffix}")
+        };
+        return Some((token.to_string(), label));
+    }
+    None
+}
+
+fn is_round_anchor(s: &str) -> bool {
+    s.strip_prefix('R')
+        .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn is_role_anchor(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("§R") else {
+        return false;
+    };
+    let Some((digits, kind)) = rest.split_once('.') else {
+        return false;
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    let core = kind.strip_suffix('+').unwrap_or(kind);
+    matches!(core, "W" | "D" | "P" | "U")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum MdBlock {
     Heading(String),
     Bullet(Vec<MdInline>),

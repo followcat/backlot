@@ -30,6 +30,21 @@ fn chip(key: char, full: &'static str, short: &'static str, primary: bool) -> Ch
 }
 
 fn available_chips(view: &CardView) -> Vec<ChipSpec> {
+    if view.meta.kind == ReaderKind::Design {
+        let mut chips = Vec::with_capacity(4);
+        if !view.meta.design_finalized() {
+            chips.push(chip('r', "[r] reply", "[r]", true));
+        }
+        if view.meta.design_awaiting_user() {
+            chips.push(chip('a', "[a] sign off", "[a]", true));
+        }
+        if view.meta.sheet_studio_key().is_some() {
+            chips.push(chip('v', "[v] sheet", "[v]", false));
+        }
+        chips.push(chip('y', "[y] copy", "[y]", true));
+        return chips;
+    }
+
     if view.card.is_some() {
         let mut chips = vec![
             chip('a', "[a] apply", "[a]", true),
@@ -65,13 +80,15 @@ fn available_chips(view: &CardView) -> Vec<ChipSpec> {
 
 pub(super) fn draw_action_strip(
     buf: &mut Buffer,
-    area: Rect,
-    y: u16,
+    row: Rect,
     view: &CardView,
+    nav_total: usize,
     pending: Option<&str>,
     palette: &Palette,
     chips_out: &mut Vec<(Rect, char)>,
 ) {
+    let area = row;
+    let y = row.y;
     if area.width <= 2 {
         return;
     }
@@ -125,8 +142,18 @@ pub(super) fn draw_action_strip(
     }
 
     let specs = available_chips(view);
-    let has_nav = view.meta.nav_total.is_some_and(|n| n > 1);
-    let tail = if has_nav { "←/→ · esc" } else { "esc" };
+    let has_nav = nav_total > 1;
+    let tail = if view.meta.kind == ReaderKind::Design {
+        if has_nav {
+            "[/] · esc back"
+        } else {
+            "esc back"
+        }
+    } else if has_nav {
+        "←/→ · esc"
+    } else {
+        "esc"
+    };
 
     let tier0: Vec<ChipSpec> = specs.clone();
     let tier1: Vec<ChipSpec> = specs.iter().copied().filter(|c| c.primary).collect();
