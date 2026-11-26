@@ -27,12 +27,19 @@ fn studio_required() -> EventKind {
     k
 }
 
-fn design_entry(version: u32, round: u32, slot: DesignSlot) -> EventKind {
+fn design_entry(version: u32, round: u32, seq: u64, slot: DesignSlot) -> EventKind {
+    let slug = match slot {
+        DesignSlot::Proposal => "proposal",
+        DesignSlot::Buildability => "buildability",
+        DesignSlot::Summary => "summary",
+        DesignSlot::UserInput => "user_input",
+        DesignSlot::Supplement => "supplement",
+    };
     EventKind::DesignEntry {
         version,
         round,
         slot,
-        file: format!("design/v{version}/r{round}.md"),
+        file: format!("design/v{version}/r{round}-{seq}-{slug}.md"),
         source: None,
         refs: Vec::new(),
         questions: Vec::new(),
@@ -79,6 +86,25 @@ async fn stage_nudge_drives_design_slots_without_nudging_waiting_user() {
             Ok::<_, std::convert::Infallible>(Pending {
                 event: NewEvent::new(by.clone(), kind.clone()),
                 files: Vec::new(),
+            })
+        })
+        .unwrap()
+    };
+    let put_entry = |by: EventBy, version: u32, round: u32, slot: DesignSlot| {
+        let scratch = td.join(format!("entry-{version}-{round}-{slot:?}.md"));
+        fs::write(&scratch, format!("{slot:?} body\n")).unwrap();
+        store::append(&sdir, move |_, seq| {
+            let kind = design_entry(version, round, seq, slot);
+            let EventKind::DesignEntry { ref file, .. } = kind else {
+                unreachable!()
+            };
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(by.clone(), kind.clone()),
+                files: vec![crate::store::PendingFile {
+                    src: scratch,
+                    dest: file.clone(),
+                    append: None,
+                }],
             })
         })
         .unwrap()
@@ -173,10 +199,7 @@ async fn stage_nudge_drives_design_slots_without_nudging_waiting_user() {
         )
     }));
 
-    put(
-        EventBy::role("writer"),
-        design_entry(1, 1, DesignSlot::Proposal),
-    );
+    put_entry(EventBy::role("writer"), 1, 1, DesignSlot::Proposal);
     let t2 = load().1;
     stage
         .nudge("acme-shop", &sdir, &replay(&load().0), &live, t2 + 1_000)
@@ -191,14 +214,8 @@ async fn stage_nudge_drives_design_slots_without_nudging_waiting_user() {
         )
     }));
 
-    put(
-        EventBy::role("director"),
-        design_entry(1, 1, DesignSlot::Buildability),
-    );
-    put(
-        EventBy::role("producer"),
-        design_entry(1, 1, DesignSlot::Summary),
-    );
+    put_entry(EventBy::role("director"), 1, 1, DesignSlot::Buildability);
+    put_entry(EventBy::role("producer"), 1, 1, DesignSlot::Summary);
     let (before, t3) = load();
     stage
         .nudge("acme-shop", &sdir, &replay(&before), &live, t3 + 1_000)
