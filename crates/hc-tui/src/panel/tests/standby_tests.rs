@@ -37,11 +37,17 @@ fn standby_summary(writer_state: &str, producer_state: &str) -> Summary {
     .unwrap()
 }
 
-fn draw_panel(summary: &Summary, width: u16, height: u16) -> (Buffer, crate::panel::PanelRender) {
+fn draw_panel(
+    summary: &Summary,
+    width: u16,
+    height: u16,
+    sidebar_collapsed: bool,
+) -> (Buffer, crate::panel::PanelRender) {
     let area = Rect::new(0, 0, width, height);
     let mut buf = Buffer::empty(area);
     let panel = Panel {
         mode: PanelMode::Expanded,
+        sidebar_collapsed,
         ..Panel::new()
     };
     let palette = Palette::from_name("catppuccin").unwrap();
@@ -85,7 +91,8 @@ fn standby_row_in_dock_renders_single_line_role_badge_and_no_counts() {
 
     let palette = Palette::from_name("catppuccin").unwrap();
     let area = Rect::new(0, 0, 44, 30);
-    let (buf, hits) = draw_panel(&summary, area.width, area.height);
+    // When left sidebar is collapsed, Lot expands all roles including standby writer.
+    let (buf, hits) = draw_panel(&summary, area.width, area.height, true);
     let writer_rect = hits
         .rows
         .iter()
@@ -102,6 +109,14 @@ fn standby_row_in_dock_renders_single_line_role_badge_and_no_counts() {
     assert_eq!(buf[(area.x + badge_x, writer_rect.y)].fg, palette.teal);
     let state_x = row1[..row1.find("standby").unwrap()].chars().count() as u16;
     assert_eq!(buf[(area.x + state_x, writer_rect.y)].fg, palette.overlay0);
+
+    // When left sidebar is open, calm + standby roles summarize onto 1 line.
+    let (open_buf, _) = draw_panel(&summary, area.width, area.height, false);
+    let open_text = (area.y..area.y + area.height)
+        .map(|y| line_at(&open_buf, area, y))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(open_text.contains("○ 2 idle · Ⓦ standby"), "{open_text}");
 
     // Hint moved to `Space` drawer rather than a permanent 2nd dock line.
     let all_text = (area.y..area.y + area.height)

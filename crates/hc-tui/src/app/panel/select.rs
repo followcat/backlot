@@ -40,12 +40,17 @@ impl App {
         {
             return at;
         }
+        let fallback = |cand: &Target| match (target, cand) {
+            (Target::Block(k), Target::Studio(o)) | (Target::Studio(k), Target::Block(o)) => k == o,
+            _ => false,
+        };
         targets
             .iter()
             .enumerate()
             .filter(|(_, t)| *t == target)
             .map(|(i, _)| i)
             .min_by_key(|i| i.abs_diff(self.panel.selected_row.unwrap_or(0)))
+            .or_else(|| targets.iter().position(fallback))
             .unwrap_or(0)
     }
     /// The body height the dock draws into — derived from `self.area`

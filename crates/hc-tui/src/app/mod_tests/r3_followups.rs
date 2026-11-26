@@ -120,18 +120,29 @@ async fn prefix_chord_closes_open_menu_and_reopens_for_current_focus() {
     super::endpoint_nav::pending_attach(&mut app);
     app.area = (120, 24);
     draw_to(&mut app, 120, 24);
-    // Right-click acme-shop workspace row -> StudioFocus::Studio(acme-shop) & menu opens.
-    let ws = app
-        .hit_map
-        .workspaces
+    // Right-click acme-shop header in Lot -> StudioFocus::Studio(acme-shop) & menu opens.
+    app.panel.mode = crate::panel::PanelMode::Expanded;
+    app.area = (120, 24);
+    draw_to(&mut app, 120, 24);
+    let acme = app
+        .panel_hits
+        .rows
         .iter()
-        .find(|w| w.workspace_id.ends_with("acme-shop"))
-        .map(|w| w.rect)
-        .expect("acme-shop workspace row");
+        .find(|(_, t)| {
+            matches!(
+                t,
+                crate::panel::Target::Studio(k)
+                    | crate::panel::Target::Block(k)
+                    | crate::panel::Target::Strip(k)
+                    if k == &StudioKey::local("acme-shop")
+            )
+        })
+        .map(|(r, _)| *r)
+        .expect("acme-shop lot header row");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Right),
-        ws.x + 2,
-        ws.y,
+        acme.x + 2,
+        acme.y,
     ));
     assert!(app.menu.is_some());
     assert_eq!(

@@ -11,6 +11,7 @@ pub(crate) mod data;
 mod draw;
 mod draw_blocks;
 mod draw_cards;
+mod draw_compact;
 mod draw_tasks;
 mod pending;
 pub(crate) mod remote;
@@ -79,6 +80,10 @@ pub(crate) struct Panel {
     /// Studios whose `□ <n> closed` fold is open — the closed
     /// role rows show under the fold line.
     pub closed_folds: std::collections::BTreeSet<crate::studio::StudioKey>,
+    /// Mirror of `shell_state.sidebar_collapsed` for this frame: while the
+    /// left sidebar is open, the current studio card summarizes calm/standby
+    /// roles instead of repeating Cast; when collapsed, all roles expand here.
+    pub sidebar_collapsed: bool,
     /// `f` on a ready-to-finish studio armed the inline
     /// `finish <id>? [y/n]` confirm — `y` runs `studio finish`, `n`
     /// or `Esc` stands down (S2 §2's `[f]` hint made real).
@@ -140,6 +145,7 @@ impl Panel {
             drawer: None,
             accepted_folds: Default::default(),
             closed_folds: Default::default(),
+            sidebar_collapsed: false,
             finish_confirm: None,
             drafts: std::collections::HashMap::new(),
             histories: std::collections::HashMap::new(),

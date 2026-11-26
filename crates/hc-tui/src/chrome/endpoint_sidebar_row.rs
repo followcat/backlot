@@ -108,8 +108,32 @@ pub(super) fn render_machine_line(
     }
     let x = rect.x.saturating_add(indent);
     let hc = line.hc.as_deref().map(|v| format!("hc {v} "));
+    let draw_stage_suffix = |buf: &mut Buffer, start_x: u16| {
+        let Some(ok) = line.stage_ok else {
+            return;
+        };
+        let suffix = if ok { " · ● ok" } else { " · ◌ down" };
+        let w = display_width(suffix);
+        if start_x.saturating_sub(x) + w > inner {
+            return;
+        }
+        let dot = if ok { "●" } else { "◌" };
+        let dot_style = Style::default().fg(if ok { palette.green } else { palette.peach });
+        let word = if ok { " ok" } else { " down" };
+        put_text(buf, start_x, rect.y, 3, " · ", dim);
+        put_text(buf, start_x + 3, rect.y, 1, dot, dot_style);
+        put_text(
+            buf,
+            start_x + 4,
+            rect.y,
+            display_width(word),
+            word,
+            if ok { dim } else { dot_style },
+        );
+    };
+    let text_w = display_width(&line.text);
     match hc {
-        Some(hc) if display_width(&hc) + display_width(&line.text) <= inner => {
+        Some(hc) if display_width(&hc) + text_w <= inner => {
             let hc_w = display_width(&hc);
             put_text(buffer, x, rect.y, hc_w, &hc, dim);
             put_text(
@@ -120,8 +144,12 @@ pub(super) fn render_machine_line(
                 &line.text,
                 text_style,
             );
+            draw_stage_suffix(buffer, x.saturating_add(hc_w).saturating_add(text_w));
         }
-        _ => put_text(buffer, x, rect.y, inner, &line.text, text_style),
+        _ => {
+            put_text(buffer, x, rect.y, inner, &line.text, text_style);
+            draw_stage_suffix(buffer, x.saturating_add(text_w));
+        }
     }
 }
 
@@ -145,6 +173,7 @@ mod tests {
             hc: Some("0.1.0".into()),
             text: "backlot 0.2.4".into(),
             tone: MachineTone::Normal,
+            stage_ok: None,
         };
         let mut buf = Buffer::empty(Rect::new(0, 0, 26, 1));
         render_machine_line(&mut buf, Rect::new(0, 0, 26, 1), &line, &palette);
@@ -152,5 +181,19 @@ mod tests {
         let mut buf = Buffer::empty(Rect::new(0, 0, 17, 1));
         render_machine_line(&mut buf, Rect::new(0, 0, 17, 1), &line, &palette);
         assert_eq!(row_text(&buf, 17), "   backlot 0.2.4");
+    }
+
+    #[test]
+    fn stage_ok_suffix_renders_when_space_allows() {
+        let palette = Palette::catppuccin();
+        let line = MachineLine {
+            hc: None,
+            text: "backlot 0.4.12".into(),
+            tone: MachineTone::Normal,
+            stage_ok: Some(true),
+        };
+        let mut buf = Buffer::empty(Rect::new(0, 0, 25, 1));
+        render_machine_line(&mut buf, Rect::new(0, 0, 25, 1), &line, &palette);
+        assert_eq!(row_text(&buf, 25), "   backlot 0.4.12 · ● ok");
     }
 }

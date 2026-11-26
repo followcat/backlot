@@ -9,7 +9,7 @@ use backlot_model::summary::{OutwardCardSummary, RoleSummary, StudioExchange, Ta
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
 use super::rows_fit::*;
-use super::rows_fold::{BlockState, block_states};
+use super::rows_fold::{BlockState, CompactKind, block_states};
 use super::{Panel, PanelMode};
 use crate::studio::StudioKey;
 
@@ -153,6 +153,19 @@ pub(crate) enum Row<'a> {
     },
     /// `╰──╯`
     BlockBottom(StudioRef<'a>),
+    /// 1-line summary of calm/standby live roles omitted on the current
+    /// studio while Left Cast already shows the full roster:
+    /// `│ ○ 2 idle · Ⓦ standby │`.
+    CalmSummary {
+        studio: StudioRef<'a>,
+        idle_count: usize,
+        standby_badges: String,
+    },
+    /// Borderless 1-line compact studio (`✓ gamma-web  5/5 ready [f]`).
+    CompactStudio {
+        studio: StudioRef<'a>,
+        kind: CompactKind,
+    },
     /// `│ <mark> <role_badge>[ <flag>]  <state>[ <age>][ · <detail…>] │`
     Person {
         studio: StudioRef<'a>,
@@ -263,12 +276,14 @@ impl Row<'_> {
             | Row::Usage { .. }
             | Row::InputDivider { .. }
             | Row::BlockBottom(_)
+            | Row::CalmSummary { .. }
             | Row::Drawer { .. }
             | Row::Update { .. } => Target::None,
             // R22: the hint is the dialog's button — actionable like
             // the Call Sheet's own setup line.
             Row::SetupHint => Target::Setup,
             Row::BlockTop { studio, .. } => Target::Studio(studio.key()),
+            Row::CompactStudio { studio, .. } => Target::Block(studio.key()),
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::OutwardCard { studio, card } => Target::OutwardCard(studio.key(), card.id.clone()),
@@ -292,12 +307,13 @@ impl Row<'_> {
 }
 
 /// One studio's expanded block: header, owed-step subheader, live
-/// roles, task rows, the accepted fold, closed roles, bounded
-/// exchange rows, input row, bottom border.
+/// roles (or calm summary when current and sidebar expanded), task rows,
+/// folds, bounded exchange rows, input row, bottom border.
 fn block_rows<'a>(
     out: &mut Vec<Row<'a>>,
     studio: StudioRef<'a>,
     panel: &Panel,
+    current: Option<&StudioKey>,
     stage: bool,
     reachable: bool,
     talk_limit: usize,
@@ -382,7 +398,15 @@ fn block_rows<'a>(
             }
         }
     };
-    for role in live_roles(studio.studio) {
+    let (calm, shown_roles) = live_person_plan(studio, panel, current);
+    if let Some((idle_count, standby_badges)) = calm {
+        out.push(Row::CalmSummary {
+            studio,
+            idle_count,
+            standby_badges,
+        });
+    }
+    for role in shown_roles {
         emit_person(out, role);
     }
     for card in &studio.studio.outward_cards {
@@ -439,8 +463,8 @@ fn block_rows<'a>(
     out.push(Row::BlockBottom(studio));
 }
 
-/// An unselected studio's folded block: header, one `Person` row per
-/// live role (no detail or drawer lines), and bottom border.
+/// An unselected active studio's folded block: header, one `Person` row per
+/// active/alert live role, and bottom border.
 fn folded_block_rows<'a>(
     out: &mut Vec<Row<'a>>,
     studio: StudioRef<'a>,
@@ -449,7 +473,7 @@ fn folded_block_rows<'a>(
 ) {
     let health = health_of(studio.studio, stage, reachable);
     out.push(Row::BlockTop { studio, health });
-    for role in live_roles(studio.studio) {
+    for role in super::rows_fold::folded_roles(studio.studio) {
         out.push(Row::Person { studio, role });
     }
     out.push(Row::BlockBottom(studio));
@@ -547,24 +571,31 @@ pub(crate) fn rows<'a>(
                     health,
                 });
                 let roles = strip_roles(studio.studio);
-                if roles.is_empty() {
-                    out.push(Row::StripSummary {
-                        studio: *studio,
-                        stage,
-                        reachable: reach,
-                    });
-                } else {
+                if !roles.is_empty() {
                     for role in roles {
                         out.push(Row::StripRole {
                             studio: *studio,
                             role,
                         });
                     }
+                } else if !stage || !reach || studio.studio.error.is_some() {
+                    out.push(Row::StripSummary {
+                        studio: *studio,
+                        stage,
+                        reachable: reach,
+                    });
                 }
             }
         }
         PanelMode::Expanded => {
             let header_rows = out.len().saturating_sub(1);
+            let compact_of = |studio: StudioRef<'_>| {
+                super::draw_compact::compact_kind(
+                    studio.studio,
+                    stage_running(studio.machine),
+                    reachable(studio.machine),
+                )
+            };
             let owed = |studio: StudioRef<'_>| {
                 !reachable(studio.machine)
                     || !stage_running(studio.machine)
@@ -572,7 +603,7 @@ pub(crate) fn rows<'a>(
                     || studio.studio.next.is_some()
                     || studio.studio.ready_to_finish
             };
-            let states = block_states(&studios, panel, current, body_height, &owed);
+            let states = block_states(&studios, panel, current, body_height, &compact_of, &owed);
             let budgets = talk_budgets(
                 &studios,
                 &states,
@@ -589,9 +620,24 @@ pub(crate) fn rows<'a>(
                 match states.get(&key).copied().unwrap_or(BlockState::Stacked) {
                     BlockState::Full => {
                         let talk_limit = budgets.get(&key).copied().unwrap_or(0);
-                        block_rows(&mut out, studio, panel, stage, reach, talk_limit);
+                        block_rows(&mut out, studio, panel, current, stage, reach, talk_limit);
                     }
                     BlockState::Folded => folded_block_rows(&mut out, studio, stage, reach),
+                    BlockState::Compact(kind) => {
+                        out.push(Row::CompactStudio { studio, kind });
+                        if panel.finish_confirm.as_ref() == Some(&key) {
+                            let pending = if super::data::report_pending(studio.studio) {
+                                " (report pending)"
+                            } else {
+                                ""
+                            };
+                            out.push(Row::Owed {
+                                studio,
+                                kind: Owed::Confirm,
+                                text: format!("finish {}{pending}? [y/n]", studio.studio.id),
+                            });
+                        }
+                    }
                     BlockState::Stacked => out.push(Row::Stacked(studio)),
                 }
             }

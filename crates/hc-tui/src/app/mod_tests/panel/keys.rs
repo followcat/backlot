@@ -568,9 +568,13 @@ async fn keys_reach_a_remote_actor_across_publishes() {
         },
         "actor-a".into(),
     );
-    for _ in 0..30 {
+    for _ in 0..35 {
         if app.panel.selected == Some(actor.clone()) {
             break;
+        }
+        if matches!(app.panel.selected, Some(Target::Block(_))) {
+            key(&mut app, hc_vt::Key::Enter);
+            continue;
         }
         republish(&mut app);
         key(&mut app, hc_vt::Key::ArrowDown);

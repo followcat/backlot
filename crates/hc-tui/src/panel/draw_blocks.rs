@@ -65,9 +65,9 @@ pub(super) fn draw_top(
     );
     // The studio-wide actor cap beside the progress: `actors 2/4` once
     // the document carries one — older documents read 0 and show none.
-    if studio.studio.actors_cap > 0 {
+    if studio.studio.actors_live > 0 && studio.studio.actors_cap > 0 {
         progress.push_str(&format!(
-            " actors {}/{}",
+            " · {}/{}",
             studio.studio.actors_live, studio.studio.actors_cap
         ));
     }
@@ -313,7 +313,17 @@ pub(super) fn draw_input(
     palette: &Palette,
 ) -> Option<crate::chrome::help::CursorState> {
     let elev = palette.elevation();
-    let field_bg = elev.raised_field;
+    let active_field = selected || composing;
+    let field_bg = if active_field {
+        elev.raised_field
+    } else {
+        elev.surface
+    };
+    let ph_fg = if active_field {
+        elev.muted_raised
+    } else {
+        elev.muted_surface
+    };
     draw_inner(buf, rect, frame);
     if rect.width > 2 {
         let inner = Rect::new(rect.x + 1, rect.y, rect.width.saturating_sub(2), 1);
@@ -340,7 +350,7 @@ pub(super) fn draw_input(
     } else if selected {
         Style::default().fg(palette.accent).bg(field_bg)
     } else {
-        Style::default().fg(elev.muted_raised).bg(field_bg)
+        Style::default().fg(ph_fg).bg(field_bg)
     };
     put_text(buf, rect.x + 2, rect.y, 1, "›", mark);
     let badge = cue
@@ -368,7 +378,7 @@ pub(super) fn draw_input(
                 width,
                 &truncate_end("tell producer · / actions", width as usize),
                 Style::default()
-                    .fg(elev.muted_raised)
+                    .fg(ph_fg)
                     .bg(field_bg)
                     .add_modifier(Modifier::ITALIC),
             );
@@ -382,7 +392,7 @@ pub(super) fn draw_input(
             width,
             &truncate_end("tell producer · / actions", width as usize),
             Style::default()
-                .fg(elev.muted_raised)
+                .fg(ph_fg)
                 .bg(field_bg)
                 .add_modifier(Modifier::ITALIC),
         );
@@ -395,11 +405,7 @@ pub(super) fn draw_input(
             width,
             &truncate_end(draft.as_str(), width as usize),
             Style::default()
-                .fg(if selected {
-                    palette.subtext0
-                } else {
-                    elev.muted_raised
-                })
+                .fg(if selected { palette.subtext0 } else { ph_fg })
                 .bg(field_bg),
         );
         None

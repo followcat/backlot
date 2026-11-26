@@ -15,7 +15,7 @@ use super::render::{
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
-    workspace_entries_filtered, workspace_rows,
+    workspace_entries_for_sidebar, workspace_rows,
 };
 use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
@@ -111,13 +111,21 @@ pub(crate) fn render_expanded(
         if let Some(snapshot) = endpoint.snapshot.as_deref() {
             let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                 .unwrap_or(&empty_collapsed_groups);
+            let hidden = state
+                .studio_tree
+                .and_then(|tree| tree.live_studios.get(&endpoint.endpoint_id));
             rows.extend(
-                workspace_entries_filtered(snapshot, collapsed_groups, state.hide_stage_space)
-                    .into_iter()
-                    .map(|entry| Row::Workspace {
-                        endpoint: endpoint_index,
-                        entry,
-                    }),
+                workspace_entries_for_sidebar(
+                    snapshot,
+                    collapsed_groups,
+                    state.hide_stage_space,
+                    hidden,
+                )
+                .into_iter()
+                .map(|entry| Row::Workspace {
+                    endpoint: endpoint_index,
+                    entry,
+                }),
             );
         }
         if let Some(tree) = state.studio_tree {
@@ -300,13 +308,13 @@ pub(crate) fn render_expanded(
             _ => false,
         })
     {
-        let metrics = super::scroll::list_scroll_metrics(
+        *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
             &row_heights,
             &gaps,
             body.height,
             *state.workspace_scroll,
+            machine_row,
         );
-        *state.workspace_scroll = machine_row.min(metrics.max_offset_from_bottom);
     }
     // W1b: `Ctrl+B t`'s cursor never falls out of view — the section
     // scrolls to the highlighted row, as it does for the current studio.

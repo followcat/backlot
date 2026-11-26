@@ -88,17 +88,17 @@ fn people(targets: &[Target]) -> Vec<String> {
 #[test]
 fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     let summary = summary();
+    // Collapsed left sidebar expands the full cast in Lot.
+    let mut collapsed_panel = panel(PanelMode::Expanded);
+    collapsed_panel.sidebar_collapsed = true;
     let t = targets(
         Some(&summary),
         true,
-        &panel(PanelMode::Expanded),
+        &collapsed_panel,
         Some("acme-shop"),
         100,
     );
     assert_eq!(t.first(), Some(&Target::None));
-    // The top border is the only `Studio` row — the title and the
-    // bottom border are the `Target::None` rows (A2.2); S2 dropped
-    // the group dividers.
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
@@ -117,6 +117,24 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
             "producer",
             "director",
             "writer",
+            "actor-alice",
+            "actor-erin",
+            "actor-bob",
+            "actor-carol",
+        ]
+    );
+    // Open left sidebar summarizes calm director+writer on the current studio.
+    let open_t = targets(
+        Some(&summary),
+        true,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        100,
+    );
+    assert_eq!(
+        people(&open_t),
+        vec![
+            "producer",
             "actor-alice",
             "actor-erin",
             "actor-bob",
@@ -269,7 +287,7 @@ fn a_dead_stage_moves_the_stage_word_inside_the_block() {
 }
 
 #[test]
-fn idle_collapsed_strip_emits_summary_row_under_studio() {
+fn idle_collapsed_strip_emits_one_row_when_healthy_and_summary_when_stage_down() {
     let value = serde_json::json!({
         "schema": "backlot/1",
         "updated_ms": 1,
@@ -292,13 +310,26 @@ fn idle_collapsed_strip_emits_summary_row_under_studio() {
     let list = machines(Some(&summary));
     let p = panel(PanelMode::Collapsed);
     let r = rows(&list, |_| true, |_| true, &p, PanelMode::Collapsed, None, 0);
-    assert!(
-        r.iter()
-            .any(|row| matches!(row, crate::panel::Row::StripSummary { .. })),
-        "idle strip emits StripSummary: {r:?}"
+    assert_eq!(r.len(), 2, "calm studio takes 1 strip line only: {r:?}");
+    assert!(matches!(r[1], crate::panel::Row::Strip { .. }));
+
+    // Stage down keeps 1 summary line beneath the studio strip row.
+    let down = rows(
+        &list,
+        |_| false,
+        |_| true,
+        &p,
+        PanelMode::Collapsed,
+        None,
+        0,
     );
     assert!(
-        r.iter()
+        down.iter()
+            .any(|row| matches!(row, crate::panel::Row::StripSummary { .. })),
+        "stage-down strip emits StripSummary: {down:?}"
+    );
+    assert!(
+        down.iter()
             .skip(1)
             .all(|row| row.target() == Target::Strip("acme-shop".into())),
         "StripSummary shares Strip target"

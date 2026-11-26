@@ -66,6 +66,8 @@ pub(crate) struct MachineLine {
     pub text: String,
     /// The accent (`↑` update hint), normal or dim tone.
     pub tone: MachineTone,
+    /// Optional stage health suffix (`· ● ok` / `· ◌ down`) when installed.
+    pub stage_ok: Option<bool>,
 }
 
 /// A machine sub-line's palette choice.

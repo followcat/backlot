@@ -382,7 +382,7 @@ fn short_height_stacks_other_blocks_to_single_lines() {
     let panel = panel(PanelMode::Expanded);
     // Tall enough for one expanded block but not two → the
     // non-current studio draws its `╶` line with mark counts.
-    let area = Rect::new(0, 0, 31, 20);
+    let area = Rect::new(0, 0, 31, 14);
     let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("╶ second-studio"), "{text}");
@@ -466,17 +466,15 @@ fn an_expanded_block_draws_its_input_line() {
 }
 
 #[test]
-fn collapsed_strip_draws_health_id_machine_and_attention() {
+fn collapsed_strip_draws_health_id_and_attention_without_single_machine_suffix() {
     let summary = summary();
     let panel = panel(PanelMode::Collapsed);
     let area = Rect::new(0, 0, 16, 12);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("lot"), "{text}");
-    // `● acme-shop·loc` — health, the id and the machine's three
-    // chars; no tasks and no waiting still say something (A4.3).
-    assert!(text.contains("acme-shop·loc"), "{text}");
-    assert!(text.contains('●'), "{text}");
+    assert!(text.contains("● acme-shop"), "{text}");
+    assert!(!text.contains("·loc"), "single-machine omits ·loc: {text}");
     assert!(
         hits.rows
             .iter()
@@ -489,20 +487,33 @@ fn collapsed_strip_draws_health_id_machine_and_attention() {
         .cloned()
         .unwrap();
     assert!(!strip.contains('!'), "{strip}");
-    // With attention `!n` joins the tail.
+    // Single-machine omits ·loc so `acme-shop  !1` fits cleanly at width 16;
+    // narrower strips keep `!1` and truncate `id` with `…`.
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     value["studios"][0]["waiting"] = serde_json::json!(1);
     let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let (buf, _) = draw(area, Some(&summary), &panel, None);
-    // `!1` takes tail room, so the id truncates to `acme-…·loc`.
     let strip = lines(&buf, area)
         .iter()
-        .find(|l| l.contains("·loc"))
+        .find(|l| l.contains("acme"))
         .cloned()
         .unwrap();
     assert!(strip.contains("!1"), "{strip}");
-    assert!(strip.contains('…'), "{strip}");
+    assert!(
+        !strip.contains("·loc"),
+        "single-machine omits ·loc: {strip}"
+    );
+
+    let narrow = Rect::new(0, 0, 13, 12);
+    let (nbuf, _) = draw(narrow, Some(&summary), &panel, None);
+    let nstrip = lines(&nbuf, narrow)
+        .iter()
+        .find(|l| l.contains("acme"))
+        .cloned()
+        .unwrap();
+    assert!(nstrip.contains("!1"), "{nstrip}");
+    assert!(nstrip.contains('…'), "{nstrip}");
 }
 
 #[test]
@@ -760,7 +771,22 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let area = Rect::new(0, 0, 16, 12);
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("○2 ✓1"), "calm role counts render: {text}");
+    assert!(
+        text.contains("● acme-shop 1/5"),
+        "1-line calm strip: {text}"
+    );
+    assert!(
+        !text.contains("○2 ✓1"),
+        "calm strip is strictly 1 line: {text}"
+    );
+
+    // Ready-to-finish renders `✓ acme-shop 1/5` on 1 line as well.
+    let mut ready_val = value.clone();
+    ready_val["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    let ready_summary: Summary = serde_json::from_value(ready_val).unwrap();
+    let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
+    let ready_text = lines(&buf, area).join("\n");
+    assert!(ready_text.contains("✓ acme-shop 1/5"), "{ready_text}");
 
     // Stage down renders a concise stage cue instead of blank space.
     let mut down_buf = Buffer::empty(area);
@@ -788,13 +814,14 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let down_text = lines(&down_buf, area).join("\n");
     assert!(down_text.contains("◌ stage down"), "{down_text}");
 
-    // Ready to finish renders `✓ ready`.
+    // Ready to finish renders compact `✓ acme-shop 1/5` on 1 line as well.
     let mut ready_val = value;
     ready_val["studios"][0]["ready_to_finish"] = serde_json::json!(true);
     let ready_summary: Summary = serde_json::from_value(ready_val).unwrap();
     let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
     let ready_text = lines(&buf, area).join("\n");
-    assert!(ready_text.contains("✓ ready"), "{ready_text}");
+    assert!(ready_text.contains("✓ acme-shop 1/5"), "{ready_text}");
+    assert!(!ready_text.contains("✓ ready"), "{ready_text}");
 }
 
 #[test]

@@ -137,6 +137,7 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
     let summary = summary_with_exchange();
     let panel = Panel {
         mode: PanelMode::Expanded,
+        sidebar_collapsed: true,
         ..Panel::new()
     };
     let current = crate::studio::StudioKey::local("acme-shop");
@@ -198,6 +199,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
     let area = Rect::new(0, 0, 38, 22);
     let panel = Panel {
         mode: PanelMode::Expanded,
+        sidebar_collapsed: true,
         ..Panel::new()
     };
     let current = crate::studio::StudioKey::local("acme-shop");

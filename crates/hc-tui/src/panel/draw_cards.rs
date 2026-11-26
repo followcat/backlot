@@ -101,10 +101,9 @@ pub(super) fn draw_stacked(
     }
 }
 
-/// The collapsed strip's studio line: `● acme·Loc  1/3` — the
-/// health glyph, a short `id·<machine>` label and `<done>/<total>`
-/// or `!<n>` right-aligned (A4.3). Never blank: a studio with no
-/// tasks and nothing waiting still shows its health and name.
+/// The collapsed strip's studio line: `▸ beta    0/0` or `✓ gamm    5/5` —
+/// the focus/health glyph, studio id (plus `·<machine>` only when studios span
+/// machines), and `<done>/<total>` or `!<n>` right-aligned.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_strip(
     buf: &mut Buffer,
@@ -113,17 +112,17 @@ pub(super) fn draw_strip(
     health: Health,
     selected: bool,
     focused: bool,
+    focused_terminal: bool,
+    multi: bool,
     local: Option<&str>,
     palette: &Palette,
 ) {
-    put_text(
-        buf,
-        rect.x,
-        rect.y,
-        1,
-        health.glyph(),
-        Style::default().fg(health.color(palette)),
-    );
+    let (glyph, glyph_fg) = if focused_terminal {
+        (crate::studio::glyphs::FOCUSED_STUDIO, palette.accent)
+    } else {
+        (health.glyph(), health.color(palette))
+    };
+    put_text(buf, rect.x, rect.y, 1, glyph, Style::default().fg(glyph_fg));
     let waiting = crate::studio::waiting_count(studio.studio);
     let mut parts = Vec::new();
     if waiting > 0 {
@@ -133,7 +132,7 @@ pub(super) fn draw_strip(
             if user { palette.red } else { palette.peach },
         ));
     }
-    if studio.studio.tasks_total > 0 {
+    if studio.studio.tasks_total > 0 || focused_terminal {
         parts.push((
             format!("{}/{}", studio.studio.tasks_done, studio.studio.tasks_total),
             palette.overlay0,
@@ -141,14 +140,16 @@ pub(super) fn draw_strip(
     }
     let tail = put_parts_right(buf, rect, &parts);
     let gap = u16::from(!parts.is_empty());
-    // `<short_id>·<machine 2-3>` — the machine keeps its three
-    // chars, the id truncates first (A4.3).
-    let machine = studio.machine.or(local).unwrap_or("local");
-    let short_m: String = machine.chars().take(3).collect();
     let label_w = tail.saturating_sub(rect.x + 2 + gap);
-    let id_room = (label_w as usize).saturating_sub(1 + short_m.chars().count());
-    let id = truncate_end(&studio.studio.id, id_room.max(1));
-    let label = format!("{id}·{short_m}");
+    let label = if multi {
+        let machine = studio.machine.or(local).unwrap_or("local");
+        let short_m: String = machine.chars().take(3).collect();
+        let id_room = (label_w as usize).saturating_sub(1 + short_m.chars().count());
+        let id = truncate_end(&studio.studio.id, id_room.max(1));
+        format!("{id}·{short_m}")
+    } else {
+        truncate_end(&studio.studio.id, label_w as usize)
+    };
     if label_w > 0 {
         let style = studio_title_style(selected, focused, palette.text, palette);
         put_text(
