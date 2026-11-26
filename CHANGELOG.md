@@ -10,6 +10,17 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **Studio switching moves to `Alt+PageUp`/`Alt+PageDown`, and `Alt+Left`/`Alt+Right` go back to the terminal.** Studios are a vertical list, so the studio step now lives on the page keys; the old arrow chords were word movement in shells and agent input boxes. `Alt+Up`/`Alt+Down` still move between a studio's people (`docs/keys.md`, `docs/studio/guide.md`, `docs/studio/panel.md`).
+- **The Hollywood band shows one row per studio.** A READY row absorbs that studio's asks, other decisions fold into `+n`, and ASKS rows reply or acknowledge in place (`docs/studio/panel.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
+### Fixed
+
+- **Stepping to a studio also switches the main pane.** `Alt+Left`/`Alt+Right` now shows the studio's last member (a role or a shell, else its producer, else its first live person or shell) instead of leaving the previous studio's pane up. Stepping from a terminal moves the keys to the landed member; stepping from the lot or the machines tree swaps the pane but leaves that surface in charge, so you can keep stepping or press `Enter`. A studio with nobody live leaves the pane as it is, quietly (`docs/keys.md`, `docs/studio/guide.md`).
+- **Person questions no longer depend on recency.** `backlot tell user` stays a report, `backlot tell user --ask` is the explicit question, and `ask.acknowledged` lets the user mark one seen without answering it.
+- **A rate-limit stall stays one attention.** Reset-aware episodes escalate in place, self-continuing runners wait out their own reset, and Claude's weekly-limit paid-choice dialog is never answered by the stage.
+
 ## 0.4.11 — 2026-11-26
 
 ### Added

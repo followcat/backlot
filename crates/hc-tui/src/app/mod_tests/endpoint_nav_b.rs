@@ -369,11 +369,14 @@ async fn ctrl_jk_preserves_alt_arrows_tree_focus_compose_and_modals() {
     );
     app_alt.on_input(UiEvent::Key(alt_down), 120);
     assert_eq!(app_alt.focused.as_deref(), Some("t2"));
+    // One studio wraps onto itself: the step lands its remembered
+    // member (t2 was the last person) in the pane.
     app_alt.on_input(UiEvent::Key(alt_right), 120);
     assert_eq!(
         app_alt.studio.focus,
-        Some(StudioFocus::Studio(StudioKey::local("aiflows")))
+        Some(StudioFocus::Role(StudioKey::local("aiflows"), "t2".into()))
     );
+    assert_eq!(app_alt.focused.as_deref(), Some("t2"));
 
     // (b) Left tree keys (`Ctrl+B t`, arrows) and focused tree own Ctrl+K/Ctrl+J.
     let mut app_tree = work_app();

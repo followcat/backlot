@@ -167,7 +167,7 @@ impl App {
         }
     }
 
-    /// A direct studio key: `alt+left/right` move between studios in
+    /// A direct studio key: `alt+pageup/pagedown` move between studios in
     /// the aggregate's order — this core's first, then machine-list
     /// order — `alt+up/down` between the current studio's live
     /// people in cast order — all wrapping.
@@ -177,7 +177,6 @@ impl App {
         if studios.is_empty() {
             return;
         }
-        self.nav_leave_overlays();
         match nav {
             StudioNav::PreviousStudio | StudioNav::NextStudio => {
                 let dir: isize = if matches!(nav, StudioNav::NextStudio) {
@@ -199,22 +198,63 @@ impl App {
                     None => self.studio.current_index(&machines).unwrap_or(0),
                 };
                 let next = studios[anchor].key();
+                // The member the person was on when they step away — a
+                // role id or a shell's address — so stepping back lands
+                // there even if the last sync never saw it.
+                if let Some(left) = match &self.studio.focus {
+                    Some(studio::StudioFocus::Studio(key))
+                    | Some(studio::StudioFocus::Role(key, _)) => Some(key.clone()),
+                    None => self.studio.current.clone(),
+                } {
+                    self.remember_member(&left, &machines);
+                }
+                // The dock and the machines tree keep the keyboard: a
+                // step swaps the main pane but leaves that owner in
+                // place, its cursor on the studio it landed on. A
+                // full-screen dock has no visible pane beside it and a
+                // composing `›` line is mid-sentence, so both step back
+                // as before.
+                let tree_owns = self.tree_focused();
+                let dock_owns = !tree_owns
+                    && self.panel.focused
+                    && !self.panel_fullscreen()
+                    && !self.panel_editing()
+                    && self.panel.finish_confirm.is_none();
+                if !dock_owns && !tree_owns {
+                    self.nav_leave_overlays();
+                }
                 self.studio.set_studio_focus(next.clone());
                 self.last_current_studio = self.studio.current.clone();
-                if self
-                    .panel
-                    .selected
-                    .as_ref()
-                    .and_then(crate::panel::Target::studio)
-                    != Some(&next)
+                if !dock_owns
+                    && self
+                        .panel
+                        .selected
+                        .as_ref()
+                        .and_then(crate::panel::Target::studio)
+                        != Some(&next)
                 {
                     self.panel.selected = None;
                     self.panel.selected_row = None;
                 }
                 self.panel_reveal_studio(&next);
                 self.sync_lot(&machines);
+                // Land the stepped-to studio's member in the main pane.
+                // Quiet when it has none: a studio still seating queues
+                // its landing for the next publish, a settled one leaves
+                // the pane as it is — no notice on a step. Either way a
+                // queue left by an earlier step is dropped, so a studio
+                // left behind never takes the keys later.
+                self.ns_pending_focus = None;
+                self.land_studio_member(&next);
+                if dock_owns {
+                    self.panel_select_studio(&next);
+                }
+                if tree_owns {
+                    self.tree_focus_studio_row(&next);
+                }
             }
             StudioNav::PreviousRole | StudioNav::NextRole => {
+                self.nav_leave_overlays();
                 let dir: isize = if matches!(nav, StudioNav::NextRole) {
                     1
                 } else {
@@ -272,10 +312,29 @@ impl App {
         };
         self.studio.current = Some(key.clone());
         self.nav_leave_overlays();
+        match self.studio_landing(key, &studio) {
+            // The member's terminal is machine-qualified on an added
+            // machine — the same address shape a sidebar focus takes.
+            Some(terminal) => self.focus_pane(terminal),
+            None if self.studio_still_seating(key, studio.studio) => {
+                self.ns_pending_focus = Some(key.clone());
+            }
+            None => self.show_notice("Studio", &format!("{} has no live terminal", key.id)),
+        }
+    }
+
+    /// The terminal a landing on `studio` focuses — its remembered
+    /// member (a role id or a shell's address) while live, else its
+    /// producer, else its first live person in cast order, else its
+    /// first live shell. `None` when the studio has no live member.
+    /// Shared by `focus_studio` and the `Alt+arrow` step.
+    pub(crate) fn studio_landing(
+        &self,
+        key: &StudioKey,
+        studio: &crate::panel::data::StudioRef<'_>,
+    ) -> Option<String> {
         let live = |role: &RoleSummary| studio::live_terminal(role).is_some();
         let shells = self.studio_shells_live(key);
-        // The remembered member is a role id or a shell's address —
-        // `remembered` holds whichever the studio was left on.
         let remembered = self.studio.remembered.get(key).and_then(|member| {
             studio
                 .studio
@@ -285,7 +344,7 @@ impl App {
                 .and_then(|role| role.terminal.clone())
                 .or_else(|| shells.iter().find(|a| *a == member).cloned())
         });
-        let target = remembered
+        remembered
             .or_else(|| {
                 studio
                     .studio
@@ -300,15 +359,56 @@ impl App {
                     .find(|role| live(role))
                     .and_then(|role| role.terminal.clone())
             })
-            .or_else(|| shells.first().cloned());
-        match target {
-            // The member's terminal is machine-qualified on an added
-            // machine — the same address shape a sidebar focus takes.
+            .or_else(|| shells.first().cloned())
+    }
+
+    /// Land `key`'s member in the main pane quietly — a studio switch
+    /// the person made that must not announce itself. The landing is
+    /// `studio_landing`; a studio still seating queues the landing for
+    /// the next publish, a settled one leaves the pane as it is.
+    pub(crate) fn land_studio_member(&mut self, key: &StudioKey) {
+        let machines = self.panel_summaries();
+        let Some(studio) = crate::panel::data::studio(&machines, key) else {
+            return;
+        };
+        match self.studio_landing(key, &studio) {
             Some(terminal) => self.focus_pane(terminal),
             None if self.studio_still_seating(key, studio.studio) => {
                 self.ns_pending_focus = Some(key.clone());
             }
-            None => self.show_notice("Studio", &format!("{} has no live terminal", key.id)),
+            None => {}
+        }
+    }
+
+    /// Record the member the person is on in `key` — the role id or the
+    /// shell's address of the focused terminal, when it belongs there.
+    /// `sync_studio` already latches this on a focus move; stepping away
+    /// calls it so a member chosen since the last sync (a cast or lot
+    /// click) is remembered too.
+    fn remember_member(
+        &mut self,
+        key: &StudioKey,
+        machines: &[crate::panel::data::MachineSummary],
+    ) {
+        let Some(focused) = self.focused.clone() else {
+            return;
+        };
+        let Some(studio) = crate::panel::data::studio(machines, key) else {
+            return;
+        };
+        let member = studio
+            .studio
+            .roles
+            .iter()
+            .find(|role| role.terminal.as_deref() == Some(focused.as_str()))
+            .map(|role| role.role.clone())
+            .or_else(|| {
+                self.studio_shells_live(key)
+                    .into_iter()
+                    .find(|shell| shell == &focused)
+            });
+        if let Some(member) = member {
+            self.studio.remembered.insert(key.clone(), member);
         }
     }
 

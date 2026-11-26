@@ -73,6 +73,7 @@ mod stage_toast;
 mod standby;
 mod studio;
 mod studio_cache;
+mod studio_follow;
 mod studio_machines;
 mod studio_mouse;
 mod studio_notify;
