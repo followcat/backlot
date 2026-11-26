@@ -93,15 +93,17 @@ pub(crate) fn render_mobile_header(
         .saturating_sub(1)
         .saturating_sub(pill_w);
     // The version badge claims a right slot only when the status keeps
-    // a readable width — the hint drops first, then the whole badge.
+    // a readable width — the hint degrades in steps: full, then the
+    // compact `↑`/`↻`, then the bare version.
     // A studio header's status is its name, so that name — not the
     // bare minimum — is what the badge must leave room for.
     let keep = lot.and_then(|l| l.header).map_or(MOBILE_STATUS_MIN, |h| {
         super::lot::header_name_width(h).max(MOBILE_STATUS_MIN)
     });
     let full = super::render::version_badge_width(update_badge);
+    let compact = super::render::version_badge_compact_width(update_badge);
     let bare = super::render::version_badge_width(super::render::UpdateBadge::None);
-    let badge_w = [full, bare]
+    let badge_w = [full, compact, bare]
         .into_iter()
         .find(|w| status_width >= w + 1 + keep)
         .unwrap_or(0);
