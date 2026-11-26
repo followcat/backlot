@@ -481,6 +481,12 @@ impl Stage {
         self.liveness.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.rate_pace.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.ask_watch.borrow_mut().retain(|(s, r), _| keep(s, r));
+        self.design_watch
+            .borrow_mut()
+            .retain(|s, _| keep(s, "producer"));
+        self.design_tainted
+            .borrow_mut()
+            .retain(|s, _| keep(s, "producer"));
         Ok(())
     }
 
