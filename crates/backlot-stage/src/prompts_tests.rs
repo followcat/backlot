@@ -270,6 +270,24 @@ fn shell_words(cmd: &str) -> Vec<String> {
     out
 }
 
+/// Neutral stand-ins for placeholder tokens (`<seq>`, `<json>`,
+/// `<file>`, etc.) so readable prompt commands parse through
+/// `args::parse`.
+fn substitute_prompt_placeholder(token: &str) -> String {
+    let mut out = token.to_string();
+    for (needle, val) in [
+        ("<seq>", "1"),
+        ("<n>", "1"),
+        ("<r>", "1"),
+        ("<v>", "1"),
+        ("<json>", "{}"),
+        ("<file>", "/tmp/f"),
+    ] {
+        out = out.replace(needle, val);
+    }
+    out
+}
+
 #[test]
 fn every_command_in_the_prompts_parses() {
     for (kind, name) in [
@@ -285,7 +303,10 @@ fn every_command_in_the_prompts_parses() {
                 continue;
             };
             found += 1;
-            let words = shell_words(cmd);
+            let words: Vec<String> = shell_words(cmd)
+                .into_iter()
+                .map(|w| substitute_prompt_placeholder(&w))
+                .collect();
             assert!(
                 args::parse(&words).is_ok(),
                 "{name}.md: `backlot {cmd}` does not parse"
@@ -1006,4 +1027,214 @@ fn the_read_only_set_holds_no_writes() {
     }
     assert!(crate::runners::READ_ONLY.contains(&"git branch --list"));
     assert!(crate::runners::READ_ONLY.contains(&"git branch --show-current"));
+}
+
+fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState {
+    let mut state = state_with_task();
+    let mut cfg = studio_config(Vec::new());
+    cfg.design_gate = design_gate;
+    state.studio = Some(cfg);
+    state
+}
+
+#[test]
+fn actor_template_and_render_stay_byte_identical_across_design_gates() {
+    let raw = template(RoleKind::Actor);
+    assert_eq!(raw.len(), 2643, "actor.md size must stay byte-identical");
+    assert!(raw.ends_with("asking to open a PR.\n"));
+    assert!(!raw.contains("design_gate"));
+    assert!(!raw.contains("backlot design"));
+
+    let dir = tmp();
+    let st = start(RoleKind::Actor, "actor-t1-c1", Some("t1"));
+    let off_state = state_with_gate(backlot_model::event::DesignGate::Off);
+    let req_state = state_with_gate(backlot_model::event::DesignGate::Required);
+
+    let off_file = prepare(&dir, "acme-shop", &st, &off_state).unwrap();
+    let off_text = fs::read(&off_file).unwrap();
+    let req_file = prepare(&dir, "acme-shop", &st, &req_state).unwrap();
+    let req_text = fs::read(&req_file).unwrap();
+    assert_eq!(off_text, req_text, "actor prompt must ignore design_gate");
+}
+
+#[test]
+fn design_gate_required_renders_placeholders_sections_and_commands() {
+    let dir = tmp();
+    let state = state_with_gate(backlot_model::event::DesignGate::Required);
+    let design_v2 = dir.join("design/v2.md").to_string_lossy().into_owned();
+
+    for (kind, role) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Writer, "writer"),
+        (RoleKind::Director, "director"),
+    ] {
+        let raw = template(kind);
+        let section = raw
+            .split("{#design_gate}")
+            .nth(1)
+            .and_then(|rest| rest.split("{/design_gate}").next())
+            .unwrap_or_else(|| panic!("{role}.md must contain a {{ #design_gate }} block"));
+        assert!(
+            section.len() <= 2500,
+            "{role}.md design section grew too large ({} bytes)",
+            section.len()
+        );
+
+        let st = start(kind, role, None);
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains('{'), "{role} left a placeholder: {text}");
+        assert!(
+            text.contains(&design_v2),
+            "{role} misses {design_v2}: {text}"
+        );
+
+        match kind {
+            RoleKind::Producer => {
+                assert!(!text.contains("wherdr"), "producer must not mention wherdr");
+                for want in [
+                    "## Opening design discussion (`design_gate = required`)",
+                    "`backlot design open`",
+                    "`backlot design open --suggest-skip --reason \"<why>\"`",
+                    "`backlot design write --slot summary --file <file> --question <json>`",
+                    "`backlot design show`",
+                    "`backlot design note --from user --text \"...\"`",
+                    "`backlot design next`",
+                    "Never record the same words",
+                    "never run `backlot design sign`",
+                    "press `a` on the DECISION card in the Call Sheet or",
+                    "`backlot tell user --text <note> --note`",
+                ] {
+                    assert!(text.contains(want), "producer misses `{want}`:\n{text}");
+                }
+            }
+            RoleKind::Writer => {
+                for want in [
+                    "## Opening design proposal",
+                    "`backlot design write --slot proposal --file <file>`",
+                    "`backlot design supplement --file <file> --refs <seq>`",
+                ] {
+                    assert!(text.contains(want), "writer misses `{want}`:\n{text}");
+                }
+            }
+            RoleKind::Director => {
+                for want in [
+                    "## Opening buildability review",
+                    "`backlot design write --slot buildability --file <file>`",
+                    "`backlot design supplement --file <file> --refs <seq>`",
+                ] {
+                    assert!(text.contains(want), "director misses `{want}`:\n{text}");
+                }
+            }
+            RoleKind::Actor => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn design_gate_off_omits_design_section_byte_identically() {
+    let dir = tmp();
+    let state = state_with_gate(backlot_model::event::DesignGate::Off);
+
+    for (kind, role, baseline_len, baseline_tail) in [
+        (
+            RoleKind::Producer,
+            "producer",
+            5246usize,
+            "merely to send them there.\n",
+        ),
+        (
+            RoleKind::Writer,
+            "writer",
+            2697usize,
+            "(`backlot tell user --text <note> --note`).\n",
+        ),
+        (
+            RoleKind::Director,
+            "director",
+            5830usize,
+            "is killed for you.\n",
+        ),
+    ] {
+        let raw = template(kind);
+        assert!(
+            raw.contains("{#design_gate}"),
+            "{role}.md missing {{#design_gate}}"
+        );
+        assert!(
+            raw.contains("{/design_gate}"),
+            "{role}.md missing {{/design_gate}}"
+        );
+        let base = raw.split("{#design_gate}").next().unwrap();
+        assert_eq!(
+            base.len(),
+            baseline_len,
+            "{role}.md baseline prefix length shifted"
+        );
+        assert!(
+            base.ends_with(baseline_tail),
+            "{role}.md baseline tail shifted"
+        );
+
+        let fields = BTreeMap::from([
+            ("studio".into(), "acme-shop".into()),
+            ("studio_dir".into(), dir.to_string_lossy().into_owned()),
+            ("role".into(), role.into()),
+            ("task".into(), String::new()),
+            ("title".into(), String::new()),
+            ("acceptance".into(), String::new()),
+            (
+                "req_file".into(),
+                dir.join("req/v2.md").to_string_lossy().into_owned(),
+            ),
+            ("req_version".into(), "2".into()),
+            ("work".into(), dir.to_string_lossy().into_owned()),
+            ("branch".into(), "backlot/acme-shop/integration".into()),
+            ("checks".into(), "cargo test".into()),
+            ("actor_cap".into(), "3".into()),
+            ("design_gate".into(), "off".into()),
+            (
+                "design_file".into(),
+                dir.join("design/v2.md").to_string_lossy().into_owned(),
+            ),
+        ]);
+        assert_eq!(
+            render(raw, &fields),
+            render(base, &fields),
+            "{role}.md with design_gate=off must render byte-identical to baseline"
+        );
+
+        let st = start(kind, role, None);
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains('{'), "{role} left a brace: {text}");
+        assert!(
+            !text.contains("Opening design"),
+            "{role} leaked design section"
+        );
+        assert!(!text.contains("backlot design"), "{role} leaked design cmd");
+        assert!(text.ends_with(baseline_tail), "{role} tail changed: {text}");
+    }
+}
+
+#[test]
+fn design_gate_required_pre_requirement_avoids_empty_backticks_and_v0() {
+    let dir = tmp();
+    let mut state = state_with_gate(backlot_model::event::DesignGate::Required);
+    state.requirement_version = 0;
+    state.tasks.clear();
+    let design_dir = dir.join("design").to_string_lossy().into_owned();
+    for kind in [RoleKind::Producer, RoleKind::Director] {
+        let st = start(kind, kind.name(), None);
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains('{'), "{kind:?} left a placeholder: {text}");
+        assert!(!text.contains("``"), "{kind:?} has empty backticks: {text}");
+        let outside_paths = text.replace(&dir.to_string_lossy().into_owned(), "");
+        assert!(!outside_paths.contains("v0"), "{kind:?} shows v0: {text}");
+        assert!(
+            text.contains(&design_dir),
+            "{kind:?} misses the design folder: {text}"
+        );
+    }
 }

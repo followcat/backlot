@@ -485,7 +485,9 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         limits: cast.limits,
                         max_actors: cast.max_actors.unwrap_or_else(default_max_actors),
                         push,
-                        design_gate: cast.design_gate.unwrap_or_default(),
+                        design_gate: cast
+                            .design_gate
+                            .unwrap_or_else(DesignGate::default_for_new_studio),
                     },
                     by,
                     Vec::new(),

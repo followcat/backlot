@@ -152,7 +152,11 @@ fn seed_history(scratch: &Scratch, kind: &str, n: usize) {
 /// `acme-shop` exists with one `kind` task `t1` — the ordinary
 /// standard-mode flow: studio, req v1, task.
 fn acme_with_task(scratch: &Scratch, env: &crate::cli::Env, kind: &str) {
-    let cast = fixture(scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

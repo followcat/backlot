@@ -57,7 +57,11 @@ fn studio_names_are_checked_and_missing_studios_refused() {
 #[test]
 fn finding_records_on_open_and_closed_tasks() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -131,7 +135,11 @@ fn finding_records_on_open_and_closed_tasks() {
 #[test]
 fn task_state_commands() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -220,7 +228,11 @@ fn task_state_commands() {
 #[test]
 fn review_at_cap_accepts_or_recasts() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

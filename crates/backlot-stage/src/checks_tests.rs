@@ -694,7 +694,10 @@ fn a_report_written_after_an_accept_over_failures_carries_the_section() {
     new_studio(
         &env,
         &scratch,
-        &cast_with_checks("", "[[checks]]\nname = \"unit\"\nrun = \"true\""),
+        &cast_with_checks(
+            "design_gate = \"off\"",
+            "[[checks]]\nname = \"unit\"\nrun = \"true\"",
+        ),
     )
     .unwrap();
     let req = fixture(&scratch, "req.md", "the ask\n");

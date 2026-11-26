@@ -58,6 +58,7 @@ stall_limit_s = 600     # optional, default 600
 nudge_after_s = 180     # optional, default 180
 escalate_after_s = 600  # optional, default 600
 max_actors = 4          # optional, default 4 — actors live at once
+design_gate = "required" # optional, default "required" on new studios ("off" skips opening design)
 task_budget_s = 7200    # optional running-time budget per task — unset means none
 check_env = ["CI"]      # stage env names a check may see — optional
 
@@ -126,6 +127,7 @@ timeout_s = 120
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
+| `design_gate` | Optional opening design policy: `"required"` (the default for new studios) or `"off"`. Historical studios whose `studio.created` event predates `design_gate` keep `"off"`; set `design_gate = "off"` in `cast.toml` or apply it later with `backlot studio cast set` to skip the opening design discussion for a studio. |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
 | `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. A single-repository feature — refused on a workspace or no-git studio at `studio new`. |
 | `[push]` | Optional outward push policy (`policy = "recorded" | "any" | "none"`, `protected_branches`, `allow_remotes`, `allow_tags`, `allow_gh_pr`; overrides also via `--push-*` flags or `[push]` in user config). Under the default `recorded` mode, non-protected branch pushes to remotes recorded at `studio new` pass directly, while protected branches, tags, other remotes, and `gh pr create` propose a user card; force pushes and `core.*` overrides stay refused. |
@@ -442,13 +444,47 @@ write, a commit or a work-area change still does). The panel shows the first owe
 `→` line under the studio. When any delivery reported usage, a `usage:` line under the limits
 sums the studio's tokens and cost (nothing shows while every counter is zero).
 
+## Opening design discussion
+
+Newly created studios start with `design_gate = "required"` by default. Before any formal plan,
+dispatch, or task creation runs for a requirement version, the producer runs a structured technical
+discussion with you, the writer, and the director:
+
+1. **Round 1+:** When `req.version` arrives, the producer opens Round 1 (`backlot design open`, or
+   `--suggest-skip` only for a tiny fix or an already-finalized external plan). The writer posts
+   concrete options and a recommendation (`proposal`), the director checks buildability, commands,
+   and task split (`buildability`), and the producer writes a short convergence `summary` with 0–3
+   decisions/questions (`waiting_user`).
+2. **Respond and sign off in the TUI or CLI:** Review the `DECISION` card (`?N` in the lot pill,
+   Call Sheet, or Lot Dock — press `o` to read `design/v<N>.md` with `§R<r>.*` section jumps, `r` to
+   reply or ask a follow-up round, or `a` to confirm sign-off / confirm skip). Roles can never sign
+   off on your behalf (`backlot design sign` is refused from role terminals). Once signed off
+   (`approved`), `design/v<N>-final.md` freezes and the writer derives the plan and acceptance
+   criteria citing `design v<N> §R<r>.*` before the producer dispatches automatically:
+
+```sh
+backlot design show --studio acme-shop
+backlot tell producer --text "Go with Option B" --studio acme-shop --as user
+backlot design sign --studio acme-shop --as user
+backlot design sign --skip --reason "tiny one-line fix" --studio acme-shop --as user
+backlot design open --studio acme-shop --as user
+backlot design note --from user --text "Go with Option B" --studio acme-shop --as producer
+backlot design next --studio acme-shop --as producer
+```
+
+3. **Turn the gate off per studio:** Existing studios whose ledgers predate `design_gate` stay
+   `"off"` unchanged. To disable the gate on a new or existing studio, set `design_gate = "off"` in
+   `cast.toml` at `studio new` or apply an updated file with `backlot studio cast set --file <file>`
+   (see [Changing a studio after it starts](#changing-a-studio-after-it-starts)).
+
 ## What happens next
 
 In the normal path the steps run in this order:
 
 | Step | Who | What |
 |---|---|---|
-| plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
+| design | producer + writer + director + you | When `design_gate = "required"` (default on new studios), the producer records requirement v1 (`backlot req revise`) and runs the opening design rounds until you sign off (`a` on the `DECISION` card or `backlot design sign`). |
+| plan | producer + writer | Once the design is signed (or immediately when `design_gate = "off"`), the writer derives/publishes the plan and acceptance list (`backlot plan publish`), citing decided `design v<N> §R<r>.*` sections. |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
 | cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. `backlot cast --task <id> --suggest` first shows every candidate's factual record for the task's kind across all studios — counts and honest notices only, never a pick; `--json` prints the same view structured. |
 | deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). On a workspace the actor works inside `work/<task>/<member>`; `deliver --commits` takes comma-separated ranges — a bare `a..b` resolves to the one member whose task branch holds the tip, `member:a..b` pins it, and the ledger stores `member:sha..sha`. | A runner that knows its own figures can also report `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and `--cost-usd`. The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
@@ -1139,6 +1175,7 @@ studios/acme-shop/
   events.jsonl               the ledger: append-only, the source of truth
   events.lock                the flock every append takes
   req/v<N>.md                requirement versions
+  design/                    opening design v<N>.md, frozen v<N>-final.md, and immutable v<N>/r*.md sections
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
   messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges
@@ -1202,11 +1239,24 @@ claude = "~/.config/backlot/claude.env"        # this runner only
 A file that exists but does not parse or read is `config malformed` — the message names the path
 and the line's position only, never the value beside it.
 
-When a studio enables `design_gate = "required"`, both `<state base>/config.toml` and the user
-config (`~/.config/backlot/config.toml`, with the per-core file taking precedence) accept
-`[design]` with `hook_capture = false` to opt out of verbatim producer terminal prompt capture
-during opening design discussions (`true` by default; with hook capture off or on runners without a
-prompt hook, untainted producer turns require `backlot design note` before `backlot design next`).
+### Terminal input capture during opening design
+
+While a studio's opening design is active and waiting on you (`waiting_user`),
+messages you type directly in the **producer** terminal on supported runners
+(`claude`, `devin`, and `agy` when prompt payload capture is available) are
+captured verbatim into that studio's local design record (`design/v<N>.md`).
+Capture is strictly scoped to the producer role during `waiting_user`, excludes
+stage-injected notices, and stays entirely on your machine.
+
+To disable hook capture and fall back to explicit `backlot design note` entries
+(still protected by the hard gate against starting the next round without
+recording your input), set in `<state_dir>/config.toml` (or
+`~/.config/backlot/config.toml`, with the per-core file taking precedence):
+
+```toml
+[design]
+hook_capture = false
+```
 
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
 the factual record, with no score. `--kind <task_kind>` keeps only one task kind's rows (and

@@ -2227,3 +2227,68 @@ async fn alt_enter_adds_a_line_to_the_brief() {
     assert_eq!(d.build_text(), "first\nsecond");
     assert_eq!(d.step, Step::IdTitle, "alt+⏎ does not advance the step");
 }
+
+#[tokio::test]
+async fn new_studio_dialog_creates_studio_with_design_gate_required() {
+    struct TempGuard(std::path::PathBuf);
+    impl Drop for TempGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    let (mut app, recorded) = dialog_app().await;
+    to_step4(&mut app).await;
+    recorded.lock().unwrap().clear();
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+
+    let calls = recorded.lock().unwrap();
+    let create = calls
+        .iter()
+        .find(|(_, argv, _)| argv.starts_with(&["studio".into(), "new".into()]))
+        .expect("the create call");
+    let cast_toml = create.2.as_deref().expect("dialog passes cast on stdin");
+
+    let root = std::env::temp_dir().join(format!("hc-tui-ns-design-gate-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let _guard = TempGuard(root.clone());
+    let repo = root.join("acme-shop");
+    std::fs::create_dir_all(&repo).unwrap();
+    let cast_file = root.join("cast.toml");
+    std::fs::write(&cast_file, cast_toml).unwrap();
+
+    let env = backlot_stage::cli::Env {
+        vars: std::collections::BTreeMap::from([(
+            "BACKLOT_STATE_DIR".into(),
+            root.to_string_lossy().into_owned(),
+        )]),
+    };
+    let argv: Vec<String> = [
+        "studio",
+        "new",
+        "--studio",
+        "acme-shop",
+        "--title",
+        "Acme Shop",
+        "--repo",
+        &repo.to_string_lossy(),
+        "--cast",
+        &cast_file.to_string_lossy(),
+        "--no-git",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    std::thread::spawn(move || backlot_stage::cli::run(&argv, &env))
+        .join()
+        .unwrap()
+        .unwrap();
+
+    let sdir = backlot_stage::store::studio_dir(&root, "acme-shop");
+    let state = backlot_stage::store::load_state(&sdir).unwrap();
+    assert_eq!(
+        state.studio.unwrap().design_gate,
+        backlot_model::design::DesignGate::Required
+    );
+}

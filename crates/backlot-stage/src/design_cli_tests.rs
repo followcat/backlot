@@ -5,7 +5,7 @@
 use std::fs;
 
 use backlot_model::EventKind;
-use backlot_model::design::{DesignPhase, DesignSlot, EntrySource};
+use backlot_model::design::{DesignGate, DesignPhase, DesignSlot, EntrySource};
 
 use crate::cli::{Env, Fail, run, run_stdin};
 use crate::cli_testkit::{CAST_TOML, Scratch, commit_in, fixture, ok, scratch, work_area};
@@ -468,7 +468,11 @@ fn tell_producer_in_waiting_user_syncs_user_input_and_others_do_not() {
 fn design_gate_off_preserves_byte_identical_baseline() {
     let (scratch, env) = scratch();
     let dir = store::studio_dir(&scratch.dir, "acme-shop");
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok_args(
         &env,
         &[
@@ -540,4 +544,123 @@ fn design_gate_off_preserves_byte_identical_baseline() {
         shown.to_lowercase().contains("no opening design"),
         "{shown}"
     );
+}
+
+#[test]
+fn new_studio_without_design_gate_defaults_to_required_and_blocks_unsigned() {
+    let (scratch, env) = scratch();
+    let dir = store::studio_dir(&scratch.dir, "acme-shop");
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok_args(
+        &env,
+        &[
+            "studio",
+            "new",
+            "--title",
+            "Shop",
+            "--repo",
+            "/home/user/acme-shop",
+            "--cast",
+            &cast,
+        ],
+    );
+    let state = store::load_state(&dir).unwrap();
+    assert_eq!(
+        state.studio.as_ref().unwrap().design_gate,
+        DesignGate::Required
+    );
+    let shown = ok(&env, "studio cast show");
+    assert!(shown.contains("design_gate = \"required\""), "{shown}");
+
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary first-cut --as producer"),
+    );
+
+    let plan = fixture(&scratch, "plan.md", "# plan\n");
+    let plan_err = refused_args(
+        &env,
+        &[
+            "plan", "publish", "--kind", "plan", "--file", &plan, "--as", "writer",
+        ],
+    );
+    assert!(plan_err.contains("not signed off yet"), "{plan_err}");
+
+    let disp = fixture(&scratch, "dispatch.md", "director: go\n");
+    let disp_err = refused_args(&env, &["dispatch", "--file", &disp, "--as", "producer"]);
+    assert!(disp_err.contains("not signed off yet"), "{disp_err}");
+
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let task_err = refused_args(
+        &env,
+        &[
+            "task",
+            "new",
+            "--title",
+            "cart",
+            "--kind",
+            "feature",
+            "--acceptance-file",
+            &acc,
+            "--as",
+            "director",
+        ],
+    );
+    assert!(task_err.contains("not signed off yet"), "{task_err}");
+}
+
+#[test]
+fn old_ledger_without_design_gate_replays_as_off_forever() {
+    let (scratch, env) = scratch();
+    let dir = store::studio_dir(&scratch.dir, "acme-shop");
+    fs::create_dir_all(&dir).unwrap();
+    // Simulate a legacy studio ledger recorded before `design_gate` existed.
+    let legacy_studio_created = concat!(
+        r#"{"seq":1,"ts_ms":1000,"by":{"role":"user"},"kind":"studio.created","#,
+        r#""title":"Legacy Shop","repo":"/home/user/acme-shop","mode":"standard","#,
+        r#""roles":{"producer":{"runner":"fake","model":"plain","effort":"high","permission_profile":"standard"},"#,
+        r#""director":{"runner":"fake","model":"plain","effort":"high","permission_profile":"standard"},"#,
+        r#""writer":{"runner":"fake","model":"plain","effort":"high","permission_profile":"standard"}},"#,
+        r#""candidates":[{"name":"actor-a","runner":"fake","model":"plain","effort":"high","permission_profile":"standard"}],"#,
+        r#""rework_cap":2,"stall_limit_s":600,"no_git":true}"#,
+    );
+    fs::write(
+        dir.join("events.jsonl"),
+        format!("{legacy_studio_created}\n"),
+    )
+    .unwrap();
+
+    let state = store::load_state(&dir).unwrap();
+    assert_eq!(state.studio.as_ref().unwrap().design_gate, DesignGate::Off);
+    let shown = ok(&env, "studio cast show");
+    assert!(shown.contains("design_gate = \"off\""), "{shown}");
+
+    let req = fixture(&scratch, "req.md", "# requirement\nkeep running\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary legacy-v1 --as producer"),
+    );
+    ok(&env, "plan request --as producer");
+    let plan = fixture(&scratch, "plan.md", "# plan\n");
+    ok(
+        &env,
+        &format!("plan publish --kind plan --file {plan} --as writer"),
+    );
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    ok(
+        &env,
+        &format!("plan publish --kind acceptance --file {acc} --as writer"),
+    );
+    let disp = fixture(&scratch, "dispatch.md", "director: go\n");
+    ok(&env, &format!("dispatch --file {disp} --as producer"));
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+
+    let after = store::load_state(&dir).unwrap();
+    assert_eq!(after.studio.as_ref().unwrap().design_gate, DesignGate::Off);
+    assert_eq!(after.design_phase(), DesignPhase::Idle);
+    assert!(!dir.join("design").exists());
 }

@@ -279,3 +279,30 @@ fn destructive_verbs_require_the_reviewed_token() {
             .is_file()
     );
 }
+
+#[test]
+fn remote_studio_new_without_design_gate_defaults_to_required() {
+    let dir = TestDir::new("blops-remote-design-gate");
+    let env = env_for(&dir, &make_fake_runner(&dir));
+    let mut server = Server::start(&env);
+    let made: StudioNewResult = server.typed(
+        &ReqAction::StudioNew {
+            id: "acme-shop".into(),
+            title: "Shop".into(),
+            repo: "/home/user/acme-shop".into(),
+            cast: FAKE_CAST.into(),
+            mode: None,
+            init: false,
+            no_git: true,
+            ask: None,
+            dry_run: false,
+        },
+        None,
+    );
+    assert_eq!(made.seq, Some(1));
+    let state = store::load_state(&store::studio_dir(&base_of(&env), "acme-shop")).unwrap();
+    assert_eq!(
+        state.studio.unwrap().design_gate,
+        backlot_model::design::DesignGate::Required
+    );
+}

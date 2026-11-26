@@ -117,7 +117,11 @@ fn studio_new_repo_must_be_absolute_and_canonical() {
 #[test]
 fn full_loop_status_and_records() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -245,7 +249,11 @@ fn full_loop_status_and_records() {
 #[test]
 fn exit_kinds_usage_vs_refused() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -917,7 +925,11 @@ fn server_control_is_refused_from_a_role_terminal() {
 #[test]
 fn a_tell_to_an_actor_of_a_done_task_is_refused() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

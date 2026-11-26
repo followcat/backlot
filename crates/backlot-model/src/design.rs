@@ -11,8 +11,9 @@ use crate::state::StudioState;
 
 /// Studio-level opening design gate policy (`cast.toml` / `studio.created`).
 ///
-/// Missing fields in old logs deserialize as [`DesignGate::Off`]. In PR 2
-/// new studios also default to `Off` (PR 8 switches new studios to `Required`).
+/// Missing fields in old logs deserialize as [`DesignGate::Off`]. Newly
+/// created studios default to [`DesignGate::Required`] via
+/// [`DesignGate::default_for_new_studio`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DesignGate {
@@ -25,6 +26,12 @@ impl DesignGate {
     /// Returns `true` when `self` is [`DesignGate::Off`].
     pub fn is_off(&self) -> bool {
         *self == Self::Off
+    }
+
+    /// Default opening design gate for newly created studios and `cast.toml`
+    /// definitions that omit `design_gate`.
+    pub const fn default_for_new_studio() -> Self {
+        Self::Required
     }
 }
 

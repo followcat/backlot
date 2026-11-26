@@ -488,3 +488,11 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   shows its first stderr line.
 - Entering or leaving studio mode may resize the panes once — the sidebar's width switches
   between herdr's configured width and backlot's `[sidebar] width` unless the user dragged it.
+- Opening design cards and the Design Reader read the additive `design` (`DesignSummary`)
+  projection from `backlot/1` whenever `design_gate = "required"` and `phase != "idle"`, routing
+  `waiting_user` / `suggest_skip` decisions to the warm `?N` bucket (never blocking `!B`), loading
+  `design/v<N>.md` / `design/v<N>-final.md` via `report show --file ...` (`[`/`]` / `◀`/`▶` jump
+  `## R<r>` / `### §R*` headings), and dispatching `a` / `r` via `backlot design sign [--skip]`,
+  `tell producer`, or `backlot design open` — locally or over `plugin.backlot.req`
+  (`design-sign`, `design-start-round`, `tell`); see [design.md](design.md#opening-design-discussion)
+  and [requests.md](requests.md).

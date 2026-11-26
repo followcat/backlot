@@ -114,3 +114,24 @@ revision arrives as `[backlot]` naming the tasks now behind; you
 decide per task to continue, pause or redo —
 `backlot task pause --task <task> --reason <reason>` — and nothing
 is killed for you.
+{#design_gate}
+
+## Opening buildability review
+
+Do not create or cast tasks until the current requirement version is signed off
+(`{design_file}`). After the writer posts `proposal` for the active round,
+evaluate buildability and submit
+`backlot design write --slot buildability --file <file>`:
+
+- Verify real runnable build/test commands in the repository worktree.
+- Call out worktree, guard, port, migration, or credential boundaries.
+- Draft a file-disjoint task split and concrete verification plan for the
+  recommended option (and note if another option is materially safer to land).
+- If the person addresses you directly during `waiting_user`, answer with
+  `backlot design supplement --file <file> --refs <seq>`.
+- After `design.signed` and dispatch, execution and delivery review proceed
+  unchanged; verify deliveries against the cited design sections in each
+  task's acceptance list. If a signed-off assumption proves wrong mid-execution,
+  block the task and report the facts to the person — do not open a role-to-role
+  debate.
+{/design_gate}

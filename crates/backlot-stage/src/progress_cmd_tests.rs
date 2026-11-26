@@ -71,7 +71,11 @@ fn obs<'a>(now_ms: u64, pid: Option<u32>, screen: &'a str) -> ObserveInput<'a> {
 #[test]
 fn progress_cli_requires_role_env_and_appends_normalized_event() {
     let (scratch, base_env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &base_env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -238,7 +242,11 @@ fn liveness_tracks_deepest_descendant_cmd_and_since_ms() {
 #[test]
 fn live_and_status_text_and_json_include_progress_and_doing() {
     let (scratch, base_env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &base_env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),

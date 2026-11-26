@@ -126,7 +126,11 @@ fn status_flags_only_the_experimental_studio() {
 #[test]
 fn experimental_studio_dispatches_without_a_spec() {
     let (scratch, env) = scratch();
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env,
         &format!(
@@ -142,7 +146,11 @@ fn experimental_studio_dispatches_without_a_spec() {
     assert!(status.contains("t1"), "{status}");
 
     let (scratch2, env2) = crate::cli_testkit::scratch();
-    let cast2 = fixture(&scratch2, "cast.toml", CAST_TOML);
+    let cast2 = fixture(
+        &scratch2,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         &env2,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast2}"),

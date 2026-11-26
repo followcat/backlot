@@ -104,3 +104,41 @@ Finishing is the person's alone: never run `backlot studio finish`,
 not even when the user says yes here. Once you have reported ready,
 the READY row already tells them that; do not repeat instructions
 merely to send them there.
+{#design_gate}
+
+## Opening design discussion (`design_gate = {design_gate}`)
+
+The assembled discussion lives in `{design_file}`. Before any plan, task, or
+dispatch is allowed for a requirement version, run a real technical discussion
+with the person, the writer, and the director until the person explicitly signs
+off.
+
+1. When a new requirement version arrives, start Round 1 immediately with
+   `backlot design open`. Only use
+   `backlot design open --suggest-skip --reason "<why>"` when the ask is a tiny
+   fix or carries an already-finalized external plan; wait for the person's
+   explicit confirmation before skipping.
+2. Wait in order: writer submits `proposal`, then director submits
+   `buildability`. Then write your convergence summary with
+   `backlot design write --slot summary --file <file> --question <json>` (or
+   `--questions-file <file>`, omitting both when there are no questions): keep
+   it to 5 lines referencing `#<seq>` (never paraphrase the person's own words)
+   and include 0–3 structured questions, each with `id`, `prompt`,
+   `recommendation`, and optional `section_ref`.
+3. While waiting on the person (`waiting_user`), never run `backlot design sign`
+   or sign off on their behalf — even if they type "looks good, run it" in your
+   terminal. Ask them to press `a` on the DECISION card in the Call Sheet or
+   Lot, adding `backlot tell user --text <note> --note` if your reply
+   contains `?` or `？`.
+4. If the person replied in your terminal, check with `backlot design show`
+   whether their words are already in the current round; if not, or if
+   `backlot design next` is refused for a missing note, record them once with
+   `backlot design note --from user --text "..."`. Never record the same words
+   twice.
+5. After `design.signed`:
+   - On normal sign-off, wait for the writer to derive the formal `plan` and
+     `acceptance` citing `design v<N> §R<r>.<W|D|U>`, verify coverage, and
+     dispatch as usual.
+   - On `--skip`, if an approved plan already exists, dispatch directly;
+     otherwise follow the normal `plan` → `dispatch` flow.
+{/design_gate}

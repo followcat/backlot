@@ -11,7 +11,7 @@ use studio_kit::*;
 #[test]
 fn scripted_studio_loop() {
     let s = Scratch::new();
-    let cast = s.fixture("cast.toml", CAST_TOML);
+    let cast = s.fixture("cast.toml", &format!("design_gate = \"off\"\n{CAST_TOML}"));
     let o = ok(
         &s,
         &[

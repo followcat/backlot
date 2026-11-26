@@ -14,7 +14,11 @@ use crate::store::studio_dir;
 /// have made, and t2 created `--depends-on t1`.
 fn studio(scratch: &Scratch, env: &Env) {
     let repo = shared_repo(scratch);
-    let cast = fixture(scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         env,
         &format!(

@@ -24,7 +24,11 @@ fn setup_delivered_studio(
     merge_to_main: bool,
 ) -> PathBuf {
     git_repo(repo);
-    let cast = fixture(scratch, &format!("cast-{studio_name}.toml"), CAST_TOML);
+    let cast = fixture(
+        scratch,
+        &format!("cast-{studio_name}.toml"),
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     let req = fixture(scratch, &format!("req-{studio_name}.md"), "# req\n");
     let acc = fixture(scratch, &format!("acc-{studio_name}.md"), "# acc\n");
     let rep = fixture(scratch, &format!("rep-{studio_name}.md"), "# report\n");
@@ -194,7 +198,11 @@ fn studio_delete_refuses_open_task_without_touching_worktree_or_archiving() {
     let (scratch, env) = scratch();
     let repo = scratch.files.join("repo-open");
     git_repo(&repo);
-    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     let req = fixture(&scratch, "req.md", "# req\n");
     let acc = fixture(&scratch, "acc.md", "# acc\n");
     ok(

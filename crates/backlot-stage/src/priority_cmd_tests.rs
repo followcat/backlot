@@ -6,7 +6,11 @@ use crate::cli_testkit::*;
 
 /// Studio with one requirement and one task `t1`.
 fn studio_with_task(scratch: &Scratch, env: &crate::cli::Env) {
-    let cast = fixture(scratch, "cast.toml", CAST_TOML);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
     ok(
         env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
