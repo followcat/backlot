@@ -152,8 +152,8 @@ every other studio keeps `surface1`.
   `accent` background chip with contrast `panel_bg` foreground, truncating cleanly before the
   health/progress tail when narrow; `subtext0` or focused `text` on unselected blocks). The first
   row inside is the **header**: a health glyph — `●` live, `◌` stage stopped, `×` offline or a
-  ledger error, `✓` finished — then `r<version> · <done>/<total>` and `!<waiting>` in the
-  blocked colour when above zero. On stacked rows (`╶`) and the collapsed strip, the selected
+  ledger error, `✓` finished — then `r<version> · <done>/<total>`, `actors <live>/<cap>` and
+  `!<waiting>` in the blocked colour when above zero. On stacked rows (`╶`) and the collapsed strip, the selected
   studio's label uses bold `accent`.
 - The **owed-step** line under it says where the next step is owed in role names —
   `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and

@@ -129,6 +129,8 @@ mod tests {
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    actors_live: 0,
+                    actors_cap: 0,
                     usage: None,
                     tasks: Vec::new(),
                     roles: Vec::new(),

@@ -39,6 +39,7 @@ rework_cap = 2          # optional, default 2
 stall_limit_s = 600     # optional, default 600
 nudge_after_s = 180     # optional, default 180
 escalate_after_s = 600  # optional, default 600
+max_actors = 4          # optional, default 4 — actors live at once
 task_budget_s = 7200    # optional running-time budget per task — unset means none
 check_env = ["CI"]      # stage env names a check may see — optional
 
@@ -100,6 +101,7 @@ timeout_s = 120
 | `escalate_after_s` | Seconds after that nudge was delivered, or after the owner's last ledger write if that is later, during which the step may stay owed and the owner idle before an `owed` attention raises. Optional; default 600. Must be at least 1. |
 | `task_budget_s` | Running-time budget per task in seconds, counted from the task's first actor `role.started` to its close, leaving out paused stretches — a cast a `[limits]` cap still holds has used nothing. A running or delivered task past it raises one `over budget` attention — the director and the producer are told; nothing is killed or paused. Optional; unset means no budget. Must be at least 1. |
 | `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. The cap must seat its fixed roles first — the producer and the director stay live for the studio's whole run — so `studio new` refuses a cap under their count on the runner, or at their count while the writer or a candidate shares it: nobody else could ever sit. |
+| `max_actors` | The studio-wide actor cap: how many actors play at once. Optional; default 4. Only actors count — the producer, the director and the writer never fill an actor slot — and an actor being started counts too. A wanted actor past the cap waits (`waiting for an actor slot`, separate from a `[limits]` runner wait) and starts the tick one actor closes. A candidate is a *kind* of actor: one candidate can be cast to several tasks at once, so several actors share its identity. Must be at least 1 — a studio with no actor slot can never cast. `backlot status` shows `actors <live>/<cap>`. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode`, `cursor`, `cmd`, `cline` or `agy`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. A `cline` model must be a `cline-pass/<model>` id: the provider is taken from it, and any other id is refused. |
 | `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort` — `low`, `medium`, `high`, `xhigh` or `max`; Codex `model_reasoning_effort` — the same plus `ultra`; agy `--effort` — `low` through `max`; cline `--thinking` — `none`, `low`, `medium`, `high` or `xhigh`). `cursor` and `devin` carry the depth in the model id, `cmd`'s flag writes global config and `opencode`'s launch carries none, so all four omit it — a set `effort` on `cursor` or `cmd` is refused, on `devin` or `opencode` ignored. |
@@ -452,7 +454,7 @@ drawer under a person or task, or folds a studio block on its header. The marks:
 | Mark | Meaning |
 |---|---|
 | spinning glyph | `working` — the role's screen shows its runner's working marker |
-| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting); a role that has sat at its prompt longer than 60 s reads `idle <n>m` instead. A wanted role a `[limits]` cap holds back shows the same mark; the cast's second line says `waiting for a <runner> slot` |
+| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting); a role that has sat at its prompt longer than 60 s reads `idle <n>m` instead. A wanted role a `[limits]` cap holds back shows the same mark; the cast's second line says `waiting for a <runner> slot` (or `waiting for an actor slot` past `max_actors`) |
 | `×` | `blocked` — the role's screen shows a permission prompt |
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
@@ -739,8 +741,9 @@ terminal and worktree (see [Changing who plays a role](#changing-who-plays-a-rol
 ## Changing a studio after it starts
 
 The cast file you give `backlot studio new` only **initializes** the studio. The roles, the
-`[[candidates]]`, the `[limits]`, the checks and the timings can all change afterwards — the
-binding (`repo`, `members`, `no_git`, `mode`) and the push remotes recorded at creation do not.
+`[[candidates]]`, the `[limits]`, the `max_actors`, the checks and the timings can all change
+afterwards — the binding (`repo`, `members`, `no_git`, `mode`) and the push remotes recorded at
+creation do not.
 
 `backlot studio cast show` prints the cast the studio **plays now** as a cast file: the fixed
 roles as their newest recast has them, everything else as last set. Pipe it to a file, edit it, and
@@ -756,7 +759,7 @@ backlot studio cast set --file /home/user/acme-shop.cast.toml --studio acme-shop
 ```
 
 `--dry-run` prints a readable diff — the roles whose identity moved, the candidates added, removed
-or changed, the limits, the checks and the timings — and records nothing; `--json` prints the same
+or changed, the limits, the `max_actors`, the checks and the timings — and records nothing; `--json` prints the same
 structured. `set` records a `studio.cast` event carrying the whole new settings, and the earlier
 events keep what they recorded.
 

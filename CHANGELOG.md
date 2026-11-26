@@ -10,6 +10,13 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+A studio runs more than two actors at once: a new cast setting, `max_actors` (default 4), caps how many actors play together, the director is told a candidate is a kind of actor and to cast independent tasks in parallel, and `backlot status`, the panel and the Hollywood frames show `actors <live>/<cap>`.
+
+### Added
+
+- **A studio-wide actor cap, `max_actors` (default 4).** The cast caps how many actors play at once; only actors count — the producer, the director and the writer never fill an actor slot — and an actor being started counts too. A wanted actor past the cap waits `waiting for an actor slot` (distinct from a runner's `waiting for a <runner> slot`) and starts the tick one actor closes. It is part of the cast, so `backlot studio cast show|set`, `Edit cast…` and Hollywood `cast` cards change it; a value below 1 is refused. `backlot status` shows `actors <live>/<cap>`, and the panel and Hollywood frames show the same beside their cast.
+- **The director casts in parallel.** The director prompt now says a candidate is a kind of actor (not a person), every cast starts a new actor with its own terminal, worktree and branch, one candidate can be cast to several tasks at once, and independent tasks should run in parallel — cast every task whose dependencies are met, up to the studio's actor cap, and let dependent tasks keep waiting. The producer's prompt asks for that split when it dispatches. Nothing in the code ever refused a second actor or capped it behaviourally; this makes the intent explicit (`docs/studio/guide.md`, `docs/studio/design.md`, `docs/studio/limits.md`, `docs/studio/ledger.md`).
+
 ## 0.4.8 — 2026-11-26
 
 Change a studio's cast from the client: `Recast…` now works on actors, and `Edit cast…` on the studio menu opens the cast in your editor, shows what would change, and applies it on confirm. The same commands work over `--server`.

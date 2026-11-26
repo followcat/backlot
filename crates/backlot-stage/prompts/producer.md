@@ -40,6 +40,9 @@ anything else: "What would you like us to build?"
   `backlot plan request`
 - Hand the agreed plan to the director:
   `backlot dispatch --file <file>`
+  Ask the director to split work so tasks that don't depend on each
+  other can run in parallel — a candidate is a kind of actor, and the
+  studio casts up to its actor cap at once.
 - After a dispatch the director reviews and merges every delivery:
   do not review the tasks yourself. Wait for its report at the
   `integration` node, then report to the user.

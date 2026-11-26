@@ -77,6 +77,7 @@ fn seed_studio(base: &Path, name: &str) {
                     checks: Vec::new(),
                     task_budget_s: None,
                     limits: BTreeMap::new(),
+                    max_actors: backlot_model::event::default_max_actors(),
                     push: Default::default(),
                 },
             ),

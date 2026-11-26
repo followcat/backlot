@@ -102,6 +102,14 @@ pub struct StudioSummary {
     /// Every task the ledger recorded.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub tasks_total: u32,
+    /// The studio-wide actor cap and how many actors play now (fixed
+    /// roles never counting) — the TUI's `actors <live>/<cap>`. Both
+    /// absent while the studio records no cast and read 0 on documents
+    /// an older stage wrote.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub actors_live: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub actors_cap: u32,
     /// Token/cost totals the studio's deliveries reported (P4a) —
     /// factual sums only, never a score (D8). Absent while zero so
     /// documents for usage-less studios stay byte-identical.
@@ -518,6 +526,8 @@ pub fn summary_with_running(
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    actors_live: 0,
+                    actors_cap: 0,
                     usage: None,
                     tasks: Vec::new(),
                     roles: Vec::new(),
@@ -540,16 +550,16 @@ pub fn summary_with_running(
         // or as a synthetic row for a role never started.
         let held = crate::limits::held(state);
         for rs in roles.iter_mut() {
-            if let Some(runner) = held.get(&rs.role) {
+            if let Some(why) = held.get(&rs.role) {
                 rs.state = "waiting".into();
-                rs.doing = Some(cap(&format!("waiting for a {runner} slot")));
+                rs.doing = Some(cap(&why.waiting_text()));
                 rs.running = None;
                 rs.work = None;
                 rs.failed = None;
             }
         }
         for w in crate::wanted::wanted_roles(state) {
-            let Some(runner) = held.get(&w.role) else {
+            let Some(why) = held.get(&w.role) else {
                 continue;
             };
             if roles.iter().any(|r| r.role == w.role) {
@@ -568,7 +578,7 @@ pub fn summary_with_running(
                     .filter(|e| !e.is_empty())
                     .map(|e| cap(&e)),
                 state: "waiting".into(),
-                doing: Some(cap(&format!("waiting for a {runner} slot"))),
+                doing: Some(cap(&why.waiting_text())),
                 progress: state.progress.get(&w.role).cloned(),
                 running: None,
                 work: None,
@@ -641,6 +651,8 @@ pub fn summary_with_running(
                 })
                 .count() as u32,
             tasks_total: state.tasks.len() as u32,
+            actors_live: crate::limits::live_actors(state) as u32,
+            actors_cap: cfg.max_actors,
             usage: (!state.usage.is_empty()).then_some(state.usage),
             tasks: state
                 .tasks

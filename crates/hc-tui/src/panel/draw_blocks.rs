@@ -58,10 +58,18 @@ pub(super) fn draw_top(
     // beside it, else `●!1` — the progress part drops before the
     // waiting count does.
     let waiting = crate::studio::waiting_count(studio.studio);
-    let progress = format!(
+    let mut progress = format!(
         "r{}·{}/{}",
         studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
     );
+    // The studio-wide actor cap beside the progress: `actors 2/4` once
+    // the document carries one — older documents read 0 and show none.
+    if studio.studio.actors_cap > 0 {
+        progress.push_str(&format!(
+            " actors {}/{}",
+            studio.studio.actors_live, studio.studio.actors_cap
+        ));
+    }
     let full_tail = if waiting > 0 {
         format!("{} {progress} !{waiting}", health.glyph())
     } else {
