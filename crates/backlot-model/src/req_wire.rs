@@ -355,6 +355,18 @@ pub enum ReqAction {
     Runners,
     /// The dialog's `--version` probe, answered from the hub.
     Version,
+    /// `design sign`: user-only opening design sign-off (`approved` or `skipped`).
+    DesignSign {
+        studio: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        skip: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    /// `design start round`: reject `--suggest-skip` and start Round 1 immediately.
+    DesignStartRound { studio: String },
 }
 
 /// Ack document written solely by the stage (`plugin.backlot.res`).

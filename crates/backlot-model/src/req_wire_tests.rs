@@ -242,3 +242,84 @@ fn card_ids_accept_c_prefix_or_numeric_and_prompt_reasons_refused() {
     let st: ReqAction = serde_json::from_value(json!({"kind": "hollywood-switch-status"})).unwrap();
     assert_eq!(st, ReqAction::HollywoodSwitchStatus);
 }
+
+#[test]
+fn design_actions_and_results_round_trip() {
+    use crate::design::SignMode;
+    use crate::req_results::{DesignSignResult, DesignStartRoundResult};
+
+    let sign_plain: ReqAction = serde_json::from_value(json!({
+        "kind": "design-sign",
+        "studio": "acme-shop"
+    }))
+    .unwrap();
+    assert_eq!(
+        sign_plain,
+        ReqAction::DesignSign {
+            studio: "acme-shop".into(),
+            skip: false,
+            reason: None,
+            note: None,
+        }
+    );
+
+    let sign_skip: ReqAction = serde_json::from_value(json!({
+        "kind": "design-sign",
+        "studio": "acme-shop",
+        "skip": true,
+        "reason": "typo fix only",
+        "note": "proceed directly"
+    }))
+    .unwrap();
+    assert_eq!(
+        sign_skip,
+        ReqAction::DesignSign {
+            studio: "acme-shop".into(),
+            skip: true,
+            reason: Some("typo fix only".into()),
+            note: Some("proceed directly".into()),
+        }
+    );
+
+    let sign_rt: ReqAction =
+        serde_json::from_value(serde_json::to_value(&sign_skip).unwrap()).unwrap();
+    assert_eq!(sign_rt, sign_skip);
+
+    let start: ReqAction = serde_json::from_value(json!({
+        "kind": "design-start-round",
+        "studio": "acme-shop"
+    }))
+    .unwrap();
+    assert_eq!(
+        start,
+        ReqAction::DesignStartRound {
+            studio: "acme-shop".into(),
+        }
+    );
+    let start_rt: ReqAction =
+        serde_json::from_value(serde_json::to_value(&start).unwrap()).unwrap();
+    assert_eq!(start_rt, start);
+
+    let sign_res = DesignSignResult {
+        studio: "acme-shop".into(),
+        seq: 19,
+        version: 1,
+        round: 2,
+        mode: SignMode::Approved,
+        doc_file: "design/v1-final.md".into(),
+    };
+    let sign_res_rt: DesignSignResult =
+        serde_json::from_value(serde_json::to_value(&sign_res).unwrap()).unwrap();
+    assert_eq!(sign_res_rt, sign_res);
+
+    let start_res = DesignStartRoundResult {
+        studio: "acme-shop".into(),
+        seq: 20,
+        version: 1,
+        round: 3,
+        doc_file: "design/v1.md".into(),
+    };
+    let start_res_rt: DesignStartRoundResult =
+        serde_json::from_value(serde_json::to_value(&start_res).unwrap()).unwrap();
+    assert_eq!(start_res_rt, start_res);
+}

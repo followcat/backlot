@@ -307,3 +307,24 @@ pub struct HollywoodSwitchStatusResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<crate::hollywood_summary::HandoffSummary>,
 }
+
+/// Result of `design-sign` (`backlot design sign`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesignSignResult {
+    pub studio: String,
+    pub version: u32,
+    pub round: u32,
+    pub mode: crate::design::SignMode,
+    pub doc_file: String,
+    pub seq: u64,
+}
+
+/// Result of `design-start-round` (or `backlot design open`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesignStartRoundResult {
+    pub studio: String,
+    pub version: u32,
+    pub round: u32,
+    pub doc_file: String,
+    pub seq: u64,
+}

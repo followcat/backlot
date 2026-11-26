@@ -11,7 +11,7 @@ use backlot_model::event::{
 };
 
 use crate::cli::Fail;
-use crate::{args_hwood, args_studio, args_task};
+use crate::{args_design, args_hwood, args_studio, args_task};
 
 #[derive(Default, Clone)]
 pub struct Common {
@@ -305,6 +305,8 @@ pub enum Cmd {
     Hollywood(HollywoodCmd),
     /// `backlot card list|apply|cancel` — the card gate (D17a).
     Card(CardCmd),
+    /// `backlot design open|write|supplement|note|next|sign|show` — opening design discussion.
+    Design(DesignCmd),
     /// `backlot server run|start|stop|adopt|service` — single-server mode (B3).
     Server(ServerCmd),
 }
@@ -340,6 +342,7 @@ pub enum ServerCmd {
     },
 }
 
+pub use crate::args_design::{DesignCmd, QuestionInput};
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
 
 /// Tail line of every command's usage text.
@@ -579,6 +582,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "records" => args_task::records(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
+        "design" => args_design::design(&mut common, &mut it),
         "perms" => match it.next().as_deref() {
             Some("revoke") => {
                 let id = it

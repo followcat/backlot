@@ -737,6 +737,30 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::ReportSent { node, to, .. } => format!(" {node} → {to}"),
         EventKind::StudioDeleted { archive } => format!(" → {archive}"),
         EventKind::Correction { target, .. } => format!(" on event {target}"),
+        EventKind::DesignOpened {
+            version,
+            round,
+            suggest_skip,
+            ..
+        } => {
+            if *suggest_skip && *round == 0 {
+                format!(" v{version} (suggest-skip)")
+            } else {
+                format!(" v{version} r{round}")
+            }
+        }
+        EventKind::DesignEntry {
+            version,
+            round,
+            slot,
+            ..
+        } => format!(" v{version} r{round} {slot:?}"),
+        EventKind::DesignSigned {
+            version,
+            round,
+            mode,
+            ..
+        } => format!(" v{version} r{round} {mode:?}"),
         _ => String::new(),
     };
     format!("event {}: {}{}", event.seq, event.kind.raw_name(), subject)

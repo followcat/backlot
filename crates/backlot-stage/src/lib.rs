@@ -5,6 +5,7 @@
 mod act;
 pub mod args;
 mod args_card;
+mod args_design;
 mod args_hwood;
 mod args_source;
 mod args_studio;
@@ -26,6 +27,7 @@ mod delete;
 mod delete_ops;
 mod delete_render;
 mod deliver;
+mod design_doc;
 mod digest;
 mod discover;
 mod doc;
@@ -143,6 +145,7 @@ mod transcript_ext;
 mod transcript_runners;
 mod verbs;
 mod verbs_card_show;
+mod verbs_design;
 mod verbs_fmt;
 mod verbs_hwood;
 mod watch;
@@ -201,6 +204,12 @@ mod deliver_refuse_tests;
 mod deliver_tests;
 #[cfg(test)]
 mod dep_cmd_tests;
+#[cfg(test)]
+mod design_cli_tests;
+#[cfg(test)]
+mod design_doc_tests;
+#[cfg(test)]
+mod design_remote_tests;
 #[cfg(test)]
 mod digest_tests;
 #[cfg(test)]

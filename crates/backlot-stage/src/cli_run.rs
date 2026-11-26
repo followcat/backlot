@@ -27,6 +27,9 @@ pub(crate) fn run_stdin_with_host(
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
     check_identity(&common, env)?;
+    if matches!(cmd, Cmd::Design(crate::args::DesignCmd::Sign { .. })) {
+        crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::DesignSign, &common, env)?;
+    }
     if let Some(res) =
         crate::remote_doc_cli::route(&mut common, &cmd, env, stdin, local_hostname, current_user)
     {
@@ -298,9 +301,10 @@ pub(crate) fn run_stdin_with_host(
 fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
     use crate::args::TextSource;
     let source = match cmd {
-        Cmd::Tell { source, .. } | Cmd::ReqRevise { source, .. } | Cmd::Progress { source } => {
-            source
-        }
+        Cmd::Tell { source, .. }
+        | Cmd::ReqRevise { source, .. }
+        | Cmd::Progress { source }
+        | Cmd::Design(crate::args::DesignCmd::Note { source, .. }) => source,
         Cmd::StudioNew {
             ask: Some(source), ..
         } => source,
