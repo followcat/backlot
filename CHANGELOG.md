@@ -10,13 +10,16 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **The cast changes from the client, and over `--server`.** The role menu's `Recast…` now sits on actor rows too, and the studio menu's `Edit cast…` opens the effective cast in `$EDITOR`, checks it with `studio cast set --dry-run`, shows the diff and records it on confirm. `studio cast show`, `studio cast set` (the file travels as content, never a path) and an actor `recast` all travel over the server queue when the client is on another machine. Also fixes a flaky `setsid -f` detach test by having its payload signal readiness (`docs/studio/guide.md`, `docs/keys.md`, `docs/studio/server.md`).
+
 ## 0.4.7 — 2026-11-26
 
 A studio's cast is where it starts, not a lock: change its candidates, limits, checks, timings and role agents later with `backlot studio cast show|set`, recast an actor onto another agent, and let Hollywood propose `restart` and `cast` cards. The Hollywood band now reads as a conversation: a card or a silence shows under your line, the newest reply reads in full, and older turns fold into one row.
 
 ### Added
 
-- **The cast changes from the client, and over `--server`.** The role menu's `Recast…` now sits on actor rows too, and the studio menu's `Edit cast…` opens the effective cast in `$EDITOR`, checks it with `studio cast set --dry-run`, shows the diff and records it on confirm. `studio cast show`, `studio cast set` (the file travels as content, never a path) and an actor `recast` all travel over the server queue when the client is on another machine. Also fixes a flaky `setsid -f` detach test by having its payload signal readiness (`docs/studio/guide.md`, `docs/keys.md`, `docs/studio/server.md`).
 - **A studio's cast is a starting point, not a gate.** `backlot studio cast set --file <cast.toml>` changes a studio's roles, candidates, `[limits]`, checks and timings after it started — the cast file given to `studio new` now only initializes it; `backlot studio cast show [--json]` prints the effective cast as a cast file, and `--dry-run` shows the diff. Only what keeps the studio runnable is checked (a supported, installed runner, the effort and cline-model rules, a positive limit, caps that still seat the fixed roles). A fixed role whose identity moves is recast in the same apply. Live actors keep running, new limits apply to the next start, new checks run on the next delivery. `backlot recast` now also takes an actor key (`actor-<task>-c<n>`): the key, terminal and worktree stay, the conversation is new, and the task's deliveries and budget are untouched. Hollywood can propose these as cards: `recast` on an actor, the new `restart` and `cast` (`docs/studio/guide.md`, `docs/studio/hollywood.md`, `docs/studio/design.md`, `docs/studio/ledger.md`).
 
 ### Changed
