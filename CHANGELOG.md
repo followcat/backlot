@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.13 — 2026-11-26
+
 ### Changed
 
 - **Layered modal popups with dimmed backdrops, breathing padding, rounded borders, and drop shadows.** Modals, wizards, navigator, peek, floats, Task Sheet, Reader, and menus now separate visually from the background using theme-derived surface elevation and shadows, fix wide CJK characters straddling popup and shadow edges, and add `[ui] popup_backdrop = "dim" | "none"` and `[ui] popup_shadow = true | false` toggles (`docs/theme.md`, `docs/keys.md`, `docs/parity.md`).
