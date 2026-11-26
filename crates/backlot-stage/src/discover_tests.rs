@@ -676,6 +676,7 @@ fn version_asks_the_launch_program() {
         stage_env: &env,
         role: "producer",
         checks: &[],
+        answer_trust: true,
     };
     let ident = |runner: &str| ActorIdentity {
         runner: runner.into(),
