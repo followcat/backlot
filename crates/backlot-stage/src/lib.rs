@@ -50,6 +50,12 @@ mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
 mod guide;
+mod handoff;
+mod handoff_commit;
+mod handoff_pkg;
+mod handoff_run;
+mod handoff_term;
+mod handoff_verify;
 mod hcard;
 mod hcard_cast;
 mod hcard_new;
@@ -68,6 +74,7 @@ pub mod hook;
 mod hrender;
 mod hsetup;
 mod hstage;
+mod hswitch_verbs;
 mod hwatch;
 mod hwcli;
 mod hwood;
@@ -130,6 +137,9 @@ mod studio_cast;
 mod studio_fmt;
 mod studio_list;
 mod supervise;
+mod transcript;
+mod transcript_ext;
+mod transcript_runners;
 mod verbs;
 mod verbs_card_show;
 mod verbs_fmt;
@@ -358,13 +368,23 @@ mod studio_cast_tests;
 mod trust_tests;
 
 #[cfg(test)]
+mod handoff_extra_tests;
+#[cfg(test)]
+mod handoff_pkg_tests;
+#[cfg(test)]
+mod handoff_tests;
+#[cfg(test)]
 mod hcard_setup_tests;
+#[cfg(test)]
+mod hswitch_cli_tests;
 #[cfg(test)]
 mod hwood_setup_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod text_src_tests;
+#[cfg(test)]
+mod transcript_tests;
 #[cfg(test)]
 mod usage_tests;
 #[cfg(test)]

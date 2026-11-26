@@ -14,8 +14,11 @@ use crate::args_task;
 use crate::cli::Fail;
 use crate::config::HollywoodCfg;
 
+#[path = "args_hswitch.rs"]
+mod args_hswitch;
 pub use crate::args_card::CardCmd;
 pub(crate) use crate::args_card::card;
+use args_hswitch::hswitch_args;
 
 /// `backlot hollywood`'s subcommands.
 pub enum HollywoodCmd {
@@ -38,7 +41,24 @@ pub enum HollywoodCmd {
     /// back its own open card.
     Withdraw { id: u64, reason: String },
     /// `hollywood setup` (R22) — writes the `[hollywood]` table.
-    Setup { cfg: HollywoodCfg },
+    Setup {
+        cfg: HollywoodCfg,
+        force_offline: bool,
+    },
+    /// `hollywood switch` — switch Hollywood's agent by make-before-break handoff.
+    Switch {
+        runner: String,
+        model: String,
+        effort: Option<String>,
+        timeout_s: Option<u64>,
+        force: bool,
+        no_wait: bool,
+        json: bool,
+    },
+    /// `hollywood switch --cancel`.
+    SwitchCancel { json: bool },
+    /// `hollywood switch --status`.
+    SwitchStatus { json: bool },
 }
 
 pub(crate) const U_HOLLYWOOD: &str = "usage:
@@ -50,10 +70,13 @@ pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood report \"<headline>\" [--body <f>] [--answers <seqs>]
   backlot hollywood withdraw <card> --reason <text>
   backlot hollywood show <seq>
-  backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]
+  backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>] [--force-offline]
+  backlot hollywood switch --runner <r> --model <m> [--effort <e>] [--timeout <secs>] [--force] [--no-wait] [--json]
+  backlot hollywood switch --cancel [--json]
+  backlot hollywood switch --status [--json]
   a studio-new draft's --studio needs a name matching [a-z0-9_-]{1,16}";
 
-/// `backlot hollywood propose|report|show|withdraw|setup`.
+/// `backlot hollywood propose|report|show|withdraw|setup|switch`.
 pub(crate) fn hollywood(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let Some(sub) = it.next() else {
         return Err(usage("missing hollywood subcommand", U_HOLLYWOOD));
@@ -64,6 +87,7 @@ pub(crate) fn hollywood(common: &mut Common, it: &mut It) -> Result<(Common, Cmd
         "show" => hshow(common, it),
         "withdraw" => hwithdraw(common, it),
         "setup" => hsetup_args(common, it),
+        "switch" => hswitch_args(common, it),
         "-h" | "--help" => Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD))),
         _ => Err(usage(
             format!("unknown hollywood subcommand '{sub}'"),
@@ -383,6 +407,7 @@ fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
     let mut effort = None;
     let mut key = None;
     let mut default_cast = None;
+    let mut force_offline = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
@@ -403,6 +428,7 @@ fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
             _ if eq(&arg, "--default-cast").is_some() => {
                 default_cast = eq(&arg, "--default-cast").map(String::from)
             }
+            "--force-offline" => force_offline = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_HOLLYWOOD)),
         }
     }
@@ -416,6 +442,7 @@ fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
                 key,
                 default_cast,
             },
+            force_offline,
         }),
     ))
 }

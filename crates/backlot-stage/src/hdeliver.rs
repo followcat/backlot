@@ -191,11 +191,15 @@ impl Stage {
         user_pending.sort_by_key(|m| m.seq);
         notice_pending.sort_by_key(|m| (hnotice::rank(m), m.seq));
         let role = &hs.role;
+        let active = crate::handoff_term::active_hollywood_terminal(role, terminals);
+        let blocked = crate::handoff::handoff_blocks_delivery(hdir)
+            || self
+                .herror
+                .borrow()
+                .as_ref()
+                .is_some_and(crate::handoff::HBlockedKind::blocks_delivery);
         let gate = Gate {
-            live: role.live
-                && terminals
-                    .iter()
-                    .any(|t| t.name == backlot_model::hollywood::HOLLYWOOD_TERMINAL),
+            live: role.live && active.is_some() && !blocked,
             work: self.work.borrow().get(&pair).copied(),
             screen: self.screens.borrow().get(&pair).cloned(),
             role_since_ms: role.since_ms,
@@ -219,11 +223,7 @@ impl Stage {
             let seqs = notice_pending.iter().map(|m| m.seq).collect();
             (text, seqs)
         };
-        let address = terminals
-            .iter()
-            .find(|t| t.name == backlot_model::hollywood::HOLLYWOOD_TERMINAL)
-            .map(|t| t.address.clone())
-            .unwrap_or_default();
+        let address = active.map(|t| t.address.clone()).unwrap_or_default();
         self.hpassive_sending
             .borrow_mut()
             .insert(pair.clone(), passive.into_iter().map(|p| p.key).collect());

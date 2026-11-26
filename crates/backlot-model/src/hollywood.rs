@@ -29,9 +29,14 @@ pub use crate::hollywood_validate::{HRefusal, validate};
 /// name, since its ledger sits beside the studios' at `<base>/hollywood`.
 pub const HOLLYWOOD: &str = "hollywood";
 
-/// Hollywood's terminal name (D13): one per core, outside the
-/// studios' `bl-<studio>-<role>` shape.
+/// Hollywood's initial terminal name (D13): outside the studios'
+/// `bl-<studio>-<role>` shape. Subsequent handoffs use `-next` or `-g<k>`.
 pub const HOLLYWOOD_TERMINAL: &str = "bl-hollywood";
+
+/// Whether `name` is Hollywood's primary or handoff-generation terminal name.
+pub fn is_hollywood_terminal_name(name: &str) -> bool {
+    name == HOLLYWOOD_TERMINAL || name.starts_with("bl-hollywood-")
+}
 
 /// The last headlines kept in state (D15's collapsed layer shows one).
 pub const HEADLINE_CAP: usize = 10;

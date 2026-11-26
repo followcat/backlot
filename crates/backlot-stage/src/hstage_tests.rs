@@ -486,3 +486,131 @@ async fn agents_md_refreshes_on_adopt() {
         "stale AGENTS.md must be refreshed on Adopt"
     );
 }
+
+#[tokio::test]
+async fn resume_inside_previous_retention_window_picks_free_terminal_name() {
+    use hc_proto::client::Client;
+    use hc_proto::codec::Reader;
+    use hc_proto::frame::{Frame, Kind};
+    use serde_json::{Value, json};
+    use tokio::io::AsyncWriteExt;
+
+    let tmp = crate::test_support::TestDir::new("bl-hresume-free");
+    let cfg_dir = tmp.join("cfg/backlot");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.toml"),
+        "[hollywood]\nrunner = \"fake\"\nmodel = \"m\"\neffort = \"low\"\n",
+    )
+    .unwrap();
+    let hdir = crate::store::hollywood_dir(tmp.path());
+    crate::hstage::record_role(
+        &hdir,
+        backlot_model::hollywood::RoleMotion::Lost,
+        None,
+        Some(ActorIdentity {
+            runner: "fake".into(),
+            runner_version: None,
+            model: "m".into(),
+            effort: Some("low".into()),
+            permission_profile: "standard".into(),
+        }),
+        Some("fake-bl-hollywood-next".into()),
+        Some("terminal gone"),
+    )
+    .unwrap();
+
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    let launched_name = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+    let launched_copy = launched_name.clone();
+    tokio::spawn(async move {
+        let (read, mut write) = tokio::io::split(core_side);
+        let mut reader = Reader::new(read);
+        let _ = reader.read_line().await.unwrap().unwrap();
+        write
+            .write_all(
+                serde_json::to_string(&json!({
+                    "jsonrpc": "2.0", "id": 0,
+                    "result": {
+                        "generation": 1, "version": "fake-core 0.0",
+                        "framed": true,
+                        "core": {"id": "core-fake-1", "name": "fake-core"},
+                        "methods": ["terminal.run", "terminal.read"],
+                        "features": [],
+                    }
+                }))
+                .unwrap()
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        write.write_all(b"\n").await.unwrap();
+        while let Ok(Some(frame)) = reader.read_frame().await {
+            if frame.channel != 0 || frame.kind != Kind::Data {
+                continue;
+            }
+            let req: Value = serde_json::from_slice(&frame.payload).unwrap();
+            if req["method"] == "terminal.run" {
+                let name = req["params"]["name"].as_str().unwrap_or("").to_string();
+                *launched_copy.lock().unwrap() = Some(name.clone());
+                let reply = serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": req["id"],
+                    "result": { "terminal": { "address": "t-new", "name": name } }
+                }))
+                .unwrap();
+                write
+                    .write_all(&Frame::data(0, reply).encode())
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+
+    let mut stage = crate::daemon::Stage::for_test(client);
+    stage.base = tmp.path().to_path_buf();
+    stage.env_vars.insert(
+        "XDG_CONFIG_HOME".into(),
+        tmp.join("cfg").to_string_lossy().into_owned(),
+    );
+    let fake_bin = tmp.join("fake-runner.sh");
+    std::fs::write(&fake_bin, "#!/bin/sh\necho ok\n").unwrap();
+    stage.env_vars.insert(
+        "BACKLOT_FAKE_RUNNER".into(),
+        fake_bin.to_string_lossy().into_owned(),
+    );
+
+    let finished = vec![
+        crate::reconcile::LiveTerminal {
+            name: "bl-hollywood".into(),
+            address: "t-old".into(),
+            labels: std::collections::BTreeMap::from([
+                ("backlot.role".into(), "hollywood-previous".into()),
+                ("backlot.previous_until_ms".into(), "99999999".into()),
+            ]),
+            ..Default::default()
+        },
+        crate::reconcile::LiveTerminal {
+            name: "bl-hollywood-next".into(),
+            address: "t-dead-next".into(),
+            labels: std::collections::BTreeMap::from([("backlot.role".into(), "hollywood".into())]),
+            ..Default::default()
+        },
+    ];
+    let mut free = true;
+    stage
+        .hollywood(&[], &finished, &mut free, 1_000)
+        .await
+        .unwrap();
+
+    let name = launched_name
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("terminal.run launched");
+    assert_eq!(name, "bl-hollywood-g1");
+}

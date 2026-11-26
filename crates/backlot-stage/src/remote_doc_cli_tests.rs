@@ -347,3 +347,94 @@ fn remote_card_apply_and_cancel_travel_over_the_doc_queue() {
         backlot_model::hollywood::HollywoodKind::CardCancelled { card, .. } if card == setup_card_seq
     )));
 }
+
+#[test]
+fn remote_hollywood_switch_cancel_and_status_travel_over_doc_queue() {
+    let dir = TestDir::new("blrem-hswitch-queue");
+    let (rt, env, base, core, stage, mut consumer, _s, _r, _n) = seeded_fake_core(&dir);
+
+    let mut run_cli = |line: &str| -> Result<String, crate::cli::Fail> {
+        let (common, cmd) = args::parse(&words(line)).unwrap();
+        let json = crate::remote_doc_cli::wants_json(&cmd);
+        let action = match map_cmd(&common, &cmd, &env, None).unwrap() {
+            MappedCmd::Action(a) => a,
+            MappedCmd::NeedsStudio(mk) => mk("acme-shop".into()),
+            MappedCmd::Unsupported => panic!("unexpected unsupported for {line}"),
+        };
+        rt.block_on(async {
+            let client = core.client().await;
+            let ep = core.endpoint();
+            let fut = tokio::spawn(async move {
+                crate::remote_doc_cli::execute_client_with(
+                    &client,
+                    Some(&ep),
+                    &action,
+                    Duration::from_secs(2),
+                    json,
+                )
+                .await
+            });
+            loop {
+                if fut.is_finished() {
+                    break fut.await.unwrap();
+                }
+                let _ = consumer
+                    .process(&stage, crate::live::now_ms())
+                    .await
+                    .unwrap();
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+    };
+
+    // Initial `--status` when no handoff exists returns empty handoff.
+    let status0: backlot_model::req_results::HollywoodSwitchStatusResult =
+        serde_json::from_str(&run_cli("hollywood switch --status --json").unwrap()).unwrap();
+    assert!(!status0.active);
+    assert!(status0.handoff.is_none());
+
+    // `switch --no-wait --json` stages handoff.json over doc queue.
+    let queued: backlot_model::req_results::HollywoodSwitchResult = serde_json::from_str(
+        &run_cli("hollywood switch --runner fake --model model-b --effort high --no-wait --json")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(queued.action, "queued");
+    assert!(queued.handoff.is_some());
+
+    // `switch --status --json` reports active handoff.
+    let status1: backlot_model::req_results::HollywoodSwitchStatusResult =
+        serde_json::from_str(&run_cli("hollywood switch --status --json").unwrap()).unwrap();
+    assert!(status1.active);
+
+    // `switch --cancel --json` sets cancel_requested.
+    let cancelled: backlot_model::req_results::HollywoodSwitchResult =
+        serde_json::from_str(&run_cli("hollywood switch --cancel --json").unwrap()).unwrap();
+    assert_eq!(cancelled.action, "cancel-requested");
+    let rec = crate::handoff::load_handoff(&store::hollywood_dir(&base))
+        .unwrap()
+        .unwrap();
+    assert!(rec.cancel_requested);
+
+    // Non-user `--as producer` is refused on switch map_cmd.
+    let (common, cmd) = args::parse(&words(
+        "hollywood switch --runner fake --model model-b --effort high --no-wait --as producer",
+    ))
+    .unwrap();
+    assert!(map_cmd(&common, &cmd, &env, None).is_err());
+
+    // Live stage + live Hollywood refuses `hollywood setup` over RPC unless `--force-offline`.
+    crate::live::write(
+        &base,
+        &crate::live::Live {
+            updated_ms: crate::live::now_ms(),
+            roles: Vec::new(),
+        },
+    )
+    .unwrap();
+    let err = run_cli("hollywood setup --runner fake --model model-b --effort high").unwrap_err();
+    assert!(err.message().contains("hollywood switch"), "{err:?}");
+    let ok = run_cli("hollywood setup --runner fake --model model-b --effort high --force-offline")
+        .unwrap();
+    assert!(ok.contains("[hollywood]"), "{ok}");
+}

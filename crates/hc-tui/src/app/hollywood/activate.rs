@@ -100,7 +100,7 @@ impl App {
             }
             // U7's setup line: the in-TUI dialog — runner/model/
             // effort pickers, the write through `hollywood setup`.
-            Some(Target::Setup) => self.hw_setup_open(),
+            Some(Target::Setup) => self.hw_switch_open(false),
             _ => {}
         }
     }
@@ -207,17 +207,62 @@ impl App {
         self.opening_new_studio();
     }
 
-    /// The live `bl-hollywood` terminal's address — the same read
-    /// `reap` and `stage_running` make of the inventory.
-    pub(super) fn hollywood_terminal(&self) -> Option<String> {
-        self.view
-            .inventory
-            .terminals()
+    /// The live active Hollywood terminal's address: prefers `summary.hollywood.terminal`,
+    /// falls back to the unique live `backlot.role == "hollywood"` terminal, then to the
+    /// legacy `HOLLYWOOD_TERMINAL` (`bl-hollywood`) name.
+    pub(crate) fn hollywood_terminal(&self) -> Option<String> {
+        let machines = self.panel_summaries();
+        let summary_addr = crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .and_then(|h| h.terminal.as_deref());
+        let terminals = self.view.inventory.terminals();
+        if let Some(addr) = summary_addr
+            && terminals
+                .values()
+                .any(|t| t.state == "live" && !t.address.contains('/') && t.address == addr)
+        {
+            return Some(addr.to_string());
+        }
+        terminals
             .values()
             .find(|t| {
                 t.state == "live"
                     && !t.address.contains('/')
-                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
+                    && t.labels.get("backlot.role").map(String::as_str) == Some("hollywood")
+            })
+            .or_else(|| {
+                terminals.values().find(|t| {
+                    t.state == "live"
+                        && !t.address.contains('/')
+                        && t.name
+                            .as_deref()
+                            .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
+                })
+            })
+            .map(|t| t.address.clone())
+    }
+
+    /// Live candidate Hollywood terminal during an in-progress handoff.
+    pub(crate) fn candidate_hollywood_terminal(&self) -> Option<String> {
+        let machines = self.panel_summaries();
+        let cand_addr = crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .and_then(|h| h.handoff.as_ref())
+            .and_then(|hf| hf.candidate_terminal.as_deref());
+        let terminals = self.view.inventory.terminals();
+        if let Some(addr) = cand_addr
+            && terminals
+                .values()
+                .any(|t| t.state == "live" && !t.address.contains('/') && t.address == addr)
+        {
+            return Some(addr.to_string());
+        }
+        terminals
+            .values()
+            .find(|t| {
+                t.state == "live"
+                    && !t.address.contains('/')
+                    && t.labels.get("backlot.role").map(String::as_str) == Some("hollywood-handoff")
             })
             .map(|t| t.address.clone())
     }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use backlot_model::EventBy;
 use backlot_model::hollywood::{
-    HOLLYWOOD_TERMINAL, HollywoodEvent, HollywoodKind, RoleMotion, replay,
+    HOLLYWOOD, HOLLYWOOD_TERMINAL, HollywoodEvent, HollywoodKind, RoleMotion, replay,
 };
 use hc_proto::codec::Reader;
 use hc_proto::frame::{Frame, Kind};
@@ -256,8 +256,64 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
         }];
         let mut free = true;
 
+        // Tick 1: make-before-break stages brief, launches candidate `t-new` beside
+        // live `t-old`, and leaves `config.toml` and `t-old` untouched until verified.
         stage
             .hollywood(&live_old, &[], &mut free, 1_000)
+            .await
+            .unwrap();
+        assert!(
+            removed.lock().unwrap().is_empty(),
+            "old stays live during probation"
+        );
+        assert_eq!(
+            crate::config::hollywood(&env.vars).unwrap().unwrap().runner,
+            "fake",
+            "config.toml untouched until candidate verifies"
+        );
+        {
+            let launches = launch_prompts.lock().unwrap();
+            assert_eq!(launches.len(), 1, "expected candidate launch: {launches:?}");
+            let prompt_joined = launches[0].join(" ");
+            assert!(
+                prompt_joined.contains("handoffs/")
+                    && prompt_joined.contains("backlot hollywood report"),
+                "{prompt_joined}"
+            );
+        }
+
+        // Candidate reports readiness -> commit updates config, records card.done, and kills t-old.
+        let both_live = vec![
+            LiveTerminal {
+                name: HOLLYWOOD_TERMINAL.into(),
+                address: "t-old".into(),
+                ..Default::default()
+            },
+            LiveTerminal {
+                name: "bl-hollywood-next".into(),
+                address: "t-new".into(),
+                labels: std::collections::BTreeMap::from([(
+                    "backlot.role".into(),
+                    "hollywood-handoff".into(),
+                )]),
+                ..Default::default()
+            },
+        ];
+        hrecord_as(
+            &hdir,
+            EventBy {
+                role: HOLLYWOOD.into(),
+                session: Some("t-new".into()),
+                via: None,
+            },
+            HollywoodKind::Reported {
+                headline: "Handoff ready — switched to claude/claude-opus-5-5".into(),
+                body: None,
+            },
+        )
+        .unwrap();
+        stage
+            .hollywood(&both_live, &[], &mut free, 2_000)
             .await
             .unwrap();
 
@@ -267,6 +323,7 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
         assert_eq!(new_cfg.model, "claude-opus-5-5");
         assert_eq!(new_cfg.effort.as_deref(), Some("xhigh"));
         assert_eq!(new_cfg.key.as_deref(), Some("alt+h"));
+        assert_eq!(*removed.lock().unwrap(), vec!["t-old".to_string()]);
 
         let evs = hevents(&hdir);
         let done_pos = evs
@@ -277,47 +334,17 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
             HollywoodKind::CardDone { card, note } => (*card, note.clone()),
             _ => unreachable!(),
         };
-        assert_eq!(
-            done_note,
-            "Hollywood re-cast to claude / claude-opus-5-5 / xhigh"
-        );
-        let restart_pos = evs
-            .iter()
-            .position(|e| matches!(e.kind, HollywoodKind::RoleRestart { fresh: true, .. }))
-            .expect("role.restart recorded");
         assert!(
-            done_pos < restart_pos,
-            "card.done must precede role.restart"
+            done_note.contains("claude")
+                && done_note.contains("claude-opus-5-5")
+                && done_note.contains("xhigh"),
+            "{done_note}"
         );
-
-        stage
-            .hollywood(&live_old, &[], &mut free, 2_000)
-            .await
-            .unwrap();
-        assert_eq!(*removed.lock().unwrap(), vec!["t-old".to_string()]);
-
-        stage.hollywood(&[], &[], &mut free, 3_000).await.unwrap();
-        {
-            let launches = launch_prompts.lock().unwrap();
-            assert_eq!(
-                launches.len(),
-                1,
-                "expected exactly one new launch: {launches:?}"
-            );
-            let prompt_joined = launches[0].join(" ");
-            assert!(
-                prompt_joined.contains("Taking over Hollywood"),
-                "{prompt_joined}"
-            );
-            assert!(
-                prompt_joined.contains("fake / model-a / low → claude / claude-opus-5-5 / xhigh"),
-                "{prompt_joined}"
-            );
-        }
 
         let live_new = vec![LiveTerminal {
-            name: HOLLYWOOD_TERMINAL.into(),
+            name: "bl-hollywood-next".into(),
             address: "t-new".into(),
+            labels: std::collections::BTreeMap::from([("backlot.role".into(), HOLLYWOOD.into())]),
             ..Default::default()
         }];
         stage
@@ -328,6 +355,7 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
 
         let replayed = replay(&hevents(&hdir));
         assert!(replayed.role.restart.is_none());
+        assert_eq!(replayed.role.terminal.as_deref(), Some("t-new"));
         assert_eq!(
             hplan(Some(&new_cfg), &replayed.role, true, 5_000, 0),
             Vec::<HMove>::new()
@@ -337,8 +365,7 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
             &replayed,
             &std::collections::BTreeSet::new(),
         );
-        let expected_passive =
-            format!("c{done_card} done — Hollywood re-cast to claude / claude-opus-5-5 / xhigh");
+        let expected_passive = format!("c{done_card} done — {done_note}");
         assert!(
             passive.iter().any(|p| p.text == expected_passive),
             "expected passive card.done note '{expected_passive}' in {passive:?}"

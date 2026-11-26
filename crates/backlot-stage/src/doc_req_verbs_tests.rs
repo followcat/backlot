@@ -452,6 +452,7 @@ fn all_fourteen_verbs_match_cli_ledger_events_with_via_doc() {
             effort: Some("high".into()),
             key: None,
             default_cast: None,
+            force_offline: false,
         }
     );
     assert_eq!(setup_res.model, "model-alt");

@@ -96,52 +96,61 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
-        Wait::Hollywood(_) if !wait.can_answer() => vec![
-            Chip {
-                label: "peek",
-                key: "p",
-                primary: true,
-            },
-            Chip {
-                label: "open",
-                key: "↵",
-                primary: false,
-            },
-        ],
-        Wait::Hollywood(hollywood) if hollywood.attention_user => vec![
-            Chip {
-                label: "allow",
-                key: "y",
-                primary: true,
-            },
-            Chip {
-                label: "deny",
-                key: "d",
-                primary: false,
-            },
-            Chip {
-                label: "peek",
-                key: "p",
-                primary: false,
-            },
-            Chip {
-                label: "open",
-                key: "↵",
-                primary: false,
-            },
-        ],
-        Wait::Hollywood(_) => vec![
-            Chip {
-                label: "open",
-                key: "↵",
-                primary: true,
-            },
-            Chip {
-                label: "peek",
-                key: "p",
-                primary: false,
-            },
-        ],
+        Wait::Hollywood(hollywood) => {
+            if let Some(chips) = super::handoff_ui::handoff_chips(hollywood, wait.can_answer()) {
+                return chips;
+            }
+            if !wait.can_answer() {
+                vec![
+                    Chip {
+                        label: "peek",
+                        key: "p",
+                        primary: true,
+                    },
+                    Chip {
+                        label: "open",
+                        key: "↵",
+                        primary: false,
+                    },
+                ]
+            } else if hollywood.attention_user {
+                vec![
+                    Chip {
+                        label: "allow",
+                        key: "y",
+                        primary: true,
+                    },
+                    Chip {
+                        label: "deny",
+                        key: "d",
+                        primary: false,
+                    },
+                    Chip {
+                        label: "peek",
+                        key: "p",
+                        primary: false,
+                    },
+                    Chip {
+                        label: "open",
+                        key: "↵",
+                        primary: false,
+                    },
+                ]
+            } else {
+                vec![
+                    Chip {
+                        label: "open",
+                        key: "↵",
+                        primary: true,
+                    },
+                    Chip {
+                        label: "peek",
+                        key: "p",
+                        primary: false,
+                    },
+                ]
+            }
+        }
         Wait::NoRequirement(_) => vec![
             Chip {
                 label: "open",
@@ -219,6 +228,23 @@ pub(crate) fn default_chip_index(wait: &Wait<'_>, chips: &[Chip]) -> usize {
 pub(crate) fn live_head(live: &Live<'_>) -> (String, &'static str) {
     match live {
         Live::Pending => ("sending to hollywood".into(), "…"),
+        Live::HandoffQueued {
+            runner,
+            model,
+            effort,
+        } => {
+            let eff = effort
+                .filter(|e| *e != "auto")
+                .map(|e| format!("/{e}"))
+                .unwrap_or_default();
+            (
+                format!(
+                    "queued · waiting for handoff to {runner}/{model}{eff} (will deliver on commit)"
+                ),
+                "…",
+            )
+        }
+        Live::BlockedQueue(reason) => (format!("queued · {reason}"), "…"),
         Live::Working(Some(doing)) => (format!("hollywood: {doing}"), "⠶"),
         Live::Working(None) => ("hollywood is working".into(), "⠶"),
         Live::Prompt(prompt) => (format!("hollywood asks: {prompt}"), "⚠"),
@@ -309,18 +335,28 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 )
             }
         }
-        Wait::Hollywood(hollywood) if hollywood.attention_user => (
-            format!(
-                "HOLLYWOOD asks: {}",
-                hollywood
-                    .attention_detail
-                    .as_deref()
-                    .or(hollywood.attention.as_deref())
-                    .unwrap_or("permission prompt")
-            ),
-            "⚠",
-        ),
-        Wait::Hollywood(_) => ("HOLLYWOOD blocked".to_string(), "!"),
+        Wait::Hollywood(hollywood) => {
+            if let Some(res) =
+                super::handoff_ui::handoff_wait_head(hollywood, crate::update_state::now_ms())
+            {
+                return res;
+            }
+            if hollywood.attention_user {
+                (
+                    format!(
+                        "HOLLYWOOD asks: {}",
+                        hollywood
+                            .attention_detail
+                            .as_deref()
+                            .or(hollywood.attention.as_deref())
+                            .unwrap_or("permission prompt")
+                    ),
+                    "⚠",
+                )
+            } else {
+                ("HOLLYWOOD blocked".to_string(), "!")
+            }
+        }
         Wait::NoRequirement(StudioItem { machine, studio }) => {
             let machine = machine_label(*machine, local, multi);
             let machine = if machine.is_empty() {
@@ -418,11 +454,18 @@ pub(crate) fn detail_text(wait: &Wait<'_>) -> Option<String> {
         ),
         // A runner with no approval key cannot take the decision here:
         // the row says where to answer instead of naming `y`/`d`.
-        Wait::Hollywood(_) if !wait.can_answer() => Some("answer in its terminal (Enter)".into()),
-        Wait::Hollywood(hollywood) if hollywood.attention_user => {
-            Some("allow once with y, deny with d, peek with p, open with Enter".into())
+        Wait::Hollywood(hollywood) => {
+            if let Some(detail) = super::handoff_ui::handoff_wait_detail(hollywood) {
+                return Some(detail);
+            }
+            if !wait.can_answer() {
+                Some("answer in its terminal (Enter)".into())
+            } else if hollywood.attention_user {
+                Some("allow once with y, deny with d, peek with p, open with Enter".into())
+            } else {
+                Some("blocked on a person — open its terminal".into())
+            }
         }
-        Wait::Hollywood(_) => Some("blocked on a person — open its terminal".into()),
         Wait::NoRequirement(item) => Some(format!(
             "next: {}",
             crate::panel::data::next_step(item.studio).unwrap_or("tell the producer what to build")

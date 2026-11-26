@@ -516,7 +516,7 @@ pub(super) fn render_overlays_and_cursor(
     // The Hollywood setup dialog dims like the other modals and
     // centres in `backlot_modal_surface`; its hit map and cursor feed
     // the next press and the host cursor like the fields do.
-    app.hw_hits = if let Some(d) = app.hw_setup.as_ref() {
+    app.hw_hits = if let Some(d) = app.hw_switch.as_ref() {
         overlay_painted = true;
         crate::chrome::popup_frame::dim_backdrop(
             buf,
@@ -524,7 +524,7 @@ pub(super) fn render_overlays_and_cursor(
             app.shell.popup_backdrop,
             None,
         );
-        crate::hw_setup::render_with_shadow(
+        crate::hw_switch::render_with_shadow(
             buf,
             d,
             &app.shell.palette,
@@ -532,7 +532,7 @@ pub(super) fn render_overlays_and_cursor(
             app.shell.popup_shadow,
         )
     } else {
-        crate::hw_setup::HwHits::default()
+        crate::hw_switch::HwHits::default()
     };
     if let Some(cursor) = app.hw_hits.cursor.as_ref() {
         app.want_cursor = CursorWish {

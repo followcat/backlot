@@ -125,9 +125,13 @@ pub(crate) async fn list_studio_terminals(
                 && t.labels.get("backlot.studio").is_some_and(|s| s == id)
                 && !matches!(
                     t.labels.get("backlot.role").map(String::as_str),
-                    Some("stage" | "hollywood")
+                    Some("stage" | "hollywood" | "hollywood-handoff" | "hollywood-previous")
                 )
-                && !matches!(t.name.as_deref(), Some("backlot-stage" | "bl-hollywood"))
+                && !matches!(t.name.as_deref(), Some("backlot-stage"))
+                && !t
+                    .name
+                    .as_deref()
+                    .is_some_and(backlot_model::hollywood::is_hollywood_terminal_name)
         })
         .collect())
 }

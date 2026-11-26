@@ -22,9 +22,10 @@ pub use crate::summary_build::{is_ask_answered, open_ask, role_name};
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
-    CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
-    MAX_OUTWARD_CARDS, MAX_OUTWARD_COMMITS, OutwardCardSummary, hollywood_section,
-    hollywood_section_with_activity, hollywood_section_with_work, studio_outward_cards,
+    CardSummary, Exchange, HEADLINE_CHARS, HandoffSummary, HollywoodSummary, MAX_EXCHANGE,
+    MAX_OPEN_CARDS, MAX_OUTWARD_CARDS, MAX_OUTWARD_COMMITS, OutwardCardSummary, QueueReason,
+    QueueStatus, hollywood_section, hollywood_section_with_activity, hollywood_section_with_work,
+    studio_outward_cards,
 };
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,

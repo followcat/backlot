@@ -408,7 +408,7 @@ fn render_band(
         let tier = if hollywood.confirm.is_some() {
             hints::for_confirm(usable)
         } else {
-            hints::for_row(
+            hints::for_row_with_handoff(
                 hollywood.selected.as_ref(),
                 hollywood.editing,
                 &waits,

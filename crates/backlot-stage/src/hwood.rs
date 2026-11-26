@@ -34,8 +34,14 @@ pub(crate) fn role(common: &Common, env: &Env) -> String {
 pub(crate) fn by_for(common: &Common, env: &Env) -> EventBy {
     EventBy {
         role: role(common, env),
-        session: env.get("HC_TERMINAL_ID").map(String::from),
-        via: None,
+        session: env
+            .get("HC_TERMINAL_ID")
+            .or_else(|| env.get("BACKLOT_TERMINAL"))
+            .map(String::from),
+        via: env
+            .get("BACKLOT_HANDOFF_ID")
+            .filter(|id| !id.is_empty())
+            .map(|id| format!("handoff:{id}")),
     }
 }
 
@@ -352,7 +358,35 @@ pub fn run(common: Common, cmd: Cmd, env: &Env) -> Result<String, Fail> {
             let res = crate::verbs_hwood::card_withdraw(&base, by, id, reason)?;
             Ok(crate::verbs_hwood::format_card_withdraw(&res))
         }
-        Cmd::Hollywood(HollywoodCmd::Setup { ref cfg }) => crate::hsetup::hsetup(&common, env, cfg),
+        Cmd::Hollywood(HollywoodCmd::Setup {
+            ref cfg,
+            force_offline,
+        }) => crate::hsetup::hsetup(&common, env, cfg, force_offline),
+        Cmd::Hollywood(HollywoodCmd::Switch {
+            ref runner,
+            ref model,
+            ref effort,
+            timeout_s,
+            force,
+            no_wait,
+            json,
+        }) => crate::hswitch_verbs::switch_local(
+            &common,
+            env,
+            runner,
+            model,
+            effort.as_deref(),
+            timeout_s,
+            force,
+            no_wait,
+            json,
+        ),
+        Cmd::Hollywood(HollywoodCmd::SwitchCancel { json }) => {
+            crate::hswitch_verbs::cancel_local(&common, env, json)
+        }
+        Cmd::Hollywood(HollywoodCmd::SwitchStatus { json }) => {
+            crate::hswitch_verbs::status_local(&common, env, json)
+        }
         Cmd::Card(CardCmd::List) => crate::hwood_read::card_list(&common, env),
         Cmd::Card(CardCmd::Show { id }) => crate::hwood_read::card_show(&common, env, id),
         Cmd::Card(CardCmd::Apply { id }) => card_apply(&common, env, id),

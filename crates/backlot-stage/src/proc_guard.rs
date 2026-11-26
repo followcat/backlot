@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use backlot_model::hollywood::HOLLYWOOD_TERMINAL;
+use backlot_model::hollywood::is_hollywood_terminal_name;
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
@@ -24,7 +24,11 @@ impl RoleAncestor {
         if let Some(r) = self.role.as_deref().filter(|s| !s.is_empty()) {
             return Some(r);
         }
-        if self.terminal.as_deref() == Some(HOLLYWOOD_TERMINAL) {
+        if self
+            .terminal
+            .as_deref()
+            .is_some_and(is_hollywood_terminal_name)
+        {
             return Some(backlot_model::hollywood::HOLLYWOOD);
         }
         if let (Some(term), Some(studio)) = (self.terminal.as_deref(), self.studio.as_deref()) {
@@ -45,6 +49,7 @@ pub(crate) enum CliVerb<'a> {
     CardMutate,
     PermsRevoke,
     ServerControl,
+    HollywoodControl,
     Approve { person: &'a str },
 }
 
@@ -167,7 +172,7 @@ pub(crate) fn find_role_ancestor(start_ppid: u32, read: AncestorRead<'_>) -> Opt
         let is_term = role.is_some()
             || terminal
                 .as_deref()
-                .is_some_and(|t| t == HOLLYWOOD_TERMINAL || t.starts_with("bl-"));
+                .is_some_and(|t| is_hollywood_terminal_name(t) || t.starts_with("bl-"));
         if is_term {
             return Some(RoleAncestor {
                 pid,
@@ -200,21 +205,12 @@ pub(crate) fn check_cli_gate_with(
     let anc = find_role_ancestor(start_ppid, read);
     let env_role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
     match verb {
-        CliVerb::CardMutate => {
-            if env_role.is_some() {
-                return Err(Fail::refused(
-                    "a card is applied or cancelled by the user — BACKLOT_ROLE is set",
-                ));
-            }
-            if let Some(a) = anc {
-                return Err(Fail::refused(format!(
-                    "a card is applied or cancelled by the user — role terminal ancestor (pid {}, BACKLOT_ROLE={})",
-                    a.pid,
-                    a.effective_role().unwrap_or("unknown")
-                )));
-            }
-            Ok(())
-        }
+        CliVerb::CardMutate => refuse_role_gate(
+            env_role,
+            anc.as_ref(),
+            "a card is applied or cancelled by the user",
+            "",
+        ),
         CliVerb::PermsRevoke => {
             if env_role.is_some() || anc.is_some() {
                 return Err(Fail::refused(
@@ -223,21 +219,18 @@ pub(crate) fn check_cli_gate_with(
             }
             Ok(())
         }
-        CliVerb::ServerControl => {
-            if env_role.is_some() {
-                return Err(Fail::refused(
-                    "the server is started, stopped or adopted by the person — BACKLOT_ROLE is set",
-                ));
-            }
-            if let Some(a) = anc {
-                return Err(Fail::refused(format!(
-                    "the server is started, stopped or adopted by the person — role terminal ancestor (pid {}, BACKLOT_ROLE={})",
-                    a.pid,
-                    a.effective_role().unwrap_or("unknown")
-                )));
-            }
-            Ok(())
-        }
+        CliVerb::ServerControl => refuse_role_gate(
+            env_role,
+            anc.as_ref(),
+            "the server is started, stopped or adopted by the person",
+            "",
+        ),
+        CliVerb::HollywoodControl => refuse_role_gate(
+            env_role,
+            anc.as_ref(),
+            "switching hollywood is the person's call",
+            "; propose a setup card with 'backlot hollywood propose setup ...' instead",
+        ),
         CliVerb::Approve { person } => {
             if let Some(a) = anc {
                 let anc_role = a.effective_role().ok_or_else(|| {
@@ -283,6 +276,27 @@ pub(crate) fn check_cli_gate_with(
             Ok(())
         }
     }
+}
+
+fn refuse_role_gate(
+    env_role: Option<&str>,
+    anc: Option<&RoleAncestor>,
+    headline: &str,
+    suffix: &str,
+) -> Result<(), Fail> {
+    if env_role.is_some() {
+        return Err(Fail::refused(format!(
+            "{headline} — BACKLOT_ROLE is set{suffix}"
+        )));
+    }
+    if let Some(a) = anc {
+        return Err(Fail::refused(format!(
+            "{headline} — role terminal ancestor (pid {}, BACKLOT_ROLE={}){suffix}",
+            a.pid,
+            a.effective_role().unwrap_or("unknown")
+        )));
+    }
+    Ok(())
 }
 
 fn is_env_assign(word: &str) -> bool {
@@ -394,6 +408,9 @@ fn check_backlot_args(args: &[String], role: Option<&str>) -> Option<String> {
         ["perms", "revoke", ..] => Some("self-approval blocked (backlot perms revoke)".into()),
         ["server", "run" | "start" | "stop" | "adopt" | "service", ..] => {
             Some("server control is the person's (backlot server)".into())
+        }
+        ["hollywood", "switch" | "setup", ..] => {
+            Some("switching hollywood is the person's (backlot hollywood switch|setup)".into())
         }
         ["approve", ..] => {
             if !matches!(role, Some("producer" | "director")) {

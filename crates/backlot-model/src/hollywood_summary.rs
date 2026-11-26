@@ -36,6 +36,9 @@ pub struct HollywoodSummary {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Live active terminal address recorded in `role.state started|resumed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<String>,
     /// Screen/signal-classified work state (`working`, `waiting`,
     /// `blocked`) while `state == "live"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,7 +88,15 @@ pub struct HollywoodSummary {
     /// `tell`s and Hollywood's `reported` headlines, oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exchange: Vec<Exchange>,
+    /// Additive queue waiting status for Hollywood's outbox.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue: Option<crate::hollywood_switch::QueueStatus>,
+    /// Active or most recent make-before-break switch handoff.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<crate::hollywood_switch::HandoffSummary>,
 }
+
+pub use crate::hollywood_switch::{HandoffSummary, QueueReason, QueueStatus};
 
 /// One line of the user's exchange with Hollywood: the user half is
 /// a `message.sent` `to` it (`who` is the sender), the Hollywood half
@@ -258,6 +269,7 @@ pub fn hollywood_section_with_activity(
         runner: runner.map(cap),
         model: model.map(cap),
         effort: effort.map(cap),
+        terminal: live.then(|| state.role.terminal.clone()).flatten(),
         work: live.then_some(work).flatten(),
         pending: state
             .messages
@@ -285,6 +297,8 @@ pub fn hollywood_section_with_activity(
             })
             .collect(),
         exchange: exchange(state),
+        queue: None,
+        handoff: None,
     }
 }
 

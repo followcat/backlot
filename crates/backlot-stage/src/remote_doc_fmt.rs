@@ -33,6 +33,57 @@ pub fn format_hollywood_setup(r: &HollywoodSetupResult) -> String {
     format!("[hollywood] {} ({} {}){note}", r.action, r.runner, r.model)
 }
 
+/// Format `HollywoodSwitchResult` in one user-facing line.
+pub fn format_hollywood_switch(r: &backlot_model::req_results::HollywoodSwitchResult) -> String {
+    match &r.handoff {
+        Some(h) => {
+            let eff = h
+                .target_effort
+                .as_deref()
+                .map(|e| format!("/{e}"))
+                .unwrap_or_default();
+            if let Some(err) = &h.error {
+                format!(
+                    "[hollywood] switch {} ({}/{}{eff}): {err}",
+                    r.action, h.target_runner, h.target_model
+                )
+            } else {
+                format!(
+                    "[hollywood] switch {} -> {}/{}{eff} (id {}, phase {})",
+                    r.action, h.target_runner, h.target_model, h.id, h.phase
+                )
+            }
+        }
+        None => format!("[hollywood] switch {}", r.action),
+    }
+}
+
+/// Format `HollywoodSwitchStatusResult` in one user-facing line.
+pub fn format_hollywood_switch_status(
+    r: &backlot_model::req_results::HollywoodSwitchStatusResult,
+) -> String {
+    match &r.handoff {
+        Some(h) => {
+            let eff = h
+                .target_effort
+                .as_deref()
+                .map(|e| format!("/{e}"))
+                .unwrap_or_default();
+            match &h.error {
+                Some(err) => format!(
+                    "handoff {}: {} -> {}/{}{eff}: {err}",
+                    h.id, h.phase, h.target_runner, h.target_model
+                ),
+                None => format!(
+                    "handoff {}: {} -> {}/{}{eff}",
+                    h.id, h.phase, h.target_runner, h.target_model
+                ),
+            }
+        }
+        None => "no active handoff".to_string(),
+    }
+}
+
 /// A destructive verb's dry-run report, unwrapped from its plan.
 fn report<T: DeserializeOwned>(ack: &ResAck, dry_run: bool) -> Result<T, Fail> {
     if dry_run {
@@ -149,6 +200,24 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
             }
         }
         ReqAction::Version => parse_res::<String>(&ack)?,
+        ReqAction::HollywoodSwitch { .. } | ReqAction::HollywoodSwitchCancel => {
+            let res: backlot_model::req_results::HollywoodSwitchResult = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&res)
+                    .map_err(|e| Fail::refused(format!("switch: {e}")))?
+            } else {
+                format_hollywood_switch(&res)
+            }
+        }
+        ReqAction::HollywoodSwitchStatus => {
+            let res: backlot_model::req_results::HollywoodSwitchStatusResult = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&res)
+                    .map_err(|e| Fail::refused(format!("switch status: {e}")))?
+            } else {
+                format_hollywood_switch_status(&res)
+            }
+        }
     };
     Ok(out)
 }

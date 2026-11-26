@@ -291,3 +291,19 @@ pub struct HollywoodSetupResult {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restarted: bool,
 }
+
+/// Result of `hollywood-switch` / `hollywood-switch-cancel`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HollywoodSwitchResult {
+    pub action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<crate::hollywood_summary::HandoffSummary>,
+}
+
+/// Result of `hollywood-switch-status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HollywoodSwitchStatusResult {
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<crate::hollywood_summary::HandoffSummary>,
+}

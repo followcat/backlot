@@ -112,16 +112,23 @@ pub(crate) fn draw_row(
         }
         Row::Fold { count, .. } => super::talk::draw_fold(buf, rect, *count, selected, palette),
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
-        Row::Input => draw_input(
-            buf,
-            rect,
-            hollywood,
-            selected,
-            suppress_highlights,
-            activity,
-            palette,
-            hits,
-        ),
+        Row::Input => {
+            let handoff_active = waits.iter().any(|w| match w {
+                Wait::Hollywood(hw) => super::handoff_ui::is_handoff_active(hw),
+                _ => false,
+            });
+            draw_input(
+                buf,
+                rect,
+                hollywood,
+                selected,
+                suppress_highlights,
+                activity,
+                handoff_active,
+                palette,
+                hits,
+            );
+        }
         Row::Setup => draw_setup(buf, rect, palette),
     }
     hits.rows.push((rect, target));
@@ -169,7 +176,19 @@ fn draw_wait(
         Wait::Prompt(_) => palette.red,
         Wait::Role(item) if item.asks => palette.peach,
         Wait::Role(_) => palette.red,
-        Wait::Hollywood(hollywood) if hollywood.attention_user => palette.red,
+        Wait::Hollywood(hollywood)
+            if hollywood.attention_user
+                || super::handoff_ui::is_quota_or_error(hollywood)
+                || matches!(
+                    super::handoff_ui::handoff_phase(hollywood),
+                    Some("needs_approval" | "rolled_back")
+                ) =>
+        {
+            palette.red
+        }
+        Wait::Hollywood(hollywood) if super::handoff_ui::is_handoff_active(hollywood) => {
+            palette.accent
+        }
         Wait::Hollywood(_) => palette.peach,
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
@@ -407,6 +426,7 @@ fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, pale
     let (text, glyph) = live_head(live);
     let (colour, bold) = match live {
         Live::Pending => (palette.overlay0, false),
+        Live::HandoffQueued { .. } | Live::BlockedQueue(_) => (palette.peach, false),
         Live::Working(_) => (palette.yellow, false),
         Live::Prompt(_) => (palette.red, true),
         Live::Idle => (palette.overlay0, false),
@@ -463,6 +483,7 @@ fn draw_input(
     selected: bool,
     suppress_highlights: bool,
     activity: HollywoodActivity,
+    handoff_active: bool,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -543,6 +564,7 @@ fn draw_input(
     } else if hollywood.input.as_str().is_empty() {
         let placeholder = match hollywood.reply_to.as_ref() {
             Some((_, role)) => format!("reply to {role}…"),
+            None if handoff_active => "tell hollywood  (draft kept across switch)".to_owned(),
             None => "tell hollywood what you need…".to_owned(),
         };
         put_text(

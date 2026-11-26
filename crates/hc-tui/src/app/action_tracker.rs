@@ -131,6 +131,7 @@ impl App {
         }
         if !pending.action.view
             && pending.action.mark != mark::hollywood_setup()
+            && pending.action.mark != mark::hollywood_switch()
             && self.reader_compose_on_reply(id, &result)
         {
             return;
@@ -189,6 +190,18 @@ impl App {
                 });
             }
         }
+    }
+
+    pub(crate) fn show_handoff_toast(&mut self, title: &str, body: &str, fail: bool) {
+        let hold = if fail { FAIL_HOLD } else { DONE_HOLD };
+        self.action_toast = Some(ActionToast {
+            title: title.to_owned(),
+            body: body.to_owned(),
+            fail,
+            command: None,
+            start_stage: None,
+            deadline: Instant::now() + hold,
+        });
     }
 
     /// `true` when the toast's deadline passed — the card un-paints.

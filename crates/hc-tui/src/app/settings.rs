@@ -304,7 +304,7 @@ impl App {
             }
             // The overseer row opens the setup dialog — prefilled
             // when `[hollywood]` exists, a first setup without one.
-            STUDIO_OVERSEER => self.hw_setup_open(),
+            STUDIO_OVERSEER => self.hw_switch_open(self.hw_switch_prefer_alternative()),
             _ => {}
         }
         let view = self.studio_view();

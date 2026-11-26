@@ -102,6 +102,14 @@ pub(crate) fn frames(machines: &[MachineSummary]) -> Vec<Frame<'_>> {
 pub(crate) enum Live<'a> {
     /// The line still sits in the outbox behind the send gate.
     Pending,
+    /// Queued while a make-before-break handoff is running.
+    HandoffQueued {
+        runner: &'a str,
+        model: &'a str,
+        effort: Option<&'a str>,
+    },
+    /// Queued while current Hollywood is blocked (e.g. out of quota).
+    BlockedQueue(&'a str),
     /// Hollywood is working; its terminal's `doing`, when reported.
     Working(Option<&'a str>),
     /// A user-owned permission prompt stands on its screen.
@@ -299,7 +307,23 @@ pub(crate) fn hollywood_live(machines: &[MachineSummary]) -> Option<(usize, Live
     {
         return None;
     }
-    let live = if hw.attention_user {
+    let live = if let Some(hf) = &hw.handoff
+        && super::handoff_ui::is_handoff_active(hw)
+        && (hw.pending || hw.queue.is_some())
+    {
+        Live::HandoffQueued {
+            runner: hf.target_runner.as_str(),
+            model: hf.target_model.as_str(),
+            effort: hf.target_effort.as_deref(),
+        }
+    } else if super::handoff_ui::is_quota_or_error(hw) && (hw.pending || hw.queue.is_some()) {
+        Live::BlockedQueue(
+            hw.attention_detail
+                .as_deref()
+                .or(hw.attention.as_deref())
+                .unwrap_or("blocked"),
+        )
+    } else if hw.attention_user {
         Live::Prompt(
             hw.attention_detail
                 .as_deref()
@@ -391,6 +415,9 @@ pub(crate) fn hollywood_activity(
     pending_marks: Option<&str>,
 ) -> HollywoodActivity {
     let hw = local_summary(machines).and_then(|s| s.hollywood.as_ref());
+    if hw.is_some_and(super::handoff_ui::is_handoff_active) {
+        return HollywoodActivity::Queued;
+    }
     if hw.is_some_and(|h| h.state == "live" && h.work == Some(Work::Working)) {
         return HollywoodActivity::Working;
     }
