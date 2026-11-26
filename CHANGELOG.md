@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.15 — 2026-11-27
+
 ### Changed
 
 - **Call Sheet zones, unified tonal surfaces, and single focus ring.** Added titled zone rules (`STUDIOS`, `WAITING ON YOU`, `HOLLYWOOD` with inline fold badge), persistent col-2 severity bars, fixed speaker columns with 2-line CJK wrap and relative age, `raised_field` compose styling with persistent empty placeholder, 1-row external drop shadow, shared two-tone footer hints, and unified `elevation.surface` / single-focus-ring styling across sidebar (`backlot` theme), Lot dock, Cast (`┄ closed (n) ┄` divider), and Call Sheet (`docs/studio/hollywood.md`, `docs/theme.md`, `docs/parity.md`).
