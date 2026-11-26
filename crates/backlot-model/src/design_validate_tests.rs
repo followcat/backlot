@@ -2,7 +2,7 @@
 
 use crate::design::{DesignGate, DesignQuestion, DesignSlot, EntrySource, SignMode};
 use crate::event::EventKind;
-use crate::state::replay;
+use crate::state::{StudioState, replay};
 use crate::testkit::*;
 use crate::validate::{Refusal, validate};
 
@@ -195,17 +195,20 @@ fn role_rules_restrict_design_events_and_slots() {
         .is_err()
     );
 
-    let supp = entry_kind(1, 1, DesignSlot::Supplement, None, vec![]);
+    let mut supp_with_ref = entry_kind(1, 1, DesignSlot::Supplement, None, vec![]);
+    if let EventKind::DesignEntry { refs, .. } = &mut supp_with_ref {
+        *refs = vec![6];
+    }
     for ok_role in ["writer", "director"] {
         assert_eq!(
-            validate(&waiting_user, &new_ev(ok_role, supp.clone())),
+            validate(&waiting_user, &new_ev(ok_role, supp_with_ref.clone())),
             Ok(())
         );
     }
     for bad in ["producer", "user", "stage", "actor-t1-c1"] {
         assert!(
             matches!(
-                validate(&waiting_user, &new_ev(bad, supp.clone())),
+                validate(&waiting_user, &new_ev(bad, supp_with_ref.clone())),
                 Err(Refusal::RoleBound { .. })
             ),
             "{bad} must not write supplement"
@@ -234,29 +237,22 @@ fn role_rules_restrict_design_events_and_slots() {
 }
 
 #[test]
-fn phase_rules_enforce_order_and_pr2_leaves_tasks_ungated() {
+fn phase_rules_enforce_order_and_gate_tasks_when_required() {
     let no_req = replay(&[ev(1, "user", studio_required())]);
     assert_eq!(
         validate(&no_req, &new_ev("producer", open_kind(1, 1, false))),
         Err(Refusal::UnknownReqVersion(1))
     );
 
+    let v_entry = |st: &StudioState, who: &str, slot: DesignSlot, q: Vec<DesignQuestion>| {
+        validate(st, &new_ev(who, entry_kind(1, 1, slot, None, q)))
+    };
     let idle = replay(&[ev(1, "user", studio_required()), req(2, 1)]);
-    // PR 2 does NOT gate TaskCreated/PlanPublished yet (that is PR 4).
     assert_eq!(
         validate(&idle, &new_ev("director", task_created("t1", "fix", 1))),
-        Ok(())
+        Err(Refusal::DesignNotSigned(1))
     );
-    assert!(
-        validate(
-            &idle,
-            &new_ev(
-                "writer",
-                entry_kind(1, 1, DesignSlot::Proposal, None, vec![])
-            )
-        )
-        .is_err()
-    );
+    assert!(v_entry(&idle, "writer", DesignSlot::Proposal, vec![]).is_err());
     assert!(validate(&idle, &new_ev("user", sign_kind(1, 1, SignMode::Approved))).is_err());
 
     // WaitingProposal refuses director buildability and user sign-off.
@@ -265,16 +261,7 @@ fn phase_rules_enforce_order_and_pr2_leaves_tasks_ungated() {
         req(2, 1),
         ev(3, "producer", open_kind(1, 1, false)),
     ]);
-    assert!(
-        validate(
-            &waiting_prop,
-            &new_ev(
-                "director",
-                entry_kind(1, 1, DesignSlot::Buildability, None, vec![])
-            )
-        )
-        .is_err()
-    );
+    assert!(v_entry(&waiting_prop, "director", DesignSlot::Buildability, vec![]).is_err());
     assert!(
         validate(
             &waiting_prop,
@@ -305,22 +292,8 @@ fn phase_rules_enforce_order_and_pr2_leaves_tasks_ungated() {
         recommendation: "r".into(),
         section_ref: Some("§R1.W".into()),
     };
-    assert!(
-        validate(
-            &waiting_sum,
-            &new_ev(
-                "producer",
-                entry_kind(
-                    1,
-                    1,
-                    DesignSlot::Summary,
-                    None,
-                    vec![q_item("1"), q_item("2"), q_item("3"), q_item("4")]
-                )
-            )
-        )
-        .is_err()
-    );
+    let qs = vec![q_item("1"), q_item("2"), q_item("3"), q_item("4")];
+    assert!(v_entry(&waiting_sum, "producer", DesignSlot::Summary, qs).is_err());
 
     // WaitingUser rejects round 2 without UserInput; accepts after UserInput.
     let mut wait_user_evs = vec![
