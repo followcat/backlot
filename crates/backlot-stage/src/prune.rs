@@ -21,9 +21,10 @@ use std::path::{Path, PathBuf};
 use backlot_model::state::StudioConfig;
 
 use crate::cli::Fail;
+use crate::driver::{LocalDriver, MachineDriver};
 use crate::prune_paths::{shown, under};
 use crate::store;
-use crate::workareas::{GitRun, err_line, real_git};
+use crate::workareas::{GitRun, err_line};
 
 pub(crate) use crate::prune_report::{PruneReport, PruneStudioReport, Step};
 
@@ -284,13 +285,39 @@ pub(crate) fn run(
     force: bool,
     json: bool,
 ) -> Result<String, Fail> {
-    let report = report(base, studio, all_finished, dry_run, force)?;
-    crate::prune_render::format_report(&report, json)
+    report_with(
+        &LocalDriver::new(),
+        base,
+        studio,
+        all_finished,
+        dry_run,
+        force,
+    )
+    .and_then(|r| crate::prune_render::format_report(&r, json))
 }
 
 /// The plan/outcome as a struct, shared by the CLI and the request
 /// queue.
 pub(crate) fn report(
+    base: &Path,
+    studio: Option<String>,
+    all_finished: bool,
+    dry_run: bool,
+    force: bool,
+) -> Result<PruneReport, Fail> {
+    report_with(
+        &LocalDriver::new(),
+        base,
+        studio,
+        all_finished,
+        dry_run,
+        force,
+    )
+}
+
+/// [`report`] through a driver's git runner.
+pub(crate) fn report_with(
+    driver: &dyn MachineDriver,
     base: &Path,
     studio: Option<String>,
     all_finished: bool,
@@ -307,7 +334,8 @@ pub(crate) fn report(
             studios: Vec::new(),
         });
     }
-    let mut git = real_git;
+    let mut git = driver.git();
+    let git = &mut **git;
     let mut studios = Vec::new();
     for name in names {
         let dir = store::studio_dir(base, &name);
@@ -334,7 +362,7 @@ pub(crate) fn report(
         // binding has none and a broken member is reported kept, so
         // either way the pass still reaches the state records; only
         // a single-repository binding with no work tree refuses.
-        let (plan, mut steps) = plan(&mut git, cfg);
+        let (plan, mut steps) = plan(git, cfg);
         let repos = match plan {
             Plan::NotWorkTree => {
                 return Err(Fail::refused(format!(
@@ -348,15 +376,7 @@ pub(crate) fn report(
             // A workspace names the member in its branch lines; a
             // single repository needs no such qualifier.
             let label = (!cfg.members.is_empty()).then(|| member_leaf(&repo));
-            match prune_studio(
-                &mut git,
-                &name,
-                &dir,
-                &repo,
-                label.as_deref(),
-                dry_run,
-                force,
-            ) {
+            match prune_studio(git, &name, &dir, &repo, label.as_deref(), dry_run, force) {
                 Ok(more) => steps.extend(more),
                 // A member that passes its probe but then refuses a
                 // git step is kept as a whole and the others still

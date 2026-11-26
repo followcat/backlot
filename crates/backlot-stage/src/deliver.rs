@@ -22,7 +22,6 @@ use backlot_model::event::EventKind;
 use backlot_model::state::StudioState;
 use backlot_model::summary::Work;
 use hc_proto::client::CallError;
-use serde_json::json;
 use tokio::task::JoinHandle;
 
 use crate::act::record;
@@ -423,22 +422,14 @@ impl Stage {
                 std::fs::write(&path, digest::body(&out.items, dir))
                     .map_err(|e| Fail::refused(format!("digest file: {e}")))?;
             }
+            let send = self.driver.send_handle(&self.client);
             let address = live
                 .iter()
                 .find(|t| t.name == name)
                 .map(|t| t.address.clone())
                 .unwrap_or_default();
-            let client = self.client.clone();
             let text = out.text.clone();
-            let handle = tokio::spawn(async move {
-                client
-                    .call_timeout(
-                        "terminal.send",
-                        Some(json!({ "terminal": address, "text": text })),
-                        SEND_DEADLINE,
-                    )
-                    .await
-            });
+            let handle = tokio::spawn(async move { send(address, text, SEND_DEADLINE).await });
             self.sending.borrow_mut().insert(
                 pair,
                 InFlight {

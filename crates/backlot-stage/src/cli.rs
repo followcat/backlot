@@ -489,7 +489,9 @@ pub(crate) fn exec_event(
         if t.cast.is_none() {
             return Err(Fail::refused(format!("task '{task}' has no cast")));
         }
-        *commits = crate::range::check_range(&dir, &caller.studio, &task, &state, commits)?;
+        let driver = crate::driver::LocalDriver::new();
+        *commits =
+            crate::range::check_range_with(&driver, &dir, &caller.studio, &task, &state, commits)?;
     }
     if let Cmd::AskRun {
         argv, cwd, command, ..
@@ -510,7 +512,8 @@ pub(crate) fn exec_event(
     {
         let task = caller.task.clone().unwrap_or_default();
         let state = load(&dir)?;
-        crate::range::check_dependencies(&dir, &caller.studio, &state, &task)?;
+        let driver = crate::driver::LocalDriver::new();
+        crate::range::check_dependencies_with(&driver, &dir, &caller.studio, &state, &task)?;
     }
     // Hollywood's own ledger keeps its copy of a message it sent a
     // studio's producer (R26) — the `message.queued` just recorded is

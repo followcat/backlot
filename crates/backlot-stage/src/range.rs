@@ -11,6 +11,7 @@ use backlot_model::event::Verdict;
 use backlot_model::state::{StudioState, Task, TaskStatus};
 
 use crate::cli::Fail;
+use crate::driver::MachineDriver;
 use crate::workareas::{self, GitRun};
 
 /// `work/<task>` under the studio dir — the git context for every
@@ -97,7 +98,9 @@ pub fn resolve(
 /// branch, real git. Returns the `sha..sha` the event records — in a
 /// workspace, `member:sha..sha` per comma-separated part (D10). A
 /// no-git studio records the text verbatim.
-pub fn check_range(
+/// The gate, through a [`MachineDriver`]'s git runner.
+pub fn check_range_with(
+    driver: &dyn MachineDriver,
     dir: &Path,
     studio: &str,
     task: &str,
@@ -113,7 +116,8 @@ pub fn check_range(
     let branch = format!("backlot/{studio}/{task}");
     if cfg.members.is_empty() {
         let work = work_area(dir, task)?;
-        return resolve(&mut workareas::real_git, &work, &branch, range);
+        let mut git = driver.git();
+        return resolve(&mut **git, &work, &branch, range);
     }
     let mut resolved = Vec::new();
     for part in range.split(',') {
@@ -127,7 +131,7 @@ pub fn check_range(
             None => cfg
                 .members
                 .iter()
-                .filter(|m| tip_on_branch(dir, task, m, &bare, &branch))
+                .filter(|m| tip_on_branch(&*driver, dir, task, m, &bare, &branch))
                 .cloned()
                 .collect(),
         };
@@ -140,7 +144,10 @@ pub fn check_range(
             }
             [m] => {
                 let work = work_area(dir, &format!("{task}/{}", leaf(m)))?;
-                let sha = resolve(&mut workareas::real_git, &work, &branch, &bare)?;
+                let sha = {
+                    let mut git = driver.git();
+                    resolve(&mut **git, &work, &branch, &bare)?
+                };
                 resolved.push(format!("{}:{sha}", leaf(m)));
             }
             many => {
@@ -167,7 +174,14 @@ fn leaf(member: &str) -> String {
 
 /// Does `bare`'s `B` resolve and sit on `backlot/<studio>/<task>`
 /// inside `work/<task>/<member>` — the bare-range member probe.
-fn tip_on_branch(dir: &Path, task: &str, member: &str, bare: &str, branch: &str) -> bool {
+fn tip_on_branch(
+    driver: &dyn MachineDriver,
+    dir: &Path,
+    task: &str,
+    member: &str,
+    bare: &str,
+    branch: &str,
+) -> bool {
     let Some(b) = bare.rsplit("..").next().filter(|b| !b.is_empty()) else {
         return false;
     };
@@ -176,7 +190,8 @@ fn tip_on_branch(dir: &Path, task: &str, member: &str, bare: &str, branch: &str)
         return false;
     }
     let cwd = work.to_string_lossy().into_owned();
-    let git = |args: &[&str]| workareas::real_git(args, &cwd);
+    let mut runner = driver.git();
+    let mut git = |args: &[&str]| runner(args, &cwd);
     let tip = git(&[
         "rev-parse",
         "--verify",
@@ -223,7 +238,9 @@ fn accepted_commits(t: &Task) -> Option<&str> {
 /// `work/integration/<member>` (or the member repository itself), a
 /// bare part in `work/integration` (or the studio repo) — the same
 /// object store. A no-git studio merges nothing and skips the gate.
-pub fn check_dependencies(
+/// The gate, through a [`MachineDriver`]'s git runner.
+pub fn check_dependencies_with(
+    driver: &dyn MachineDriver,
     dir: &Path,
     studio: &str,
     state: &StudioState,
@@ -270,7 +287,8 @@ pub fn check_dependencies(
                 }
             };
             let cwd = area.to_string_lossy().into_owned();
-            let tip = workareas::real_git(
+            let mut git = driver.git();
+            let tip = git(
                 &[
                     "rev-parse",
                     "--verify",
@@ -283,8 +301,7 @@ pub fn check_dependencies(
             let merged = match tip.code {
                 // No integration branch yet: nothing is merged into it.
                 0 => {
-                    let out =
-                        workareas::real_git(&["merge-base", "--is-ancestor", end, &branch], &cwd);
+                    let out = git(&["merge-base", "--is-ancestor", end, &branch], &cwd);
                     match out.code {
                         0 => true,
                         1 => false,

@@ -86,7 +86,8 @@ pub(crate) fn execute(env: &Env, plan: &AdoptPlan) -> Result<String, Fail> {
             let senv = Env { vars };
             rt.block_on(async {
                 let lnk = link::connect(&senv, Some(OsStr::new(&st.session_label)), None).await?;
-                server_mode::stop_terminal(&lnk.client, &st.address).await
+                let driver = crate::driver::LocalDriver::new();
+                server_mode::stop_terminal(&driver, &lnk.client, &st.address).await
             })?;
         }
     }
