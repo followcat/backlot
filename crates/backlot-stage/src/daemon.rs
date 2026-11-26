@@ -279,6 +279,10 @@ pub(crate) struct Stage {
     /// (`answer_trust` on): a config typo never silently disables the
     /// disclosure the wizard promised.
     pub(crate) stage_cfg: std::cell::Cell<config::StageCfg>,
+    /// The `[design]` config the tick last read — layered across
+    /// `<state_dir>/config.toml` and user config (`hook_capture` on by
+    /// default).
+    pub(crate) design_cfg: std::cell::Cell<Option<config::DesignCfg>>,
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
@@ -319,6 +323,12 @@ pub(crate) struct Stage {
     /// stage terminal write (covers ledgerless sends such as `continue`
     /// and trust navigation keys).
     pub(crate) ask_tainted: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// Per-studio tracking for `producer` terminal input capture and
+    /// unrecorded-turn fallback gating during `DesignPhase::WaitingUser`.
+    pub(crate) design_watch: std::cell::RefCell<BTreeMap<String, crate::design_watch::DesignWatch>>,
+    /// `studio` → true while a stage terminal write to `producer` during
+    /// `WaitingUser` has not yet finished its resulting turn.
+    pub(crate) design_tainted: std::cell::RefCell<BTreeMap<String, bool>>,
     /// Whether the core still answers `terminal.label` on a live
     /// terminal — `false` once a call is refused or unoffered: a core
     /// that cannot change labels keeps every terminal where it
@@ -370,6 +380,15 @@ impl Stage {
                 }
             }
         }
+        let state_dir = (!self.state_dir.is_empty()).then(|| Path::new(&self.state_dir));
+        match config::design_layered(state_dir, &self.env_vars) {
+            Ok(cfg) => self.design_cfg.set(Some(cfg)),
+            Err(e) => {
+                if self.hlogged.borrow_mut().insert(e.clone()) {
+                    crate::stagelog::stage_log!("{e}");
+                }
+            }
+        }
     }
 
     /// Evict every in-memory studio key not in `present` (deleted/archived
@@ -414,6 +433,8 @@ impl Stage {
         self.exchange_cache.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_watch.borrow_mut().retain(|(s, _), _| keep(s));
         self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
+        self.design_watch.borrow_mut().retain(|s, _| keep(s));
+        self.design_tainted.borrow_mut().retain(|s, _| keep(s));
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if !present.contains(&entry.studio) {
@@ -464,6 +485,8 @@ impl Stage {
             .retain(|(s, _), _| s != name);
         self.ask_watch.borrow_mut().retain(|(s, _), _| s != name);
         self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
+        self.design_watch.borrow_mut().retain(|s, _| s != name);
+        self.design_tainted.borrow_mut().retain(|s, _| s != name);
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if entry.studio == name {
@@ -1016,6 +1039,7 @@ impl Stage {
             hseen: std::cell::RefCell::new((0, 0)),
             hcfg: std::cell::RefCell::new(None),
             stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
+            design_cfg: std::cell::Cell::new(None),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
             hprompt: std::cell::RefCell::new(None),
             hprompt_is_question: std::cell::Cell::new(false),
@@ -1028,6 +1052,8 @@ impl Stage {
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
             ask_watch: std::cell::RefCell::new(BTreeMap::new()),
             ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
+            design_watch: std::cell::RefCell::new(BTreeMap::new()),
+            design_tainted: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             sweep_hollywood_ticks: std::cell::Cell::new(3),
             hrate_pace: std::cell::RefCell::new(None),
@@ -1160,6 +1186,7 @@ async fn run_impl(
         hseen: std::cell::RefCell::new((0, 0)),
         hcfg: std::cell::RefCell::new(None),
         stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
+        design_cfg: std::cell::Cell::new(None),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
         hprompt: std::cell::RefCell::new(None),
         hprompt_is_question: std::cell::Cell::new(false),
@@ -1172,6 +1199,8 @@ async fn run_impl(
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
         ask_watch: std::cell::RefCell::new(BTreeMap::new()),
         ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
+        design_watch: std::cell::RefCell::new(BTreeMap::new()),
+        design_tainted: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         sweep_hollywood_ticks: std::cell::Cell::new(3),
         hrate_pace: std::cell::RefCell::new(None),
