@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **Studio-role `backlot tell user` question guard, `--note`, and `--ask` CLI pass-through.** Running `backlot tell user` as a studio role (`producer`, `director`, `writer`, `actor-<task>-c<n>`) with `?` or `？` outside inline code spans, fenced code blocks, and URL query strings (`?key=`) now refuses with exit code 2 unless `--ask` or `--note` is given, adds `--note` for plain-info `tell user` messages (mutually exclusive with `--ask`), preserves `--ask` on CLI `tell user` calls so `message.queued` records `purpose = "ask"` and `RoleSummary.asks` surfaces the question, and updates `producer.md`, `director.md`, `writer.md`, `hollywood-cli.md`, and `docs/studio/` (`guide.md`, `ledger.md`, `panel.md`, `design.md`).
+
 ## 0.4.17 — 2026-11-27
 
 ### Added

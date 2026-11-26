@@ -749,7 +749,10 @@ fn report_show_streams_allowed_roots() {
 
     // `tell user` from producer and `tell producer` from user write
     // `messages/<seq>-…` files that `report show` streams cleanly.
-    ok(&env, "tell user --text ready-to-ship --as producer");
+    {
+        let _g = crate::cli_testkit::STAGE_LOCK.lock().unwrap();
+        ok(&env, "tell user --text ready-to-ship --as producer");
+    }
     let reply = fixture(&scratch, "reply.md", "Full producer reply.\nLine two.\n");
     ok(&env, &format!("tell user --file {reply} --as producer"));
     let state = crate::store::load_state(&sdir).unwrap();

@@ -3,7 +3,7 @@
 //! stdin seam; the staged temp file must never survive a run.
 
 use crate::cli::{Env, run_stdin};
-use crate::cli_testkit::{CAST_TOML, fixture, ok, scratch, usage};
+use crate::cli_testkit::{CAST_TOML, STAGE_LOCK, fixture, ok, scratch, usage};
 use crate::store;
 
 fn args(s: &str) -> Vec<String> {
@@ -22,11 +22,6 @@ fn studio(env: &Env, scratch: &crate::cli_testkit::Scratch) {
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
     );
 }
-
-/// Only these tests write `backlot-body-*` files, so one lock held
-/// for a whole test keeps another's staged window out of its
-/// `staged_left` check.
-static STAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// The staged temp file's telltale: nothing `backlot-body-*` may
 /// outlive `run`, whatever the outcome.
