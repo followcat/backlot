@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.14 — 2026-11-26
+
 ### Added
 
 - **Make-before-break Hollywood agent switch (`backlot hollywood switch`, unified `HwSwitch` picker, `w` / `[switch w]` / `Switch agent…`).** Launches candidate Hollywood beside the live overseer with a redacted ledger brief and extracted conversation tail, commits config/routing only after readiness proof (keeping `hollywood-previous` readable for 10 minutes and rolling back cleanly on failure or cancel), pauses quota-blocked delivery, and blocks live `hollywood setup` without `--force-offline` (`docs/studio/hollywood.md`, `docs/keys.md`, `docs/studio/requests.md`, `docs/studio/guide.md`).
