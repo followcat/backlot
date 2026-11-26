@@ -8,14 +8,11 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use backlot_model::design::{
-    DesignPhase, DesignQuestion, DesignSlot, DesignState, EntrySource, SignMode,
-};
+use backlot_model::design::{DesignPhase, DesignSlot, DesignState, EntrySource, SignMode};
 use backlot_model::state::StudioState;
 use backlot_model::{Event, EventKind};
 
 use crate::args::Common;
-use crate::args_design::QuestionInput;
 use crate::cli::{Env, Fail};
 use crate::store::{self, PendingFile, StoreError};
 
@@ -85,68 +82,87 @@ pub(crate) fn verify_pending_entries<E>(
     Ok(())
 }
 
-/// Update `design/v<rv>.md` (and `design/v<rv>-final.md` on approval) for any
-/// design events appended in `stamped`.
-pub(crate) fn sync_on_append<E>(
+/// Update `design/v<rv>.md` (and idempotently freeze `design/v<rv>-final.md`
+/// on approval) after `events.jsonl` commits. Render/write errors are logged
+/// to stderr and never turn a committed append into `Err`.
+pub(crate) fn sync_on_append(dir: &Path, state: &StudioState, stamped: &[Event]) {
+    if let Err(err) = try_sync_on_append(dir, state, stamped) {
+        eprintln!("{}", sync_warning(&err));
+    }
+}
+
+pub(crate) fn sync_warning(err: &std::io::Error) -> String {
+    format!("backlot: design doc not updated: {err}; it is rebuilt on the next design write")
+}
+
+pub(crate) fn try_sync_on_append(
     dir: &Path,
     state: &StudioState,
     stamped: &[Event],
-) -> Result<(), StoreError<E>> {
-    let mut touched_versions = BTreeSet::new();
-    let mut approved_versions = BTreeSet::new();
+) -> std::io::Result<()> {
+    let mut versions = BTreeSet::new();
     for ev in stamped {
-        match &ev.kind {
-            EventKind::DesignOpened { version, .. } | EventKind::DesignEntry { version, .. } => {
-                touched_versions.insert(*version);
-            }
-            EventKind::DesignSigned { version, mode, .. } => {
-                touched_versions.insert(*version);
-                if *mode == SignMode::Approved {
-                    approved_versions.insert(*version);
-                }
-            }
-            _ => {}
+        if let EventKind::DesignOpened { version, .. }
+        | EventKind::DesignEntry { version, .. }
+        | EventKind::DesignSigned { version, .. } = &ev.kind
+        {
+            versions.insert(*version);
         }
     }
-    if touched_versions.is_empty() {
+    if versions.is_empty() {
         return Ok(());
     }
-    for ver in touched_versions {
+    for d in state.design.iter().chain(state.design_history.values()) {
+        let missing_doc = !dir.join(format!("design/v{}.md", d.version)).is_file();
+        let missing_final = d.phase == DesignPhase::Signed
+            && d.sign_mode == Some(SignMode::Approved)
+            && !dir.join(format!("design/v{}-final.md", d.version)).exists();
+        if missing_doc || missing_final {
+            versions.insert(d.version);
+        }
+    }
+    for ver in versions {
         let Some(d) = design_for_version(state, ver) else {
             continue;
         };
-        let md = render_version_markdown(dir, state, d, None).map_err(StoreError::Io)?;
-        atomic_write(&dir.join(format!("design/v{ver}.md")), md.as_bytes())
-            .map_err(StoreError::Io)?;
-        if approved_versions.contains(&ver) {
-            atomic_write(&dir.join(format!("design/v{ver}-final.md")), md.as_bytes())
-                .map_err(StoreError::Io)?;
-        }
+        sync_version(dir, state, d)?;
     }
     Ok(())
 }
 
-/// Render assembled Markdown for `version`, optionally restricted to `round`.
-pub(crate) fn render_markdown(
-    dir: &Path,
-    state: &StudioState,
-    version: u32,
-    round: Option<u32>,
-) -> Result<Option<String>, Fail> {
-    let Some(d) = design_for_version(state, version) else {
-        return Ok(None);
-    };
-    if let Some(r) = round
-        && !d.rounds.iter().any(|rd| rd.round == r)
-    {
-        return Err(Fail::refused(format!("no round {r} in design v{version}")));
+fn sync_version(dir: &Path, state: &StudioState, d: &DesignState) -> std::io::Result<()> {
+    let md = render_version_markdown(dir, state, d, None)?;
+    atomic_write(
+        &dir.join(format!("design/v{}.md", d.version)),
+        md.as_bytes(),
+    )?;
+    if d.phase == DesignPhase::Signed && d.sign_mode == Some(SignMode::Approved) {
+        freeze_final(
+            &dir.join(format!("design/v{}-final.md", d.version)),
+            md.as_bytes(),
+        )?;
     }
-    render_version_markdown(dir, state, d, round)
-        .map(Some)
-        .map_err(|e| Fail::refused(format!("cannot render design v{version}: {e}")))
+    Ok(())
 }
 
-/// Read-only `backlot design show [--version <n>] [--round <r>] [--json]`.
+/// Freeze `design/v<rv>-final.md`: idempotent when absent or byte-identical,
+/// refuses to overwrite differing content.
+fn freeze_final(final_path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    match fs::read(final_path) {
+        Ok(existing) if existing == bytes => Ok(()),
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "{} exists with differing content; refusing to overwrite",
+                final_path.display()
+            ),
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => atomic_write(final_path, bytes),
+        Err(e) => Err(e),
+    }
+}
+
+/// Render (and best-effort heal on disk) `backlot design show [--version <n>] [--round <r>] [--json]`.
 pub(crate) fn design_show(
     common: &Common,
     env: &Env,
@@ -187,6 +203,9 @@ pub(crate) fn design_show(
     {
         return Err(Fail::refused(format!("no round {r} in design v{ver}")));
     }
+    if let Err(err) = sync_version(&dir, &state, d) {
+        eprintln!("{}", sync_warning(&err));
+    }
     if json {
         let mut owned = d.clone();
         if let Some(r) = round {
@@ -195,8 +214,8 @@ pub(crate) fn design_show(
         return serde_json::to_string_pretty(&owned)
             .map_err(|e| Fail::refused(format!("design show json: {e}")));
     }
-    render_markdown(&dir, &state, ver, round)?
-        .ok_or_else(|| Fail::refused(format!("no opening design for req v{ver}")))
+    render_version_markdown(&dir, &state, d, round)
+        .map_err(|e| Fail::refused(format!("cannot render design v{ver}: {e}")))
 }
 
 fn design_for_version(state: &StudioState, version: u32) -> Option<&DesignState> {
@@ -336,52 +355,4 @@ fn utc_timestamp(ms: u64) -> String {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     format!("{y:04}-{m:02}-{d:02} {hh:02}:{mm:02}:{ss:02} UTC")
-}
-
-const MAX_QUESTIONS: usize = 3;
-
-fn parse_question_json(raw: &str, label: &str) -> Result<Vec<DesignQuestion>, Fail> {
-    let val: serde_json::Value =
-        serde_json::from_str(raw).map_err(|e| Fail::usage(format!("bad {label} JSON: {e}")))?;
-    if val.is_array() {
-        serde_json::from_value(val).map_err(|e| Fail::usage(format!("bad {label} array: {e}")))
-    } else {
-        let q: DesignQuestion =
-            serde_json::from_value(val).map_err(|e| Fail::usage(format!("bad {label}: {e}")))?;
-        Ok(vec![q])
-    }
-}
-
-pub(crate) fn load_questions(
-    inputs: &[QuestionInput],
-    questions_file: Option<&Path>,
-) -> Result<Vec<DesignQuestion>, Fail> {
-    let mut out = Vec::new();
-    for item in inputs {
-        match item {
-            QuestionInput::Inline(raw) => out.extend(parse_question_json(raw, "--question")?),
-            QuestionInput::File(path) => {
-                let raw = fs::read_to_string(path).map_err(|e| {
-                    Fail::refused(format!("cannot read --question {}: {e}", path.display()))
-                })?;
-                out.extend(parse_question_json(&raw, "--question")?);
-            }
-        }
-    }
-    if let Some(path) = questions_file {
-        let raw = fs::read_to_string(path).map_err(|e| {
-            Fail::refused(format!(
-                "cannot read --questions-file {}: {e}",
-                path.display()
-            ))
-        })?;
-        out.extend(parse_question_json(&raw, "--questions-file")?);
-    }
-    if out.len() > MAX_QUESTIONS {
-        return Err(Fail::refused(format!(
-            "design summary accepts at most {MAX_QUESTIONS} questions, got {}",
-            out.len()
-        )));
-    }
-    Ok(out)
 }

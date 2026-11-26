@@ -352,20 +352,30 @@ impl AppendGuard<backlot_model::hollywood::HRefusal> for backlot_model::hollywoo
     }
 }
 
-struct AppendOps<R, St, C, A, Pre, Post> {
+struct AppendOps<R, St, C, A, Pre, W, Post> {
     reduce: R,
     stamp: St,
     check: C,
     apply: A,
     pre_copy: Pre,
+    write_log: W,
     post_copy: Post,
     migrate: MigrateFn,
 }
 
-fn append_locked<Ev, New, S, E, V, R, St, C, A, Pre, Post>(
+pub(crate) fn write_events_file(events_path: &Path, buf: &[u8]) -> io::Result<()> {
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(events_path)?;
+    f.write_all(buf)?;
+    f.sync_data()
+}
+
+fn append_locked<Ev, New, S, E, V, R, St, C, A, Pre, W, Post>(
     dir: &Path,
     build: impl FnOnce(&S, u64) -> Result<Vec<(New, Vec<PendingFile>)>, E>,
-    mut ops: AppendOps<R, St, C, A, Pre, Post>,
+    mut ops: AppendOps<R, St, C, A, Pre, W, Post>,
 ) -> Result<Vec<Ev>, StoreError<E, V>>
 where
     Ev: DeserializeOwned + Serialize + HasSeq,
@@ -375,7 +385,8 @@ where
     C: FnMut(&S, &New) -> Result<(), V>,
     A: FnMut(&mut S, &Ev),
     Pre: FnOnce(&[Ev], &[PendingFile]) -> Result<(), StoreError<E, V>>,
-    Post: FnOnce(&S, &[Ev]) -> Result<(), StoreError<E, V>>,
+    W: FnOnce(&Path, &[u8]) -> io::Result<()>,
+    Post: FnOnce(&S, &[Ev]),
 {
     fs::create_dir_all(dir)?;
     let _lock = take_lock(dir)?;
@@ -431,7 +442,6 @@ where
         let dest = dir.join(&pf.dest);
         crate::design_doc::copy_pending_atomic(pf, &dest)?;
     }
-    (ops.post_copy)(&state, &stamped)?;
 
     // One buffer, one `write_all`: a torn append can land a prefix of
     // the batch but never interleave or reorder within it, and a single
@@ -442,12 +452,8 @@ where
             .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
         buf.push(b'\n');
     }
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&events_path)?;
-    f.write_all(&buf)?;
-    f.sync_data()?;
+    (ops.write_log)(&events_path, &buf)?;
+    (ops.post_copy)(&state, &stamped);
     Ok(stamped)
 }
 
@@ -483,12 +489,44 @@ where
             pre_copy: |stamped: &[Event], copies: &[PendingFile]| {
                 crate::design_doc::verify_pending_entries(stamped, copies)
             },
+            write_log: write_events_file,
             post_copy: |state: &StudioState, stamped: &[Event]| {
-                crate::design_doc::sync_on_append(dir, state, stamped)
+                crate::design_doc::sync_on_append(dir, state, stamped);
             },
             migrate: backlot_model::migrate::migrate_event_value,
         },
     )
+}
+
+#[cfg(test)]
+pub(crate) fn append_with_test_hooks<E, F, W, Post>(
+    dir: &Path,
+    build: F,
+    write_log: W,
+    post_copy: Post,
+) -> Result<Event, StoreError<E>>
+where
+    F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
+    W: FnOnce(&Path, &[u8]) -> io::Result<()>,
+    Post: FnOnce(&StudioState, &[Event]),
+{
+    let mut events = append_locked(
+        dir,
+        |state, seq| build(state, seq).map(|p| vec![(p.event, p.files)]),
+        AppendOps {
+            reduce: replay,
+            stamp: |new: NewEvent, seq, ts| new.stamp(seq, ts),
+            check: validate,
+            apply: backlot_model::state::apply,
+            pre_copy: |stamped: &[Event], copies: &[PendingFile]| {
+                crate::design_doc::verify_pending_entries(stamped, copies)
+            },
+            write_log,
+            post_copy,
+            migrate: backlot_model::migrate::migrate_event_value,
+        },
+    )?;
+    Ok(events.remove(0))
 }
 
 /// One Hollywood event into Hollywood's own `events.jsonl` — the
@@ -531,7 +569,8 @@ where
             check: hollywood::validate,
             apply: hollywood::apply,
             pre_copy: |_: &[HollywoodEvent], _: &[PendingFile]| Ok(()),
-            post_copy: |_: &HollywoodState, _: &[HollywoodEvent]| Ok(()),
+            write_log: write_events_file,
+            post_copy: |_: &HollywoodState, _: &[HollywoodEvent]| {},
             migrate: backlot_model::migrate::migrate_hollywood_value,
         },
     )

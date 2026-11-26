@@ -1,13 +1,16 @@
 //! Parsers for the 7 `backlot design` subcommands: `open`, `write`,
 //! `supplement`, `note`, `next`, `sign`, and `show`.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use backlot_model::design::DesignSlot;
+use backlot_model::design::{DesignQuestion, DesignSlot};
 
 use crate::args::*;
 use crate::args_source::Source;
 use crate::cli::Fail;
+
+const MAX_QUESTIONS: usize = 3;
 
 /// `--question` value passed to `backlot design write`: inline JSON or `@path`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -351,4 +354,50 @@ fn show(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
             json,
         }),
     ))
+}
+
+fn parse_question_json(raw: &str, label: &str) -> Result<Vec<DesignQuestion>, Fail> {
+    let val: serde_json::Value =
+        serde_json::from_str(raw).map_err(|e| Fail::usage(format!("bad {label} JSON: {e}")))?;
+    if val.is_array() {
+        serde_json::from_value(val).map_err(|e| Fail::usage(format!("bad {label} array: {e}")))
+    } else {
+        let q: DesignQuestion =
+            serde_json::from_value(val).map_err(|e| Fail::usage(format!("bad {label}: {e}")))?;
+        Ok(vec![q])
+    }
+}
+
+pub(crate) fn load_questions(
+    inputs: &[QuestionInput],
+    questions_file: Option<&Path>,
+) -> Result<Vec<DesignQuestion>, Fail> {
+    let mut out = Vec::new();
+    for item in inputs {
+        match item {
+            QuestionInput::Inline(raw) => out.extend(parse_question_json(raw, "--question")?),
+            QuestionInput::File(path) => {
+                let raw = fs::read_to_string(path).map_err(|e| {
+                    Fail::refused(format!("cannot read --question {}: {e}", path.display()))
+                })?;
+                out.extend(parse_question_json(&raw, "--question")?);
+            }
+        }
+    }
+    if let Some(path) = questions_file {
+        let raw = fs::read_to_string(path).map_err(|e| {
+            Fail::refused(format!(
+                "cannot read --questions-file {}: {e}",
+                path.display()
+            ))
+        })?;
+        out.extend(parse_question_json(&raw, "--questions-file")?);
+    }
+    if out.len() > MAX_QUESTIONS {
+        return Err(Fail::refused(format!(
+            "design summary accepts at most {MAX_QUESTIONS} questions, got {}",
+            out.len()
+        )));
+    }
+    Ok(out)
 }

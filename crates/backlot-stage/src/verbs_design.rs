@@ -9,10 +9,9 @@ use backlot_model::req_results::{DesignSignResult, DesignStartRoundResult};
 use backlot_model::{EventKind, NewEvent};
 
 use crate::args::TextSource;
-use crate::args_design::{DesignCmd, QuestionInput};
+use crate::args_design::{DesignCmd, QuestionInput, load_questions};
 use crate::cli::{Caller, Env, Fail};
 pub(crate) use crate::design_doc::design_show;
-use crate::design_doc::load_questions;
 use crate::render;
 use crate::store::{self, Pending, PendingFile};
 use crate::verbs::require_studio_dir;
