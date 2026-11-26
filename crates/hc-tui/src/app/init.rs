@@ -67,9 +67,11 @@ impl App {
         let sidebar_section_split_manual = preferences.sidebar_section_split.is_some();
         let agent_panel_sort_manual = preferences.agent_panel_sort.is_some();
         let mouse_capture = shell.mouse_capture;
+        let pane_tick_epoch = tokio::time::Instant::now();
         let mut pane = pane::Pane::new(pane_tx.clone(), open.clone());
         pane.set_scrollback_bytes(shell.scrollback_limit_bytes);
         pane.set_attach_history(shell.attach_history_lines);
+        pane.set_tick_epoch(pane_tick_epoch);
         App {
             notice: None,
             core_start: None,
@@ -301,7 +303,39 @@ impl App {
             reaped_exited: Default::default(),
             outer_focused: None,
             probe,
+            monotonic_clock: Arc::new(Instant::now),
+            tab_status_clock: Arc::new(tab_status::system_unix_seconds),
+            pane_tick_epoch,
         }
+    }
+
+    pub(super) fn now(&self) -> Instant {
+        (self.monotonic_clock)()
+    }
+
+    /// Drive loop timers, deadlines, and off-tab pacing from Tokio's runtime
+    /// clock so `tokio::time::pause()` tests advance time deterministically.
+    pub fn use_tokio_clock(&mut self) {
+        let std_base = Instant::now();
+        let tokio_base = tokio::time::Instant::now();
+        self.monotonic_clock = Arc::new(move || {
+            std_base + tokio::time::Instant::now().saturating_duration_since(tokio_base)
+        });
+        self.pane_tick_epoch = tokio_base;
+        self.pane.set_tick_epoch(tokio_base);
+    }
+
+    /// Inject the Unix-seconds wall clock read by `%H:%M` tab-bar entries.
+    pub fn set_tab_status_clock(&mut self, clock: Arc<dyn Fn() -> Option<i64> + Send + Sync>) {
+        self.tab_status_clock = clock;
+    }
+
+    /// Stub background CLI probes (`studio list`, `--version`) for headless loop tests
+    /// so `App` never spawns `current_exe()` subprocesses.
+    pub fn stub_cli_probes(&mut self) {
+        self.ns_run = Some(Arc::new(|_, _, _| {
+            Box::pin(std::future::ready(Err("stubbed".into())))
+        }));
     }
 
     /// A pane wired to this app: the shared event channel, the attach
@@ -313,6 +347,7 @@ impl App {
         pane.set_host_facts(self.host_facts.clone());
         pane.set_scrollback_bytes(self.shell.scrollback_limit_bytes);
         pane.set_attach_history(self.shell.attach_history_lines);
+        pane.set_tick_epoch(self.pane_tick_epoch);
         pane
     }
 }

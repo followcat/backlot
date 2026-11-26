@@ -38,6 +38,31 @@ pub use probe::{installed, supported};
 pub(crate) use prompt::prompt_detail;
 pub(crate) use work::work_state;
 
+/// The read-only commands **every** role is pre-allowed on every
+/// runner that has an allow list — the forensic reads a role needs
+/// to understand a repo, a delivery or its own state without
+/// stopping at a prompt (field notes 1126 §5: a producer's `git log
+/// --stat` asked the person). Nothing here writes, moves or deletes:
+/// `git branch` is absent on purpose — `git branch -D` would come
+/// with the bare prefix — and only its two listing forms are named,
+/// which git refuses to combine with a delete (measured: `git branch
+/// --list -D x` is a usage error, exit 129). A runner's rule syntax
+/// is a prefix match on one plain command, so a `cd x && git log`, a
+/// pipe or `git -C` never matches — the prompts tell the role to run
+/// one plain command at a time.
+pub const READ_ONLY: &[&str] = &[
+    "git status",
+    "git log",
+    "git show",
+    "git diff",
+    "git branch --list",
+    "git branch --show-current",
+    "ls",
+    "rg",
+    "wc",
+    "head",
+];
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 

@@ -325,10 +325,13 @@ fn a_cast_card_born_unrunnable_is_refused() {
         .unwrap()
         .replace("runner = \"fake\"", "runner = \"runner-zzz\"");
     fs::write(&path, text).unwrap();
+    // A file argument is resolved against the proposer's directory and
+    // must already exist there, so the test names the absolute path.
     let msg = refused(
         &env,
         &format!(
-            "hollywood propose cast --studio acme-shop --file {draft} --why cheaper --as hollywood"
+            "hollywood propose cast --studio acme-shop --file {} --why cheaper --as hollywood",
+            path.display()
         ),
     );
     assert!(
@@ -356,6 +359,7 @@ async fn a_cast_card_runs_once_and_shows_its_diff() {
             action: CardAction::Cast {
                 studio: "acme-shop".into(),
                 cast: draft.clone(),
+                snapshot: None,
             },
             why: "cheaper actors".into(),
             base: CardBase::CastSeq { was: 0 },
@@ -412,6 +416,7 @@ async fn a_cast_card_whose_settings_moved_is_stale() {
             action: CardAction::Cast {
                 studio: "acme-shop".into(),
                 cast: draft,
+                snapshot: None,
             },
             why: "cheaper".into(),
             base: CardBase::CastSeq { was: 0 },

@@ -294,10 +294,23 @@ impl Stage {
         live: &[LiveTerminal],
         now_ms: u64,
     ) -> Result<(), Fail> {
+        // An actor's prompt waiting on a director who cannot answer is
+        // the person's once the grace passes (field notes 1126 §5):
+        // clear the director-owned attention and re-raise it
+        // `needs_user`. A reload then gives every check below the
+        // ledger that carries the re-raise, never the state handed in.
+        let reloaded;
+        let state = if self.route_prompts(studio, dir, state, now_ms).await? {
+            reloaded = crate::daemon::load_studio(dir)?;
+            &reloaded
+        } else {
+            state
+        };
         // Notices owed by this state, as ordinary queued messages —
         // the body file lands first so a crash mid-append leaves a
         // rewritable file, and `source_seq` dedups across restarts.
         let mut grew = false;
+
         for n in notices::owed(state, dir) {
             let dest = format!("messages/{}-{}.md", n.source_seq, n.label);
             let path = dir.join(&dest);

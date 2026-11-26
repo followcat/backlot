@@ -100,6 +100,13 @@ fn alt_arrow(tui: &Tui, arrow: char) {
     tui.pty.type_keys(format!("\x1b[1;3{arrow}").as_bytes());
 }
 
+/// Alt+PageUp/PageDown (`ESC [ 5 ; 3 ~` / `ESC [ 6 ; 3 ~`) — the
+/// default studio step.
+fn alt_page(tui: &Tui, down: bool) {
+    let code = if down { '6' } else { '5' };
+    tui.pty.type_keys(format!("\x1b[{code};3~").as_bytes());
+}
+
 /// The row `▌` (the focused cast entry) sits on, if any.
 fn focus_bar_row(text: &str) -> Option<usize> {
     text.lines()
@@ -251,8 +258,8 @@ async fn real_u1_studio_layout_screens() {
     )
     .unwrap();
 
-    /// One attach cycle: capture `first`, alt+right to the other
-    /// studio (`moved_pred`), alt+left back, alt+down one role, the
+    /// One attach cycle: capture `first`, alt+PgDn to the other
+    /// studio (`moved_pred`), alt+PgUp back, alt+down one role, the
     /// panel, detach. `ready_pred` differs because the mobile chrome
     /// (cols ≤ 64) has no sidebar for `cast ·` to land in.
     async fn attach_cycle(
@@ -277,7 +284,7 @@ async fn real_u1_studio_layout_screens() {
         )
         .await;
         save(out, &format!("w{cols}-cast.txt"), &first);
-        // alt+right: next studio. Desktop shows the cast header;
+        // alt+PgDn: next studio. Desktop shows the cast header;
         // mobile shows the focused terminal's `bl-<studio>-*` title.
         let want: Box<dyn Fn(&str) -> bool> = if mobile {
             let acme = first.contains("bl-acme-shop");
@@ -291,7 +298,7 @@ async fn real_u1_studio_layout_screens() {
             let header = format!("cast · {other}");
             Box::new(move |s: &str| s.contains(&header))
         };
-        alt_arrow(&tui, 'C');
+        alt_page(&tui, true);
         let moved = until(&mut tui, |s| want(s), "next studio").await;
         save(out, &format!("w{cols}-next-studio.txt"), &moved);
         if !mobile {
@@ -305,8 +312,8 @@ async fn real_u1_studio_layout_screens() {
             } else {
                 "acme-shop"
             };
-            // alt+left: back — then a role nav moves the ▌ marker.
-            alt_arrow(&tui, 'D');
+            // alt+PgUp: back — then a role nav moves the ▌ marker.
+            alt_page(&tui, false);
             let back = until(
                 &mut tui,
                 |s| s.contains(&format!("cast · {current}")),

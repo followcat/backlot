@@ -26,7 +26,8 @@ impl App {
                         timed = true;
                         let format =
                             crate::config::tab_bar::parse_tab_bar_datetime_format(format).ok()?;
-                        sanitize_status_text(&local_datetime()?.format(&format).ok()?)?
+                        let timestamp = (self.tab_status_clock)()?;
+                        sanitize_status_text(&local_datetime(timestamp)?.format(&format).ok()?)?
                     }
                     // M2 has no zoom; M4 owns configured shell commands.
                     TabBarRightEntryConfig::Zoom | TabBarRightEntryConfig::Command { .. } => {
@@ -64,13 +65,17 @@ impl App {
     }
 }
 
-fn local_datetime() -> Option<time::PrimitiveDateTime> {
+pub(super) fn system_unix_seconds() -> Option<i64> {
     // time_t is i64 on every target hc-tui builds for; the libc alias
     // itself is deprecated on musl (its width changed in musl 1.2).
     let mut timestamp: i64 = 0;
     if unsafe { libc::time(&mut timestamp) } == -1 {
         return None;
     }
+    Some(timestamp)
+}
+
+fn local_datetime(timestamp: i64) -> Option<time::PrimitiveDateTime> {
     let mut local: libc::tm = unsafe { std::mem::zeroed() };
     if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
         return None;

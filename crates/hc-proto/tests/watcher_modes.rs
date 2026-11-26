@@ -50,7 +50,7 @@ async fn serve_rpc_ok(mut core: DuplexCore) {
     }
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn stop_ends_reconnect_attempts() {
     let (watcher, accepted) = watcher(vec![]);
     let (kill_tx, kill_rx) = oneshot::channel::<()>();
@@ -107,7 +107,7 @@ async fn stop_ends_reconnect_attempts() {
     fake.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn an_unsupported_subscribe_falls_back_to_static_lists() {
     // The plain conn's hello advertises no events.subscribe → the
     // watcher takes the terminal.list path and stays there.
@@ -154,7 +154,7 @@ async fn an_unsupported_subscribe_falls_back_to_static_lists() {
     fake.abort();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_held_opener_never_stacks_and_drop_aborts_it() {
     // The subscription opener hands the fake a conn then hangs forever;
     // the watcher must run exactly one attempt, never stacking retries.
@@ -222,7 +222,7 @@ async fn a_held_opener_never_stacks_and_drop_aborts_it() {
 /// A `close()` future cancelled while the actor is still dying must
 /// not strand the held opener: `Watcher`'s `Drop` carries the same
 /// stop+abort ownership, so the conn dies either way.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_cancelled_close_still_kills_a_blocked_opener() {
     let (accepted_tx, mut accepted) = mpsc::channel(16);
     let sub: OpenSub = {

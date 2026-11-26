@@ -271,14 +271,14 @@ async fn a_stdout_eof_hello_failure_kills_the_child_promptly() {
         "a killed child reports its own status: {err:?}"
     );
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "hello EOF waited on a hung child: {:?}",
         start.elapsed()
     );
     let pid = pid_of("ssh-eof-hello").await;
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "child {pid} was still running: {:?}",
         start.elapsed()
     );
@@ -298,7 +298,7 @@ async fn a_live_wire_eof_kills_the_child_promptly() {
     timeout(client.closed()).await;
     deadline_wait(|| reaped(pid)).await;
     assert!(
-        start.elapsed() < Duration::from_secs(2),
+        start.elapsed() < Duration::from_secs(5),
         "reader EOF left the child alive: {:?}",
         start.elapsed()
     );

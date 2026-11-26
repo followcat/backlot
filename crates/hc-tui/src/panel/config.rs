@@ -83,13 +83,13 @@ pub(crate) enum StudioNav {
     NextRole,
 }
 
-const DEFAULT_PREVIOUS_STUDIO: &str = "alt+left";
-const DEFAULT_NEXT_STUDIO: &str = "alt+right";
+const DEFAULT_PREVIOUS_STUDIO: &str = "alt+pageup";
+const DEFAULT_NEXT_STUDIO: &str = "alt+pagedown";
 const DEFAULT_PREVIOUS_ROLE: &str = "alt+up";
 const DEFAULT_NEXT_ROLE: &str = "alt+down";
 const DEFAULT_FOCUS_LOT: &str = "alt+l";
 
-/// The direct studio keys: `alt+left/right` move between studios,
+/// The direct studio keys: `alt+pageup/pagedown` move between studios,
 /// `alt+up/down` between the current studio's people, and `alt+l`
 /// focuses the lot on its last row. `None` is an unbound key
 /// (`""` in the file).
@@ -141,7 +141,7 @@ impl StudioKeys {
         }
     }
 
-    /// The footer's two hint halves — `("alt ←→ studio", "↑↓ role")`
+    /// The footer's two hint halves — `("alt PgUp/PgDn studio", "↑↓ role")`
     /// by default — so the caller can drop the half whose navigation
     /// has nowhere to go (wide-01: `studio` only across ≥2 studios,
     /// `role` only across ≥2 cast entries) or fit them as separate tiers.
@@ -153,11 +153,16 @@ impl StudioKeys {
             self.previous_role,
             self.next_role,
         ];
-        let arrow = |combo: Option<KeyCombo>| {
+        // A pair of keys that reads well side by side under the same
+        // modifier: the four arrows (no gap), and PageUp/PageDown (a
+        // slash, so `PgUp/PgDn` never reads as one word).
+        let pair_label = |combo: Option<KeyCombo>| {
             combo.and_then(|(code, _)| match code {
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
-                    Some(code_label(code))
+                    Some((code_label(code), ""))
                 }
+                KeyCode::PageUp => Some(("PgUp".to_string(), "/")),
+                KeyCode::PageDown => Some(("PgDn".to_string(), "/")),
                 _ => None,
             })
         };
@@ -170,15 +175,15 @@ impl StudioKeys {
                 Some(_) => Some(crossterm::event::KeyModifiers::empty()),
             });
         if let (Some(ps), Some(ns), Some(pr), Some(nr)) = (
-            arrow(self.previous_studio),
-            arrow(self.next_studio),
-            arrow(self.previous_role),
-            arrow(self.next_role),
+            pair_label(self.previous_studio),
+            pair_label(self.next_studio),
+            pair_label(self.previous_role),
+            pair_label(self.next_role),
         ) && let Some(mods) = mods.filter(|m| !m.is_empty())
         {
             return (
-                format!("{} {ps}{ns} studio", mods_label(mods)),
-                format!("{pr}{nr} role"),
+                format!("{} {}{}{} studio", mods_label(mods), ps.0, ps.1, ns.0),
+                format!("{}{}{} role", pr.0, pr.1, nr.0),
             );
         }
         let pair = |a: Option<KeyCombo>, b: Option<KeyCombo>| {

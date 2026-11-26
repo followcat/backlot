@@ -403,7 +403,8 @@ pub fn card_list(common: &Common, env: &Env) -> Result<String, Fail> {
     let hdir = store::hollywood_dir(&base);
     let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
     let cfg = config::hollywood(&env.vars);
-    Ok(hrender::hollywood_block(&hstate, &cfg))
+    let roles = hrender::card_roles(&hstate, &hdir);
+    Ok(hrender::hollywood_block(&hstate, &cfg, &roles))
 }
 
 /// `card show <id>` — one card's full read (D19): the header line,
@@ -453,7 +454,11 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         });
         serde_json::to_string_pretty(&j).map_err(|e| Fail::refused(e.to_string()))
     } else {
-        blocks.push(hrender::hollywood_block(&hstate, &cfg));
+        blocks.push(hrender::hollywood_block(
+            &hstate,
+            &cfg,
+            &std::collections::BTreeMap::new(),
+        ));
         Ok(blocks.join("\n"))
     }
 }

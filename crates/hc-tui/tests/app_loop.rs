@@ -2,8 +2,8 @@
 //! No sockets or sessions are opened.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::Duration;
 
 use hc_proto::watch::{OpenRpc, OpenSub, WatchParams, Watcher};
 use hc_tui::app::{App, Probe};
@@ -36,13 +36,16 @@ fn app_with_config(config: &hc_tui::config::Config) -> (App, Arc<Probe>) {
         probe.clone(),
     );
     // The opening page is not what these loop tests measure: dismiss
-    // it (and its one-time animation) as Esc would.
+    // it (and its one-time animation) as Esc would, and disable background
+    // CLI probes so loop wakeups/draws never depend on child exit timing.
     app.dismiss_opening();
+    app.stub_cli_probes();
     (app, probe)
 }
 
 async fn idle_counters(close_replies: bool) -> (u64, u64) {
     let (mut app, probe) = app();
+    app.use_tokio_clock();
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let (_ui_tx, mut ui) = mpsc::channel(1);
     let (reply_tx, mut replies) = mpsc::channel(1);
@@ -58,14 +61,14 @@ async fn idle_counters(close_replies: bool) -> (u64, u64) {
     )
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn settled_app_does_not_poll_or_redraw_periodically() {
     let (wakeups, draws) = idle_counters(false).await;
     assert!(wakeups <= 16, "idle app woke {wakeups} times");
     assert!(draws <= 4, "idle app drew {draws} times");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn closing_host_replies_does_not_create_a_busy_loop() {
     let (wakeups, draws) = idle_counters(true).await;
     assert!(wakeups <= 16, "closed reply channel woke {wakeups} times");
@@ -232,25 +235,29 @@ async fn closing_input_still_draws_the_last_coalesced_state() {
     assert!(text.contains("the closing frame"), "{text}");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn rejected_notice_expires_during_idle_without_periodic_redraws() {
     let (mut app, probe) = app();
+    app.use_tokio_clock();
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let (ui_tx, mut ui) = mpsc::channel(1);
     let (_reply_tx, mut replies) = mpsc::channel(1);
     let counters = probe.clone();
     let producer = tokio::spawn(async move {
+        let initial = loopcore::draws_beyond(&counters, 0).await;
         ui_tx
             .send(hc_tui::app::UiEvent::InputRejected(
                 "Paste exceeds the input limit",
             ))
             .await
             .unwrap();
-        tokio::time::sleep(Duration::from_millis(3150)).await;
+        let shown = loopcore::draws_beyond(&counters, initial).await;
+        tokio::time::advance(Duration::from_millis(3150)).await;
+        loopcore::draws_beyond(&counters, shown).await;
         drop(ui_tx);
     });
     tokio::time::timeout(
-        Duration::from_secs(4),
+        Duration::from_secs(10),
         app.run(&mut terminal, &mut ui, &mut replies),
     )
     .await
@@ -265,77 +272,79 @@ async fn rejected_notice_expires_during_idle_without_periodic_redraws() {
         .map(|c| c.symbol())
         .collect();
     assert!(!text.contains("Input rejected"), "{text}");
-    assert!(counters.draws.load(Ordering::Relaxed) <= 4);
-    assert!(counters.wakeups.load(Ordering::Relaxed) <= 20);
+    assert!(probe.draws.load(Ordering::Relaxed) <= 4);
+    assert!(probe.wakeups.load(Ordering::Relaxed) <= 20);
 }
 
 /// A `%H:%M` clock re-arms a one-second tick, but the formatted text
-/// only changes on a wall-clock minute boundary. Unchanged ticks must
-/// not redraw: the measured window opens only after the draws settle —
-/// a straggling startup frame must not count. The allowance is the
-/// number of minute boundaries the window actually crossed, so the
-/// check stays strict no matter where the wall clock sits.
-#[tokio::test]
+/// only changes on a minute rollover. Driving both Tokio's paused loop
+/// clock and the injected Unix wall clock makes the tick/redraw count
+/// exact with zero wall-clock tolerance.
+#[tokio::test(start_paused = true)]
 async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
     let mut config = hc_tui::config::Config::default();
     config.ui.tab_bar_right = vec![hc_tui::config::TabBarRightEntryConfig::Datetime {
         format: "%H:%M".into(),
     }];
     let (mut app, probe) = app_with_config(&config);
+    app.use_tokio_clock();
+    // 1_700_000_045 is 5 seconds past the minute in any IANA timezone.
+    let clock = Arc::new(AtomicI64::new(1_700_000_045));
+    let app_clock = clock.clone();
+    app.set_tab_status_clock(Arc::new(move || Some(app_clock.load(Ordering::Relaxed))));
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let (ui_tx, mut ui) = mpsc::channel(1);
     let (_reply_tx, mut replies) = mpsc::channel(1);
     let counters = probe.clone();
     let producer = tokio::spawn(async move {
-        let settled = loopcore::settled_draws(&counters).await;
+        let settled = loopcore::draws_beyond(&counters, 0).await;
         assert!(settled > 0, "the initial frame never drew");
-        // A draw armed just before the counters settle can still land
-        // after the settle read — including the first one-second tick,
-        // whose freshly formatted cell counts as a change. Absorb one
-        // whole tick period so the window contains only later draws.
-        tokio::time::sleep(Duration::from_millis(1200)).await;
+        // Advance past the 2s opening settle cap so only the 1s tab-status
+        // tick remains active when the measurement window opens.
+        for _ in 0..3 {
+            let w = counters.wakeups.load(Ordering::Relaxed);
+            tokio::time::advance(Duration::from_secs(1)).await;
+            loopcore::wait_wakeups_beyond(&counters, w).await;
+        }
         let baseline = counters.draws.load(Ordering::Relaxed);
-        let start_minute = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 60;
-        tokio::time::sleep(Duration::from_millis(2200)).await;
-        // Read the counter before the clock: a boundary between the two
-        // then counts in the allowance, never the other way round.
-        let later = counters.draws.load(Ordering::Relaxed);
-        let end_minute = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            / 60;
+        for _ in 0..4 {
+            clock.fetch_add(1, Ordering::Relaxed);
+            let w = counters.wakeups.load(Ordering::Relaxed);
+            tokio::time::advance(Duration::from_secs(1)).await;
+            loopcore::wait_wakeups_beyond(&counters, w).await;
+        }
+        let same_minute = counters.draws.load(Ordering::Relaxed);
+        assert_eq!(
+            same_minute, baseline,
+            "idle clock ticks within the same minute drew extra frames"
+        );
+        clock.store(1_700_000_105, Ordering::Relaxed);
+        let w = counters.wakeups.load(Ordering::Relaxed);
+        tokio::time::advance(Duration::from_secs(1)).await;
+        loopcore::wait_wakeups_beyond(&counters, w).await;
+        let next_minute = counters.draws.load(Ordering::Relaxed);
         drop(ui_tx);
-        (baseline, later, end_minute - start_minute)
+        (baseline, next_minute)
     });
     tokio::time::timeout(
-        Duration::from_secs(6),
+        Duration::from_secs(15),
         app.run(&mut terminal, &mut ui, &mut replies),
     )
     .await
     .expect("the loop must stay responsive")
     .unwrap();
-    let (baseline, later, boundaries) = producer.await.unwrap();
-    // One unrelated startup frame can still land in the window (it does
-    // with no clock cell at all); a broken clock draws once per tick —
-    // two or three frames here — so boundaries + one is the honest
-    // allowance.
-    assert!(
-        later - baseline <= boundaries + 1,
-        "idle clock ticks drew {} extra frames across {} minute boundaries",
-        later - baseline,
-        boundaries
+    let (baseline, next_minute) = producer.await.unwrap();
+    assert_eq!(
+        next_minute,
+        baseline + 1,
+        "crossing one minute boundary must redraw exactly once"
     );
 }
 
 /// Observer output for a terminal that is not on the focused tab is
 /// retained state, not a visible change; likewise a closed replies
 /// channel. Neither may arm a redraw.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
     let (sub_tx, mut subs) = mpsc::channel(4);
     let (attach_tx, mut attaches) = mpsc::channel(8);
@@ -356,6 +365,8 @@ async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
         shell,
         probe.clone(),
     );
+    app.use_tokio_clock();
+    app.stub_cli_probes();
     // Idle draws here must be the shell's, not the opening page's
     // one-time animation.
     app.dismiss_opening();
@@ -388,9 +399,11 @@ async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
         let painted = loopcore::settled_draws(&counters).await;
         assert!(painted > baseline, "visible t2 output did not draw");
         // Move t2 onto a different tab: its observer stays attached but
-        // now feeds a background pane.
+        // now feeds a background pane. Advance past the 2s opening cap
+        // so opening settle cannot land inside the idle measurement.
         session.move_to_tab("t2", "two", 2).await;
         loopcore::draws_beyond(&counters, painted).await;
+        tokio::time::advance(Duration::from_secs(2)).await;
         let moved = loopcore::settled_draws(&counters).await;
         // Off-tab DATA chunks plus the replies channel closing: pure
         // retained-state and liveness updates, zero redraws.
@@ -401,7 +414,7 @@ async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
             tokio::time::sleep(Duration::from_millis(60)).await;
         }
         drop(reply_tx);
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        tokio::time::sleep(Duration::from_millis(800)).await;
         let end = counters.draws.load(Ordering::Relaxed);
         drop(ui_tx);
         (moved, end)

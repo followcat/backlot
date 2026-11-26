@@ -11,7 +11,7 @@ use super::data::{StudioLabel, StudioRef};
 use super::draw::PanelRender;
 use super::mark_counts;
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio;
 use crate::studio::glyphs::{Health, Person, PriorityMark};
@@ -202,13 +202,17 @@ pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, 
     let name_w = rect
         .width
         .saturating_sub(3 + right_w + u16::from(right_w > 0));
-    put_text(
+    let label = crate::studio::glyphs::RoleBadge::of_role(&role.role)
+        .map(|badge| badge.glyph().to_string())
+        .unwrap_or_else(|| role.name.clone());
+    put_role_badged_text(
         buf,
         rect.x + 3,
         rect.y,
         name_w,
-        &truncate_end(&role.name, name_w as usize),
+        &truncate_end(&label, name_w as usize),
         Style::default().fg(palette.subtext0),
+        palette,
     );
 }
 

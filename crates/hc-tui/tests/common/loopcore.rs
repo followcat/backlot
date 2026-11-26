@@ -209,11 +209,30 @@ pub async fn draws_beyond(probe: &hc_tui::app::Probe, more_than: u64) -> u64 {
     tokio::time::timeout(Duration::from_secs(5), async {
         while probe.draws.load(Ordering::Relaxed) <= more_than {
             tokio::task::yield_now().await;
+            if probe.draws.load(Ordering::Relaxed) <= more_than {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
         }
         probe.draws.load(Ordering::Relaxed)
     })
     .await
     .expect("an expected draw never landed")
+}
+
+/// Advance until `wakeups` strictly exceeds `after`, proving the loop
+/// completed at least one turn and re-entered `select!`.
+pub async fn wait_wakeups_beyond(probe: &hc_tui::app::Probe, after: u64) -> u64 {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while probe.wakeups.load(Ordering::Relaxed) <= after {
+            tokio::task::yield_now().await;
+            if probe.wakeups.load(Ordering::Relaxed) <= after {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        }
+        probe.wakeups.load(Ordering::Relaxed)
+    })
+    .await
+    .expect("an expected loop wakeup never landed")
 }
 
 /// Poll `draws` until it stays flat for a quiet window, then return it.

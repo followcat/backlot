@@ -263,11 +263,45 @@ backlot hollywood propose recast --studio acme-shop --person director --runner c
 backlot hollywood propose recast --studio acme-shop --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effort medium --why "the actor's runner keeps timing out" --as hollywood
 backlot hollywood propose restart --studio acme-shop --person director --why "stuck at a prompt" --as hollywood
 backlot hollywood propose cast --studio acme-shop --file drafts/acme-shop/cast.toml --why "cheaper actors for the second pass" --as hollywood
+backlot hollywood propose reopen-studio --studio acme-shop --why "more work on the cart" --as hollywood
 backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "person asked to switch agent" --as hollywood
+backlot hollywood withdraw c1 --reason "the quota came back" --as hollywood
 backlot card list
 backlot card apply c1
 backlot card cancel c2 --reason "not now"
 ```
+
+### Paths are resolved, and files snapshotted, when a card is proposed
+
+A file a card names — `--cast`, `--brief`, or a `cast` card's `--file` — is resolved against
+Hollywood's **working directory at propose time**, not against Hollywood's own folder at apply
+time. A relative path becomes absolute, `..` is normalised away, and a file that is not there then
+is refused at propose, never accepted and failed later at apply. `propose studio-new` runs the same
+validation apply will run — `studio new --dry-run` — against the resolved files, so a card that
+could not apply is refused before it exists.
+
+The referenced cast and brief are **copied into the card's own directory** (`cards/c<n>/` under
+Hollywood's ledger) at propose, with their SHA-256 hashes recorded on the card. Apply reads the
+copy — what the person reviewed is what executes. If the source file has changed since the
+proposal, the card goes **stale** with `the cast file changed after this card was proposed`, like
+the other base checks. `card list` and `card show` print a one-line roles summary for a card that
+carries a cast (`producer=claude/opus-5-5 director=claude/opus-5-5 writer=cmd/deepseek…`), read
+from the snapshot.
+
+### Withdrawing, and superseding
+
+`backlot hollywood withdraw <card> --reason <text>` takes back a card Hollywood proposed that is
+still **open**; the ledger records who withdrew it and why (`card.withdrawn`), and the TUI shows it
+as `withdrawn`. Hollywood may withdraw only its own card — never the user's, and never the stage's
+outward card — and not one already applied, cancelled or stale.
+
+A **newer card replaces an older conflicting one**. When a new card targets the same single fact an
+open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a
+studio's cast (`cast`), a studio's finished state (`reopen-studio`), a studio name (`studio-new`),
+or Hollywood's own identity (`setup`) — the older card is recorded `superseded by c<n>` in the same
+append. A batch apply can therefore never run both. Cards with a sequence rather than one target
+(`pause`/`resume` on a task, `priority`, `close`/`reopen` on a person) never supersede.
+
 
 Each card carries the exact action, a one-line why, and its **base** — the fact about the studio
 that must still be true when you apply it. A `pause` card bases on the task running; a `studio-new`
@@ -288,9 +322,9 @@ an effect already in the ledger records `card.done` without re-appending, so a r
 action and its record repeats nothing. Cards execute whether or not `[hollywood]` is configured:
 the config gates the agent, never the gate.
 
-Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`,
-`recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a permission
-prompt; those stay yours, answered in the studio.
+Card actions (D18): `studio-new`, `close`, `reopen`, `reopen-studio`, `priority`, `pause`, `resume`,
+`abandon`, `recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a
+permission prompt; those stay yours, answered in the studio.
 
 A `recast` card swaps the agent that plays a fixed role — `producer`, `director` or `writer` —
 or an actor, by its key `actor-<task>-c<n>`. Its text reads `recast director → cmd/deepseek-v4.1-flash`
@@ -316,6 +350,12 @@ draft, read with `studio new`'s parser and checked with the same runnable rules.
 change in between makes it stale. `card show` prints the dry-run diff the file would make. Applied,
 the stage records the recasts and one `studio.cast` `by: user`, idempotent like the other cards
 (the newest `studio.cast` carries the card's `c<n>` marker).
+
+A `reopen-studio` card brings a finished studio back. Reopening is the person's own command
+(`backlot studio reopen`); this card is how Hollywood asks for it. It bases on `studio_finished`:
+the studio is finished now, so a studio that is already running refuses the card at propose. Applied,
+the stage records `studio.reopened` `by: user` with the card's marker (a restart between the append
+and `card.done` repeats nothing), and recasts, cast changes and new tasks work again.
 
 A `setup` card changes Hollywood's own identity (`Hollywood: <old> → <new>`) against a
 `hollywood_identity` base. `propose setup` validates the runner, model and effort rule up front
@@ -443,9 +483,10 @@ decision you recorded — `y`/`d` on the bar's Hollywood prompt row — and only
 that decision answered still shows.
 
 The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
-`devin`, `codex` and `opencode` take no command list — there the runner's own permission mode
-(`smart`, `on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
-the ledger.
+`codex` and `opencode` take no command list — there the runner's own permission mode
+(`on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
+the ledger. `devin` takes no argv list either, and — since Hollywood gets none of the shared
+read-only set — `smart` alone governs it. `backlot guide` is on every list, the compiled-in docs.
 
 ## What is not here yet
 

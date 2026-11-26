@@ -1029,7 +1029,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     assert_ne!(buf[(chip[0] - 1, frame.y + 1)].bg, palette.peach);
     // The working role is on set, then what it is doing.
     let who = row_of(&buf, area, frame.y + 2);
-    assert!(who.contains("producer"), "{who}");
+    assert!(who.contains("Ⓟ"), "{who}");
     let what = row_of(&buf, area, frame.y + 3);
     assert!(what.contains("review delivery 1"), "{what}");
     // The cast line: one mark each, coloured by role state.
@@ -2252,7 +2252,7 @@ fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("? ASKS acme-shop · producer · "), "{text}");
+    assert!(text.contains("? ASKS acme-shop · Ⓟ · "), "{text}");
     assert!(text.contains("— What should we build?"), "{text}");
     assert!(text.contains("· +1"), "{text}");
     assert!(text.contains(" reply r "), "{text}");

@@ -51,7 +51,7 @@ impl App {
                 .projections
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        self.update_tab_status(Instant::now());
+        self.update_tab_status(self.now());
         self.update_window_title();
         // The reference's `apply_active_snapshot` copy arms: pane loss
         // unarms the mode, focus re-arms/disarms it.
@@ -79,7 +79,7 @@ impl App {
     pub(super) fn reconcile_published_view(&mut self) {
         // U7: the entry decision reads the publish — settle it first so
         // the card and the layer are judged against this view.
-        self.settle_opening(Instant::now());
+        self.settle_opening(self.now());
         self.fence_chrome_core();
         self.follow_shared_focus();
         // The dead pane's context survives the reprojection for the
@@ -135,7 +135,7 @@ impl App {
         }
         // Probe bookkeeping precedes the reprojection so a fingerprint
         // the publish just invalidated cannot paint a stale Waiting.
-        self.tick_waiting(Instant::now());
+        self.tick_waiting(self.now());
         self.refresh_projection();
         // U6c: the publish decides which machines want a version
         // probe — doc answers, reconnects and the 6h throttle all
@@ -171,11 +171,11 @@ impl App {
         self.ns_editor_check();
         self.ns_build_editor_check();
         self.studio_editor_check();
-        self.synthesize_alerts(Instant::now());
+        self.synthesize_alerts(self.now());
         // W2: the same publish seam feeds the studio events — a role's
         // question, a user prompt, a reply, a card, a ready studio or a
         // stopped stage announces once, keyed by its ledger seq.
-        self.synthesize_studio_events(Instant::now());
+        self.synthesize_studio_events(self.now());
         self.share_seen();
         self.reap_exited();
     }
@@ -215,7 +215,7 @@ impl App {
     pub(super) fn mark_active_seen(&mut self) {
         // A focus request alone cannot acknowledge unseen output. Source only
         // acknowledges a matching surface after it has actually been drawn.
-        self.sched.mark_dirty(Instant::now());
+        self.sched.mark_dirty(self.now());
     }
 }
 

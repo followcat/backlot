@@ -1,23 +1,37 @@
 #!/bin/sh
-# Run the workspace tests with TMPDIR pointed at a fresh, empty directory
-# and fail when the tests leave anything behind. A test core's lock files
-# are not leftovers.
+# Run the workspace tests with TMPDIR pointed at a symlink to a fresh,
+# empty directory (matching macOS's /var -> /private/var TMPDIR unless
+# BACKLOT_TEST_TMP_NOLINK=1) and fail when the tests leave anything behind.
+# A test core's lock files are not leftovers.
 #
 # Extra arguments are passed to `cargo test`.
 set -u
 
-root=$(mktemp -d "${TMPDIR:-/tmp}/backlot-testtmp.XXXXXX") || exit 1
-trap 'rm -rf "$root"' EXIT
+base=${TMPDIR:-/tmp}
+real=$(mktemp -d "$base/backlot-testtmp.XXXXXX") || exit 1
+link_dir=
+if [ "${BACKLOT_TEST_TMP_NOLINK:-}" != "1" ]; then
+    link_dir=$(mktemp -d "$base/blt.XXXXXX") || { rm -rf "$real"; exit 1; }
+    test_tmp="$link_dir/t"
+    if ! ln -s "$real" "$test_tmp"; then
+        rm -rf "$real" "$link_dir"
+        exit 1
+    fi
+else
+    test_tmp=$real
+fi
+trap 'rm -rf "$real" ${link_dir:+"$link_dir"}' EXIT
 
 status=0
-TMPDIR="$root" cargo test --workspace "$@" || status=$?
+TMPDIR="$test_tmp" cargo test --workspace "$@" || status=$?
 
-left=$(find "$root" -mindepth 1 -maxdepth 1 ! -name '*.lock' | sort)
+left=$(find "$real" -mindepth 1 -maxdepth 1 ! -name '*.lock' | sort)
 if [ -n "$left" ]; then
     echo "tests left files in TMPDIR:" >&2
     printf '%s\n' "$left" >&2
     trap - EXIT
-    echo "the directory is kept for inspection: $root" >&2
+    [ -z "$link_dir" ] || rm -rf "$link_dir"
+    echo "the directory is kept for inspection: $real" >&2
     exit 1
 fi
 

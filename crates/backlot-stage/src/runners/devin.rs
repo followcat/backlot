@@ -21,6 +21,13 @@ pub struct DevinPrep {
     pub config: PathBuf,
     /// `<studio>/roles/<role>/signals.jsonl`.
     pub signals: PathBuf,
+    /// The role's read-only pre-allow rules — one `Exec(<cmd>)` entry
+    /// under `permissions.allow`, in Devin's own rule syntax. Devin's
+    /// rules are prefix matches (`Exec(ls)` permits `ls -a`), so there
+    /// is no separate ` *` form. Devin's own `--permission-mode smart`
+    /// stays the gate; these only spare the role a prompt for the
+    /// forensics every role runs.
+    pub allow: Vec<String>,
 }
 
 pub(crate) const HOOK_EVENTS: &[&str] = &[
@@ -33,17 +40,59 @@ pub(crate) const HOOK_EVENTS: &[&str] = &[
     "SessionEnd",
 ];
 
-/// Build or byte-preservingly splice `<cwd>/.devin/config.local.json`.
-pub(crate) fn config_content(existing: Option<&[u8]>, signals: &Path) -> Vec<u8> {
+/// The read-only pre-allow rules a role's `permissions.allow` gets —
+/// one `Exec(<cmd>)` per shared read-only command ([`super::READ_ONLY`]).
+/// Devin's rules are prefix-matched on the command line (`Exec(ls)`
+/// permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single
+/// entry per command is the whole rule; there is no ` *` form and no
+/// `Bash(...)`. Nothing a role's job adds (an actor's commits, the
+/// director's merge, a check's `run`) is pre-allowed here: Devin
+/// takes no argv allow list and its smart mode governs the rest.
+pub(crate) fn allow_rules() -> Vec<String> {
+    super::READ_ONLY
+        .iter()
+        .map(|cmd| format!("Exec({cmd})"))
+        .collect()
+}
+
+/// Build or byte-preservingly splice `<cwd>/.devin/config.local.json`:
+/// `hooks` and — when `allow` is non-empty — `permissions.allow`.
+/// Every other key (and any other `permissions` member) keeps its
+/// bytes.
+pub(crate) fn config_content(existing: Option<&[u8]>, signals: &Path, allow: &[String]) -> Vec<u8> {
     let text = existing.and_then(|b| std::str::from_utf8(b).ok());
     let hooks_json = hooks_member_json(text, HOOK_EVENTS, true, "devin", signals);
     let fresh = || format!("{{\"hooks\":{hooks_json}}}\n").into_bytes();
     let Some(raw) = text else {
-        return fresh();
+        return with_allow(fresh(), allow);
     };
     match splice_member(raw.trim(), "hooks", &hooks_json) {
+        Some(spliced) => with_allow(format!("{spliced}\n").into_bytes(), allow),
+        None => with_allow(fresh(), allow),
+    }
+}
+
+/// Splice `permissions.allow` into `bytes` when `allow` is non-empty:
+/// the `permissions` object keeps every other member (`deny` and the
+/// rest), only `allow` is replaced. A file that no longer parses is
+/// left as the caller wrote it.
+fn with_allow(bytes: Vec<u8>, allow: &[String]) -> Vec<u8> {
+    if allow.is_empty() {
+        return bytes;
+    }
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return bytes;
+    };
+    let mut permissions: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str::<serde_json::Value>(text.trim())
+            .ok()
+            .and_then(|v| v.get("permissions").and_then(|p| p.as_object()).cloned())
+            .unwrap_or_default();
+    permissions.insert("allow".into(), serde_json::json!(allow));
+    let value = serde_json::to_string(&serde_json::Value::Object(permissions)).unwrap_or_default();
+    match splice_member(text.trim(), "permissions", &value) {
         Some(spliced) => format!("{spliced}\n").into_bytes(),
-        None => fresh(),
+        None => bytes,
     }
 }
 
@@ -59,7 +108,7 @@ pub fn prepare(p: &DevinPrep) -> Result<Option<PrepNote>, String> {
     let dir = p.config.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let existing = std::fs::read(&p.config).ok();
-    let bytes = config_content(existing.as_deref(), &p.signals);
+    let bytes = config_content(existing.as_deref(), &p.signals, &p.allow);
     write600(&p.config, &bytes).map_err(|e| format!("{}: {e}", p.config.display()))?;
     maybe_exclude_new(cwd, was_new, REL)?;
     Ok(None)
@@ -146,6 +195,14 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
                 .join("roles")
                 .join(ctx.role)
                 .join("signals.jsonl"),
+            // The shared read-only set for a studio role; Hollywood is
+            // the overseer and takes none (D17a keeps it to backlot's
+            // own commands, which it is not pre-allowed here at all).
+            allow: if ctx.role == "hollywood" {
+                Vec::new()
+            } else {
+                allow_rules()
+            },
         })),
     })
 }

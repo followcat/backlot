@@ -81,3 +81,35 @@ impl Drop for TestDir {
         let _ = fs::remove_dir_all(&self.path);
     }
 }
+
+/// Returns the canonical form of `path`, falling back to `path` if it cannot be canonicalized.
+pub fn real_path(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Returns `true` if `a` and `b` are equal directly or canonicalize to the same path.
+pub fn same_path(a: impl AsRef<Path>, b: impl AsRef<Path>) -> bool {
+    let a = a.as_ref();
+    let b = b.as_ref();
+    if a == b {
+        return true;
+    }
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(ca), Ok(cb)) => ca == cb,
+        _ => false,
+    }
+}
+
+/// Asserts that `left` and `right` refer to the same real path (handling symlinked `TMPDIR`).
+#[track_caller]
+pub fn assert_same_path(left: impl AsRef<Path>, right: impl AsRef<Path>) {
+    let left = left.as_ref();
+    let right = right.as_ref();
+    assert!(
+        same_path(left, right),
+        "paths differ: left={} right={}",
+        real_path(left).display(),
+        real_path(right).display()
+    );
+}

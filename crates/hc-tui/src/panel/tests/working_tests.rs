@@ -231,7 +231,7 @@ fn a_role_at_its_prompt_reads_idle_minutes_in_the_dock() {
     let lines = render_panel(studio_with(role, now_ms), 72);
     let row = lines
         .iter()
-        .find(|l| l.contains("actor-a"))
+        .find(|l| l.contains("Ⓐ"))
         .expect("person row present");
     assert!(row.contains("idle 4m"), "{row}");
 
@@ -239,7 +239,7 @@ fn a_role_at_its_prompt_reads_idle_minutes_in_the_dock() {
     let mut fresh = base_role(Work::Waiting, now_ms - 30 * 60_000);
     fresh.idle_since_ms = Some(now_ms - 30_000);
     let lines = render_panel(studio_with(fresh, now_ms), 72);
-    let row = lines.iter().find(|l| l.contains("actor-a")).unwrap();
+    let row = lines.iter().find(|l| l.contains("Ⓐ")).unwrap();
     assert!(row.contains("waiting"), "{row}");
     assert!(!row.contains("idle"), "{row}");
 }

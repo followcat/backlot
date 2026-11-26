@@ -6,10 +6,10 @@ Read `docs/requirements.md` and `docs/plan.md` first. Work on one milestone task
 - **Small commits** with Conventional Commit subjects (`feat(sidebar): …`, `fix(proto): …`), each
   with its tests.
 - **Commit messages:** omit Devin generation notices and Devin `Co-Authored-By` trailers.
-- **Before every commit**, all three must pass:
+- **Before every commit**, all three must pass (macOS differences: `docs/studio/testing.md`):
   - `cargo fmt --check`
   - `cargo clippy --all-targets -- -D warnings`
-  - `cargo test`
+  - `sh scripts/check-test-tmp.sh` (or `cargo test`)
 - **Never touch real hc sessions.** Tests and manual runs use a scratch session with temporary XDG
   directories (see `docs/plan.md` › Testing rules). Do not connect to `default` or any named
   session that you did not create.
