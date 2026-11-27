@@ -479,6 +479,9 @@ impl Stage {
         self.q_unblocked_since
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
+        self.signin_since
+            .borrow_mut()
+            .retain(|(s, r), _| keep(s, r));
         self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
         self.liveness.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.rate_pace.borrow_mut().retain(|(s, r), _| keep(s, r));

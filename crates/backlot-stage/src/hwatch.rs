@@ -15,7 +15,7 @@ use crate::daemon::Stage;
 use crate::hstage;
 use crate::reconcile::LiveTerminal;
 use crate::runners;
-use crate::watch::{structured_state, work_due};
+use crate::watch::work_due;
 
 impl Stage {
     /// A live session-less role on a post-launch runner: look for
@@ -128,7 +128,7 @@ impl Stage {
             signal: signal_state,
             signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
             interrupted,
-            structured: structured_state(t),
+            structured: crate::signin::effective_structured(runner, t, &text),
             screen: runners::work_state(runner, &text),
             now_ms,
         });
@@ -291,7 +291,7 @@ pub(crate) fn hsignal_work(
         signal: signal_state,
         signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
         interrupted: runners::work::interrupted(runner, text),
-        structured: structured_state(term),
+        structured: crate::signin::effective_structured(runner, term, text),
         screen: runners::work_state(runner, text),
         now_ms,
     })

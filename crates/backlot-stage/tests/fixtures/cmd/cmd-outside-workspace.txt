@@ -1,0 +1,24 @@
+ READ  [analysis/notes.md] 443 lines
+ LIST  [analysis/metrics]
+ │ Found 39 items (0 dirs, 39 files)
+ │ Files:
+ └  ... +39 lines [ctrl+o to expand]
+✻ Thought for 3 seconds [ctrl+o to expand]
+
+⠶ I have the baseline. Now let me explore the target repo.
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Tool Permission
+Command Code needs to run read_directory.
+
+⚠ Outside the workspace — /home/user/src/acme-shop is outside workspace (allowed:
+/home/user/.local/state/backlot/0123456789abcdef0123456789abcdef/studios/acme-shop/work/t4,
+/home/user/.local/state/backlot/0123456789abcdef0123456789abcdef/studios/acme-shop). Use /add-dir to extend access.
+
+❯ 1. Yes
+  2. No, tell Command Code what to do differently
+
+↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions (Docs ↗)

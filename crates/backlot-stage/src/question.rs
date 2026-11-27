@@ -29,6 +29,8 @@ pub(crate) fn in_episode(
 ) -> bool {
     if combined_work != Work::Blocked
         || crate::ratelimit::weekly_choice_dialog(screen)
+        || work::agy_signing_in(screen)
+        || dialog::has_non_empty_draft(screen)
         || trust_dialog(screen)
         || request.is_some()
         || work::recognized_permission(runner, screen)

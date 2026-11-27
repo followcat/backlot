@@ -16,6 +16,11 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - **Notes about a repository carry over to the next studio on it.** When a director, producer or Hollywood finds a trap in a repo's environment (a path, a proxy, a slow test), it proposes a repo note. You see it as a card and apply it with `a`. Applied notes are kept on this machine only, never in the repo, and the next studio's director and writer are told to read them. Text that looks like a secret is refused. `backlot repo-note show` and `remove` let you look at or drop them.
 - **A decision reaches every role that needs it.** The director (or producer, or you) records a cross-task ruling once with `backlot decide --id AD-<n> --file <path>`, optionally `--notify active-actors` or named roles, and `--supersedes` an older one. Each role gets it like a tell. `decisions/current.md` lists the current decisions with their ledger number and keeps superseded ones as history; the Reader and wherdr can open it.
 - **`backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone.** `metrics` lists first-delivery pass rate, send-backs, what waited on you and for how long, rate-limit windows, approvals and refusals, Hollywood notices, and review and task times, per studio or for all (`--json` for scripts). `digest` is a daily report: what finished, was sent back, is blocked or waits on you, plus a table from each design section to its task, commits, checks and verdict. Neither command uses a model or writes anything (`docs/studio/metrics.md`).
+
+### Fixed
+
+- agy's sign-in page, a Command Code file or folder permission and your own unsent draft no longer show as waiting on you.
+
 ## 0.4.22 — 2026-11-27
 
 ### Changed
