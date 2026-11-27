@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The Hollywood dock has a gilded frame.** Each zone has its own dividing line, the block has a clear edge against the terminal and the Lot, and a marquee row closes it at the bottom. It takes no extra rows when tight, keeps `--plain` and `source = "herdr"` untouched, and adds derived brass (`gilt`), stage-well (`stage_well`), and marquee-bulb (`bulb_warm`) tokens across all bundled themes.
+
 ## 0.4.25 — 2026-11-27
 
 ### Added
@@ -18,7 +22,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **The Hollywood dock has a gilded frame.** Each zone has its own dividing line, the block has a clear edge against the terminal and the Lot, and a marquee row closes it at the bottom. It takes no extra rows when tight, keeps `--plain` and `source = "herdr"` untouched, and adds derived brass (`gilt`), stage-well (`stage_well`), and marquee-bulb (`bulb_warm`) tokens across all bundled themes.
 - **Actors on the `worktree` profile ask their director less often (`cmd`, `cursor`, `claude`).** Checking disk space or the CPU count (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`), changing into their own worktree by its full path, `git -C <own worktree>` reads and, on `cmd`, reading its own scratch files no longer need an approval. Each part of a compound command is checked on its own, so `cd <worktree> && curl …` still asks. Network access, installs, paid compute and other directories still ask. `standard` and `readonly` are unchanged. `devin`, `agy`, `cline`, `codex` and `opencode` treat `worktree` the same as `standard`, and `backlot studio new --dry-run` now says so.
 
 ### Fixed
