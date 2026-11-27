@@ -19,14 +19,14 @@ pub(crate) fn opaque(palette: &Palette) -> bool {
     palette.sidebar_bg != Color::Reset && palette.panel_bg != Color::Reset
 }
 
-/// Top bar background color: `elevation.surface` when studio chrome opacity
+/// Top bar background color: `elevation.stage_well` when studio chrome
 /// is active (all non-`terminal` RGB themes under `!plain && source != "herdr"`),
 /// otherwise `palette.panel_bg`.
 pub(crate) fn chrome_bg(config: &super::ClientShellConfig) -> Color {
     if config.studio_chrome {
-        let surface = config.palette.elevation().surface;
-        if surface != Color::Reset {
-            return surface;
+        let well = config.palette.elevation().stage_well;
+        if well != Color::Reset {
+            return well;
         }
     }
     config.palette.panel_bg

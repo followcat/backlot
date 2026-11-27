@@ -37,7 +37,7 @@ async fn the_badge_the_studio_header_and_the_pill_never_overlap() {
     for w in [80u16, 120, 160] {
         let mut app = studio_app();
         let (header, _) = row0(&mut app, w, 24);
-        assert!(header.contains("machines"), "{w}: {header:?}");
+        assert!(header.contains("MACHINES"), "{w}: {header:?}");
         assert!(
             header.contains(&version()),
             "{w}: badge missing: {header:?}"
@@ -57,7 +57,8 @@ async fn the_badge_the_studio_header_and_the_pill_never_overlap() {
         assert_eq!(pill.right(), w, "{w}: the pill ends the row");
         // The version text sits inside the badge's own run, and the
         // hint's hit covers the hint only.
-        let text = header.find(&version()).unwrap() as u16;
+        let ver_byte = header.find(&version()).unwrap();
+        let text = crate::chrome::text::display_width(&header[..ver_byte]) as u16;
         assert!(text + version().len() as u16 <= badge.x, "{w}: {header:?}");
         assert!(badge.x >= 10, "{w}: the header label stays: {header:?}");
         // The hit rect covers exactly the drawn hint: the full label

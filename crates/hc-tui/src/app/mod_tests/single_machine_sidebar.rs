@@ -65,7 +65,7 @@ async fn studio_mode_with_one_machine_draws_the_machine_tree() {
     app.area = (120, 24);
     let backend = draw_to(&mut app, 120, 24);
     let sidebar = sidebar_text(&backend);
-    assert!(sidebar.contains("machines"), "{sidebar}");
+    assert!(sidebar.contains("MACHINES"), "{sidebar}");
     assert!(sidebar.contains("Local"), "{sidebar}");
     // The workspaces nest under the `Local` row, indented like the
     // federated tree's children.

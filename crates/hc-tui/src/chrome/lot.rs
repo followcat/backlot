@@ -60,6 +60,7 @@ pub(crate) struct LotFrame<'a> {
     /// truncation read it.
     pub cols: u16,
     pub spin: usize,
+    pub studio_chrome: bool,
 }
 
 /// What the header shows under the focused terminal (Decision 5):
@@ -205,8 +206,16 @@ pub(crate) fn header_name_width(header: &StudioHeader) -> u16 {
 /// The studio header's styled left pieces: ` id · machine › part`
 /// with the current-studio capsule, role badge, person glyph and
 /// priority mark in their colours.
-fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)> {
-    let header_bg = palette.elevation().surface;
+fn header_spans(
+    header: &StudioHeader,
+    palette: &Palette,
+    studio_chrome: bool,
+) -> Vec<(String, Style)> {
+    let header_bg = if studio_chrome {
+        palette.elevation().stage_well
+    } else {
+        palette.elevation().surface
+    };
     let capsule = crate::studio::glyphs::studio_capsule_style(palette);
     let text = Style::default().fg(palette.text).bg(header_bg);
     let dim = Style::default().fg(palette.overlay0).bg(header_bg);
@@ -310,14 +319,18 @@ pub(crate) fn render_studio_header(
     if area.is_empty() {
         return;
     }
-    let header_bg = palette.elevation().surface;
+    let header_bg = if lot.studio_chrome {
+        palette.elevation().stage_well
+    } else {
+        palette.elevation().surface
+    };
     buf.set_style(area, Style::default().bg(header_bg));
-    let pill_w = pill_width(&lot.counts, tier, lot.agent);
+    let pill_w = pill_width(&lot.counts, tier, lot.agent, lot.studio_chrome);
     let name_rows = area.width.saturating_sub(pill_w.saturating_add(1));
     let mut x = area.x;
     let right = area.x.saturating_add(name_rows);
     let name_end = x.saturating_add(display_width(&header.studio) + 2);
-    for (text, style) in header_spans(header, palette) {
+    for (text, style) in header_spans(header, palette, lot.studio_chrome) {
         let room = right.saturating_sub(x);
         if room == 0 {
             break;
@@ -380,6 +393,7 @@ pub(crate) fn render_studio_header(
         tier,
         lot.agent,
         lot.spin,
+        lot.studio_chrome,
         palette,
         hits,
     );

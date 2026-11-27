@@ -274,14 +274,25 @@ pub(crate) fn sidebar_surface_and_edge(
     }
 }
 
-pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
-    let (bg, edge) = sidebar_surface_and_edge(palette);
+pub(crate) fn render_sidebar_background(
+    buffer: &mut Buffer,
+    area: Rect,
+    palette: &Palette,
+    studio_chrome: bool,
+) {
+    let elev = palette.elevation();
+    let (bg, default_edge) = sidebar_surface_and_edge(palette);
+    let edge_style = if studio_chrome {
+        elev.gilt_style(bg)
+    } else {
+        Style::default().fg(default_edge).bg(bg)
+    };
     buffer.set_style(area, Style::default().bg(bg));
     let separator_x = area.right().saturating_sub(1);
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
-            cell.set_style(Style::default().fg(edge).bg(bg));
+            cell.set_style(edge_style);
         }
     }
 }
@@ -493,7 +504,7 @@ pub(crate) fn render_shell(
             // a reserved segment at its right end.
             let pill_w = lot
                 .filter(|l| l.pill)
-                .map(|l| super::lot::pill_width(&l.counts, tier, l.agent))
+                .map(|l| super::lot::pill_width(&l.counts, tier, l.agent, config.studio_chrome))
                 .unwrap_or(0)
                 .min(layout.tab_bar.width);
             let tabs_area = Rect::new(
@@ -520,6 +531,7 @@ pub(crate) fn render_shell(
                     tier,
                     lot.is_some_and(|l| l.agent),
                     lot.map_or(0, |l| l.spin),
+                    config.studio_chrome,
                     &config.palette,
                     &mut hits,
                 );

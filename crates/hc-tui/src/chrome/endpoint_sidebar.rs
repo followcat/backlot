@@ -23,7 +23,7 @@ pub(crate) fn render_collapsed(
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
-    super::render::render_sidebar_background(buffer, area, palette);
+    super::render::render_sidebar_background(buffer, area, palette, config.studio_chrome);
     let (workspace_area, divider_y, detail_area) = collapsed_sidebar_sections(area);
     let mut total_rows = 0usize;
     let mut selected_row = None;

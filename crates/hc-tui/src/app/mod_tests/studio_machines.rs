@@ -160,7 +160,7 @@ async fn the_endpoint_sidebar_keeps_the_cast_under_the_machine_tree() {
     let backend = draw_to(&mut app, 120, 24);
     let sidebar = sidebar_text(&backend);
     // The machine tree still shows both endpoints above the cast.
-    assert!(sidebar.contains("machines"), "{sidebar}");
+    assert!(sidebar.contains("MACHINES"), "{sidebar}");
     assert!(sidebar.contains("Local"), "{sidebar}");
     assert!(sidebar.contains("host-b"), "{sidebar}");
     // The lower section is the current studio's cast — the

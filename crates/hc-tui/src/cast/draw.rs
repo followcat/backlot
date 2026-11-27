@@ -31,17 +31,12 @@ pub(crate) fn render_cast(
     if area.height == 0 {
         return;
     }
-    put_text(
+    super::simple::draw_top_rule(
         buffer,
-        area.x,
-        area.y,
-        area.width,
-        &(if view.region_focused { "━" } else { "─" }).repeat(area.width as usize),
-        Style::default().fg(if view.region_focused {
-            palette.accent
-        } else {
-            palette.elevation().border_muted
-        }),
+        area,
+        view.region_focused,
+        config.studio_chrome,
+        palette,
     );
     if area.height < 2 {
         return;
@@ -226,7 +221,13 @@ pub(crate) fn render_cast(
                 }
             }
             CastRow::ClosedDivider { count } => {
-                super::simple::draw_closed_divider(buffer, rect, *count, palette);
+                super::simple::draw_closed_divider(
+                    buffer,
+                    rect,
+                    *count,
+                    config.studio_chrome,
+                    palette,
+                );
             }
             CastRow::Shells => super::simple::draw_shells_header(buffer, rect, palette),
             CastRow::Shell { shell, focused } => {
