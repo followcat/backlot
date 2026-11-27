@@ -16,6 +16,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **Unfold idle roles in studio blocks, make studio names stand out with current capsules, add `Tab` section navigation, mark the selected machine, and restore Cast model lines (`hc-tui`).** Expanded studio blocks always render every live, standby, lost, and waiting role individually without folding calm seats behind a summary line; studio names across the dock draw in bold `palette.text`, the current studio sits in a 1-cell-padded `elevation.raised_row` capsule (falling back to bold + reverse on 16-color terminals) matching the top bar header beside a bold `palette.text` cast header, and a blank row separates blocks and compact-row groups when height allows (dropping first under height pressure); pressing `Tab` / `Shift+Tab` in the focused dock jumps by section (`header` → `people` → `tasks` → `exchange` → `›`) across studios (advertised in footer hints and `?` help) while keeping `Tab` `/verb` completion in compose; the left machines tree quietly marks the Lot-selected studio's endpoint and server row with an accent `▎` left bar while focused; and the left Cast displays an indented `runner · model · effort` line under each in-use role (keeping the focused role's line longest under height pressure and keeping closed roles on one line) (`docs/studio/panel.md`, `docs/keys.md`).
 - Test fixtures and docs use neutral names only.
 
 ### Fixed

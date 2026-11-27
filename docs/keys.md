@@ -90,6 +90,7 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | Keys | Action |
 |---|---|
 | `j`/`k`, arrows | Move the selection |
+| `Tab` / `Shift+Tab` | Jump to the next / previous section inside a studio block (header → people → tasks → exchange → `›`), wrapping across studios |
 | `PageUp`/`PageDown` | Scroll |
 | `Enter` | Focus a live person's terminal / make a studio current / toggle a `✓ … done` or `□ … closed` fold row (`o` owns closed-seat reopening) |
 | `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold a studio block |
