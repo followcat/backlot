@@ -296,18 +296,19 @@ tool name with its command or path — each string capped and the line under 4 K
 so a hook can never get in the runner's way.
 
 The stage reads the file's last 16 KB and takes the newest line the role's *own* session sent — the session id the
-ledger recorded at `role.started`, so another session's lines never move the role. The two work sources combine in a
+ledger recorded at `role.started`, so another session's lines never move the role. The three work sources combine in a
 fixed order:
 
-1. `blocked` wins from either — a prompt can reach the screen before its signal lands.
-2. Otherwise the signal's state: `UserPromptSubmit` and the tool events are `working`, `PermissionRequest` and a
-   `permission_prompt` notification `blocked`, `Stop`, `StopFailure` and `idle_prompt` `waiting`.
-3. Every hook-enabled runner normalizes into this same JSON line schema via `backlot hook --runner <name> --file <role's signals.jsonl>`:
+1. `Blocked` wins from any source (signal, structured status, or screen) — a prompt can reach the screen before its signal lands, and a stale signal never hides an interactive prompt.
+2. When the screen shows the runner's captured interrupt marker after the last working signal (for Claude Code, `Interrupted · What should Claude do instead?` with no active working marker below it — emitted without a `Stop` hook when the user presses Esc), the turn ends (`Waiting`).
+3. Otherwise the signal's state (`UserPromptSubmit` and tool events → `Working`, `PermissionRequest`/`permission_prompt` → `Blocked`, `Stop`/`StopFailure`/`idle_prompt` → `Waiting`), except that on runners whose core structured status reliably reports `idle`/`done`/`waiting` (`StatusSource::Native` or `StatusSource::ForkInference` in `caps.rs`: `claude`, `codex`, `devin`, `opencode`, `cursor`, `cmd`, `agy`), a `Working` signal older than `SIGNAL_STALE_MS` (5 s) yields to `Waiting` when both the core and the screen read `Waiting`. Inside the 5 s grace window, a fresh `UserPromptSubmit` stays `Working` before the screen and core catch up.
+4. `Stop` / `StopFailure`, or a newer working signal (starting a new turn even if the previous turn's interrupt line stays visible in scrollback), takes effect immediately as today.
+5. Every hook-enabled runner normalizes into this same JSON line schema via `backlot hook --runner <name> --file <role's signals.jsonl>`:
    - **`agy`:** `<cwd>/.agents/hooks.json` splices top-level `"backlot"` across `SessionStart`, `PreInvocation`, `PreToolUse`, `PostToolUse`, `PostInvocation`, and `Stop` (`conversationId` -> `session_id`, `PreInvocation` -> `UserPromptSubmit`, `PostInvocation` -> `Stop`).
    - **`cmd`:** `<cwd>/.commandcode/settings.json` splices `"hooks"` beside `"permissions"` across `SessionStart`, `PreToolUse`, `PostToolUse`, and `Stop`.
    - **`devin`:** `<cwd>/.devin/config.local.json` splices `"hooks"` per work area (without touching `~/.config/devin/config.json`) across `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Stop`, and `SessionEnd`.
    - When `.agents/hooks.json`, `.commandcode/settings.json`, or `.devin/config.local.json` is new and untracked, launch/resume prep adds it to `<git>/info/exclude` (following linked-worktree `commondir`). When the repository already tracks the hook file, prep leaves it untouched, logs `hooks unavailable`, raises one informational `hooks unavailable` attention, and leaves the role on its remaining evidence.
-4. A session that sent nothing — and runners without hooks — answers from the screen exactly as before.
+6. A session that sent nothing — and runners without hooks — answers from structured status and the screen.
 
 Two more uses of the same tail: hook signals feed the unified D4 liveness track alongside the other five sources (any newer state-mapping signal refreshes evidence and clears an open stall `new hook signal`), while a `StopFailure` shows `last turn failed: <error>` on `backlot status` and the panel until the
 role's next signal; nothing is raised — the owed-step machinery already nudges an idle role.
