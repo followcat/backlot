@@ -140,6 +140,7 @@ mod tests {
                     needs_upgrade: false,
                     unknown_kinds: Vec::new(),
                     design: None,
+                    halted: None,
                 })
                 .collect(),
             hollywood: None,

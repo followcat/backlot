@@ -68,6 +68,9 @@ pub(crate) struct Evidence {
     last_status_sample_ms: Option<u64>,
     work_area: Option<WorkAreaSnap>,
     last_status_hash: Option<u64>,
+    last_work_area_change_ms: Option<u64>,
+    last_obs_ms: u64,
+    blocked_intervals: Vec<(u64, u64)>,
     eligible_since_ms: Option<u64>,
     stall_raised_ms: Option<u64>,
     last_moved_ms: u64,
@@ -101,6 +104,10 @@ impl Evidence {
             last_status_sample_ms: None,
             work_area: None,
             last_status_hash: None,
+            last_work_area_change_ms: (input.local_machine && !input.work_roots.is_empty())
+                .then_some(now_ms),
+            last_obs_ms: now_ms,
+            blocked_intervals: Vec::new(),
             eligible_since_ms: input.eligible.then_some(now_ms),
             stall_raised_ms: None,
             last_moved_ms: now_ms,
@@ -297,8 +304,12 @@ impl Evidence {
             self.last_status_sample_ms = Some(now_ms);
         }
         let snap = work_read(work_roots, run_status, git);
+        if self.last_work_area_change_ms.is_none() {
+            self.last_work_area_change_ms = Some(now_ms);
+        }
         if let Some(reason) = diff_work_area(self.work_area.as_ref(), self.last_status_hash, &snap)
         {
+            self.last_work_area_change_ms = Some(now_ms);
             moved.push((
                 Source::WorkArea,
                 SourceStamp {
@@ -400,6 +411,32 @@ impl Evidence {
     /// where a bare progress line does not.
     pub(crate) fn work_area_moved_ms(&self) -> Option<u64> {
         self.moved_sources.get(&Source::WorkArea).map(|s| s.at_ms)
+    }
+
+    /// Last timestamp the role's work area (`git HEAD`, index, or `git status`)
+    /// started monitoring or changed — `None` when no local work root was sampled.
+    pub(crate) fn work_area_change_ms(&self) -> Option<u64> {
+        self.last_work_area_change_ms
+    }
+
+    /// Record whether the role was sampled as `Work::Blocked` up to `now_ms`.
+    pub(crate) fn record_work(&mut self, now_ms: u64, is_blocked: bool) {
+        let prev = self.last_obs_ms;
+        self.last_obs_ms = self.last_obs_ms.max(now_ms);
+        if is_blocked && now_ms > prev {
+            if let Some(last) = self.blocked_intervals.last_mut()
+                && last.1 >= prev
+            {
+                last.1 = last.1.max(now_ms);
+            } else {
+                self.blocked_intervals.push((prev, now_ms));
+            }
+        }
+    }
+
+    /// Intervals spent sampled as `Work::Blocked`.
+    pub(crate) fn blocked_intervals(&self) -> &[(u64, u64)] {
+        &self.blocked_intervals
     }
 
     pub(crate) fn lock_wait(&self) -> Option<(&str, u64)> {

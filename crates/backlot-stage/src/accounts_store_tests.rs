@@ -74,6 +74,7 @@ fn studio_dir_with_started_role(base: &Path, name: &str, role: &str, runner: &st
                     actor: Some(actor(runner, "sonnet-5")),
                     session_id: Some("sess-1".into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

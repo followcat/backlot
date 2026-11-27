@@ -183,6 +183,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
             actor: Some(actor(runner)),
             session_id: Some("s-prod".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     let ask_seq = queue_ask(&dir, "producer", "what should we build?");
@@ -385,6 +386,7 @@ async fn agy_pre_invocation_and_hooks_unavailable_fallback() {
             actor: Some(actor("agy")),
             session_id: Some("s-dir".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     append(

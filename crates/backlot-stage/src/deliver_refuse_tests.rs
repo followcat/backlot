@@ -235,6 +235,7 @@ fn queued_message(dir: &Path) {
             actor: Some(actor()),
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     );
 }

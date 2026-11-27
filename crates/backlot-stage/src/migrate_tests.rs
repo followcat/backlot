@@ -37,6 +37,7 @@ fn studio(scratch_dir: &std::path::Path, name: &str, n: u64) -> std::path::PathB
                 actor: Some(actor("a")),
                 session_id: None,
                 reason: None,
+                prompt_hash: None,
             },
         );
     }

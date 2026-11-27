@@ -109,6 +109,7 @@ fn recast_cli_explains_when_writer_has_not_started_and_is_quiet_once_started() {
             actor: None,
             session_id: Some("sess-d".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     let dir_out = ok(

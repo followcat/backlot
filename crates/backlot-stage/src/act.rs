@@ -193,6 +193,7 @@ pub(crate) fn start_event(
     launch: &runners::Launch,
     address: &str,
     start_reason: Option<&'static str>,
+    prompt_hash: Option<String>,
 ) -> EventKind {
     match &start.resume {
         Some(resume) => EventKind::RoleResumed {
@@ -208,6 +209,7 @@ pub(crate) fn start_event(
             actor: Some(start.actor.clone()),
             session_id: launch.session_id(),
             reason: start_reason.map(String::from),
+            prompt_hash,
         },
     }
 }
@@ -264,6 +266,7 @@ impl Stage {
         start: &Start,
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
+        prompt_hash: Option<String>,
     ) -> Result<bool, Fail> {
         // A runner's per-launch filesystem prep — cursor's
         // isolated tree — before anything starts. A failure is an
@@ -385,7 +388,10 @@ impl Stage {
             .get(&start.role)
             .and_then(|r| r.restart.as_ref())
             .and_then(|r| r.fresh.then_some(RESTARTED));
-        record(dir, start_event(start, launch, &address, start_reason))?;
+        record(
+            dir,
+            start_event(start, launch, &address, start_reason, prompt_hash),
+        )?;
         crate::stagelog::stage_log!("started {} as {}", start.role, start.terminal);
         Ok(true)
     }
@@ -537,6 +543,7 @@ impl Stage {
                             .and_then(|a| runners::session_id(a, terminal)),
                         actor,
                         reason: Some("adopted after restart".into()),
+                        prompt_hash: None,
                     },
                 )?;
                 crate::stagelog::stage_log!("adopted {terminal} for {role}");
@@ -606,19 +613,21 @@ impl Stage {
                 // A fresh start renders the role's prompt file and
                 // gets the one line pointing at it (a file path for
                 // `devin`); a resume gets no first prompt.
-                let prompt = match &start.resume {
-                    Some(_) => None,
+                let (prompt, prompt_hash) = match &start.resume {
+                    Some(_) => (None, None),
                     None => {
                         let file = prompts::prepare(dir, studio, start, state)
                             .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
+                        let hash = prompts::file_sha256(&file);
                         let line = prompts::first_line(&file);
-                        if start.actor.runner == "devin" {
+                        let cmd_prompt = if start.actor.runner == "devin" {
                             let f = prompts::first_file(dir, &start.role, &line)
                                 .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
                             Some(f.to_string_lossy().into_owned())
                         } else {
                             Some(line)
-                        }
+                        };
+                        (cmd_prompt, hash)
                     }
                 };
                 let studio_dir = dir.to_string_lossy();
@@ -680,7 +689,15 @@ impl Stage {
                             .first()
                             .and_then(|program| self.runner_version(program));
                         if !self
-                            .launch(studio, dir, state, &start, launch.as_ref(), runner_env)
+                            .launch(
+                                studio,
+                                dir,
+                                state,
+                                &start,
+                                launch.as_ref(),
+                                runner_env,
+                                prompt_hash,
+                            )
                             .await?
                         {
                             *real_slot_free = true;

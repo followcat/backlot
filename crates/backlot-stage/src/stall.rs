@@ -4,7 +4,7 @@
 //! lock). An actor only stalls on a `running` task (`working` and `waiting`
 //! both count); fixed roles stall only while `working`; `blocked` never stalls.
 
-use backlot_model::event::{EventKind, STALLED};
+use backlot_model::event::{EventKind, LOOPING, NO_PROGRESS, STALLED};
 use backlot_model::state::{Attention, StudioState, TaskStatus, actor_task};
 use backlot_model::summary::Work;
 
@@ -115,6 +115,7 @@ impl crate::daemon::Stage {
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
+        self.check_looping_alert(dir, state, role, now_ms)?;
         let Some(screen) = self.screens.borrow().get(&pair).cloned() else {
             return Ok(());
         };
@@ -147,7 +148,7 @@ impl crate::daemon::Stage {
 
         let limit_ms = u64::from(state.stall_limit_s()) * 1000;
         let open = open_stall(state, role);
-        let (cleared_action, raise_snap) = {
+        let (cleared_action, raise_snap, work_change_ms, blocked_intervals) = {
             let mut map = self.liveness.borrow_mut();
             let mut git = self.git_runner();
             let ev = map
@@ -158,18 +159,25 @@ impl crate::daemon::Stage {
                 .or_insert_with(|| {
                     Evidence::new(&input, &*self.proc_read, &*self.work_area_read, &mut **git)
                 });
+            ev.record_work(now_ms, work == Work::Blocked);
+            let change_ms = ev.work_area_change_ms();
+            let blocked = ev.blocked_intervals().to_vec();
 
             if let Some(attn) = open {
                 (
                     ev.clear_reason(attn.ts_ms, now_ms).map(|r| (attn.seq, r)),
                     None,
+                    change_ms,
+                    blocked,
                 )
             } else {
                 ev.clear_raised();
                 let raise = stalled(role, task, work, ev, now_ms, limit_ms).then(|| ev.clone());
-                (None, raise)
+                (None, raise, change_ms, blocked)
             }
         };
+
+        self.check_no_progress_alert(dir, state, role, work_change_ms, &blocked_intervals, now_ms)?;
 
         if let Some((target, reason)) = cleared_action {
             record(
@@ -204,6 +212,94 @@ impl crate::daemon::Stage {
                 ev.mark_raised(now_ms);
             }
             crate::stagelog::stage_log!("{role} stalled");
+        }
+        Ok(())
+    }
+
+    fn check_looping_alert(
+        &self,
+        dir: &std::path::Path,
+        state: &StudioState,
+        role: &str,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        if let Some(open) = state
+            .open_attention()
+            .find(|a| a.role == role && a.reason == LOOPING)
+        {
+            if let Some(reason) = crate::liveness_progress::looping_clear_due(state, open, now_ms) {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: open.seq,
+                        reason: Some(reason.into()),
+                    },
+                )?;
+            }
+            return Ok(());
+        }
+        if let Some(alert) = crate::liveness_progress::evaluate_looping(state, role, now_ms) {
+            record(
+                dir,
+                EventKind::AttentionRaised {
+                    role: role.into(),
+                    reason: LOOPING.into(),
+                    detail: crate::liveness_progress::looping_detail(&alert),
+                    needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
+                },
+            )?;
+            crate::stagelog::stage_log!("{role} looping on guard refusals");
+        }
+        Ok(())
+    }
+
+    fn check_no_progress_alert(
+        &self,
+        dir: &std::path::Path,
+        state: &StudioState,
+        role: &str,
+        work_change_ms: Option<u64>,
+        blocked_intervals: &[(u64, u64)],
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        if let Some(open) = state
+            .open_attention()
+            .find(|a| a.role == role && a.reason == NO_PROGRESS)
+        {
+            if let Some(reason) =
+                crate::liveness_progress::no_progress_clear_due(state, open, work_change_ms)
+            {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: open.seq,
+                        reason: Some(reason.into()),
+                    },
+                )?;
+            }
+            return Ok(());
+        }
+        if let Some(alert) = crate::liveness_progress::evaluate_no_progress(
+            state,
+            role,
+            work_change_ms,
+            blocked_intervals,
+            now_ms,
+        ) {
+            record(
+                dir,
+                EventKind::AttentionRaised {
+                    role: role.into(),
+                    reason: NO_PROGRESS.into(),
+                    detail: crate::liveness_progress::no_progress_detail(&alert),
+                    needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
+                },
+            )?;
+            crate::stagelog::stage_log!("{role} no progress on coding task");
         }
         Ok(())
     }

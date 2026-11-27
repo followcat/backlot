@@ -57,6 +57,7 @@ fn a_removed_candidate_does_not_touch_a_live_actor() {
             actor: Some(actor("a")),
             session_id: Some("s-a".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     events.push(drop_candidates());
@@ -109,6 +110,7 @@ fn a_new_limit_applies_only_to_the_next_start() {
             actor: Some(actor("a")),
             session_id: Some("s-a".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     events.push(ev(
@@ -120,6 +122,7 @@ fn a_new_limit_applies_only_to_the_next_start() {
             actor: Some(actor("b")),
             session_id: Some("s-b".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&events);
@@ -208,6 +211,7 @@ fn an_actor_recast_keeps_the_key_and_worktree_and_starts_fresh() {
             actor: Some(actor("a")),
             session_id: Some("s-a".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let new = ActorIdentity {

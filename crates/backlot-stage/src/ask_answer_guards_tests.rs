@@ -180,6 +180,7 @@ async fn setup_ask(runner: &str) -> (TestDir, Stage, Arc<Mutex<FakeCore>>, LiveT
             actor: Some(actor(runner, "m")),
             session_id: Some("s-prod".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     let msg_dir = dir.join("messages");
@@ -426,6 +427,7 @@ async fn lifecycle_events_after_ask_do_not_clear_it() {
                 actor: Some(actor("claude", "m")),
                 session_id: Some("s-prod-new".into()),
                 reason: None,
+                prompt_hash: None,
             },
         ),
         (

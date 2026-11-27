@@ -46,6 +46,8 @@ pub(crate) const U_DIGEST: &str =
     "usage: backlot digest [--studio <id> | --all] [--since <dur>] [--format md|json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
 pub(crate) const U_SERVER: &str = "usage: backlot server run [--session <s>]\n       backlot server start|stop [--session <s>] [--remote <t>]\n       backlot server adopt [--dry-run] [--stop-stages] [--core <id>]\n       backlot server service [--print | --write] [--session <s>]";
+pub(crate) const U_HALT: &str = "usage: backlot halt --reason <text>";
+pub(crate) const U_RESUME: &str = "usage: backlot resume [--note <text>] [--false-positive]";
 pub(crate) const U_GUIDE: &str = "usage: backlot guide [<topic>] [--grep <word>] — backlot's own docs, compiled into the binary (no studio, no disk search)";
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
 pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>] [--all]\n       dot-directories stay hidden unless --all is given";

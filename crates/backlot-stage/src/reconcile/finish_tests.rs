@@ -47,6 +47,7 @@ fn finished_log() -> Vec<Event> {
                 actor: Some(actor("a")),
                 session_id: Some("sess-1".into()),
                 reason: None,
+                prompt_hash: None,
             },
         ),
         ev(

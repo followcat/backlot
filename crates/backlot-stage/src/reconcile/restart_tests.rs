@@ -44,6 +44,7 @@ fn started(seq: u64, role: &str, term: &str, sess: &str) -> Event {
             actor: Some(actor("a")),
             session_id: Some(sess.into()),
             reason: None,
+            prompt_hash: None,
         },
     )
 }

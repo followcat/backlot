@@ -114,6 +114,7 @@ fn running_studio(base: &Path) {
             actor: Some(tk::actor("a")),
             session_id: Some("s-a".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
 }

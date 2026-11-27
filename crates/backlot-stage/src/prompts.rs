@@ -330,6 +330,12 @@ pub fn prepare(
     Ok(file)
 }
 
+/// Lowercase hex SHA-256 of the rendered prompt file recorded on `role.started`.
+pub(crate) fn file_sha256(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    Some(backlot_model::hollywood::sha256_hex(&bytes))
+}
+
 /// The one-line first prompt a fresh start gets.
 pub fn first_line(file: &Path) -> String {
     format!("Read {} and follow it.", file.display())

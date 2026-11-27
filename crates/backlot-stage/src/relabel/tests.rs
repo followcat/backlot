@@ -31,6 +31,7 @@ fn started_on(role: &str, address: &str) -> EventKind {
         actor: None,
         session_id: None,
         reason: None,
+        prompt_hash: None,
     }
 }
 

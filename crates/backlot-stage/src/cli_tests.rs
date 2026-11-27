@@ -659,6 +659,8 @@ permission_profile = "worktree"
 fn every_command_word_is_registered() {
     for word in [
         "studio",
+        "halt",
+        "resume",
         "req",
         "plan",
         "dispatch",

@@ -330,7 +330,32 @@ pub(crate) fn render_metrics_table(report: &MetricsReport, since: Option<&str>) 
             .collect();
         wrap_items("refused by rule (total/-209): ", &items, &mut out);
     }
+
+    if report.all.halts.halts > 0 || report.all.halts.resumes > 0 {
+        push_line(&mut out, "");
+        push_line(
+            &mut out,
+            "studio             halts  resumes   fp  fp-share    halted",
+        );
+        for s in &report.studios {
+            push_halts_row(&mut out, &s.studio, &s.halts);
+        }
+        push_halts_row(&mut out, "ALL", &report.all.halts);
+    }
     out
+}
+
+fn push_halts_row(out: &mut String, name: &str, h: &backlot_model::metrics::HaltMetrics) {
+    let line = format!(
+        "{}  {:>6}  {:>7}  {:>3}  {:>8}  {:>8}",
+        pad_left_col(name, 16),
+        h.halts,
+        h.resumes,
+        h.false_positives,
+        fmt_pct(h.false_positive_share),
+        fmt_dur_ms(h.halted_ms),
+    );
+    push_line(out, &line);
 }
 
 pub(crate) use crate::metrics_digest_render::render_digest_md;

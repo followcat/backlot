@@ -100,6 +100,7 @@ fn seed_base_with_actor(dir: &Path) -> u64 {
             actor: Some(actor("a")),
             session_id: Some("sess-t1-1".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     append_ev(
@@ -225,6 +226,7 @@ async fn drops_mail_when_actor_is_closed_exited_finished_or_recast() {
             actor: Some(actor("b")),
             session_id: Some("sess-t1-2".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     let c2_seq = append_ev(
@@ -416,6 +418,7 @@ async fn never_drops_fixed_role_mail() {
                 actor: Some(actor("a")),
                 session_id: Some(format!("sess-{role}")),
                 reason: None,
+                prompt_hash: None,
             },
         );
         append_ev(
@@ -481,6 +484,7 @@ async fn old_ledger_with_stale_actor_mail_is_cleaned_without_rewrite() {
                 actor: Some(actor("a")),
                 session_id: Some("sess-1".into()),
                 reason: None,
+                prompt_hash: None,
             },
         ),
         ev(
@@ -552,6 +556,7 @@ async fn dropped_actor_mail_no_longer_counts_as_pending_and_stays_visible() {
             actor: Some(actor("a")),
             session_id: Some("sess-t1".into()),
             reason: None,
+            prompt_hash: None,
         },
     );
     let msg_seq = append_ev(

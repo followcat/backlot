@@ -160,6 +160,17 @@ revision arrives as `[backlot]` naming the tasks now behind; you
 decide per task to continue, pause or redo —
 `backlot task pause --task <task> --reason <reason>` — and nothing
 is killed for you.
+
+## Halting new dispatches
+
+- If the base branch, requirement, or opening assumption proves wrong and casting
+  more tasks would waste work, run `backlot halt --reason <text>`: it freezes new
+  `task.cast` dispatches without killing or pausing running tasks.
+- Always pair a halt with a message to the person explaining what is wrong and
+  what choice you need (`backlot tell user --text <note> --note`); halting alone
+  does not replace telling the person.
+- Clear the stop once resolved with `backlot resume --note <text>` (passing
+  `--false-positive` if the alarm was false).
 {#design_gate}
 
 ## Opening buildability review
@@ -185,6 +196,10 @@ evaluate buildability and submit
   for core cross-task contracts when needed, carry `AD-<n>`, decided design
   sections, and any binding `#<seq>` references (`Binding: #<seq> (<one-line what>)`)
   into each task's acceptance list without retelling them, and verify deliveries
-  against them. If a signed-off assumption proves wrong mid-execution, block the
-  task and report the facts to the person — do not open a role-to-role debate.
+  against them. If a signed-off assumption proves wrong mid-execution, halt new
+  dispatches (`backlot halt --reason <text>`) so new work is not wasted, block
+  affected tasks, and tell the person (`backlot tell user --text <note> --note`) —
+  halting is never a substitute for telling the person. Once fixed or re-signed,
+  resume with `backlot resume --note <text>` (add `--false-positive` if the stop
+  turned out to be unnecessary).
 {/design_gate}

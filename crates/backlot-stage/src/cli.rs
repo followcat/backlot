@@ -21,6 +21,8 @@ use crate::store::{self, StoreError};
 /// left for the TUI's own argument parsing.
 const COMMANDS: &[&str] = &[
     "studio",
+    "halt",
+    "resume",
     "req",
     "plan",
     "dispatch",
@@ -393,6 +395,8 @@ pub(crate) fn exec_event(
         | Cmd::Recast { .. }
         | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
         | Cmd::StudioCheck(_)
+        | Cmd::Halt { .. }
+        | Cmd::Resume { .. }
         | Cmd::Design(crate::args::DesignCmd::Sign { .. })
         | Cmd::Design(crate::args::DesignCmd::Note { .. }) => Caller {
             studio: studio_name(&common, env)?,

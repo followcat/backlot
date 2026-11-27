@@ -354,6 +354,31 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                     });
                 }
             }
+            backlot_model::event::LOOPING => {
+                if let Some(to) = crate::stall::notice_to(state, a) {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to,
+                        label: "looping",
+                        body: crate::liveness_progress::looping_notice_body(a),
+                    });
+                }
+            }
+            backlot_model::event::NO_PROGRESS => {
+                let to = if state.roles.contains_key("director") {
+                    Some("director".into())
+                } else {
+                    crate::stall::notice_to(state, a)
+                };
+                if let Some(to) = to {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to,
+                        label: "no progress",
+                        body: crate::liveness_progress::no_progress_notice_body(a),
+                    });
+                }
+            }
             // A lost role that cannot come back gets one `lost`
             // notice, routed like a stall — an actor's to its task
             // reviewer, the writer's and director's to the producer,

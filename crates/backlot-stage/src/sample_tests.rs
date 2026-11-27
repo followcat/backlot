@@ -608,6 +608,7 @@ async fn a_signal_bound_prompt_needs_no_screen_block() {
                     actor: Some(actor()),
                     session_id: Some("fake-t1".into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

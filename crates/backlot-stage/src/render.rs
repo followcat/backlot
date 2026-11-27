@@ -213,6 +213,10 @@ pub fn status(
         );
         let _ = writeln!(out, "  warning: {msg}");
     }
+    if let Some(h) = &state.halted {
+        let age = age_short(now_ms.saturating_sub(h.since_ms));
+        let _ = writeln!(out, "  halted: by {} ({age} ago) — {}", h.by, h.reason);
+    }
     // The producer's own stall or unresumable terminal is the one
     // problem no role in the studio can fix; put it above everything
     // else so a glance at `backlot status` says why nothing moves.
