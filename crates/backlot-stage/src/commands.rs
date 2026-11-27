@@ -373,6 +373,8 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         Cmd::Help(_) => unreachable!("help is answered in cli::run"),
         Cmd::Status { .. }
         | Cmd::Records { .. }
+        | Cmd::Metrics { .. }
+        | Cmd::Digest { .. }
         | Cmd::CastSuggest { .. }
         | Cmd::StageStart
         | Cmd::StageStop

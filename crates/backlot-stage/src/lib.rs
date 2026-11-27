@@ -99,6 +99,9 @@ mod liveness;
 mod liveness_diff;
 mod liveness_probe;
 mod liveness_work;
+mod metrics_cli;
+mod metrics_digest_render;
+mod metrics_render;
 mod migrate;
 mod msg_show;
 mod msg_show_fmt;
@@ -326,6 +329,8 @@ mod liveness_probe_tests;
 mod liveness_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
+#[cfg(test)]
+mod metrics_cli_tests;
 #[cfg(test)]
 mod migrate_tests;
 #[cfg(test)]
