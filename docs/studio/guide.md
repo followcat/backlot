@@ -148,8 +148,9 @@ hc server start
 backlot
 ```
 
-With no studio, `backlot` opens on the **opening page**: one line of what it is, then its
-actions. Press `n` — the **New Studio dialog** opens, a four-step overlay that runs in the
+With no studio, `backlot` opens on the 49-column stepped **opening page** with its `‹✦›` rule,
+tagline, and quick actions. Press `n` — the **New Studio dialog** (`╔══╡ ✦ NEW STUDIO · [n/4] … ╞══╗`)
+opens, a four-step overlay that runs in the
 client itself: **1 Machine & Repo** (Local plus every attached machine, each checked for
 reachability and `backlot --version`; a machine without backlot or offline says why and cannot
 be picked), **2 ID & Title** (the repository's name, validated live, plus an optional
