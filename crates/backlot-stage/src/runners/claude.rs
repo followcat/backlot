@@ -69,7 +69,9 @@ pub fn hollywood_commands() -> &'static [&'static str] {
         "backlot progress",
         "backlot hollywood propose",
         "backlot hollywood report",
+        "backlot hollywood withdraw",
         "backlot studio new --dry-run",
+        "backlot studio cast set --dry-run",
         "backlot --help",
         "backlot help",
         // Read-only, compiled into the binary: the overseer's own docs

@@ -19,6 +19,9 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 - `backlot studio new --title <t> --repo <path> --cast <file.toml> [--ask <text> | --ask-file <f>] [--mode standard|experimental] [--dry-run]`
   flags: --title --repo --cast --ask --ask-file --mode --dry-run
 
+- `backlot studio cast set --file <file.toml> [--dry-run] [--json]`
+  flags: --file --dry-run --json
+
 - `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>] [--answers <seqs>] --why <line>`
   flags: --studio --task --person --level --runner --model --effort --title --repo --cast --brief --fresh --file --answers --why
   actions: studio-new | close | reopen | reopen-studio | priority | pause | resume | abandon | recast | restart | cast | setup
@@ -28,6 +31,9 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 
 - `backlot hollywood report "<headline>" [--body <f>] [--answers <seqs>]`
   flags: --body --answers
+
+- `backlot hollywood withdraw <card> --reason <text>`
+  flags: --reason
 
 - `backlot guide [<topic>] [--grep <word>] — backlot's own docs, compiled into the binary (no studio, no disk search)`
   flags: --grep
