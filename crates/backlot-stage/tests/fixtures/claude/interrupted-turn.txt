@@ -1,0 +1,9 @@
+❯ Check README.md and summarize the crate.
+
+● Read(README.md)
+  ⎿  Interrupted · What should Claude do instead?
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts                                         accept edits · sonnet

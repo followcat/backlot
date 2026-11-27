@@ -238,16 +238,125 @@ pub fn answered_requests(
         .collect()
 }
 
-/// The work-map answer from the three sources, in order: the
-/// role's own hook signal (S9f), then the terminal's structured
-/// state (S12d), then the stage's screen read. A `blocked` from
-/// any source wins over everything else — a prompt on any channel
-/// must still open an episode.
-pub fn combine(signal: Option<Work>, structured: Option<Work>, screen: Work) -> Work {
-    if [signal, structured, Some(screen)].contains(&Some(Work::Blocked)) {
+/// How long a fresh `Working` hook signal (such as `UserPromptSubmit`)
+/// outranks a trustworthy `Waiting` core status + `Waiting` screen while
+/// the screen and core catch up.
+pub const SIGNAL_STALE_MS: u64 = 5_000;
+
+/// Per-`(studio, role)` state tracking screen interrupt markers across
+/// samples so an older interrupted turn still sitting in scrollback does
+/// not cancel a later turn's fresh `Working` signal.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct InterruptTrack {
+    pub prev_count: usize,
+    pub ended_sig_ts_ms: Option<u64>,
+}
+
+/// Track whether `runner`'s screen shows an interrupt marker ending the
+/// current turn. Returns `true` when an active interrupt ends the turn.
+pub(crate) fn note_interrupt(
+    slot: &mut Option<InterruptTrack>,
+    runner: &str,
+    screen: &str,
+    signal: Option<&Signal>,
+    signal_work: Option<Work>,
+) -> bool {
+    let count = crate::runners::work::interrupt_count(runner, screen);
+    let screen_interrupted = crate::runners::work::interrupted(runner, screen);
+    if signal_work != Some(Work::Working) {
+        *slot = Some(InterruptTrack {
+            prev_count: count,
+            ended_sig_ts_ms: None,
+        });
+        return screen_interrupted;
+    }
+    let sig_ts = signal.map_or(0, |s| s.ts_ms);
+    let ended = match *slot {
+        None => screen_interrupted.then_some(sig_ts),
+        Some(prev) => (screen_interrupted
+            && (count > prev.prev_count || prev.ended_sig_ts_ms == Some(sig_ts)))
+        .then_some(sig_ts),
+    };
+    *slot = Some(InterruptTrack {
+        prev_count: count,
+        ended_sig_ts_ms: ended,
+    });
+    ended.is_some()
+}
+
+/// Update `track` for `pair` and return whether an active interrupt ends
+/// the current turn.
+pub(crate) fn note_role_interrupt(
+    track: &std::cell::RefCell<BTreeMap<(String, String), InterruptTrack>>,
+    pair: &(String, String),
+    runner: &str,
+    screen: &str,
+    signal: Option<&Signal>,
+    signal_work: Option<Work>,
+) -> bool {
+    let mut map = track.borrow_mut();
+    let mut slot = map.remove(pair);
+    let hit = note_interrupt(&mut slot, runner, screen, signal, signal_work);
+    if let Some(updated) = slot {
+        map.insert(pair.clone(), updated);
+    }
+    hit
+}
+
+/// Whether `runner`'s structured core status reliably reports `idle` /
+/// `done` / `waiting` — native OSC 7501 (`devin`, `agy`) or fork screen
+/// inference (`claude`, `codex`, `opencode`, `cursor`, `cmd`). `ScreenOnly`
+/// runners (`cline`, `fake`) and unknown runners return `false`.
+pub fn structured_idle_trustworthy(runner: &str) -> bool {
+    backlot_model::caps::get(runner).is_some_and(|c| {
+        matches!(
+            c.status_source,
+            backlot_model::caps::StatusSource::Native
+                | backlot_model::caps::StatusSource::ForkInference
+        )
+    })
+}
+
+/// Whether a working hook signal stamped at `signal_ts_ms` is older than
+/// [`SIGNAL_STALE_MS`] as of `now_ms`.
+pub fn is_stale(signal_ts_ms: Option<u64>, now_ms: u64) -> bool {
+    signal_ts_ms.is_none_or(|ts| now_ms.saturating_sub(ts) > SIGNAL_STALE_MS)
+}
+
+/// Inputs to [`combine`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkInputs<'a> {
+    pub runner: &'a str,
+    pub signal: Option<Work>,
+    pub signal_ts_ms: Option<u64>,
+    pub interrupted: bool,
+    pub structured: Option<Work>,
+    pub screen: Work,
+    pub now_ms: u64,
+}
+
+/// The work-map answer from the three sources, in order: hook signal
+/// (S9f), terminal structured state (S12d), and the stage's screen
+/// read. `Blocked` from any source wins. An interrupt marker on screen
+/// ends the turn (`Waiting`), and once a `Working` signal outlives
+/// [`SIGNAL_STALE_MS`] on a runner with trustworthy structured status, a
+/// `Waiting` core + `Waiting` screen overrides the stale signal.
+pub fn combine(inputs: &WorkInputs<'_>) -> Work {
+    if [inputs.signal, inputs.structured, Some(inputs.screen)].contains(&Some(Work::Blocked)) {
         return Work::Blocked;
     }
-    signal.or(structured).unwrap_or(screen)
+    if inputs.interrupted && matches!(inputs.signal, None | Some(Work::Working)) {
+        return Work::Waiting;
+    }
+    if inputs.signal == Some(Work::Working)
+        && is_stale(inputs.signal_ts_ms, inputs.now_ms)
+        && structured_idle_trustworthy(inputs.runner)
+        && inputs.structured == Some(Work::Waiting)
+        && inputs.screen == Work::Waiting
+    {
+        return Work::Waiting;
+    }
+    inputs.signal.or(inputs.structured).unwrap_or(inputs.screen)
 }
 
 /// `role` → StopFailure error for every recorded role whose last
