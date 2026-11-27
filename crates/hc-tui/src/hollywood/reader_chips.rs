@@ -6,7 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::reader_chrome::babylon_rail_style;
+use super::reader_frame::babylon_rail_style;
 use super::reader_meta::{ReaderKind, ReaderOAction};
 use super::view::CardView;
 use crate::chrome::palette::Palette;

@@ -6,14 +6,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::reader_chips::draw_action_strip;
 use super::reader_chrome::{
-    draw_bottom_border, draw_context_row, draw_frame_divider, draw_top_border, draw_vertical_rails,
-    put_styled_line,
+    ChromePass, LowerChrome, draw_lower_chrome, draw_top_chrome, put_styled_line,
 };
-use super::reader_compose::{
-    InlineTellState, ReaderComposeOpts, draw_compose_band, draw_composing_hints,
-};
+use super::reader_compose::{InlineTellState, ReaderComposeOpts};
+use super::reader_frame::draw_bottom_border;
 use super::reader_md::parse_design_sections;
 use super::reader_meta::{HeaderLayout, ReaderKind, ReaderMeta};
 use super::reader_wrap::{body_mode_for_title, natural_body_width, render_body_with_sections};
@@ -299,62 +296,36 @@ pub(crate) fn render_view_with_opts(
 
     let bg = crate::chrome::popup_frame::overlay_bg(palette);
     let edge = Style::default().fg(palette.accent).bg(bg);
-    draw_vertical_rails(buf, area, palette, plain);
-    let (prev_hit, next_hit) =
-        draw_top_border(buf, area, &header, edge, palette, plain, show_row2_actual);
+    let pass = ChromePass {
+        view,
+        header: &header,
+        edge,
+        palette,
+        plain,
+        show_row2: show_row2_actual,
+    };
+    let (prev_hit, next_hit) = draw_top_chrome(buf, area, bottom, &pass);
     hits.prev_hit = prev_hit;
     hits.next_hit = next_hit;
-
     if area.height < 4 {
-        draw_bottom_border(buf, area, bottom, None, edge, palette, plain);
         return hits;
     }
 
     let show_row2 = show_row2_actual;
-    if show_row2 {
-        draw_context_row(buf, area, area.y + 1, &header, palette, plain);
-        draw_frame_divider(buf, area, area.y + 2, edge, palette, plain, true);
-    }
-
-    let action_y = bottom - 1;
-    draw_frame_divider(buf, area, div_y, edge, palette, plain, false);
-    if view.tell.is_composing() {
-        draw_composing_hints(
-            buf,
-            area,
-            action_y,
-            compose.is_none_or(|c| c.studio),
-            palette,
-            plain,
-        );
-    } else {
-        draw_action_strip(
-            buf,
-            Rect::new(area.x, action_y, area.width, 1),
-            view,
-            meta_for_header.nav_total.unwrap_or(0),
+    let body_end = draw_lower_chrome(
+        buf,
+        area,
+        &pass,
+        LowerChrome {
+            div_y,
+            bottom,
+            has_compose,
+            nav_total: meta_for_header.nav_total.unwrap_or(0),
             pending,
-            (palette, plain),
-            &mut hits.chips,
-        );
-    }
-
-    let body_end = if has_compose && div_y >= area.y + 3 {
-        let compose_div_y = div_y - 2;
-        let (crect, cursor) = draw_compose_band(
-            buf,
-            area,
-            compose_div_y,
-            &view.tell,
             compose,
-            (edge, palette, plain),
-        );
-        hits.compose_rect = crect;
-        hits.cursor = cursor;
-        compose_div_y
-    } else {
-        div_y
-    };
+        },
+        &mut hits,
+    );
 
     let raw_body_y = area.y + if show_row2 { 3 } else { 1 };
     let raw_body_h = body_end.saturating_sub(raw_body_y);

@@ -33,6 +33,7 @@ mod reader_chips;
 mod reader_chrome;
 mod reader_compose;
 mod reader_design;
+mod reader_frame;
 mod reader_md;
 mod reader_meta;
 mod reader_wrap;

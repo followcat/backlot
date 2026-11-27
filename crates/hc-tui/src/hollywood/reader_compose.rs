@@ -6,7 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::reader_chrome::{DividerKind, babylon_rail_style, draw_divider};
+use super::reader_frame::{DividerKind, babylon_rail_style, draw_divider};
 use super::reader_meta::{ReaderMeta, ReaderOrigin, is_fixed_seat};
 use crate::chrome::help::CursorState;
 use crate::chrome::palette::Palette;
