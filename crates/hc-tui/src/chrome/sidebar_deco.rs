@@ -79,7 +79,7 @@ pub(super) fn render_machines_header(
         workspace_area.y,
         1,
         " ",
-        Style::default().bg(bg),
+        Style::default().fg(palette.overlay0).bg(bg),
     );
     if workspace_area.width >= 2 {
         put_text(

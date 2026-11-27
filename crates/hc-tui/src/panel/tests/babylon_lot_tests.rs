@@ -51,9 +51,14 @@ fn draw(
 }
 
 fn line_at(buf: &Buffer, area: Rect, y: u16) -> String {
-    (area.x..area.x + area.width)
-        .map(|x| buf[(x, y)].symbol())
-        .collect()
+    let mut out = String::new();
+    let mut x = area.x;
+    while x < area.x + area.width {
+        let sym = buf[(x, y)].symbol();
+        out.push_str(sym);
+        x = x.saturating_add(sym.width().max(1) as u16);
+    }
+    out
 }
 
 fn screen_lines(buf: &Buffer, area: Rect) -> Vec<String> {
@@ -277,7 +282,7 @@ fn cjk_studio_name_and_plain_chrome_bypass_stay_safe() {
     let doc: Summary = serde_json::from_value(val).unwrap();
     let list = machines(Some(&doc));
 
-    let area = Rect::new(0, 0, 30, 16);
+    let area = Rect::new(0, 0, 30, 22);
     let mut sel = panel(PanelMode::Expanded);
     sel.focused = true;
     sel.selected = Some(Target::Studio("中文工作室名长标题".into()));
