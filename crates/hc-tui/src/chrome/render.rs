@@ -156,6 +156,8 @@ pub(crate) struct ShellHitMap {
     pub context_menu_rows: Vec<(Rect, usize)>,
     /// The studio cast's `others` toggle row (empty in herdr mode).
     pub cast_others: Rect,
+    /// The studio cast's collapsed closed-roles row (`── · N closed · … ▸`).
+    pub cast_closed: Option<(Rect, crate::studio::StudioKey)>,
     /// The lot pill's segment at the bar's right end — clicking it
     /// toggles the Hollywood bar.
     pub lot_pill: Rect,

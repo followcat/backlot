@@ -548,14 +548,18 @@ merged into `integration`, and feeds confirmed defects back onto the audited bui
 
 ### What the panel and the cast show
 
-The sidebar's cast lists the current studio's people, live first, a first row each: mark,
-name and task, the runner at the right edge. The rest wraps over as many rows as it needs
-(up to four per person) — the full state text and, on a row of its own, the full model with
-its effort. An open attention wraps its whole state text (`needs you · …`, `asks you · …`)
-and takes the model's row away; a failed turn says `last turn failed` the same way. When the
-studio's people do not all fit, only the focused person keeps the full height and the others
-fall back to two rows. The focused person's rows are highlighted with a `▌` marker. A
-trailing `others` row expands to the agents that belong to no studio.
+The sidebar's cast lists the current studio's open people first: mark, name and task on row 1
+(with an indented `runner · model · effort` line underneath when height allows). An open
+attention wraps its whole state text (`needs you · …`, `asks you · …`) and takes the model's row
+away; a failed turn says `last turn failed` the same way. Closed roles collapse onto one
+interactive summary line (`── · <n> closed · <names> ▸`, keeping `<n> closed` and `▸` whole and
+truncating names with `…` on narrower sidebars): clicking it, or pressing `Enter` or `o` while
+Cast focus sits on it, opens the studio's reopen picker (`reopen a closed role`) ordered
+numerically by task (`t1, t2, …`), where `Enter` or a click reopens the selected seat (`Esc`
+closes; offline machines stay dimmed). Plain mode (`--plain`) and `[theme] source = "herdr"`
+keep their existing sidebar appearance without stale-terminal attaches on closed roles. The
+focused person's rows are highlighted with a `▌` marker. A trailing `others` row expands to the
+agents that belong to no studio.
 
 Expanded, the dock draws one bordered block per studio — the id in the frame, a header row
 with the health glyph (`●` live, `◌` stage stopped, `×` offline or ledger error, `✓`

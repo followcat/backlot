@@ -37,6 +37,7 @@ pub(crate) use remote::RemoteRunner;
 pub(crate) use row_lines::{info_line, owed_text};
 pub(crate) use rows::{Row, Section, StoppedLedger, Target, rows};
 pub(crate) use rows_fit::{health_of, mark_counts};
+pub(crate) use rows_fold::closed_fold_summary;
 pub(crate) use update::{UpdateHint, newest};
 
 /// How the panel sits on screen. The default is `Expanded`: the
