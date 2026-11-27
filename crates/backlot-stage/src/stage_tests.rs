@@ -170,7 +170,7 @@ fn stage_stop_finds_only_a_live_named_terminal() {
     let mut dead = term("finished", Some(0));
     dead.name = Some(STAGE_NAME.into());
     let mut federated = term("live", None);
-    federated.address = "pc-t14/t9".into();
+    federated.address = "host-a/t9".into();
     for list in [
         vec![],
         vec![other.clone()],
