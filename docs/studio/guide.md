@@ -821,7 +821,7 @@ backlot recast --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effor
 ```
 
 The new identity takes the runner, model, effort, permission profile and, at launch, the runner
-version. `--permission-profile standard|worktree` overrides the profile the role plays now; without
+version. `--permission-profile standard|worktree|readonly` overrides the profile the role plays now; without
 it the current one is kept. The command is the user's: a role terminal is refused, exactly like
 `card apply`. It runs the same identity and seat rules `studio new --dry-run` does — a supported,
 installed runner, the cast file's effort and cline-model rules, and, for a fixed role, the
