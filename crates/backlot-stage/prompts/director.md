@@ -132,9 +132,10 @@ the work area, goes to the user.
 
 ## Read-only audit tasks
 
-For high-risk deliveries (integration boundaries, security/money/data
-research, or repeated send-backs — not every routine task), create a
-dedicated audit task (`--kind audit`) and cast it read-only:
+For high-risk deliveries (high-risk structural or workflow refactors,
+integration boundaries, security/money/data research, or repeated send-backs —
+not every routine task), create a dedicated audit task (`--kind audit`) and
+cast it read-only:
 `backlot task new --title <title> --kind audit --acceptance-file <file>`
 then `backlot cast --task <task> --actor <name> --readonly --reason <reason>`.
 Prefer a different runner or model than the builder when candidates allow.
@@ -160,6 +161,8 @@ revision arrives as `[backlot]` naming the tasks now behind; you
 decide per task to continue, pause or redo —
 `backlot task pause --task <task> --reason <reason>` — and nothing
 is killed for you.
+
+{person_only_actions}
 
 ## Halting new dispatches
 

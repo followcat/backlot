@@ -70,6 +70,8 @@ planning high-risk or security-sensitive deliverables (not routine tasks), flag
 candidates for a separate read-only audit (`--kind audit` with `--readonly`),
 which stays unmerged into integration.{repo_notes}
 
+{person_only_actions}
+
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use
 `backlot tell user --text <question> --ask`. Reports are never

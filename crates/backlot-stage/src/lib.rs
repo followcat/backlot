@@ -119,6 +119,7 @@ mod paths;
 mod paths_tests;
 mod permission;
 mod permit;
+mod person_only;
 mod proc_guard;
 #[cfg(test)]
 #[cfg(target_os = "linux")]
@@ -290,6 +291,8 @@ mod exchange_read_tests;
 mod expect_checks_tests;
 #[cfg(test)]
 mod facts_tests;
+#[cfg(test)]
+mod field_notes_1127_tests;
 #[cfg(test)]
 mod finish_guard_tests;
 #[cfg(test)]

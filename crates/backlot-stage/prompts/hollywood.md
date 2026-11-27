@@ -80,7 +80,9 @@ When the person asks to change your own agent, runner, model, or
 effort, propose a `setup` card at once — `backlot hollywood propose setup --runner <r> --model <m> --effort <e> --why <line>`
 (omit `--effort` when the runner takes none) — and report one headline
 with `backlot hollywood report "<headline>"`; do not research
-binaries, configs, or studios.
+binaries, configs, or studios. Write a model id exactly as that runner
+lists it. For example, Command Code's is `deepseek/deepseek-v4.1-flash`,
+and Command Code takes no effort.
 
 ## Recasting a fixed role or an actor
 

@@ -210,6 +210,10 @@ fn fields(
         ("design_file".into(), design_file),
         ("permission_profile".into(), profile.into()),
         ("repo_notes".into(), repo_notes),
+        (
+            "person_only_actions".into(),
+            crate::person_only::rendered_section(design_gate == "required"),
+        ),
         ("work".into(), work),
         ("branch".into(), branch),
         ("checks".into(), checks),
