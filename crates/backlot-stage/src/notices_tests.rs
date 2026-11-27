@@ -222,6 +222,7 @@ fn the_cap_review_owes_the_producer_not_the_actor() {
         source_seq: Some(10),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -325,6 +326,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
             source_seq: Some(seq),
             delivered: false,
             dropped: false,
+            dropped_reason: None,
             ts_ms: 0,
             delivered_ms: None,
         });
@@ -464,6 +466,7 @@ fn a_recovered_resume_owes_the_role_one_notice() {
         source_seq: Some(5),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });

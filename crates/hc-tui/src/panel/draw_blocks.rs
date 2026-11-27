@@ -479,12 +479,16 @@ pub(super) fn draw_talk(
         if selected {
             style = style.add_modifier(Modifier::BOLD);
         }
+        let display = match line.dropped_reason.as_deref() {
+            Some(reason) => format!("{} (dropped: {reason})", line.text),
+            None => line.text.clone(),
+        };
         put_text(
             buf,
             rect.x + 4,
             rect.y,
             width,
-            &truncate_end(&line.text, width as usize),
+            &truncate_end(&display, width as usize),
             style,
         );
     }

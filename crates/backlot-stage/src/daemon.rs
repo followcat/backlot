@@ -338,6 +338,8 @@ pub(crate) struct Stage {
     /// so dead `bl-hollywood` tombstones from this or an earlier launch
     /// get swept via `terminal.rm` even with no finished studio.
     pub(crate) sweep_hollywood_ticks: std::cell::Cell<u8>,
+    /// Last logged suppressed-probe count per studio (`suppressed-probes` file).
+    pub(crate) suppressed_logged: std::cell::RefCell<BTreeMap<String, u64>>,
     /// Rate/connection/error watch state for active Hollywood.
     pub(crate) hrate_pace: std::cell::RefCell<Option<crate::ratelimit::RatePace>>,
     pub(crate) hconn_pace: std::cell::RefCell<Option<crate::connerr::ConnPace>>,
@@ -368,6 +370,27 @@ impl Stage {
         if self.logged.insert(format!("{studio}: {msg}")) {
             crate::stagelog::stage_log!("{studio}: {msg}");
         }
+    }
+
+    pub(crate) fn flush_suppressed_in(
+        logged: &mut BTreeMap<String, u64>,
+        name: &str,
+        dir: &Path,
+    ) -> Option<String> {
+        let total = crate::guard_probes::read_suppressed_count(dir);
+        let prev = logged.get(name).copied().unwrap_or(0);
+        if total <= prev {
+            return None;
+        }
+        logged.insert(name.to_string(), total);
+        let delta = total - prev;
+        let msg = format!("{name}: suppressed {delta} read-only probe refusal(s) (total {total})");
+        crate::stagelog::stage_log!("{msg}");
+        Some(msg)
+    }
+
+    fn flush_suppressed_probes(&self, name: &str, dir: &Path) {
+        Self::flush_suppressed_in(&mut self.suppressed_logged.borrow_mut(), name, dir);
     }
 
     /// Re-read the user config's `[stage]` section for this tick —
@@ -438,6 +461,7 @@ impl Stage {
         self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
         self.design_watch.borrow_mut().retain(|s, _| keep(s));
         self.design_tainted.borrow_mut().retain(|s, _| keep(s));
+        self.suppressed_logged.borrow_mut().retain(|s, _| keep(s));
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if !present.contains(&entry.studio) {
@@ -490,6 +514,7 @@ impl Stage {
         self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
         self.design_watch.borrow_mut().retain(|s, _| s != name);
         self.design_tainted.borrow_mut().retain(|s, _| s != name);
+        self.suppressed_logged.borrow_mut().retain(|s, _| s != name);
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if entry.studio == name {
@@ -621,6 +646,7 @@ impl Stage {
         if !live_ledger() {
             return Ok(());
         }
+        self.flush_suppressed_probes(name, &dir);
         let state = &self.cached[name];
         if !state.unknown_kinds.is_empty() {
             return Ok(());
@@ -1061,6 +1087,7 @@ impl Stage {
             design_tainted: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             sweep_hollywood_ticks: std::cell::Cell::new(3),
+            suppressed_logged: std::cell::RefCell::new(BTreeMap::new()),
             hrate_pace: std::cell::RefCell::new(None),
             hconn_pace: std::cell::RefCell::new(None),
             herror: std::cell::RefCell::new(None),
@@ -1210,6 +1237,7 @@ async fn run_impl(
         design_tainted: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         sweep_hollywood_ticks: std::cell::Cell::new(3),
+        suppressed_logged: std::cell::RefCell::new(BTreeMap::new()),
         hrate_pace: std::cell::RefCell::new(None),
         hconn_pace: std::cell::RefCell::new(None),
         herror: std::cell::RefCell::new(None),

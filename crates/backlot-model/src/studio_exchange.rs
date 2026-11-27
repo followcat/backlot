@@ -41,6 +41,9 @@ pub struct StudioExchange {
     /// Studio-relative path (`messages/…` or `reports/…`) opened on Enter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    /// Reason recorded by `message.dropped`, omitted for live/delivered turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dropped_reason: Option<String>,
 }
 
 enum RawTurn<'a> {
@@ -61,8 +64,7 @@ impl RawTurn<'_> {
 /// timeline: excludes dropped notices, stage-relayed notices
 /// (`source_seq.is_some()`), and workflow envelopes (`purpose.is_some()`).
 fn is_user_facing_message(m: &Message) -> bool {
-    !m.dropped
-        && m.source_seq.is_none()
+    m.source_seq.is_none()
         && (m.purpose.is_none() || m.purpose.as_deref() == Some("ask"))
         && (m.from == "user" || m.to == "user" || m.from == "hollywood")
 }
@@ -137,6 +139,10 @@ pub fn studio_exchange(
                     ts_ms: (m.ts_ms > 0).then_some(m.ts_ms),
                     text,
                     file: m.file.as_deref().and_then(clean_relpath),
+                    dropped_reason: m
+                        .dropped_reason
+                        .clone()
+                        .or_else(|| m.dropped.then(|| "dropped".into())),
                 }
             }
             RawTurn::Report(r) => {
@@ -160,6 +166,7 @@ pub fn studio_exchange(
                     ts_ms: (r.ts_ms > 0).then_some(r.ts_ms),
                     text,
                     file: clean_relpath(&r.file),
+                    dropped_reason: None,
                 }
             }
         })

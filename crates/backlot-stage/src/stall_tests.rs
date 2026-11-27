@@ -199,6 +199,7 @@ fn stalled_notice_routes_per_role() {
         source_seq: Some(20),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });

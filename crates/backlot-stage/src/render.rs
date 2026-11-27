@@ -475,6 +475,15 @@ pub fn status(
             let _ = write!(out, ", {dropped} dropped");
         }
         let _ = writeln!(out);
+        for m in state.messages.iter().filter(|m| m.dropped) {
+            let reason = m.dropped_reason.as_deref().unwrap_or("dropped");
+            let file = m.file.as_deref().unwrap_or("-");
+            let _ = writeln!(
+                out,
+                "    #{} {} → {} (dropped: {reason}) {file}",
+                m.seq, m.from, m.to
+            );
+        }
     }
     if !state.reports.is_empty() {
         let _ = writeln!(out, "  reports:");

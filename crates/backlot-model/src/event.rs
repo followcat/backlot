@@ -180,6 +180,11 @@ pub const RECOVERED: &str = "recovered";
 /// start that follows: one deliberate stop, never counted as a loss.
 pub const RESTARTED: &str = "restarted";
 
+/// `message.dropped` reason when queued mail targets an actor whose
+/// session has closed for good (finished, abandoned, closed, or
+/// replaced) with no resume and no live terminal for that actor id.
+pub const ACTOR_CLOSED: &str = "actor_closed";
+
 /// The `dialog` a `stage.answered` names today: Claude Code's
 /// first-use folder-trust dialog.
 pub const FOLDER_TRUST: &str = "folder-trust";

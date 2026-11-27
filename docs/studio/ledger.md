@@ -171,12 +171,17 @@ that is harmless.
 
 At send time every queued message carrying a `source_seq` is checked against the event it relays
 (S9d): when the source no longer stands the stage records `message.dropped` with a short reason
-and sends nothing — the table of what counts as stale is in `design.md`. A dropped message is
+and sends nothing — the table of what counts as stale is in `design.md`. Queued mail addressed to
+a specific task actor (`actor-<task>-c<n>`) whose session has closed for good (finished, closed,
+or exited with no resume and no live terminal for that actor id) likewise drops with reason
+`actor_closed`; mail to fixed roles (`producer`, `director`, `writer`) and to paused, recovering,
+reopened, restarting, or still-live actors is kept. A dropped message is
 never pending again — not for the outbox, not for the idle rule that gates nudges — but it still
 counts as handled in the dedup set, so the same notice is never re-queued; a dropped message is
-never marked `message.delivered`. Only `stage` may record the event, and only on a queued message
-still undelivered — a send already in flight is exempt, since it cannot be un-sent. Messages
-without a `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never
+never marked `message.delivered`, and remains visible with its reason in `status` and `exchange`.
+Only `stage` may record the event, and only on a queued message
+still undelivered — a send already in flight is exempt, since it cannot be un-sent. Fixed-role
+messages without a `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never
 dropped.
 
 When a role is owed two or more items at send time they go out as one digest: the stage writes
@@ -247,7 +252,14 @@ without removing the exchange turn. Only the user may record it, and only while 
 
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
 200 chars, `cwd`, and optional `decision` / `argv` when cardable or guarded) refused by `backlot guard`,
-hooks, or the per-role `pre-push` hook. The refusal also raises one `outward action` attention
+hooks, or the per-role `pre-push` hook. Harmless read-only `git`/`gh` probes (`git --version`,
+`git --help`, layout-only `git rev-parse`, studio-wide read-only `git`, `gh pr`/`repo`/`issue`/`release`/`gist`
+reads, `gh --help`) are allowed directly; read-only `git` probe refusals from config-override
+rules (`alias.*`, `core.fsmonitor`, `core.hooksPath`, `submodule.recurse`) or `git path outside work area` on a
+non-work `cwd` with no explicit outside-reach options are still refused by the guard but suppress
+`role.refused` and `outward action`, incrementing `<studio>/suppressed-probes` (summarized as a
+counter in `stage.log`). (`git hooksPath tampered` and `unknown git global option` are never suppressed
+and still record `role.refused`.) For recorded refusals, the event also raises one `outward action` attention
 (`needs_user: false`) once per open attention episode for that role and command. The refusal is
 informational: it stays on the studio's attention list and the role's record, but it is `info`, so it
 never counts toward the person's needs-you list, the lot pill or notifications. The role sees the

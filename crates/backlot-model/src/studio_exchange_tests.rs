@@ -29,6 +29,7 @@ fn msg(
         source_seq,
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: seq * 100,
         delivered_ms: None,
     }
@@ -112,13 +113,14 @@ fn studio_exchange_filters_internal_mail_and_orders_by_seq() {
     ));
     let mut dropped = msg(
         11,
-        "user",
-        "producer",
-        Some("messages/11-dropped.txt"),
+        "stage",
+        "actor-t1-c1",
+        Some("messages/11-dropped.md"),
         None,
-        None,
+        Some(5),
     );
     dropped.dropped = true;
+    dropped.dropped_reason = Some("actor_closed".into());
     state.messages.push(dropped);
 
     // Included: plain hollywood -> producer (#12), producer -> user tell (#13),
@@ -820,7 +822,44 @@ fn studio_exchange_populates_to_kind_task_and_ts_ms() {
     // Wire serialization omits None fields.
     let v = serde_json::to_value(&ex[1]).unwrap();
     assert!(v.get("ts_ms").is_none());
+    assert!(v.get("dropped_reason").is_none());
     assert_eq!(v["to"], "actor-t1-c1");
     assert_eq!(v["kind"], "tell");
     assert_eq!(v["task"], "t1");
+}
+
+#[test]
+fn studio_exchange_keeps_dropped_user_tell_with_reason() {
+    let mut state = base_state();
+    let mut dropped_tell = msg(
+        20,
+        "user",
+        "actor-t1-c1",
+        Some("messages/20-tell.md"),
+        None,
+        None,
+    );
+    dropped_tell.dropped = true;
+    dropped_tell.dropped_reason = Some("actor_closed".into());
+    state.messages.push(dropped_tell);
+
+    let mut dropped_notice = msg(
+        21,
+        "stage",
+        "actor-t1-c1",
+        Some("messages/5-delivered.md"),
+        None,
+        Some(5),
+    );
+    dropped_notice.dropped = true;
+    dropped_notice.dropped_reason = Some("no longer wanted".into());
+    state.messages.push(dropped_notice);
+
+    let mut snippets = BTreeMap::new();
+    snippets.insert(20, "check edge cases".into());
+    let ex = studio_exchange(&state, &snippets);
+    assert_eq!(ex.len(), 1);
+    assert_eq!(ex[0].seq, 20);
+    assert_eq!(ex[0].text, "check edge cases");
+    assert_eq!(ex[0].dropped_reason.as_deref(), Some("actor_closed"));
 }

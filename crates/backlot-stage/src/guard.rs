@@ -83,7 +83,7 @@ pub(crate) fn studio_role_from_env(env: &Env) -> Option<(PathBuf, String)> {
     sdir.join("events.jsonl").is_file().then_some((sdir, role))
 }
 
-fn fast_work_area(sdir: &Path, role: &str) -> Option<PathBuf> {
+pub(crate) fn fast_work_area(sdir: &Path, role: &str) -> Option<PathBuf> {
     if role == "director" {
         return Some(sdir.join("work").join("integration"));
     }
@@ -160,6 +160,11 @@ pub(crate) fn record_verdict(
     };
     if !sdir.join("events.jsonl").is_file() {
         return Ok(());
+    }
+    if disposition == RefusalDisposition::Refused
+        && crate::guard_probes::is_suppressed_probe_refusal(env, argv, rule)
+    {
+        return crate::guard_probes::record_suppressed_probe(&sdir).map(|_| ());
     }
 
     let task = env.get("BACKLOT_TASK").map(String::from);
@@ -319,6 +324,7 @@ pub(crate) fn run_in_with_stdin(
         }
     }
 
+    let no_opt_locks = crate::guard_probes::should_disable_optional_locks(name, rest, cwd, env);
     let shim_dir = role_dir.map(|r| r.join("bin"));
     let Some(real) = find_real_binary(name, env.get("PATH"), shim_dir.as_deref()) else {
         return (
@@ -332,7 +338,12 @@ pub(crate) fn run_in_with_stdin(
         {
             use std::os::unix::process::CommandExt;
             for attempt in 0..5 {
-                let err = Command::new(&real).args(rest).exec();
+                let mut cmd = Command::new(&real);
+                cmd.args(rest);
+                if no_opt_locks {
+                    cmd.env("GIT_OPTIONAL_LOCKS", "0");
+                }
+                let err = cmd.exec();
                 if err.raw_os_error() == Some(libc::ETXTBSY) && attempt < 4 {
                     std::thread::sleep(std::time::Duration::from_millis(10));
                     continue;
@@ -347,6 +358,9 @@ pub(crate) fn run_in_with_stdin(
         cmd.args(rest).current_dir(cwd);
         if !env.vars.is_empty() {
             cmd.env_clear().envs(&env.vars);
+        }
+        if no_opt_locks {
+            cmd.env("GIT_OPTIONAL_LOCKS", "0");
         }
         match cmd.status() {
             Ok(st) => {
