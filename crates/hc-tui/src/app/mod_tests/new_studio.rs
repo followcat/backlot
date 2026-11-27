@@ -1779,6 +1779,38 @@ async fn a_failed_create_keeps_the_wizard_and_its_draft() {
 #[tokio::test]
 async fn a_dry_run_keeps_the_wizard_and_creates_nothing() {
     let (mut app, recorded) = dialog_app().await;
+    // The injected runner validates the generated cast through the same
+    // parser the CLI uses, so this seam accepts only a valid stdin cast.
+    let answers: Vec<(String, Result<String, String>)> = base_answers()
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    let sink = recorded.clone();
+    app.set_ns_run(std::sync::Arc::new(move |machine, argv, stdin| {
+        sink.lock()
+            .unwrap()
+            .push((machine, argv.clone(), stdin.clone()));
+        let joined = argv.join(" ");
+        let out = if joined.contains("--dry-run") {
+            let cast = stdin.expect("the dry run carries its cast on stdin");
+            let file = std::env::temp_dir().join(format!(
+                "ns-valid-cast-{}-{}",
+                std::process::id(),
+                cast.len()
+            ));
+            std::fs::write(&file, cast).unwrap();
+            let valid = backlot_stage::validate_cast_file(&file).map_err(|e| e.to_string());
+            let _ = std::fs::remove_file(&file);
+            valid.map(|_| "dry run ok\n".into())
+        } else {
+            answers
+                .iter()
+                .find(|(k, _)| joined.starts_with(k.as_str()))
+                .map(|(_, v)| v.clone())
+                .unwrap_or_else(|| Err(format!("unstubbed call: {joined}")))
+        };
+        Box::pin(async move { out })
+    }));
     to_step4(&mut app).await;
     let d = app.new_studio.as_ref().expect("the wizard is open");
     assert_eq!(d.step, Step::CheckStart);

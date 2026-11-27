@@ -223,6 +223,7 @@ impl App {
         if !matches!(next, WorkspaceRegion::CallSheet(_)) && self.hollywood.expanded() {
             self.hollywood.mode = LayerMode::Collapsed;
             self.hollywood.editing = false;
+            self.hollywood.clear_reply();
             self.hollywood.history.reset_nav();
             self.hollywood.confirm = None;
         }

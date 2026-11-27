@@ -35,6 +35,30 @@ fn card_line(b: &mut Buffer, body: Rect, y: u16, p: &Palette, label: &str, value
     );
 }
 
+/// The failure lines to draw in `budget` rows. When the full error
+/// does not fit, keep its first line and its last non-empty line — the
+/// command context and the reason — with as much of the middle as the
+/// rows between them allow.
+fn error_lines(error: &str, budget: usize) -> Vec<&str> {
+    let lines: Vec<&str> = error.lines().collect();
+    if lines.len() <= budget {
+        return lines;
+    }
+    let Some(last) = lines.iter().rposition(|line| !line.trim().is_empty()) else {
+        return Vec::new();
+    };
+    if budget == 0 {
+        return Vec::new();
+    }
+    if budget == 1 || last == 0 {
+        return vec![lines[last]];
+    }
+    let mut out = vec![lines[0]];
+    out.extend(lines[1..last].iter().take(budget - 2).copied());
+    out.push(lines[last]);
+    out
+}
+
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
     let overlay_bg = crate::chrome::popup_frame::overlay_bg(p);
     let raised = p.elevation().raised_on_overlay;
@@ -90,12 +114,11 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     }
     y += 1;
 
-    // A failed dry run's own words — verbatim, as many lines as fit.
+    // A failed dry run's own words — as many as fit, with the final
+    // reason kept when the middle must be cut.
     if let Probe::Failed(error) = &d.dry {
-        for line in error.lines().take(4) {
-            if y >= body.bottom().saturating_sub(6) {
-                break;
-            }
+        let budget = body.bottom().saturating_sub(6).saturating_sub(y) as usize;
+        for line in error_lines(error, budget) {
             put_text(
                 b,
                 body.x + 1,

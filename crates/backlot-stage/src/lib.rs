@@ -158,6 +158,7 @@ mod stage_accounts;
 mod stagelog;
 mod stale;
 mod stall;
+mod stdin_stage;
 pub mod store;
 mod studio_cast;
 mod studio_check;
@@ -434,6 +435,8 @@ mod stagelog_tests;
 mod stale_tests;
 #[cfg(test)]
 mod stall_tests;
+#[cfg(test)]
+mod stdin_cast_tests;
 #[cfg(test)]
 mod store_tests;
 #[cfg(test)]

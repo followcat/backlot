@@ -178,6 +178,7 @@ impl App {
         // stopped stage announces once, keyed by its ledger seq.
         self.synthesize_studio_events(self.now());
         self.share_seen();
+        self.sync_hollywood_reply_target();
         self.reap_exited();
     }
 
