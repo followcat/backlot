@@ -24,6 +24,8 @@ pub(crate) mod help_picker;
 pub(crate) mod history;
 pub(crate) mod intertitle;
 pub(crate) mod lot;
+#[cfg(test)]
+mod lot_deco_tests;
 pub(crate) mod menu;
 pub mod mobile;
 pub mod mobile_items;
@@ -48,6 +50,7 @@ pub mod scroll;
 pub(crate) mod selection_highlight;
 pub(crate) mod settings;
 pub(crate) mod settings_render;
+mod sidebar_deco;
 pub(crate) mod sidebar_nav;
 pub mod sidebar_render;
 pub mod snapshot;

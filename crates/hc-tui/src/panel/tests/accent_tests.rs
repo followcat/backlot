@@ -54,11 +54,12 @@ fn block_bounds(buf: &Buffer, area: Rect, target_id: &str) -> (u16, u16) {
             let row: String = (area.x..area.x + area.width)
                 .map(|x| buf[(x, y)].symbol())
                 .collect();
-            (row.contains('╭') || row.contains('▌')) && row.contains(target_id)
+            (row.contains('╭') || row.contains('╔') || row.contains('┏') || row.contains('▌'))
+                && row.contains(target_id)
         })
         .unwrap_or_else(|| panic!("missing block top for {target_id}"));
     let bot_y = (top_y + 1..area.y + area.height)
-        .find(|&y| buf[(bx, y)].symbol() == "╰")
+        .find(|&y| matches!(buf[(bx, y)].symbol(), "╰" | "╚" | "┗"))
         .unwrap_or_else(|| panic!("missing block bottom for {target_id}"));
     (top_y, bot_y)
 }
@@ -74,11 +75,13 @@ fn assert_border_fg(
     let bx = area.x + 1;
     let rx = area.x + area.width - 1;
     for y in (top_y + 1)..bot_y {
-        // A role-group or input divider joins the border with `├ … ┤`.
         let lsym = buf[(bx, y)].symbol();
         let rsym = buf[(rx, y)].symbol();
         assert!(
-            matches!((lsym, rsym), ("│", "│") | ("├", "┤")),
+            matches!(
+                (lsym, rsym),
+                ("│", "│") | ("├", "┤") | ("║", "║") | ("╟", "╢") | ("┃", "┃") | ("┣", "┫")
+            ),
             "{label} side y={y}: {lsym:?} / {rsym:?}"
         );
         assert_eq!(buf[(bx, y)].fg, expected_fg, "{label} left fg y={y}");
@@ -86,11 +89,11 @@ fn assert_border_fg(
     }
     for x in bx..area.x + area.width {
         assert_eq!(buf[(x, bot_y)].fg, expected_fg, "{label} bottom x={x}");
-        if buf[(x, top_y)].symbol() == "─" {
+        if matches!(buf[(x, top_y)].symbol(), "─" | "═" | "━") {
             assert_eq!(buf[(x, top_y)].fg, expected_fg, "{label} top dash x={x}");
         }
     }
-    if buf[(bx, top_y)].symbol() == "╭" {
+    if matches!(buf[(bx, top_y)].symbol(), "╭" | "╔" | "┏") {
         assert_eq!(buf[(bx, top_y)].fg, expected_fg, "{label} top-left");
     }
     assert_eq!(
@@ -142,15 +145,8 @@ fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
     let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
     let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
 
-    assert_border_fg(
-        &buf,
-        area,
-        acme_top,
-        acme_bot,
-        elev.border_muted,
-        "acme-shop",
-    );
-    assert_border_fg(&buf, area, blog_top, blog_bot, elev.border_muted, "blog");
+    assert_border_fg(&buf, area, acme_top, acme_bot, elev.gilt, "acme-shop");
+    assert_border_fg(&buf, area, blog_top, blog_bot, elev.gilt, "blog");
 
     let top_row: String = (area.x..area.x + area.width)
         .map(|x| buf[(x, acme_top)].symbol())
@@ -233,7 +229,7 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         // `acme-shop` holds the focused terminal `▸` (` ▸ acme-shop `) capsule:
         // `elev.raised_row` + bold `palette.text` on RGB themes, `BOLD | REVERSED` on 16-color;
         // border stays `border_muted`.
-        assert_border_fg(&buf, area, acme_top, acme_bot, elev.border_muted, theme);
+        assert_border_fg(&buf, area, acme_top, acme_bot, elev.gilt, theme);
         for x in 2..=14 {
             let cell = &buf[(x, acme_top)];
             assert_eq!(cell.fg, palette.text, "{theme} capsule fg x={x}");
@@ -252,7 +248,7 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         // `blog` is selected: border is `accent`, chip ` blog ` has `bg == accent` and `contrast_fg`, bold.
         assert_border_fg(&buf, area, blog_top, blog_bot, palette.accent, theme);
         let expected_fg = glyphs::contrast_fg(&palette);
-        for x in 2..=7 {
+        for x in 3..=8 {
             let cell = &buf[(x, blog_top)];
             assert_eq!(cell.bg, palette.accent, "{theme} blog chip bg x={x}");
             assert_eq!(cell.fg, expected_fg, "{theme} blog chip fg x={x}");
@@ -279,14 +275,7 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         palette.accent,
         "fallback first",
     );
-    assert_border_fg(
-        &buf,
-        area,
-        blog_top,
-        blog_bot,
-        elev.border_muted,
-        "fallback second",
-    );
+    assert_border_fg(&buf, area, blog_top, blog_bot, elev.gilt, "fallback second");
 }
 
 #[test]
@@ -366,7 +355,10 @@ fn narrow_dock_fits_title_chip_padding_and_truncates_label_before_dropping_tail(
             .collect();
         // Tail (`!1`) and `╮` keep their place, label truncates with `…`, chip has 1-cell padding each side.
         assert!(row.contains("…"), "w{width} label truncated: {row:?}");
-        assert!(row.contains("!1╮"), "w{width} tail preserved: {row:?}");
+        assert!(
+            row.contains("!1═╗") || row.contains("!1╗") || row.contains("!1╮"),
+            "w{width} tail preserved: {row:?}"
+        );
         let chip_cells: Vec<u16> = (0..area.width)
             .filter(|&x| buf[(x, top_y)].bg == palette.accent)
             .collect();
@@ -389,7 +381,7 @@ fn narrow_dock_fits_title_chip_padding_and_truncates_label_before_dropping_tail(
         .collect();
     assert!(row.contains("…"), "progress tail label truncated: {row:?}");
     assert!(
-        row.contains("● r1·1/2╮"),
+        row.contains("● r1·1/2═╗") || row.contains("● r1·1/2╮"),
         "progress tail preserved: {row:?}"
     );
 }
@@ -409,14 +401,7 @@ fn screenshot_36x30_renders_selected_chip_and_accent_border_when_focused() {
     let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
     let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
     assert_border_fg(&buf, area, acme_top, acme_bot, palette.accent, "shot acme");
-    assert_border_fg(
-        &buf,
-        area,
-        blog_top,
-        blog_bot,
-        elev.border_muted,
-        "shot blog",
-    );
+    assert_border_fg(&buf, area, blog_top, blog_bot, elev.gilt, "shot blog");
 
     if let Some(out_path) = std::env::var_os("LOT_ACCENT_SHOT_OUT") {
         let lines: Vec<String> = (area.y..area.y + area.height)

@@ -4,6 +4,9 @@
 //! where `blocking > 0` paints red and non-blocking pills sit on
 //! `elevation.raised_row`.
 
+#[path = "lot_pill_deco.rs"]
+pub(super) mod deco;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -96,6 +99,7 @@ pub(crate) fn pill_tier(cols: u16, mobile_threshold: u16) -> PillTier {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Seg {
+    Clasp,
     Spark,
     Body,
     Blocking,
@@ -114,7 +118,9 @@ impl Seg {
             Seg::Asks => PillAction::Asks,
             Seg::Cards => PillAction::Cards,
             Seg::Ready => PillAction::Ready,
-            Seg::Spark | Seg::Body | Seg::Unread | Seg::Live | Seg::Hint => PillAction::Default,
+            Seg::Clasp | Seg::Spark | Seg::Body | Seg::Unread | Seg::Live | Seg::Hint => {
+                PillAction::Default
+            }
         }
     }
 }
@@ -405,14 +411,7 @@ fn segments(
 }
 
 fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
-    let switch_urgent = matches!(
-        counts.switch_state,
-        Some(
-            crate::hollywood::PillSwitchState::NeedsApproval
-                | crate::hollywood::PillSwitchState::QuotaOut { .. }
-                | crate::hollywood::PillSwitchState::AuthError { .. }
-        )
-    );
+    let switch_urgent = deco::is_switch_urgent(counts);
     if counts.blocking > 0 || switch_urgent {
         let base = Style::default()
             .fg(panel_contrast_fg(palette))
@@ -437,6 +436,7 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
     };
     match seg {
         Seg::Spark => base.fg(palette.accent),
+        Seg::Clasp => deco::calm_clasp_style(palette),
         Seg::Body | Seg::Blocking => base.fg(body_fg),
         Seg::Asks | Seg::Cards => base.fg(palette.peach).add_modifier(Modifier::BOLD),
         Seg::Ready => base.fg(palette.teal).add_modifier(Modifier::BOLD),
@@ -451,12 +451,14 @@ fn pill_fit(
     tier: PillTier,
     hollywood: bool,
     spin: usize,
+    deco: bool,
 ) -> (Vec<(String, Seg)>, PillTier) {
     let mut tier = tier;
     loop {
         let segs = segments(counts, tier, hollywood, spin);
+        let (segs, cap) = deco::apply_deco_and_cap(segs, counts, tier, spin, deco);
         let width: u16 = segs.iter().map(|(t, _)| display_width(t)).sum();
-        if width <= tier.cap() {
+        if width <= cap {
             return (segs, tier);
         }
         match tier.demote() {
@@ -467,8 +469,8 @@ fn pill_fit(
 }
 
 /// The width the pill would claim at `tier`.
-pub(crate) fn pill_width(counts: &LotCounts, tier: PillTier, hollywood: bool) -> u16 {
-    let (segs, _) = pill_fit(counts, tier, hollywood, 0);
+pub(crate) fn pill_width(counts: &LotCounts, tier: PillTier, hollywood: bool, deco: bool) -> u16 {
+    let (segs, _) = pill_fit(counts, tier, hollywood, 0, deco);
     segs.iter().map(|(t, _)| display_width(t)).sum()
 }
 
@@ -479,11 +481,12 @@ pub(crate) fn pill_segments(
     tier: PillTier,
     hollywood: bool,
     spin: usize,
+    deco: bool,
 ) -> Vec<(Rect, PillAction)> {
     if rect.width == 0 || rect.height == 0 {
         return Vec::new();
     }
-    let (segs, _) = pill_fit(counts, tier, hollywood, spin);
+    let (segs, _) = pill_fit(counts, tier, hollywood, spin, deco);
     let mut out = Vec::new();
     let mut x = rect.x;
     let right = rect.right();
@@ -503,6 +506,7 @@ pub(crate) fn pill_segments(
 }
 
 /// Draw the pill into `rect` and return its overall hit rect.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_pill(
     buf: &mut Buffer,
     rect: Rect,
@@ -510,12 +514,13 @@ pub(crate) fn render_pill(
     tier: PillTier,
     hollywood: bool,
     spin: usize,
+    deco: bool,
     palette: &Palette,
 ) -> Rect {
     if rect.width == 0 || rect.height == 0 {
         return Rect::default();
     }
-    let (segs, _) = pill_fit(counts, tier, hollywood, spin);
+    let (segs, _) = pill_fit(counts, tier, hollywood, spin, deco);
     let mut x = rect.x;
     let right = rect.right();
     for (text, seg) in segs {
@@ -550,9 +555,10 @@ pub(crate) fn render_pill_recorded(
     tier: PillTier,
     hollywood: bool,
     spin: usize,
+    deco: bool,
     palette: &Palette,
     hits: &mut ShellHitMap,
 ) {
-    hits.lot_pill = render_pill(buf, rect, counts, tier, hollywood, spin, palette);
-    hits.lot_pill_segments = pill_segments(hits.lot_pill, counts, tier, hollywood, spin);
+    hits.lot_pill = render_pill(buf, rect, counts, tier, hollywood, spin, deco, palette);
+    hits.lot_pill_segments = pill_segments(hits.lot_pill, counts, tier, hollywood, spin, deco);
 }

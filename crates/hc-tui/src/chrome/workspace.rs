@@ -64,7 +64,7 @@ pub(crate) fn render_collapsed_sidebar(
     let palette = &config.palette;
     let selection_background = workspace_selection_background(palette);
     let active_background = workspace_active_background(palette, selected_workspace_id.is_some());
-    super::render::render_sidebar_background(buffer, area, palette);
+    super::render::render_sidebar_background(buffer, area, palette, config.studio_chrome);
     let (workspace_area, divider_y, detail_area) = collapsed_sidebar_sections(area);
     for (index, workspace) in snapshot
         .workspaces

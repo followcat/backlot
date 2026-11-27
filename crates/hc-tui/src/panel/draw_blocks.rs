@@ -8,22 +8,14 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
+use super::draw_deco_blocks::{
+    BlockWeight, draw_entered_tag, entered_width, finished_top_tail, paint_finished_tail,
+};
 use super::rows::Owed;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs::{self, Health, Person};
-
-/// The frame's colour: `accent` only while Lot owns focus and this
-/// studio is selected, `border_muted` for every other block.
-pub(super) fn frame_style(focused_selected: bool, palette: &Palette) -> Style {
-    let elev = palette.elevation();
-    Style::default().fg(if focused_selected {
-        palette.accent
-    } else {
-        elev.border_muted
-    })
-}
 
 /// The `│` edges of a block's interior row.
 pub(super) fn draw_inner(buf: &mut Buffer, rect: Rect, edge: Style) {
@@ -49,92 +41,111 @@ pub(super) fn draw_top(
     health: Health,
     selected: bool,
     focused_terminal: bool,
-    entered: bool,
+    weight: BlockWeight,
+    plain_chrome: bool,
     frame: Style,
     palette: &Palette,
 ) {
+    let entered = weight == BlockWeight::Entered;
     let right = rect.x + rect.width;
-    put_text(
-        buf,
-        rect.x,
-        rect.y,
-        rect.width.min(1),
-        if entered { "┏" } else { "╭" },
-        frame,
-    );
-    put_text(
-        buf,
-        right.saturating_sub(1),
-        rect.y,
-        1,
-        if entered { "┓" } else { "╮" },
-        frame,
-    );
+    let (left_corner, fill_glyph, right_corner) = weight.top_corners();
+    put_text(buf, rect.x, rect.y, rect.width.min(1), left_corner, frame);
+    put_text(buf, right.saturating_sub(1), rect.y, 1, right_corner, frame);
+    let edge_pad = weight != BlockWeight::Resting && rect.width >= 36;
+    if edge_pad {
+        put_text(buf, rect.x + 1, rect.y, 1, fill_glyph, frame);
+        put_text(buf, right - 2, rect.y, 1, fill_glyph, frame);
+    }
     // The right-hand tail: `● r1·1/4 !1` when the whole label fits
     // beside it, else `●!1` — the progress part drops before the
     // waiting count does.
     let waiting = crate::studio::waiting_count(studio.studio);
-    let mut progress = format!(
-        "r{}·{}/{}",
-        studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
-    );
-    // The studio-wide actor cap beside the progress: `actors 2/4` once
-    // the document carries one — older documents read 0 and show none.
-    if studio.studio.actors_live > 0 && studio.studio.actors_cap > 0 {
-        progress.push_str(&format!(
-            " · {}/{}",
-            studio.studio.actors_live, studio.studio.actors_cap
-        ));
-    }
-    let full_tail = if waiting > 0 {
-        format!("{} {progress} !{waiting}", health.glyph())
-    } else {
-        format!("{} {progress}", health.glyph())
-    };
     let marker_w = u16::from(focused_terminal) * 2;
     let has_pill = selected || focused_terminal;
     let chip_pad = u16::from(has_pill);
-    let interior = rect.width.saturating_sub(4 + chip_pad);
-    let entered_w = if entered { 15u16 } else { 0 };
-    let full_fits =
-        display_width(&label.full) as u16 + display_width(&full_tail) as u16 + entered_w
-            <= interior.saturating_sub(marker_w);
-    let tail = if full_fits {
-        full_tail
-    } else if waiting == 0 {
-        if entered {
-            health.glyph().to_string()
-        } else {
-            full_tail
-        }
+    let side_pads = u16::from(edge_pad) * 2;
+    let interior = rect.width.saturating_sub(4 + chip_pad + side_pads);
+    let entered_w = entered_width(entered, plain_chrome);
+    let (tail, finished_deco) = if let Some((fin_tail, deco_c)) = finished_top_tail(
+        studio,
+        rect.width,
+        interior.saturating_sub(marker_w),
+        display_width(&label.full) as u16,
+        plain_chrome,
+    ) {
+        (fin_tail, Some(deco_c))
     } else {
-        format!("{}!{waiting}", health.glyph())
+        let mut progress = format!(
+            "r{}·{}/{}",
+            studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
+        );
+        // The studio-wide actor cap beside the progress: `actors 2/4` once
+        // the document carries one — older documents read 0 and show none.
+        if studio.studio.actors_live > 0 && studio.studio.actors_cap > 0 {
+            progress.push_str(&format!(
+                " · {}/{}",
+                studio.studio.actors_live, studio.studio.actors_cap
+            ));
+        }
+        let full_tail = if waiting > 0 {
+            format!("{} {progress} !{waiting}", health.glyph())
+        } else {
+            format!("{} {progress}", health.glyph())
+        };
+        let full_fits =
+            display_width(&label.full) as u16 + display_width(&full_tail) as u16 + entered_w
+                <= interior.saturating_sub(marker_w);
+        let tail = if full_fits {
+            full_tail
+        } else if waiting == 0 {
+            if entered {
+                health.glyph().to_string()
+            } else {
+                full_tail
+            }
+        } else {
+            format!("{}!{waiting}", health.glyph())
+        };
+        (tail, None)
     };
     let tail_w = display_width(&tail) as u16;
-    let tail_x = right.saturating_sub(1 + tail_w);
+    let tail_right_pad = 1 + u16::from(edge_pad);
+    let tail_x = right.saturating_sub(tail_right_pad + tail_w);
     if tail_w > 0 {
-        put_text(
-            buf,
-            tail_x,
-            rect.y,
-            tail_w,
-            &tail,
-            Style::default().fg(health.color(palette)),
-        );
-    }
-    // `!<n>` is its own colour — red while a person or outward card waits on
-    // the user, peach for director-owned waits (S2 §2).
-    if waiting > 0 {
-        let mark_w = display_width(&format!("!{waiting}")) as u16;
-        let user = crate::studio::waiting_is_user(studio.studio);
-        put_text(
-            buf,
-            right.saturating_sub(1 + mark_w),
-            rect.y,
-            mark_w,
-            &format!("!{waiting}"),
-            Style::default().fg(if user { palette.red } else { palette.peach }),
-        );
+        if let Some(deco_c) = finished_deco {
+            paint_finished_tail(
+                buf,
+                tail_x,
+                rect.y,
+                &tail,
+                deco_c,
+                health.color(palette),
+                palette,
+            );
+        } else {
+            put_text(
+                buf,
+                tail_x,
+                rect.y,
+                tail_w,
+                &tail,
+                Style::default().fg(health.color(palette)),
+            );
+            // `!<n>` is its own colour — red while a person or outward card waits on
+            // the user, peach for director-owned waits (S2 §2).
+            if waiting > 0 {
+                let mark_w = display_width(&format!("!{waiting}")) as u16;
+                let user = crate::studio::waiting_is_user(studio.studio);
+                put_text(
+                    buf,
+                    right.saturating_sub(tail_right_pad + mark_w),
+                    rect.y,
+                    mark_w,
+                    &format!("!{waiting}"),
+                    Style::default().fg(if user { palette.red } else { palette.peach }),
+                );
+            }
+        }
     }
     // R14: an experimental studio's `exp` badge rides after the
     // label — the label gets the full budget and a dock too narrow
@@ -143,7 +154,11 @@ pub(super) fn draw_top(
     // sits in a subtle raised capsule (`elevation.raised_row`, or bold+reverse
     // on 16-color terminals); other blocks draw bold `palette.text`.
     let id_end = tail_x.saturating_sub(1);
-    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w + chip_pad);
+    let left_pad = u16::from(edge_pad);
+    let plain_pad = u16::from(!has_pill && !plain_chrome && !edge_pad);
+    let pill_x = rect.x + 1 + left_pad;
+    let id_start = rect.x + 2 + left_pad + plain_pad + marker_w;
+    let id_width = id_end.saturating_sub(id_start + chip_pad);
     let id_text = label.fit(id_width as usize);
     let drawn = display_width(&id_text) as u16;
     if has_pill && id_width > 0 {
@@ -155,39 +170,28 @@ pub(super) fn draw_top(
         } else {
             glyphs::studio_capsule_style(palette)
         };
-        put_text(buf, rect.x + 1, rect.y, 1, " ", pill_style);
+        put_text(buf, pill_x, rect.y, 1, " ", pill_style);
         if focused_terminal {
             put_text(
                 buf,
-                rect.x + 2,
+                pill_x + 1,
                 rect.y,
                 2,
                 &format!("{} ", glyphs::FOCUSED_STUDIO),
                 pill_style,
             );
         }
-        put_text(
-            buf,
-            rect.x + 2 + marker_w,
-            rect.y,
-            id_width,
-            &id_text,
-            pill_style,
-        );
+        put_text(buf, id_start, rect.y, id_width, &id_text, pill_style);
         if drawn > 0 {
-            put_text(
-                buf,
-                rect.x + 2 + marker_w + drawn,
-                rect.y,
-                1,
-                " ",
-                pill_style,
-            );
+            put_text(buf, id_start + drawn, rect.y, 1, " ", pill_style);
         }
     } else if id_width > 0 {
+        if !plain_chrome && !edge_pad && rect.width > 3 {
+            put_text(buf, rect.x + 1, rect.y, 1, fill_glyph, frame);
+        }
         put_text(
             buf,
-            rect.x + 2 + marker_w,
+            id_start,
             rect.y,
             id_width,
             &id_text,
@@ -197,19 +201,18 @@ pub(super) fn draw_top(
         );
     }
     let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
-    let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
-    if entered && fill_start + 15 <= id_end {
-        put_text(
+    let mut fill_start = id_start + drawn + u16::from(drawn > 0);
+    if entered {
+        fill_start = draw_entered_tag(
             buf,
             fill_start,
             rect.y,
-            14,
-            "entered studio",
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD),
+            id_end,
+            fill_glyph,
+            plain_chrome,
+            frame,
+            palette,
         );
-        fill_start += 15;
     }
     if badge && fill_start + 3 < id_end {
         put_text(
@@ -224,7 +227,6 @@ pub(super) fn draw_top(
         );
         fill_start += 4;
     }
-    let fill_glyph = if entered { "━" } else { "─" };
     if id_end > fill_start {
         put_text(
             buf,

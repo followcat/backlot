@@ -2,6 +2,7 @@
 //! file and the renderer. Neutral fixture data only: `acme-shop`,
 //! `alice`, `host-a`.
 mod accent_tests;
+mod babylon_lot_tests;
 mod config_tests;
 mod data_tests;
 mod design_tests;

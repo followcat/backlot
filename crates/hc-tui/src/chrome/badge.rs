@@ -120,6 +120,29 @@ fn put_badge(
     update_badge: UpdateBadge<'_>,
     palette: &Palette,
 ) -> Rect {
+    put_badge_styled(
+        buffer,
+        row,
+        min_left,
+        version,
+        update_badge,
+        palette,
+        palette.overlay0,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn put_badge_styled(
+    buffer: &mut Buffer,
+    row: Rect,
+    min_left: u16,
+    version: &str,
+    update_badge: UpdateBadge<'_>,
+    palette: &Palette,
+    ver_fg: Color,
+    ver_bg: Option<Color>,
+) -> Rect {
     let ver_w = display_width(version);
     let room = row.right().saturating_sub(min_left);
     // The widest hint this row has room for: full, compact, or none.
@@ -133,26 +156,20 @@ fn put_badge(
         return Rect::default();
     }
     let ver_x = row.right().saturating_sub(ver_w + hint_w);
-    put_text(
-        buffer,
-        ver_x,
-        row.y,
-        ver_w,
-        version,
-        Style::default().fg(palette.overlay0),
-    );
+    let mut ver_style = Style::default().fg(ver_fg);
+    if let Some(bg) = ver_bg {
+        ver_style = ver_style.bg(bg);
+    }
+    put_text(buffer, ver_x, row.y, ver_w, version, ver_style);
     if hint.is_empty() {
         return Rect::default();
     }
     let hint_x = ver_x.saturating_add(ver_w);
-    put_text(
-        buffer,
-        hint_x,
-        row.y,
-        hint_w,
-        &hint,
-        Style::default().fg(hint_color(update_badge, palette)),
-    );
+    let mut h_style = Style::default().fg(hint_color(update_badge, palette));
+    if let Some(bg) = ver_bg {
+        h_style = h_style.bg(bg);
+    }
+    put_text(buffer, hint_x, row.y, hint_w, &hint, h_style);
     Rect::new(hint_x, row.y, hint_w, 1)
 }
 
@@ -172,6 +189,27 @@ pub(super) fn put_version_badge(
         &running_version(),
         update_badge,
         palette,
+    )
+}
+
+pub(super) fn put_version_badge_styled(
+    buffer: &mut Buffer,
+    row: Rect,
+    min_left: u16,
+    update_badge: UpdateBadge<'_>,
+    palette: &Palette,
+    ver_fg: Color,
+    ver_bg: Option<Color>,
+) -> Rect {
+    put_badge_styled(
+        buffer,
+        row,
+        min_left,
+        &running_version(),
+        update_badge,
+        palette,
+        ver_fg,
+        ver_bg,
     )
 }
 

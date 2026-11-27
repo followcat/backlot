@@ -518,7 +518,7 @@ async fn call_sheet_zone_syncs_with_waiting_hollywood_studios_tab_ring_and_openi
     let buf = backend.buffer();
     let mode_row: String = (0..140).map(|x| buf[(x, 35)].symbol()).collect();
     assert!(
-        mode_row.contains("FOCUS: call sheet › waiting"),
+        mode_row.contains("FOCUS: CALL SHEET · waiting"),
         "modebar should show Waiting breadcrumb: {mode_row:?}"
     );
 
@@ -534,7 +534,7 @@ async fn call_sheet_zone_syncs_with_waiting_hollywood_studios_tab_ring_and_openi
         .map(|x| backend.buffer()[(x, 35)].symbol())
         .collect();
     assert!(
-        mode_row.contains("FOCUS: call sheet › hollywood"),
+        mode_row.contains("FOCUS: CALL SHEET · hollywood"),
         "modebar should show Hollywood breadcrumb: {mode_row:?}"
     );
 
@@ -549,7 +549,7 @@ async fn call_sheet_zone_syncs_with_waiting_hollywood_studios_tab_ring_and_openi
         .map(|x| backend.buffer()[(x, 35)].symbol())
         .collect();
     assert!(
-        mode_row.contains("FOCUS: call sheet › studios"),
+        mode_row.contains("FOCUS: CALL SHEET · studios"),
         "modebar should show Studios breadcrumb: {mode_row:?}"
     );
 

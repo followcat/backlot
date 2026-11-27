@@ -215,7 +215,7 @@ async fn backlot_peek_renders_clean_studio_title_while_plain_peek_is_untouched()
         .elevation()
         .dim_cell(&mut probe, &app.shell.palette);
     assert_eq!(
-        drawn.buffer()[(0, 0)].bg,
+        drawn.buffer()[(0, 1)].bg,
         probe.bg,
         "Backlot peek dims backdrop"
     );

@@ -11,7 +11,7 @@ use ratatui::{
 use super::endpoints::collapsed_groups_for_endpoint;
 use super::render::{
     MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, display_width,
-    put_right_text, put_text, put_version_badge,
+    put_right_text, put_text,
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
@@ -93,7 +93,7 @@ pub(crate) fn render_expanded(
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
-    super::render::render_sidebar_background(buffer, area, palette);
+    super::render::render_sidebar_background(buffer, area, palette, config.studio_chrome);
     hits.sidebar_divider = if area.is_empty() {
         Rect::default()
     } else {
@@ -224,45 +224,14 @@ pub(crate) fn render_expanded(
     } else {
         sidebar_section_divider_rect(area, state.sidebar_section_split)
     };
-    let header_fg = if state.tree_focused {
-        palette.accent
-    } else {
-        palette.overlay0
-    };
-    let header_title = if state.tree_focused {
-        if workspace_area.width >= 20 {
-            " ▸ machines [C-b t]"
-        } else {
-            " ▸ machines"
-        }
-    } else {
-        " machines"
-    };
-    put_text(
+    hits.update_badge = super::sidebar_deco::render_machines_header(
         buffer,
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width,
-        header_title,
-        Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
+        workspace_area,
+        state.tree_focused,
+        config.studio_chrome,
+        state.update_badge,
+        palette,
     );
-    // The version badge shares the header row, right-aligned a cell
-    // short of the divider column and never touching `machines`.
-    let badge_row = Rect::new(
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width.saturating_sub(1),
-        1,
-    );
-    if !state.tree_focused {
-        hits.update_badge = put_version_badge(
-            buffer,
-            badge_row,
-            workspace_area.x.saturating_add(10),
-            state.update_badge,
-            palette,
-        );
-    }
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
@@ -559,6 +528,7 @@ pub(crate) fn render_expanded(
                     buffer,
                     rect,
                     palette,
+                    config.studio_chrome,
                     endpoint,
                     state.current_studio,
                     row,
@@ -603,6 +573,15 @@ pub(crate) fn render_expanded(
             workspace_area.width.saturating_sub(1),
             hint,
             Style::default().fg(palette.overlay0),
+        );
+    } else if config.mouse_capture && config.studio_chrome {
+        super::sidebar_deco::render_footer_action(
+            buffer,
+            workspace_area,
+            footer_y,
+            state,
+            palette,
+            hits,
         );
     } else if config.mouse_capture {
         let label = format!(

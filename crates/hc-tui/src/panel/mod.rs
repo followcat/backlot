@@ -13,6 +13,8 @@ mod draw;
 mod draw_blocks;
 mod draw_cards;
 mod draw_compact;
+mod draw_deco;
+mod draw_deco_blocks;
 mod draw_design;
 mod draw_empty;
 mod draw_hints;
@@ -135,6 +137,8 @@ pub(crate) struct Panel {
     pub tell_target: crate::focus::TellTarget,
     /// Role under the cursor when entering Compose, used by empty `Tab` cycling.
     pub compose_cursor_role: Option<String>,
+    /// True under `--plain` or `[theme] source = "herdr"`, keeping Herdr chrome.
+    pub plain_chrome: bool,
 }
 
 #[cfg(test)]
@@ -174,6 +178,7 @@ impl Panel {
             lot_studios_browse: false,
             tell_target: crate::focus::TellTarget::default(),
             compose_cursor_role: None,
+            plain_chrome: false,
         }
     }
 

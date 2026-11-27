@@ -44,17 +44,17 @@ async fn open_close_open_repaints_both_regions() {
     let text = screen_lines(&closed).join("\n");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // ` lot` (not bare `lot`: the sidebar's machine line names `backlot`).
-    assert!(!text.contains(" lot"), "{text}");
+    assert!(!text.contains("L O T"), "{text}");
 
     open_panel(&mut app);
     let open = draw_to(&mut app, 120, 24);
     let text = screen_lines(&open).join("\n");
-    assert!(text.contains(" lot"), "{text}");
+    assert!(text.contains("L O T · 1"), "{text}");
     assert!(text.contains("Ⓐ task-1"), "{text}");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // The right 26 columns are all panel: no pane paint remains there.
     let right = columns_text(&open, 84, 120);
-    assert!(right.contains("lot"), "{right}");
+    assert!(right.contains("L O T"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
 
     app.panel_close();
@@ -88,7 +88,7 @@ async fn a_pane_update_while_the_panel_is_open_repaints_cleanly() {
     assert!(text.contains("PANE-ALPHA"), "{text}");
     assert!(text.contains("PANE-BRAVO"), "{text}");
     let right = columns_text(&open, 84, 120);
-    assert!(right.contains("lot"), "{right}");
+    assert!(right.contains("L O T"), "{right}");
     assert!(!right.contains("PANE"), "{right}");
 }
 
@@ -116,12 +116,12 @@ async fn a_resize_moves_the_panel_between_beside_and_overlay() {
     let text = screen_lines(&hidden).join("\n");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     let edge = columns_text(&hidden, 64, 80);
-    assert!(!edge.contains("lot"), "{edge}");
+    assert!(!edge.contains("L O T"), "{edge}");
     // Back at 120 the expanded beside column returns automatically.
     app.area = (120, 24);
     let back = draw_to(&mut app, 120, 24);
     let right = columns_text(&back, 84, 120);
-    assert!(right.contains("lot"), "{right}");
+    assert!(right.contains("L O T"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
 }
 
@@ -143,7 +143,7 @@ async fn the_collapsed_hollywood_strip_clears_the_panel_title() {
     // And the panel's title row reads its own text, not the strip's.
     let top = columns_text(&drawn, title.x, title.x + title.width);
     let first = top.lines().next().unwrap_or_default().to_string();
-    assert!(first.contains("lot"), "{first}");
+    assert!(first.contains("L O T · 1"), "{first}");
     assert!(!first.contains("hollywood"), "{first}");
 }
 
@@ -157,7 +157,7 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     // The strip is 16 columns — its rows clip to it and the panes own
     // everything left of it.
     let strip = columns_text(&collapsed, 104, 120);
-    assert!(strip.contains("lot"), "{strip}");
+    assert!(strip.contains("LOT·1"), "{strip}");
     assert!(!strip.contains("PANE-ALPHA"), "{strip}");
     let panes_above_modebar: String = columns_text(&collapsed, 0, 104)
         .lines()
@@ -165,7 +165,7 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        !panes_above_modebar.contains(" lot"),
+        !panes_above_modebar.contains("L O T"),
         "{panes_above_modebar}"
     );
     // Expanding again puts the full column back.

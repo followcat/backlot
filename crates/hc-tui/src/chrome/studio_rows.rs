@@ -25,10 +25,12 @@ pub(super) fn endpoint_is_machine(endpoint: &ClientEndpointId, machine: Option<&
 
 /// One W1 machines-tree row: a ledger studio (`stage down` tag), the
 /// `finished (n)` group, or the machine's one `unreachable` line.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_studio_row(
     buffer: &mut Buffer,
     rect: Rect,
     palette: &Palette,
+    studio_chrome: bool,
     endpoint: &ClientShellEndpoint,
     current: Option<&crate::studio::StudioKey>,
     row: &StudioRow,
@@ -142,16 +144,23 @@ pub(super) fn render_studio_row(
         }
         StudioRow::Finished { id } => {
             highlight(buffer, id);
+            let (label, style) = if studio_chrome {
+                (
+                    format!("✦ {id}"),
+                    Style::default()
+                        .fg(palette.elevation().gilt)
+                        .add_modifier(ratatui::style::Modifier::DIM),
+                )
+            } else {
+                (format!("✓ {id}"), dim)
+            };
             put_text(
                 buffer,
                 rect.x.saturating_add(indent),
                 rect.y,
                 rect.width.saturating_sub(indent),
-                &super::text::truncate_end(
-                    &format!("✓ {id}"),
-                    rect.width.saturating_sub(indent) as usize,
-                ),
-                dim,
+                &super::text::truncate_end(&label, rect.width.saturating_sub(indent) as usize),
+                style,
             );
             hits.studio_rows.push(StudioRowHit {
                 rect,
