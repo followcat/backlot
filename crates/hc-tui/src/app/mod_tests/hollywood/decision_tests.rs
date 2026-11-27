@@ -722,22 +722,20 @@ async fn show_view_and_reader_wrap_150_char_run_at_80_columns() {
         .lines()
         .skip(modal_area.y as usize)
         .take(modal_area.height as usize)
-        .filter_map(|l| {
+        .map(|l| {
             let start = usize::from(modal_area.x);
             let chars: String = l
                 .chars()
                 .skip(start)
                 .take(usize::from(modal_area.width))
                 .collect();
-            Some(
-                chars
-                    .trim()
-                    .trim_matches(|c: char| {
-                        c == '│' || c == '╭' || c == '╮' || c == '╰' || c == '╯' || c == '─'
-                    })
-                    .trim()
-                    .to_owned(),
-            )
+            chars
+                .trim()
+                .trim_matches(|c: char| {
+                    c == '│' || c == '╭' || c == '╮' || c == '╰' || c == '╯' || c == '─'
+                })
+                .trim()
+                .to_owned()
         })
         .collect::<Vec<_>>()
         .join("");
