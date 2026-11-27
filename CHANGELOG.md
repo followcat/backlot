@@ -12,7 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **The Hollywood dock has a gilded frame.** Each zone has its own dividing line, the block has a clear edge against the terminal and the Lot, and a marquee row closes it at the bottom. It takes no extra rows when tight, keeps `--plain` and `source = "herdr"` untouched, and adds derived brass (`gilt`), stage-well (`stage_well`), and marquee-bulb (`bulb_warm`) tokens across all bundled themes.
+- **The Hollywood dock has a gilded frame in the style of the film *Babylon*: each zone has its own dividing line, the block has a clear edge against the terminal and the Lot, and a row of marquee bulbs closes it at the bottom.** It costs no extra rows on a short terminal. On items waiting for you, action chips put keys first and wrap the action that Enter runs in `‹ ›` (`‹ y allow ›`, `d deny`).
 
 ## 0.4.25 — 2026-11-27
 
