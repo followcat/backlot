@@ -66,7 +66,7 @@ fn list_dirs_lists_only_directories() {
 #[test]
 fn a_broken_git_mark_is_no_repository() {
     let (scratch, _env) = scratch();
-    let broken = scratch.files.join("aiflows");
+    let broken = scratch.files.join("orchard");
     fs::create_dir_all(broken.join(".git")).unwrap();
     assert_eq!(probe(&broken), Repo::Dir);
     assert_eq!(probe(&scratch.files), Repo::Dir);
