@@ -12,11 +12,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-- **Checks proposed at the opening, activated on sign-off, with no false greens (`expect` / `min_matches`).**
-  - `[[checks]]` entries (`cast.toml`, `--checks-file`, or `backlot studio check add`) now accept optional `expect = "<regex>"` and `min_matches = <k>` (default `1` when `expect` is set). A command that exits `0` without matching at least `min_matches` non-overlapping occurrences in combined stdout+stderr fails the check (`task.checked` keeps real `exit_code` and sets `expect_failed`), blocking accepting reviews over empty/no-op runs.
-  - During opening design, `backlot design write --slot buildability --file <file> --checks-file <toml>` validates `[[checks]]` statically, preflights every proposed check once in the director's worktree under a stripped check environment and the director's outward-action guard (120 s cap), refuses any failing/timed-out/missed-expect check with its output tail, and records `design.entry.checks`.
-  - The Call Sheet `DECISION` row shows `+N check(s)`, `Enter` opens a read-only view starting with `Signing off also activates N check(s):` and every check verbatim (`name`, wrapped `run`, `timeout_s`, `expect`), `[o]` includes the same summary, and pressing `a` opens a 3-choice modal (shared by Call Sheet, Lot Dock, and Design Reader) displaying every proposed check verbatim so you can sign and activate checks, sign without checks (`--no-checks`), or cancel (`--skip` activates none).
-  - User-only `backlot studio check add` (with optional `--expect`, `--min-matches`, `--preflight`) and `backlot studio check remove` let you manage checks on a live studio (`--as user`), while `studio cast show` → `studio cast set` preserves `design` and `user` origins when specs are unchanged (`docs/studio/design.md`, `docs/studio/guide.md`, `docs/studio/ledger.md`).
+- **Checks are proposed at the opening and switched on when you sign.** In the buildability step the director proposes the repo's real test or lint commands (`design write --slot buildability --checks-file <toml>`). Each one first runs once in the director's own worktree, under its guard and without credentials or proxies; a failing one is refused. On the Call Sheet the design shows `+N checks`, and signing (`a`) shows every command in full and lets you sign with the checks, sign without them, or cancel.
+- **A check can require its output, so "scanned 0 files" is not a pass.** `expect = "<regex>"` (and `min_matches`) on a check makes a run that exits 0 without the expected output fail, and a failing check blocks accepting the delivery. `backlot studio check add` and `remove` let you manage checks on a running studio.
 
 ## 0.4.23 — 2026-11-27
 
