@@ -215,6 +215,8 @@ pub struct StudioNewResult {
     pub ask_seq: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 /// Result of `studio finish`.

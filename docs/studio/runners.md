@@ -571,6 +571,25 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16; `tru
   prompt block, `Native` status source, turn-level revision rule, and `.agents/hooks.json` signals +
   `PreToolUse` guard.
 
+## Worktree profile (`worktree`)
+
+When a non-`hollywood` role runs under `permission_profile = "worktree"`, the stage adds worktree-scoped read-only diagnostics (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`, complementing `ls`, `wc`, and `head` already in `READ_ONLY`) and per-segment-safe worktree path rules (`cd <own worktree>` and `git -C <own worktree> <read subcommand>` for `status`, `log`, `show`, `diff`, `branch --list`, `branch --show-current`) where the CLI's permission model supports them safely. `standard` and `readonly` outputs remain unchanged, and `hollywood` keeps its minimal overseer allowlist even if configured with `worktree`. `curl`, `wget`, `pip`, `uv`, `colab`, `python`/`python3`, `bash -c`, main-repository paths, `$HOME`, and bare family rules stay gated.
+
+| Runner | What `worktree` adds over `standard` | Scratch directory handling | Compound-command matching |
+|---|---|---|---|
+| `cmd` (`command-code 1.93.0`) | Exact-prefix `Shell(<diag>:*)` rules for `which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`, plus `Shell(cd <own worktree>:*)` and `Shell(git -C <own worktree> <read>:*)` | Adds `/tmp/commandcode-<uid>/<encoded cwd>` (or `$COMMANDCODE_SCRATCHPAD_BASE/commandcode-<uid>/<encoded cwd>` when set and absolute) to both `.commandcode/settings.json` `permissions.additionalDirectories` and `--add-dir`; never adds `/tmp/commandcode-<uid>/` itself | AST splits on `&&`, `||`, `;`, `\|`, `&`, `(`, `)`, newlines and checks every subcommand via `shellAllowedByPatterns` + `matchesShellPattern` (`^prefix( .*)?$`), blocking `cd <wt> && curl ...` and `cd <wt>-other` (`cli.mjs` `splitShellSubcommands` / `shellAllowedByPatterns` / `matchesShellPattern`) |
+| `cursor` (`2026.11.19-f005e9d`) | `Shell(<diag>)` for the 7 diagnostics, `Shell(cd <own worktree>)`, and `Shell(git -C <own worktree> <read>)` | Handled natively (`CURSOR_DATA_DIR/projects/<slug>` and non-`$HOME` `/tmp/...` writes are already allowed; `cli-config.json` has no `additionalDirectories` field) | Tree-sitter bash extracts `executableCommands`, approves per segment via `cmdIsAllowedByAllowlist` + `matchesShell` (`exact` or `startsWith(pattern + " ")`), and gates redirects separately (`index.js` `executableCommands` / `cmdIsAllowedByAllowlist` / `matchesShell`) |
+| `claude` (`2.1.332`) | Keeps `--permission-mode acceptEdits`; adds `Bash(<diag>)` / `Bash(<diag> *)` for the 7 diagnostics, `Bash(cd <own worktree>)`, and `Bash(git -C <own worktree> <read>)` / `Bash(git -C <own worktree> <read> *)` | Handled natively (reads under `/tmp/claude-<uid>/<encoded cwd>/` are already permitted; no `--add-dir` emitted) | Splits AST subcommands and checks every segment via `To.every(allow)` (rejecting compound matches against single unsplit rules) while validating `cd` targets against session working dirs (`cd-git-compound` via `xzs` / `kdo`) |
+| `devin` | **Same as `standard`** (`worktree` and `standard` emit identical settings/flags) | — | — |
+| `agy` | **Same as `standard`** (`worktree` and `standard` emit identical settings/flags) | — | — |
+| `cline` | **Same as `standard`** (`worktree` and `standard` emit identical settings/flags) | — | — |
+| `codex` | **Same as `standard`** (`worktree` and `standard` emit identical settings/flags) | — | — |
+| `opencode` | **Same as `standard`** (`worktree` and `standard` emit identical settings/flags) | — | — |
+
+Command Code scratch directory encoding (`sanitizeCwdComponent` in `command-code 1.93.0` `dist/cli.mjs` line 2): replace every character outside `[A-Za-z0-9]` with `-` (preserving case, camelCase boundaries, and leading `-`). When the sanitized string is 1..=200 characters, keep it verbatim (e.g. `/home/user/AControl/work/t1` → `-home-user-AControl-work-t1`); otherwise append `-` and the first 8 unpadded base64url characters of `sha256(cwd)` after the first 200 sanitized characters (or `"root"` if empty).
+
+`backlot studio new --dry-run` prints a note whenever a cast sets `permission_profile = "worktree"` on a runner whose `standard` and `worktree` profiles are the same (`devin`, `agy`, `cline`, `codex`, `opencode`).
+
 ## Read-only profile (`readonly`)
 
 When a role runs under `permission_profile = "readonly"` (such as an `--kind audit` task cast with `backlot cast --readonly`), the stage enforces read-only boundaries in two layers:

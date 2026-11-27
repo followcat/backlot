@@ -279,6 +279,8 @@ mod doc_req_verbs_tests;
 #[cfg(test)]
 mod docs_tests;
 #[cfg(test)]
+mod draft_dry_run_tests;
+#[cfg(test)]
 mod draft_tests;
 #[cfg(test)]
 mod driver_record_tests;

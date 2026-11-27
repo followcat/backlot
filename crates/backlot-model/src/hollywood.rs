@@ -15,7 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::event::{ActorIdentity, ApprovalDecision, EventBy, Priority};
-pub use crate::hollywood_snapshot::{CardSnapshot, SnapshotFile, sha256_hex};
+pub use crate::hollywood_snapshot::{CardSnapshot, SnapshotFile, sha256, sha256_hex};
 use crate::state::{RoleLifecycle, StudioState, TaskStatus};
 
 // The reduced state and the append rules live in the two sibling

@@ -123,6 +123,7 @@ fn studio_new(
     let cast_file = TempFile::new("cast", &cast)?;
     if dry_run {
         draft::check(base, &id, &repo, cast_file.path(), env, init, no_git)?;
+        let notes = draft::dry_run_notes(cast_file.path())?;
         return to_json(StudioNewResult {
             studio: id,
             title,
@@ -131,6 +132,7 @@ fn studio_new(
             seq: None,
             ask_seq: None,
             first_message: ask.as_deref().map(crate::studio_fmt::first_message_line),
+            notes,
         });
     }
     let ask_file = match &ask {
@@ -169,6 +171,7 @@ fn studio_new(
         seq: Some(event.seq),
         ask_seq,
         first_message: None,
+        notes: Vec::new(),
     })
 }
 
