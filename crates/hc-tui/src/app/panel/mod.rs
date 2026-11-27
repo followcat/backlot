@@ -5,6 +5,7 @@
 //! `backlot` document and the inventory's stage flag.
 
 mod actions;
+mod enter;
 mod input;
 mod keys;
 mod layout;
@@ -123,16 +124,16 @@ impl App {
         if self.panel_mode_at(self.area.0) == PanelMode::Closed {
             self.panel.mode = PanelMode::Expanded;
             self.panel.focused = true;
-            self.panel.selected = None;
-            self.panel.selected_row = None;
-            self.panel.scroll = 0;
             self.panel_select_first();
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                self.derived_lot_level(),
+            ));
             return;
         }
         // Full-screen owns the keys: the chord closes on the first
         // press, even when the focus latch is off after a resize from
         // beside to full-screen.
-        if self.panel_fullscreen() || self.panel.focused {
+        if self.panel_fullscreen() || self.panel_focused() {
             self.panel_close();
             return;
         }
@@ -140,26 +141,129 @@ impl App {
         if self.panel.selected.is_none() {
             self.panel_select_first();
         }
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+            self.derived_lot_level(),
+        ));
     }
 
     /// Whether `key` is the configured `focus_lot` binding (`alt+l`
     /// by default): active in studio mode (`!plain`), disabled inside
-    /// a running dock compose or inline finish confirm.
+    /// a running dock/CallSheet compose or inline finish confirm.
     pub(crate) fn focus_lot_press(&self, key: &super::input::TerminalKey) -> bool {
-        if !self.studio.active || self.panel_editing() || self.panel.finish_confirm.is_some() {
+        if !self.studio.active
+            || self.panel_editing()
+            || self.hollywood.editing
+            || self.panel.finish_confirm.is_some()
+        {
             return false;
         }
         let matched = crate::input::terminal_key_of(key);
         self.panel_config.keys.focus_lot_matches(&matched)
     }
 
-    /// Show and focus the lot with the selection on its last
-    /// selectable row (`Alt+L`): never toggles closed and never starts
-    /// composing.
+    /// Show and focus the lot according to §1.2.4:
+    /// - From `Terminal`/`Tree`/`Cast`/`CallSheet`: open Lot and enter the
+    ///   target studio on its priority landing row (or `Studios` if none).
+    /// - From `Lot(Studios)`: enter the selected studio (or activate
+    ///   `+ new` / `setup`).
+    /// - 2nd press from `Lot(InsideStudio(S))` / `RowActions`: jump into
+    ///   `Compose` on `S`.
     pub(crate) fn focus_lot(&mut self) {
+        use crate::focus::{LotLevel, TellTarget, WorkspaceRegion};
+        if !self.focus.modals.is_empty()
+            || self.panel_editing()
+            || self.hollywood.editing
+            || self.panel.finish_confirm.is_some()
+        {
+            return;
+        }
         self.panel.mode = PanelMode::Expanded;
-        self.panel.focused = true;
-        self.panel_select_last();
+        match self.focus.workspace.clone() {
+            WorkspaceRegion::Lot(LotLevel::InsideStudio(studio))
+            | WorkspaceRegion::Lot(LotLevel::RowActions { studio, .. }) => {
+                self.enter_lot_compose(&studio, TellTarget::default());
+            }
+            WorkspaceRegion::Lot(LotLevel::Compose { .. }) => {}
+            WorkspaceRegion::Lot(LotLevel::Studios) => {
+                let target = self
+                    .panel
+                    .selected
+                    .clone()
+                    .or_else(|| self.default_studios_target());
+                match target {
+                    Some(crate::panel::Target::Setup | crate::panel::Target::Stage(_)) => {
+                        self.panel_activate_target(target);
+                    }
+                    Some(other) => {
+                        if let Some(key) = other
+                            .studio()
+                            .cloned()
+                            .or_else(|| self.studio.current.clone())
+                        {
+                            self.enter_studio_in_lot(&key);
+                        } else {
+                            self.enter_studios_level();
+                        }
+                    }
+                    None => self.enter_studios_level(),
+                }
+            }
+            WorkspaceRegion::CallSheet(_) => {
+                let studio = self
+                    .hollywood
+                    .selected
+                    .as_ref()
+                    .and_then(|t| t.studio().cloned())
+                    .or_else(|| self.studio.current.clone());
+                self.call_sheet_return = None;
+                self.hollywood_collapse();
+                if let Some(key) = studio {
+                    self.enter_studio_in_lot(&key);
+                } else {
+                    self.enter_studios_level();
+                }
+            }
+            WorkspaceRegion::Tree => {
+                let tree_studio = match self.tree_focus.clone() {
+                    Some(crate::chrome::studio_tree::SidebarRow::Workspace {
+                        endpoint,
+                        workspace_id,
+                    }) => self.studio_for_workspace(&endpoint, &workspace_id),
+                    Some(crate::chrome::studio_tree::SidebarRow::Studio {
+                        endpoint,
+                        row:
+                            crate::chrome::studio_tree::Row::Studio { id, .. }
+                            | crate::chrome::studio_tree::Row::Finished { id },
+                    }) => Some(crate::studio::StudioKey {
+                        machine: match endpoint {
+                            crate::chrome::snapshot::ClientEndpointId::Local => None,
+                            crate::chrome::snapshot::ClientEndpointId::Remote(m) => Some(m),
+                        },
+                        id,
+                    }),
+                    _ => None,
+                };
+                if let Some(key) = tree_studio.or_else(|| self.studio.current.clone()) {
+                    self.enter_studio_in_lot(&key);
+                } else {
+                    self.enter_studios_level();
+                }
+            }
+            WorkspaceRegion::Cast => {
+                if let Some(key) = self.cast_studio_key().or_else(|| self.studio.current.clone()) {
+                    self.enter_studio_in_lot(&key);
+                } else {
+                    self.enter_studios_level();
+                }
+            }
+            WorkspaceRegion::Terminal => {
+                if let Some(key) = self.studio.current.clone() {
+                    self.enter_studio_in_lot(&key);
+                } else {
+                    self.enter_studios_level();
+                }
+            }
+        }
     }
 
     /// Close the panel and drop every piece of interaction state.
@@ -172,6 +276,12 @@ impl App {
         self.panel.selected_row = None;
         self.panel.drawer = None;
         self.panel_anim_deadline = None;
+        if matches!(
+            self.focus.workspace,
+            crate::focus::WorkspaceRegion::Lot(_)
+        ) {
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+        }
     }
 
     /// Leave the panel after a row focused a terminal: full-screen
@@ -183,6 +293,12 @@ impl App {
             self.panel_close();
         } else {
             self.panel.focused = false;
+            if matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Lot(_)
+            ) {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+            }
         }
     }
 

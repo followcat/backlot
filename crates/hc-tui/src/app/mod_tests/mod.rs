@@ -18,6 +18,7 @@ mod float_size_wire;
 mod float_takeover;
 mod floats;
 mod floats_lifecycle;
+mod focus_entry;
 mod help;
 mod help_launcher;
 mod hollywood;

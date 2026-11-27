@@ -271,7 +271,7 @@ pub(crate) fn backlot_help_groups(
                 (
                     studio_key(panel.keys.focus_lot),
                     Cow::Owned(format!(
-                        "focus lot (last row){}",
+                        "focus / enter lot{}",
                         shadow(panel.keys.focus_lot)
                     )),
                 ),

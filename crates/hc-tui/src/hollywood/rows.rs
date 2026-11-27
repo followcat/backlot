@@ -67,6 +67,23 @@ pub(crate) enum Target {
     Setup,
 }
 
+impl Target {
+    /// Studio key directly associated with this target, if any.
+    pub(crate) fn studio(&self) -> Option<&StudioKey> {
+        match self {
+            Target::Studio(k)
+            | Target::Prompt(k, _)
+            | Target::Role(k, _)
+            | Target::Tell(k)
+            | Target::Upgrade(k)
+            | Target::Decision(k)
+            | Target::OutwardCard(k, _)
+            | Target::Ready(k) => Some(k),
+            _ => None,
+        }
+    }
+}
+
 /// One frame in the strip.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Frame<'a> {

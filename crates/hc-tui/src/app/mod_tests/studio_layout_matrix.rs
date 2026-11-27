@@ -330,9 +330,13 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     let focused_rows = slice_cols(draw_to(&mut app, 200, 44).buffer(), app.panel_hits.area);
     assert!(focused_rows[0].contains("esc leave"));
     assert!(focused_rows[focused_rows.len() - 2].contains("───"));
-    assert!(focused_rows.last().unwrap().contains("esc leave"));
     press(&mut app, hc_vt::Key::Escape);
-    assert!(!app.panel.focused);
+    assert!(
+        app.panel.focused,
+        "1st Esc in multi-studio Lot steps InsideStudio -> Studios"
+    );
+    press(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused, "2nd Esc leaves Lot for Terminal");
 
     let backend_100 = draw_to(&mut app, 100, 40);
     let layout_100 = app.chrome_layout(100, 40);

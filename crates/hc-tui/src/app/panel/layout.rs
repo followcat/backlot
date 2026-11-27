@@ -253,8 +253,15 @@ impl App {
     /// Whether any modal (Backlot or Herdr covering Backlot surfaces)
     /// is currently open — used to suppress underlying Dock and Call
     /// Sheet active highlights, `▌` bars, and secondary cursors (`R3-M2`).
+    /// Whether any dimming Backlot/Herdr modal is currently open above
+    /// underlying surfaces (excludes `ContextMenu` and `Popup` which do
+    /// not dim underlying highlights, matching `R3-M2`).
     pub(crate) fn has_active_modal(&self) -> bool {
-        self.new_studio.is_some()
+        self.focus
+            .modals
+            .iter()
+            .any(|m| !matches!(m, crate::focus::ModalLayer::ContextMenu | crate::focus::ModalLayer::Popup))
+            || self.new_studio.is_some()
             || self.hw_switch.is_some()
             || self.sheet.is_some()
             || self.hollywood.view.is_some()

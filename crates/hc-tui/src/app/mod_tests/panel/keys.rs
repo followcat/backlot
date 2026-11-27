@@ -310,10 +310,14 @@ async fn enter_on_the_strip_row_closes_a_full_screen_dock() {
     let mut app = app_with_panel_doc();
     app.area = (40, 20);
     open_panel(&mut app);
-    // The Expanded overlay's studio row: Enter focuses the studio and
-    // closes the overlay for the pane it covered.
+    // Part 1 §1.2.3 & §1.2.4: Enter on Studio header enters InsideStudio
+    // landing on priority row (`actor-bob` / `t5`, blocked); 2nd Enter on that
+    // person row opens its terminal and closes the full-screen overlay.
     key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert!(app.panel.focused);
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.focused.as_deref(), Some("t5"));
     assert_eq!(app.panel.mode, PanelMode::Closed);
 }
 
@@ -496,8 +500,17 @@ async fn enter_on_a_studio_focuses_its_producer() {
     app.area = (120, 24);
     open_panel(&mut app);
     app.panel.selected = Some(Target::Studio("acme-shop".into()));
+    // Part 1 §1.2.3 & §1.2.4: 1st Enter enters InsideStudio landing on
+    // priority row (`actor-bob` / `t5`); 2nd Enter on that live person focuses
+    // its terminal and leaves Lot.
     key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert!(app.panel.focused);
+    assert!(matches!(
+        app.focus.workspace,
+        crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(_))
+    ));
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.focused.as_deref(), Some("t5"));
     assert!(!app.panel.focused);
 }
 

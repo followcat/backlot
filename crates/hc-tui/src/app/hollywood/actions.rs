@@ -216,7 +216,7 @@ impl App {
     }
 
     /// Newest explicit question seq a role opened, projected in the studio exchange.
-    fn ask_target(&self, studio: &StudioKey, role: &str) -> Option<u64> {
+    pub(crate) fn ask_target(&self, studio: &StudioKey, role: &str) -> Option<u64> {
         let machines = self.panel_summaries();
         crate::panel::data::studio(&machines, studio)?
             .studio

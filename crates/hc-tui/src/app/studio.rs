@@ -240,12 +240,27 @@ impl App {
                 // composing `›` line is mid-sentence, so both step back
                 // as before.
                 let tree_owns = self.tree_focused();
+                let cast_owns = self.cast_focused();
+                let sheet_owns = !tree_owns
+                    && !cast_owns
+                    && !self.hollywood.editing
+                    && matches!(
+                        self.focus.workspace,
+                        crate::focus::WorkspaceRegion::CallSheet(_)
+                    );
                 let dock_owns = !tree_owns
-                    && self.panel.focused
+                    && !cast_owns
+                    && !sheet_owns
+                    && self.panel_focused()
                     && !self.panel_fullscreen()
                     && !self.panel_editing()
                     && self.panel.finish_confirm.is_none();
-                if !dock_owns && !tree_owns {
+                let in_studio_lot = matches!(
+                    self.focus.workspace,
+                    crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(_))
+                        | crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions { .. })
+                );
+                if !dock_owns && !tree_owns && !cast_owns && !sheet_owns {
                     self.nav_leave_overlays();
                 }
                 self.studio.set_studio_focus(next.clone());
@@ -263,23 +278,33 @@ impl App {
                 }
                 self.panel_reveal_studio(&next);
                 self.sync_lot(&machines);
-                // Land the stepped-to studio's member in the main pane.
-                // Quiet when it has none: a studio still seating queues
-                // its landing for the next publish, a settled one leaves
-                // the pane as it is — no notice on a step. Either way a
-                // queue left by an earlier step is dropped, so a studio
-                // left behind never takes the keys later.
                 self.ns_pending_focus = None;
                 self.land_studio_member(&next);
                 if dock_owns {
-                    self.panel_select_studio(&next);
+                    if in_studio_lot {
+                        self.enter_studio_in_lot(&next);
+                    } else {
+                        self.panel_select_studio(&next);
+                    }
                 }
                 if tree_owns {
                     self.tree_focus_studio_row(&next);
                 }
+                if cast_owns {
+                    self.cast_follow_active();
+                }
+                if sheet_owns {
+                    self.hollywood.selected = Some(crate::hollywood::Target::Studio(next.clone()));
+                    self.hollywood_remember_selected();
+                }
             }
             StudioNav::PreviousRole | StudioNav::NextRole => {
-                self.nav_leave_overlays();
+                let cast_owns = self.cast_focused();
+                let tree_owns = self.tree_focused();
+                let dock_owns = self.panel_focused() && !self.panel_editing();
+                if !cast_owns && !tree_owns && !dock_owns {
+                    self.nav_leave_overlays();
+                }
                 let dir: isize = if matches!(nav, StudioNav::NextRole) {
                     1
                 } else {
@@ -316,7 +341,10 @@ impl App {
                 }
                 let position = cycle.iter().position(|t| t == &current_term).unwrap_or(0) as isize;
                 let next = &cycle[(position + dir).rem_euclid(cycle.len() as isize) as usize];
-                self.focus_pane(next.clone());
+                self.focus_pane_preserving_focus(next.clone());
+                if self.cast_focused() {
+                    self.cast_follow_active();
+                }
             }
         }
         // M4: the machines tree follows the selection, never dropping

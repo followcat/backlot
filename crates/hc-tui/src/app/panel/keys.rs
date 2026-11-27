@@ -181,12 +181,38 @@ impl App {
         match code {
             KeyCode::Esc => {
                 self.panel.finish_confirm = None;
-                if self.panel_esc_closes() {
-                    self.panel_close();
-                } else {
-                    // Beside the panes: `esc back` — the dock keeps
-                    // its place and hands the keys to the terminal.
-                    self.panel.focused = false;
+                match self.focus.workspace.clone() {
+                    crate::focus::WorkspaceRegion::Lot(
+                        crate::focus::LotLevel::RowActions { studio, .. },
+                    ) => {
+                        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                            crate::focus::LotLevel::InsideStudio(studio),
+                        ));
+                    }
+                    crate::focus::WorkspaceRegion::Lot(
+                        crate::focus::LotLevel::InsideStudio(studio),
+                    ) => {
+                        let machines = self.panel_summaries();
+                        let count = crate::panel::data::studios(&machines).len();
+                        if count >= 2 {
+                            self.panel.selected = Some(Target::Studio(studio));
+                            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                crate::focus::LotLevel::Studios,
+                            ));
+                            self.panel_reveal_selected();
+                        } else if self.panel_esc_closes() {
+                            self.panel_close();
+                        } else {
+                            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+                        }
+                    }
+                    _ => {
+                        if self.panel_esc_closes() {
+                            self.panel_close();
+                        } else {
+                            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+                        }
+                    }
                 }
             }
             KeyCode::Char('q') if plain => self.panel_close(),
@@ -245,7 +271,14 @@ impl App {
     pub(super) fn panel_activate_target(&mut self, target: Option<Target>) {
         let machines = self.panel_summaries();
         match target {
-            Some(Target::Studio(id) | Target::Strip(id)) => {
+            Some(Target::Studio(id)) => {
+                self.studio.set_studio_focus(id.clone());
+                self.last_current_studio = self.studio.current.clone();
+                self.ns_pending_focus = None;
+                self.land_studio_member(&id);
+                self.enter_studio_in_lot(&id);
+            }
+            Some(Target::Strip(id)) => {
                 self.focus_studio(&id);
                 self.panel_leave();
             }
@@ -331,7 +364,17 @@ impl App {
     /// one lands through the same machine-qualified address the
     /// sidebar uses; a closed one is never respawned by Enter —
     /// `o` owns the reopen (R3-M11's one-key-one-meaning).
-    fn panel_person_enter(&mut self, role: &RoleSummary) {
+    /// Enter on a person: a live one focuses its terminal and returns
+    /// keyboard focus to Terminal (`[open ↵]`); a closed one is never
+    /// respawned by Enter — `o` owns the reopen.
+    pub(super) fn panel_person_enter(&mut self, role: &RoleSummary) {
+        self.panel_person_focus_pane(role, true);
+    }
+
+    /// Focus a live person's pane in the main terminal, optionally
+    /// leaving Lot focus for `Terminal` (`Enter` leaves, single-click
+    /// keeps focus in Lot per Decision #2).
+    pub(super) fn panel_person_focus_pane(&mut self, role: &RoleSummary, leave_lot: bool) {
         if role.state == "closed" {
             self.show_notice(
                 "Person closed",
@@ -349,8 +392,10 @@ impl App {
         if role.state == "live"
             && let Some(terminal) = role.terminal.clone()
         {
-            self.focus_pane(terminal);
-            self.panel_leave();
+            self.focus_pane_preserving_focus(terminal);
+            if leave_lot {
+                self.panel_leave();
+            }
         }
     }
 }

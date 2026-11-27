@@ -247,6 +247,19 @@ impl App {
     /// `Compose` on `Target::Input` when `[hollywood]` is set.
     pub(crate) fn hollywood_enter_expanded_at(&mut self, action: crate::chrome::lot::PillAction) {
         use crate::chrome::lot::PillAction;
+        if !matches!(
+            self.focus.workspace,
+            crate::focus::WorkspaceRegion::CallSheet(_)
+        ) {
+            self.call_sheet_return = Some(match &self.focus.workspace {
+                crate::focus::WorkspaceRegion::Tree => crate::focus::WorkspaceRegion::Tree,
+                crate::focus::WorkspaceRegion::Cast => crate::focus::WorkspaceRegion::Cast,
+                crate::focus::WorkspaceRegion::Lot(level) => {
+                    crate::focus::WorkspaceRegion::Lot(level.clone())
+                }
+                _ => crate::focus::WorkspaceRegion::Terminal,
+            });
+        }
         self.hollywood.mode = LayerMode::Expanded;
         self.hollywood.chip_index = None;
         self.hollywood.last_upper = None;
@@ -278,6 +291,8 @@ impl App {
         self.hollywood_sync_history_from(&machines);
         self.sync_hollywood_seen(&machines);
         self.studio.lot.counts.unread = 0;
+        let zone = self.derived_call_sheet_zone();
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::CallSheet(zone));
     }
 
     fn hollywood_enter_expanded(&mut self) {

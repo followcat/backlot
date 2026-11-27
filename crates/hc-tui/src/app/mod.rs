@@ -79,6 +79,8 @@ mod studio_shell;
 mod studio_tree;
 mod synthesize;
 mod tab_status;
+mod cast_focus;
+mod focus_sync;
 mod tree_focus;
 pub(crate) mod update_flow;
 mod update_modal;
@@ -452,6 +454,16 @@ pub struct App {
     /// enters it, `Esc` leaves. The cursor is a row of the flat tree
     /// list; `None` while the tree does not own the keys.
     pub(crate) tree_focus: Option<crate::chrome::studio_tree::SidebarRow>,
+    /// Authoritative focus stack (`workspace` + stacked `modals`).
+    pub(crate) focus: crate::focus::FocusState,
+    /// Remembered left-tree cursor rendered as faint `·` when unfocused.
+    pub(crate) tree_remembered: Option<crate::chrome::studio_tree::SidebarRow>,
+    /// Selected row inside the left Cast section when `Cast` is focused.
+    pub(crate) cast_focus: Option<crate::focus::CastTarget>,
+    /// Remembered Cast selection for faint `·` rendering when unfocused.
+    pub(crate) cast_remembered: Option<crate::focus::CastTarget>,
+    /// Workspace region to restore when `Esc` collapses the Call Sheet.
+    pub(crate) call_sheet_return: Option<crate::focus::WorkspaceRegion>,
     agent_panel_sort_manual: bool,
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,

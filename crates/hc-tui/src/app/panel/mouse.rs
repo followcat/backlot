@@ -25,7 +25,20 @@ impl App {
         let point = (mouse.col, mouse.row);
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                let was_focused = matches!(
+                    self.focus.workspace,
+                    crate::focus::WorkspaceRegion::Lot(_)
+                ) || self.panel.focused;
                 self.panel.focused = true;
+                let right_level = match self
+                    .focus
+                    .workspace
+                    .clone()
+                {
+                    crate::focus::WorkspaceRegion::Lot(l) => l,
+                    _ => self.derived_lot_level(),
+                };
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(right_level));
                 // The expanded dock's left border is a drag handle
                 // (S5 §2) — beside the panes it resizes within
                 // `28..=48`. An overlay dock's edge is not a handle.
@@ -88,10 +101,71 @@ impl App {
                         self.panel.selected_row = Some(1 + start + pos);
                         self.panel.editing = false;
                         self.panel.reset_history_nav();
-                        if !matches!(target, crate::panel::Target::Block(..)) {
-                            self.panel_reveal_selected();
+                        match &target {
+                            crate::panel::Target::Person(key, role_name) => {
+                                // Decision #2: single click on a Lot person row
+                                // switches the main pane immediately AND keeps focus
+                                // in Lot on that row.
+                                let machines = self.panel_summaries();
+                                if let Some(role) = crate::panel::data::studio(&machines, key)
+                                    .and_then(|s| {
+                                        s.studio.roles.iter().find(|r| r.role == *role_name).cloned()
+                                    })
+                                {
+                                    self.studio.current = Some(key.clone());
+                                    self.panel_person_focus_pane(&role, false);
+                                }
+                                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                    crate::focus::LotLevel::InsideStudio(key.clone()),
+                                ));
+                                self.panel_reveal_selected();
+                            }
+                            crate::panel::Target::Block(key) => {
+                                let key = key.clone();
+                                self.panel_activate_target(Some(target));
+                                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                    crate::focus::LotLevel::InsideStudio(key),
+                                ));
+                            }
+                            crate::panel::Target::Studio(key)
+                            | crate::panel::Target::Strip(key) => {
+                                self.studio.set_studio_focus(key.clone());
+                                self.last_current_studio = self.studio.current.clone();
+                                self.land_studio_member(key);
+                                self.panel.collapsed_blocks.remove(key);
+                                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                    crate::focus::LotLevel::InsideStudio(key.clone()),
+                                ));
+                                self.panel_reveal_selected();
+                            }
+                            crate::panel::Target::Input(key) => {
+                                self.panel.editing = true;
+                                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                    crate::focus::LotLevel::Compose {
+                                        studio: key.clone(),
+                                        target: crate::focus::TellTarget::default(),
+                                    },
+                                ));
+                                self.panel_reveal_selected();
+                            }
+                            other => {
+                                if !was_focused {
+                                    let level = match other.studio() {
+                                        Some(k) => {
+                                            crate::focus::LotLevel::InsideStudio(k.clone())
+                                        }
+                                        None => crate::focus::LotLevel::Studios,
+                                    };
+                                    self.set_workspace_focus(
+                                        crate::focus::WorkspaceRegion::Lot(level),
+                                    );
+                                    self.panel_reveal_selected();
+                                } else {
+                                    self.panel_reveal_selected();
+                                    self.panel_activate_target(Some(target));
+                                }
+                            }
                         }
-                        self.panel_activate_target(Some(target));
                     }
                 }
             }
@@ -100,6 +174,15 @@ impl App {
                 // the left press does — the menu's Esc must hand them
                 // back to the dock, not the focused terminal (S3 R2).
                 self.panel.focused = true;
+                let right_level = match self
+                    .focus
+                    .workspace
+                    .clone()
+                {
+                    crate::focus::WorkspaceRegion::Lot(l) => l,
+                    _ => self.derived_lot_level(),
+                };
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(right_level));
                 // Right-click selects the row under the pointer and
                 // opens its menu there (S3 §1) — the dock never
                 // swallowed right-click before, it just had none.

@@ -86,46 +86,6 @@ impl App {
         }
     }
 
-    /// The last actionable row's target (`Alt+L`): stay resting (never
-    /// arm Compose), jump across multi-row targets to their head row,
-    /// unfold the last studio if needed, and scroll so it stays visible.
-    pub(super) fn panel_select_last(&mut self) {
-        let machines = self.panel_summaries();
-        let body_height = self.panel_body_height();
-        let mut rows = self.panel_rows_at(&machines, body_height);
-        self.panel.editing = false;
-        self.panel.finish_confirm = None;
-        self.panel.reset_history_nav();
-        let last_row = |rows: &[panel::Row<'_>]| -> Option<(usize, Target)> {
-            let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
-            let mut idx = targets.iter().rposition(|t| *t != Target::None)?;
-            while idx > 0 && targets[idx - 1] == targets[idx] {
-                idx -= 1;
-            }
-            Some((idx, targets[idx].clone()))
-        };
-        let Some((mut index, target)) = last_row(&rows) else {
-            self.panel.selected = None;
-            self.panel.selected_row = None;
-            return;
-        };
-        let prev_studio = self
-            .panel
-            .selected
-            .as_ref()
-            .and_then(|t| t.studio().cloned());
-        self.panel.selected = Some(target.clone());
-        if target.studio() != prev_studio.as_ref() {
-            rows = self.panel_rows_at(&machines, body_height);
-            if let Some((new_idx, new_target)) = last_row(&rows) {
-                index = new_idx;
-                self.panel.selected = Some(new_target);
-            }
-        }
-        self.panel.selected_row = Some(index);
-        self.reveal_panel_line(&rows, index);
-    }
-
     /// j/k/arrows and paging: move the selection by `delta` rows and
     /// keep it visible. Crossing into a folded studio unfolds it (and
     /// folds the studio left) while keeping the same target visible.
