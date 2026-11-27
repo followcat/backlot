@@ -241,11 +241,11 @@ fn draw_deco_step_strip(
     let item_width = |step: Step| -> u16 {
         let idx = step.index();
         if step == current {
-            display_width(&format!("╡ {idx} {} ╞", step.label()))
+            display_width(&format!("╡ {idx} {} ╞", step.label())) as u16
         } else if idx < current.index() {
-            display_width(&format!("✓ {idx} {}", step.label()))
+            display_width(&format!("✓ {idx} {}", step.label())) as u16
         } else {
-            display_width(&format!("{idx} {}", step.label()))
+            display_width(&format!("{idx} {}", step.label())) as u16
         }
     };
     let items_sum: u16 = steps.iter().map(|&s| item_width(s)).sum();
