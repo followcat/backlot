@@ -113,7 +113,10 @@ pub(crate) struct SettingsOverlay {
 }
 
 pub(crate) fn normalized_theme_name(name: &str) -> String {
-    name.to_lowercase().replace([' ', '_'], "-")
+    let normalized = name.to_lowercase().replace([' ', '_'], "-");
+    crate::config::canonical_theme_name(&normalized)
+        .map(str::to_owned)
+        .unwrap_or(normalized)
 }
 
 pub(crate) fn theme_index(names: &[&str], name: &str) -> usize {

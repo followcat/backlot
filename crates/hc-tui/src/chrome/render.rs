@@ -253,11 +253,17 @@ pub(crate) fn sidebar_surface_and_edge(
 ) -> (ratatui::style::Color, ratatui::style::Color) {
     let elev = palette.elevation();
     // Translucent themes keep `Color::Reset` + `surface_dim` for Herdr
-    // parity. Opaque `backlot` joins `elevation.surface` unless the
+    // parity. Opaque `backlot` themes join `elevation.surface` unless the
     // user explicitly overrode `[theme.custom] sidebar_bg`.
     if palette.sidebar_bg == ratatui::style::Color::Reset {
         (palette.sidebar_bg, palette.surface_dim)
-    } else if palette.sidebar_bg == Palette::backlot().sidebar_bg {
+    } else if [
+        Palette::backlot().sidebar_bg,
+        Palette::backlot_day().sidebar_bg,
+        Palette::backlot_midnight().sidebar_bg,
+    ]
+    .contains(&palette.sidebar_bg)
+    {
         (elev.surface, elev.border_muted)
     } else {
         (palette.sidebar_bg, elev.border_muted)

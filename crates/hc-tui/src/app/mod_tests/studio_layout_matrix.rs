@@ -1,7 +1,7 @@
 //! 200x44 and 100x40 studio-mode layout matrix verification: sidebar
 //! deduplication & `? keys`, compact Lot rows, unfolded live roles,
 //! 1-line inline Cast/Lot role rows with CJK truncation, bucketed pill
-//! colors/jumps, `Alt+Y` landing, `HeaderKind::Role`, footers, and 19 themes.
+//! colors/jumps, `Alt+Y` landing, `HeaderKind::Role`, footers, and 21 themes.
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};
@@ -455,24 +455,25 @@ async fn pill_bucket_clicks_and_alt_y_smart_landing() {
 }
 
 #[tokio::test]
-async fn studio_chrome_all_19_bundled_themes_and_plain_herdr_matrix() {
+async fn studio_chrome_all_21_bundled_themes_and_plain_herdr_matrix() {
     let (mut app, dir) = matrix_fixture(true, false);
     let own_path = dir.join("own.toml");
     app.area = (160, 44);
 
-    let all_19 =
-        std::iter::once(crate::own_theme::NAME).chain(crate::config::THEME_NAMES.iter().copied());
-    for name in all_19 {
+    let all_21 = [
+        crate::own_theme::NAME,
+        crate::own_theme::DAY_NAME,
+        crate::own_theme::MIDNIGHT_NAME,
+    ]
+    .into_iter()
+    .chain(crate::config::THEME_NAMES.iter().copied());
+    for name in all_21 {
         std::fs::write(&own_path, format!("[theme]\nname = \"{name}\"\n")).unwrap();
         app.set_plain(false);
         app.reload_config();
         let elev = app.shell.palette.elevation();
-        let mut expected = if name == crate::own_theme::NAME {
-            Palette::backlot()
-        } else {
-            Palette::from_name(name).unwrap()
-        };
-        if name != crate::own_theme::NAME && !elev.is_terminal_16 {
+        let mut expected = Palette::from_name(name).unwrap();
+        if expected.sidebar_bg == Color::Reset && !elev.is_terminal_16 {
             expected.sidebar_bg = elev.surface;
         }
         assert_eq!(app.shell.palette, expected, "theme {name}");

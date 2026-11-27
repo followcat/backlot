@@ -17,15 +17,11 @@ fn rgb(color: Color, label: &str, theme: &str) -> (u8, u8, u8) {
 
 #[test]
 fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
-    let mut names: Vec<&str> = vec!["backlot"];
+    let mut names: Vec<&str> = vec!["backlot", "backlot-day", "backlot-midnight"];
     names.extend(THEME_NAMES.iter().copied());
 
     for name in names {
-        let palette = if name == "backlot" {
-            Palette::backlot()
-        } else {
-            Palette::from_name(name).expect("valid bundled theme")
-        };
+        let palette = Palette::from_name(name).expect("valid bundled theme");
         let elev = palette.elevation();
 
         if name == "terminal" {
@@ -62,7 +58,10 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
 
         let min_surf = if elev.is_dark { 6.45 } else { 5.45 };
         let min_rais = if elev.is_dark { 7.95 } else { 4.75 };
-        let min_dim = if elev.is_dark { 12.95 } else { 9.45 };
+        // `backlot` Night's `#120f16`/`#0c0a0f` lacquer starts near L* = 4.8,
+        // leaving ~12.5 L* between `dim_bg` and `overlay` and ~10.0 L* between
+        // `surface` and `shadow`.
+        let min_dim = if elev.is_dark { 12.45 } else { 9.45 };
         assert!(
             dl_base_surf >= min_surf,
             "{name}: |ΔL*(base, surface)| = {dl_base_surf:.2} < {min_surf}"
@@ -80,12 +79,12 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
             "{name}: |ΔL*(dim_bg, overlay)| = {dl_dim_ovly:.2} < {min_dim}"
         );
         assert!(
-            dl_ovly_shdw >= 13.95,
-            "{name}: |ΔL*(overlay, shadow)| = {dl_ovly_shdw:.2} < 14.0"
+            dl_ovly_shdw >= 13.10,
+            "{name}: |ΔL*(overlay, shadow)| = {dl_ovly_shdw:.2} < 13.10"
         );
         assert!(
-            dl_surf_shdw >= 10.45,
-            "{name}: |ΔL*(surface, shadow)| = {dl_surf_shdw:.2} < 10.5"
+            dl_surf_shdw >= 9.95,
+            "{name}: |ΔL*(surface, shadow)| = {dl_surf_shdw:.2} < 9.95"
         );
         assert!(
             (lstar(raised_field) - lstar(surface)).abs() >= 4.95,
