@@ -3,7 +3,13 @@
 //! to a temporary file, and rewrites the command to use that path, so
 //! validation, notes and creation never compete for the same stream.
 
-use std::path::PathBuf;
+use std::fs::{DirBuilder, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 use crate::args::{CastCmd, Cmd, HollywoodCmd, TextSource};
 use crate::cli::Fail;
@@ -189,25 +195,125 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
+static NEXT_NAME: AtomicU64 = AtomicU64::new(0);
+const STAGE_ATTEMPTS: u64 = 8;
+
 fn stage_body(label: &str, body: &str, nested_report: bool) -> Result<PathBuf, Fail> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let id = format!(
-        "{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    );
-    let path = if nested_report {
-        let dir = std::env::temp_dir().join(format!("backlot-report-{id}"));
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
-        dir.join("report.md")
-    } else {
-        std::env::temp_dir().join(format!("backlot-body-{id}.txt"))
-    };
-    std::fs::write(&path, body)
-        .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
-    #[cfg(test)]
-    STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
-    Ok(path)
+    stage_body_in(
+        &std::env::temp_dir(),
+        &NEXT_NAME,
+        label,
+        body,
+        nested_report,
+    )
+}
+
+/// Claim a fresh name atomically and write the body owner-only. A
+/// planted file, symlink or directory costs one counter value, never
+/// the body's bytes or the victim behind the link.
+fn stage_body_in(
+    tmp: &Path,
+    next: &AtomicU64,
+    label: &str,
+    body: &str,
+    nested_report: bool,
+) -> Result<PathBuf, Fail> {
+    for _ in 0..STAGE_ATTEMPTS {
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            next.fetch_add(1, Ordering::Relaxed)
+        );
+        if nested_report {
+            let dir = tmp.join(format!("backlot-report-{id}"));
+            let mut builder = DirBuilder::new();
+            #[cfg(unix)]
+            builder.mode(0o700);
+            match builder.create(&dir) {
+                Ok(()) => {
+                    let path = dir.join("report.md");
+                    match write_private(&path, body) {
+                        Ok(()) => {
+                            #[cfg(test)]
+                            STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
+                            return Ok(path);
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                            let _ = std::fs::remove_dir(&dir);
+                        }
+                        Err(e) => {
+                            let _ = std::fs::remove_file(&path);
+                            let _ = std::fs::remove_dir(&dir);
+                            return Err(stage_fail(label, e));
+                        }
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(stage_fail(label, e)),
+            }
+        } else {
+            let path = tmp.join(format!("backlot-body-{id}.txt"));
+            match write_private(&path, body) {
+                Ok(()) => {
+                    #[cfg(test)]
+                    STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
+                    return Ok(path);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(stage_fail(label, e)),
+            }
+        }
+    }
+    Err(Fail::refused(format!(
+        "cannot stage the {label} body: no free temporary name"
+    )))
+}
+
+fn write_private(path: &Path, body: &str) -> std::io::Result<()> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options.open(path)?;
+    file.write_all(body.as_bytes())
+}
+
+fn stage_fail(label: &str, e: std::io::Error) -> Fail {
+    Fail::refused(format!("cannot stage the {label} body: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::TestDir;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_staged_body_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TestDir::new("stdin-stage-mode");
+        let next = AtomicU64::new(0);
+        let path = stage_body_in(dir.path(), &next, "message", "body", false).unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_next_name_is_never_written_through() {
+        let dir = TestDir::new("stdin-stage-planted");
+        let next = AtomicU64::new(0);
+        let planted = dir.join(format!("backlot-body-{}-0.txt", std::process::id()));
+        let victim = dir.join("victim");
+        std::fs::write(&victim, "victim").unwrap();
+        std::os::unix::fs::symlink(&victim, &planted).unwrap();
+
+        let path = stage_body_in(dir.path(), &next, "message", "body", false).unwrap();
+
+        assert_ne!(path, planted);
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "victim");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "body");
+    }
 }
