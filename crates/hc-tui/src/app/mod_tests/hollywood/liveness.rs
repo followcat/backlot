@@ -50,8 +50,9 @@ async fn call_sheet_and_collapsed_lot_pill_animate_when_hollywood_is_queued_or_w
         app.has_animation(),
         "collapsed Lot Pill keeps spinner armed"
     );
+    let pill_spin0 = top_spin0.rsplit('│').next().unwrap_or(&top_spin0);
     assert!(
-        !top_spin0.contains('✦'),
+        !pill_spin0.contains('✦'),
         "spinner glyph replaced static spark: {top_spin0}"
     );
     let due = app.panel_anim_deadline.expect("deadline armed");

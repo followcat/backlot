@@ -276,7 +276,7 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
         "beta-api ›",
         "Ⓟ",
         "agy · gemini-4-neon (xhigh)",
-        "✦ 7",
+        "◉ 7",
         "!1",
         "✓4 ready",
         "alt+y",
@@ -292,7 +292,7 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     let lot_area = app.panel_hits.area;
     let lot_rows = slice_cols(buf, lot_area);
     let lot_text = lot_rows.join("\n");
-    assert!(lot_text.contains("lot · 7"), "{lot_text}");
+    assert!(lot_text.contains("✦ L O T · 7"), "{lot_text}");
     assert!(lot_rows[0].contains("alt+l focus") && !lot_rows[0].contains("alt+y"));
     assert!(!lot_text.contains("actors ") && !lot_text.contains("gemini-4-neon"));
     assert!(lot_text.contains("idle") && lot_text.contains("standby"));
@@ -335,12 +335,22 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     press_mods(&mut app, hc_vt::Key::Char('l'), hc_vt::Mods::ALT);
     assert!(app.panel.focused);
     let focused_rows = slice_cols(draw_to(&mut app, 200, 44).buffer(), app.panel_hits.area);
-    assert!(focused_rows[0].contains("esc leave"));
+    assert!(
+        focused_rows[0].contains("esc studios"),
+        "{:?}",
+        focused_rows[0]
+    );
     assert!(focused_rows[focused_rows.len() - 2].contains("───"));
     press(&mut app, hc_vt::Key::Escape);
     assert!(
         app.panel.focused,
         "1st Esc in multi-studio Lot steps InsideStudio -> Studios"
+    );
+    let studios_rows = slice_cols(draw_to(&mut app, 200, 44).buffer(), app.panel_hits.area);
+    assert!(
+        studios_rows[0].contains("esc leave"),
+        "{:?}",
+        studios_rows[0]
     );
     press(&mut app, hc_vt::Key::Escape);
     assert!(!app.panel.focused, "2nd Esc leaves Lot for Terminal");
@@ -484,6 +494,11 @@ async fn studio_chrome_all_21_bundled_themes_and_plain_herdr_matrix() {
         let buf = collapsed.buffer();
         assert_eq!(
             buf[(layout.sidebar.x, layout.sidebar.y)].bg,
+            elev.stage_well,
+            "{name}"
+        );
+        assert_eq!(
+            buf[(layout.sidebar.x, layout.sidebar.y + 1)].bg,
             elev.surface,
             "{name}"
         );
@@ -504,7 +519,7 @@ async fn studio_chrome_all_21_bundled_themes_and_plain_herdr_matrix() {
         let sep_x = (layout.tab_bar.x..layout.tab_bar.right())
             .find(|&x| buf[(x, layout.tab_bar.y)].symbol() == "›")
             .unwrap_or_else(|| panic!("missing › in tab_bar for {name}"));
-        assert_eq!(buf[(sep_x, layout.tab_bar.y)].bg, elev.surface, "{name}");
+        assert_eq!(buf[(sep_x, layout.tab_bar.y)].bg, elev.stage_well, "{name}");
         let lot = app.panel_hits.area;
         assert_eq!(
             buf[(lot.x + 1, lot.bottom() - 1)].bg,
@@ -553,7 +568,7 @@ async fn studio_chrome_all_21_bundled_themes_and_plain_herdr_matrix() {
     .unwrap();
     app.reload_config();
     assert_eq!(
-        draw_to(&mut app, 160, 44).buffer()[(layout.sidebar.x, layout.sidebar.y)].bg,
+        draw_to(&mut app, 160, 44).buffer()[(layout.sidebar.x, layout.sidebar.y + 1)].bg,
         Color::Rgb(32, 37, 48)
     );
 }

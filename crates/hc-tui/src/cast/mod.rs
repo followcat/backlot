@@ -10,6 +10,8 @@ pub(crate) mod rows;
 mod simple;
 
 #[cfg(test)]
+mod deco_tests;
+#[cfg(test)]
 mod standby_tests;
 #[cfg(test)]
 #[path = "tests.rs"]

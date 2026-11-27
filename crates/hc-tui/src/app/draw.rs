@@ -161,6 +161,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 && layout.pane_surface.width >= 40,
             cols: app.area.0,
             spin: app.panel.spin,
+            studio_chrome: app.shell.studio_chrome,
         },
     );
     let update_latest = app.update_ready_version().map(str::to_owned);

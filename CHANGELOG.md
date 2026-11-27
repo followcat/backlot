@@ -12,8 +12,9 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **The design Reader looks like a silent-film title card: a stepped gilt frame, centred section banners and a gold bar beside questions and quotes, with the same reading width as before.** A finished studio's Sheet ends with `THE END`.
+- **The Lot, the top bar, the modebar and the sidebar take on *Babylon*'s gilded style.** A studio's frame gets heavier as you select it and enter it, finished studios end on `THE END`, and the top pill turns red with a `◉` while something is blocking.
 - **Studio dialogs, notices, the New Studio wizard, and the opening card now wear *Babylon*'s gilded frames.** Destructive confirms are framed in red with a `◉`, the button Enter runs is wrapped in `‹ ›`, finishing a studio shows a `THE END` notice, and an empty Lot shows a small plaque with the keys to start one; `--plain` and `[theme] source = "herdr"` keep rounded frames ([docs/studio/panel.md](docs/studio/panel.md), [docs/studio/guide.md](docs/studio/guide.md), [docs/theme.md](docs/theme.md)).
+- **The design Reader looks like a silent-film title card: a stepped gilt frame, centred section banners and a gold bar beside questions and quotes, with the same reading width as before.** A finished studio's Sheet ends with `THE END`.
 
 ## 0.4.26 — 2026-11-27
 

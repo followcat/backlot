@@ -472,7 +472,7 @@ async fn an_open_panel_draws_its_column_and_fullscreen_covers() {
     open_panel(&mut app);
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("lot · 1"), "{text}");
+    assert!(text.contains("✦ L O T · 1"), "{text}");
     assert!(text.contains("acme-shop"));
     // At 80 the same panel covers the frame instead.
     app.area = (80, 24);
@@ -513,7 +513,7 @@ async fn mobile_60x20_activates_mobile_header_full_pane_and_full_width_overlay()
     );
     let open = draw_to(&mut app, 60, 20);
     let text = screen_lines(&open).join("\n");
-    assert!(text.contains("lot · 1"), "{text}");
+    assert!(text.contains("✦ L O T · 1"), "{text}");
     assert!(text.contains("Ⓐ task-1"), "{text}");
     assert!(text.contains("tell producer"), "{text}");
     // Mobile header stays visible on row 0 above the overlay.

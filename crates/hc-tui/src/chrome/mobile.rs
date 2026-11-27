@@ -84,8 +84,13 @@ pub(crate) fn render_mobile_header(
     let pill_w = lot
         .filter(|l| l.pill)
         .map(|l| {
-            super::lot::pill_width(&l.counts, super::lot::PillTier::Mobile, l.agent)
-                .min(button.x.saturating_sub(area.x).saturating_sub(2))
+            super::lot::pill_width(
+                &l.counts,
+                super::lot::PillTier::Mobile,
+                l.agent,
+                config.studio_chrome,
+            )
+            .min(button.x.saturating_sub(area.x).saturating_sub(2))
         })
         .unwrap_or(0);
     let status_width = button
@@ -131,6 +136,7 @@ pub(crate) fn render_mobile_header(
             super::lot::PillTier::Mobile,
             lot.agent,
             lot.spin,
+            config.studio_chrome,
             palette,
             hits,
         );

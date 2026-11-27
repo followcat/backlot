@@ -124,7 +124,7 @@ fn expanded_block_draws_frame_people_and_state_words() {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
         let text = lines(&buf, area).join("\n");
-        assert!(text.contains("lot · 1"), "w{width}: {text}");
+        assert!(text.contains("✦ L O T · 1"), "w{width}: {text}");
         assert!(text.contains("╭"), "w{width}: {text}");
         assert!(text.contains("╰"), "w{width}: {text}");
         // The id truncates with `…` at w22 — the spec's ellipsis
@@ -165,13 +165,12 @@ fn borders_are_honest_about_focus() {
     let (buf, _) = draw(area, Some(&summary), &focused, None);
     assert_eq!(buf[(area.x, top_y)].symbol(), "│");
     assert_eq!(buf[corner].fg, palette().accent);
-    assert_eq!(buf[(area.x + 1, top_y)].symbol(), "▌");
-    // Unfocused, the row cursor hides (`╭` is back, no `▌`), and the
-    // unfocused studio frame demotes to `border_muted` (single focus ring).
+    assert_eq!(buf[(area.x + 1, top_y)].symbol(), "╔");
+    // Unfocused, the resting corner (`╭`) and `gilt` frame return without `▌`.
     let mut unfocused = panel(PanelMode::Expanded);
     unfocused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
-    assert_eq!(buf[corner].fg, palette().elevation().border_muted);
+    assert_eq!(buf[corner].fg, palette().elevation().gilt);
     assert_eq!(buf[(area.x + 1, top_y)].symbol(), "╭");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");
@@ -568,7 +567,7 @@ fn collapsed_strip_draws_health_id_and_attention_without_single_machine_suffix()
     let area = Rect::new(0, 0, 16, 12);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("lot"), "{text}");
+    assert!(text.contains("✦ LOT·1"), "{text}");
     assert!(text.contains("● acme-shop"), "{text}");
     assert!(!text.contains("·loc"), "single-machine omits ·loc: {text}");
     assert!(
@@ -778,7 +777,7 @@ fn studios_spanning_machines_name_their_machine() {
     assert!(text.contains("acme-shop · Local"), "{text}");
     assert!(text.contains("acme-shop · host-b"), "{text}");
     // The title's count spans machines too.
-    assert!(text.contains("lot · 2"), "{text}");
+    assert!(text.contains("✦ L O T · 2"), "{text}");
 }
 
 #[test]
@@ -817,7 +816,7 @@ fn one_machine_keeps_the_bare_id_headers() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
     assert!(!text.contains("acme-shop ·"), "{text}");
-    assert!(text.contains("lot · 1"), "{text}");
+    assert!(text.contains("✦ L O T · 1"), "{text}");
 }
 
 /// R14: an experimental studio's block header carries `exp` after

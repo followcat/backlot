@@ -37,7 +37,7 @@ fn non_blocking_pill_uses_raised_row_with_teal_and_peach_segments() {
         switch_state: None,
     };
     let mut hits = ShellHitMap::default();
-    let w = pill_width(&counts, PillTier::Full, true);
+    let w = pill_width(&counts, PillTier::Full, true, true);
     let area = Rect::new(0, 0, w, 1);
     let mut buf = Buffer::empty(area);
     render_pill_recorded(
@@ -47,12 +47,15 @@ fn non_blocking_pill_uses_raised_row_with_teal_and_peach_segments() {
         PillTier::Full,
         true,
         0,
+        true,
         &palette,
         &mut hits,
     );
     let text = row_text(&buf, area);
-    assert!(text.contains("✦ 4 · ?1 · 2c · ✓1 ready"), "{text:?}");
-    assert!(text.contains("alt+y"), "{text:?}");
+    assert!(
+        text.contains("╡ ✦ 4 · ?1 · 2c · ✓1 ready · alt+y ╞"),
+        "{text:?}"
+    );
 
     for x in 0..w {
         assert_ne!(buf[(x, 0)].bg, palette.red, "non-blocking pill never red");
@@ -98,7 +101,7 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
         switch_state: None,
     };
     let mut hits = ShellHitMap::default();
-    let w = pill_width(&counts, PillTier::Wide, true);
+    let w = pill_width(&counts, PillTier::Wide, true, true);
     let area = Rect::new(0, 0, w, 1);
     let mut buf = Buffer::empty(area);
     render_pill_recorded(
@@ -108,31 +111,42 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
         PillTier::Wide,
         true,
         0,
+        true,
         &palette,
         &mut hits,
     );
     let text = row_text(&buf, area);
-    assert!(text.contains("✦ 3 · !2 · ?1 · 1c · ✓1"), "{text:?}");
+    assert!(text.contains("╡ ◉ 3 · !2 · ?1 · 1c · ✓1 ╞"), "{text:?}");
     for x in 0..w {
         assert_eq!(buf[(x, 0)].bg, palette.red);
     }
 
     // Tiny priority: blocking > asks > cards > unread > ready.
     let tiny = |c: LotCounts| -> String {
-        let tw = pill_width(&c, PillTier::Tiny, true);
+        let tw = pill_width(&c, PillTier::Tiny, true, true);
         let a = Rect::new(0, 0, tw, 1);
         let mut b = Buffer::empty(a);
         let mut h = ShellHitMap::default();
-        render_pill_recorded(&mut b, a, &c, PillTier::Tiny, true, 0, &palette, &mut h);
+        render_pill_recorded(
+            &mut b,
+            a,
+            &c,
+            PillTier::Tiny,
+            true,
+            0,
+            true,
+            &palette,
+            &mut h,
+        );
         row_text(&b, a)
     };
-    assert_eq!(tiny(counts), " ✦!2 ");
+    assert_eq!(tiny(counts), "╡ ◉!2 ╞");
     assert_eq!(
         tiny(LotCounts {
             blocking: 0,
             ..counts
         }),
-        " ✦?1 "
+        "╡ ✦?1 ╞"
     );
     assert_eq!(
         tiny(LotCounts {
@@ -140,7 +154,7 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
             asks: 0,
             ..counts
         }),
-        " ✦c1 "
+        "╡ ✦c1 ╞"
     );
     assert_eq!(
         tiny(LotCounts {
@@ -150,7 +164,7 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
             unread: 3,
             ..counts
         }),
-        " ✦+3 "
+        "╡ ✦+3 ╞"
     );
     assert_eq!(
         tiny(LotCounts {
@@ -160,7 +174,7 @@ fn blocking_pill_paints_red_and_tiny_follows_bucket_priority() {
             unread: 0,
             ..counts
         }),
-        " ✦✓1 "
+        "╡ ✦✓1 ╞"
     );
 }
 
@@ -194,6 +208,7 @@ fn studio_header_draws_role_badge_color_and_degrades_runner_model_effort() {
         unfocused_cue: false,
         cols: 120,
         spin: 0,
+        studio_chrome: true,
     };
 
     // Wide enough for full `runner · model (effort)`.
@@ -284,6 +299,7 @@ fn studio_header_paints_raised_row_capsule_with_terminal_16_fallback_and_wide_cj
         unfocused_cue: false,
         cols: 80,
         spin: 0,
+        studio_chrome: true,
     };
     let pal = Palette::backlot();
     let elev = pal.elevation();

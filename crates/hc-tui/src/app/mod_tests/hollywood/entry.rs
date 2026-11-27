@@ -115,7 +115,7 @@ async fn a_queued_document_does_not_decide_the_entry() {
     assert!(!text.contains("New studio"), "{text}");
     // R3-M6: a plain `new` workspace is no studio workspace — the
     // sidebar stays studio-free; the pill's count proves the read.
-    assert!(text.contains("✦2"), "{text}");
+    assert!(text.contains("◉2"), "{text}");
 }
 
 // ---------- another machine's late studios (U6a) ----------
@@ -238,5 +238,5 @@ async fn remote_studios_close_the_card_without_opening_the_bar() {
     );
     // The lot pill counts the remote machine's studios.
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("✦2"), "the pill's studio count: {text}");
+    assert!(text.contains("◉2"), "the pill's studio count: {text}");
 }

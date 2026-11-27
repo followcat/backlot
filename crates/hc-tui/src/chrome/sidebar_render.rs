@@ -33,7 +33,7 @@ pub(crate) fn render_sidebar(
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
-    super::render::render_sidebar_background(buffer, area, palette);
+    super::render::render_sidebar_background(buffer, area, palette, config.studio_chrome);
     hits.sidebar_divider = if area.is_empty() {
         Rect::default()
     } else {
