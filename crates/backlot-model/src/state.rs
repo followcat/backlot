@@ -155,6 +155,8 @@ pub struct CheckedRecord {
     pub exit_code: Option<i32>,
     #[serde(default, skip_serializing_if = "crate::event::is_false")]
     pub timed_out: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_failed: Option<String>,
     /// The capped log under `checks/` in the studio dir.
     pub output: String,
     pub duration_ms: u64,
@@ -163,10 +165,9 @@ pub struct CheckedRecord {
 }
 
 impl CheckedRecord {
-    /// A check passes only on a clean exit — a signal or a timeout
-    /// never does.
+    /// A check passes only on a clean exit with no timeout and no failed `expect`.
     pub fn passed(&self) -> bool {
-        self.exit_code == Some(0) && !self.timed_out
+        self.exit_code == Some(0) && !self.timed_out && self.expect_failed.is_none()
     }
 }
 

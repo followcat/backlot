@@ -48,6 +48,12 @@ pub fn to_toml(s: &CastSettings) -> String {
         let _ = writeln!(out, "name = {}", string(&c.name));
         let _ = writeln!(out, "run = {}", string(&c.run));
         let _ = writeln!(out, "timeout_s = {}", c.timeout_s);
+        if let Some(expect) = &c.expect {
+            let _ = writeln!(out, "expect = {}", string(expect));
+        }
+        if let Some(min) = c.min_matches {
+            let _ = writeln!(out, "min_matches = {min}");
+        }
     }
     out.push_str("\n[push]\n");
     let _ = writeln!(

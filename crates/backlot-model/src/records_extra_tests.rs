@@ -137,6 +137,7 @@ fn stage_checks_and_actor_reported_checks_count_apart() {
         name: name.into(),
         exit_code: code,
         timed_out: false,
+        expect_failed: None,
         output: format!("checks/x-{name}.log"),
         duration_ms: 10,
     };

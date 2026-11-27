@@ -364,6 +364,8 @@ pub enum ReqAction {
         reason: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        no_checks: bool,
     },
     /// `design start round`: reject `--suggest-skip` and start Round 1 immediately.
     DesignStartRound { studio: String },

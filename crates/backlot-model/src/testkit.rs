@@ -75,11 +75,7 @@ pub fn studio_kind() -> EventKind {
 
 /// A declared stage check for `studio.created`.
 pub fn check_decl(name: &str, run: &str, timeout_s: u64) -> CheckDecl {
-    CheckDecl {
-        name: name.into(),
-        run: run.into(),
-        timeout_s,
-    }
+    CheckDecl::new(name, run, timeout_s)
 }
 
 /// A `role.started` — the actor's budget clock opens here. No

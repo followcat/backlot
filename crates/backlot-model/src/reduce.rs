@@ -466,6 +466,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             name,
             exit_code,
             timed_out,
+            expect_failed,
             output,
             duration_ms,
         } => {
@@ -475,6 +476,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     name: name.clone(),
                     exit_code: *exit_code,
                     timed_out: *timed_out,
+                    expect_failed: expect_failed.clone(),
                     output: output.clone(),
                     duration_ms: *duration_ms,
                     seq,

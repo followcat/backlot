@@ -136,6 +136,8 @@ pub struct DesignEntryRecord {
     pub refs: Vec<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub questions: Vec<DesignQuestion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<crate::event::CheckDecl>,
 }
 
 /// One discussion round for a requirement version.
@@ -152,6 +154,8 @@ pub struct DesignRound {
     pub waiting_since_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub questions: Vec<DesignQuestion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<crate::event::CheckDecl>,
 }
 
 /// Reduced opening design state for the active requirement version.
@@ -177,6 +181,8 @@ pub struct DesignState {
     pub signed_seq: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signed_ts_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposed_checks: Vec<crate::event::CheckDecl>,
 }
 
 impl DesignState {

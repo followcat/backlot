@@ -46,6 +46,7 @@ pub(crate) fn apply_event(state: &mut StudioState, event: &Event) {
                 d.phase = DesignPhase::SuggestSkip;
                 d.skip_reason = reason.clone();
                 d.waiting_since_ms = Some(ts);
+                d.proposed_checks.clear();
             } else {
                 d.phase = DesignPhase::WaitingProposal;
                 d.skip_reason = None;
@@ -68,6 +69,7 @@ pub(crate) fn apply_event(state: &mut StudioState, event: &Event) {
             source,
             refs,
             questions,
+            checks,
         } => {
             let d = ensure_design(state, *version);
             let round_idx = match d.rounds.iter().position(|r| r.round == *round) {
@@ -91,6 +93,7 @@ pub(crate) fn apply_event(state: &mut StudioState, event: &Event) {
                 source: *source,
                 refs: refs.clone(),
                 questions: questions.clone(),
+                checks: checks.clone(),
             });
             match slot {
                 DesignSlot::Proposal => {
@@ -100,6 +103,7 @@ pub(crate) fn apply_event(state: &mut StudioState, event: &Event) {
                 DesignSlot::Buildability => {
                     d.phase = DesignPhase::WaitingSummary;
                     d.waiting_since_ms = None;
+                    d.proposed_checks = checks.clone();
                 }
                 DesignSlot::Summary => {
                     d.phase = DesignPhase::WaitingUser;

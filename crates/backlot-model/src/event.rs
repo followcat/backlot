@@ -257,15 +257,69 @@ pub struct Check {
     pub passed: bool,
 }
 
+/// Where a declared check originated so re-signing an opening design
+/// replaces only checks added by the design proposal flow without
+/// disturbing `cast.toml` or `studio check add` entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckOrigin {
+    #[default]
+    Cast,
+    Design,
+    User,
+}
+
+impl CheckOrigin {
+    pub fn is_cast(origin: &Self) -> bool {
+        *origin == Self::Cast
+    }
+}
+
 /// A check the cast declares for the stage to run on each delivery
 /// (`[[checks]]`, S9b part 2). The stage runs `run` under a stripped
 /// environment in a worktree of the delivery's tip and records
-/// `task.checked`; `timeout_s` bounds it.
+/// `task.checked`; `timeout_s` bounds it. When `expect` is set, stdout+stderr
+/// must match the regex at least `effective_min_matches()` times even if
+/// the command exits `0`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckDecl {
     pub name: String,
     pub run: String,
     pub timeout_s: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_matches: Option<u32>,
+    #[serde(default, skip_serializing_if = "CheckOrigin::is_cast")]
+    pub origin: CheckOrigin,
+}
+
+impl CheckDecl {
+    /// Construct a `Cast`-origin check with no output expectation.
+    pub fn new(name: impl Into<String>, run: impl Into<String>, timeout_s: u64) -> Self {
+        Self {
+            name: name.into(),
+            run: run.into(),
+            timeout_s,
+            expect: None,
+            min_matches: None,
+            origin: CheckOrigin::Cast,
+        }
+    }
+
+    /// Minimum regex match count when `expect` is set (defaults to 1).
+    pub fn effective_min_matches(&self) -> u32 {
+        self.min_matches.unwrap_or(1)
+    }
+
+    /// Compare behavioral specification ignoring `origin`.
+    pub fn same_spec(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.run == other.run
+            && self.timeout_s == other.timeout_s
+            && self.expect == other.expect
+            && self.min_matches == other.min_matches
+    }
 }
 
 /// Finding severity; the ledger names the field but not the values.
@@ -595,6 +649,9 @@ pub enum EventKind {
         /// The run hit its `timeout_s` and the stage killed it.
         #[serde(default, skip_serializing_if = "is_false")]
         timed_out: bool,
+        /// Reason an `exit_code == Some(0)` check failed its `expect` assertion.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expect_failed: Option<String>,
         /// The capped log under `checks/` in the studio dir.
         output: String,
         duration_ms: u64,
@@ -811,6 +868,8 @@ pub enum EventKind {
         refs: Vec<u64>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         questions: Vec<DesignQuestion>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        checks: Vec<CheckDecl>,
     },
     /// `design.signed`: user-only sign-off (`approved` or `skipped`) for the current requirement version.
     #[serde(rename = "design.signed")]
