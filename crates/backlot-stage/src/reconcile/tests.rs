@@ -31,6 +31,24 @@ fn studio() -> Vec<Event> {
     ]
 }
 
+#[test]
+fn live_terminal_keeps_the_core_creation_clock() {
+    let terminal: hc_proto::terminal::Terminal = serde_json::from_value(serde_json::json!({
+        "address": "t1",
+        "name": "bl-acme-shop-director",
+        "labels": {},
+        "argv": ["cursor-agent"],
+        "cwd": "/home/user/acme-shop",
+        "state": "live",
+        "created_ms": 1234,
+        "screen": "exact",
+        "cols": 80,
+        "rows": 24
+    }))
+    .unwrap();
+    assert_eq!(LiveTerminal::from(terminal).created_ms, 1234);
+}
+
 fn plan_request(seq: u64) -> Event {
     ev(
         seq,

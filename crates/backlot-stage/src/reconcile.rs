@@ -133,6 +133,8 @@ pub enum Action {
 pub struct LiveTerminal {
     pub name: String,
     pub address: String,
+    /// When the core created this terminal, ms since the epoch.
+    pub created_ms: u64,
     pub argv: Vec<String>,
     pub cwd: String,
     pub labels: BTreeMap<String, String>,
@@ -156,6 +158,7 @@ impl From<hc_proto::terminal::Terminal> for LiveTerminal {
         LiveTerminal {
             name: t.name.unwrap_or_default(),
             address: t.address,
+            created_ms: t.created_ms,
             argv: t.argv,
             cwd: t.cwd,
             labels: t.labels,

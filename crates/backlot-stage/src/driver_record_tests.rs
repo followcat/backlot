@@ -166,6 +166,7 @@ fn live_terminal(name: &str, address: &str, dir: &Path) -> LiveTerminal {
     LiveTerminal {
         name: name.into(),
         address: address.into(),
+        created_ms: 0,
         argv: Vec::new(),
         cwd: dir.join("repo").to_string_lossy().into_owned(),
         labels: BTreeMap::new(),
