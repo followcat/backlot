@@ -121,6 +121,8 @@ mod priority_tests;
 #[cfg(test)]
 mod progress_tests;
 #[cfg(test)]
+mod readonly_audit_tests;
+#[cfg(test)]
 mod recast_tests;
 #[cfg(test)]
 mod records_extra_tests;

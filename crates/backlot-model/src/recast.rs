@@ -210,7 +210,10 @@ pub fn check(state: &StudioState, role: &str, actor: &ActorIdentity) -> Result<(
     if !supported_runner(&actor.runner) {
         return Err(Refusal::RunnerNotSupported(actor.runner.clone()));
     }
-    if !matches!(actor.permission_profile.as_str(), "standard" | "worktree") {
+    if !matches!(
+        actor.permission_profile.as_str(),
+        "standard" | "worktree" | "readonly"
+    ) {
         return Err(Refusal::ProfileNotSupported(
             actor.permission_profile.clone(),
         ));

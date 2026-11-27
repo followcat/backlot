@@ -470,10 +470,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 return Err(Refusal::UnknownReqVersion(*requirement_version));
             }
             for dep in dependencies {
-                if !state.tasks.contains_key(dep) {
+                let Some(dep_task) = state.tasks.get(dep) else {
                     return Err(Refusal::UnknownDependency {
                         task: task.clone(),
                         dep: dep.clone(),
+                    });
+                };
+                if dep_task.is_readonly_or_audit() {
+                    return Err(Refusal::AuditIntegrationRefused {
+                        task: dep.clone(),
+                        why: "audit/readonly tasks have no code to integrate as dependencies",
                     });
                 }
             }
@@ -502,10 +508,15 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             let found = studio.candidates.iter().find(|c| c.name == *candidate);
             match found {
                 None => Err(Refusal::UnknownCandidate(candidate.clone())),
-                Some(c) if c.actor() != *actor => Err(Refusal::CandidateMismatch {
+                Some(c) if !matches_cast(c, actor) => Err(Refusal::CandidateMismatch {
                     candidate: candidate.clone(),
                 }),
-                Some(_) => Ok(()),
+                Some(_) => {
+                    if t.task_kind == "audit" && actor.permission_profile != "readonly" {
+                        return Err(Refusal::AuditRequiresReadonly { task: task.clone() });
+                    }
+                    Ok(())
+                }
             }
         }
         // Priority only orders people in the panel: any recorded
@@ -518,6 +529,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         EventKind::TaskDelivered {
             task,
             delivery,
+            commits,
             requirement_version,
             ..
         } => {
@@ -528,6 +540,9 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     task: task.clone(),
                     status: t.status,
                 });
+            }
+            if t.is_readonly_or_audit() && !commits.is_empty() {
+                return Err(Refusal::ReadonlyDeliveryHasCommits { task: task.clone() });
             }
             let expected = t.deliveries.len() as u32 + 1;
             if *delivery != expected {
@@ -588,10 +603,17 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             delivery,
             verdict,
             conclusion,
+            upstream_changes,
             ..
         } => {
             let studio = require_studio(state)?;
             let t = require_task(state, task)?;
+            if t.is_readonly_or_audit() && !upstream_changes.is_empty() {
+                return Err(Refusal::AuditIntegrationRefused {
+                    task: task.clone(),
+                    why: "audit/readonly tasks take no upstream integration changes",
+                });
+            }
             match t.status {
                 TaskStatus::Delivered => {}
                 // At the cap the producer resolves the task: accept
@@ -723,6 +745,19 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     }
 }
 
+fn matches_cast(
+    cand: &crate::event::Candidate,
+    actor: &crate::event::ActorIdentity,
+) -> bool {
+    let base = cand.actor();
+    base == *actor
+        || (actor.permission_profile == "readonly"
+            && base.runner == actor.runner
+            && base.runner_version == actor.runner_version
+            && base.model == actor.model
+            && base.effort == actor.effort)
+}
+
 /// The accepting-verdict rule `task.reviewed` and a review-targeting
 /// `correct` share: while a declared check has no `task.checked`
 /// record only `user` may accept ahead of it; over a recorded
@@ -737,6 +772,7 @@ fn check_acceptance(
 ) -> Result<(), Refusal> {
     if !matches!(verdict, Verdict::Accepted | Verdict::PartiallyAccepted)
         || studio.checks.is_empty()
+        || t.is_readonly_or_audit()
     {
         return Ok(());
     }
