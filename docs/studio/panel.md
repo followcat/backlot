@@ -415,6 +415,30 @@ is derived from the `backlot` documents (the same needs-you list above), keyed s
 - `[ui.toast] studio = false` in herdr's config (default `true`) turns the studio events off; the
   pane alerts are unaffected. `--plain` is herdr's screen exactly and emits nothing.
 
+### A desktop notification when a studio waits on you
+
+In studio mode your outer terminal also raises a desktop notification when a studio starts waiting on
+you: a role's question (`backlot tell user … --ask`) or a card waiting for you. It fires **once per
+item** — keyed by the studio plus the question's ledger seq or the card's `c<seq>` — so anything
+already open when the client starts does not ping, and a restart or reconnect never replays it.
+Answering or acknowledging an item never pings:
+
+| Item | Text |
+| --- | --- |
+| A role's question | `acme-shop · producer asks: <first line>` |
+| A card waiting for you | `acme-shop · card c4: <action>` |
+
+It rides the same outer-terminal sequence as an agent's attention alert (OSC 9 or OSC 99 for your
+terminal, tmux-wrapped inside tmux), but on its own switch: `[studio] notify_asks` (default `true`)
+turns it on or off, whatever the `[ui.toast] delivery` setting is and whether or not you are already
+looking at the studio. `--plain` and `[theme] source = "herdr"` leave the person's screen exactly as
+Herdr draws it and send no ping.
+
+```toml
+[studio]
+notify_asks = false
+```
+
 ## The cast
 
 In studio mode the left sidebar deduplicates active live studios from the `machines` workspace tree
