@@ -12,7 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **`worktree` permission profile on `cmd`, `cursor`, and `claude`.** Actors and roles on `permission_profile = "worktree"` now get read-only diagnostic commands (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`), per-segment worktree-scoped `cd <own worktree>` / `git -C <own worktree> <read>` rules, and (on `cmd`) the worktree's encoded `/tmp/commandcode-<uid>/<encoded cwd>` scratch directory; `standard` and `readonly` are unchanged, `devin`/`agy`/`cline`/`codex`/`opencode` remain identical across `standard` and `worktree`, and `backlot studio new --dry-run` notes when a cast sets `worktree` on those runners (`docs/studio/runners.md`).
+- **Actors on the `worktree` profile ask their director less often (`cmd`, `cursor`, `claude`).** Checking disk space or the CPU count (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`), changing into their own worktree by its full path, `git -C <own worktree>` reads and, on `cmd`, reading its own scratch files no longer need an approval. Each part of a compound command is checked on its own, so `cd <worktree> && curl …` still asks. Network access, installs, paid compute and other directories still ask. `standard` and `readonly` are unchanged. `devin`, `agy`, `cline`, `codex` and `opencode` treat `worktree` the same as `standard`, and `backlot studio new --dry-run` now says so.
 
 ## 0.4.24 — 2026-11-27
 
