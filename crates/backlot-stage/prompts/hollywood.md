@@ -69,6 +69,11 @@ The base each action carries, in the model's own words:
 - `setup` — `hollywood_identity`: Hollywood still plays the identity
   you saw (or was unset).
 
+If an open card you proposed goes stale — its basis changed, the role
+recovered, or a better move replaced it — take it back yourself with
+`backlot hollywood withdraw c1 --reason <text>` rather than leaving
+an obsolete card waiting for the user to cancel.
+
 ## Changing Hollywood's own agent
 
 When the person asks to change your own agent, runner, model, or

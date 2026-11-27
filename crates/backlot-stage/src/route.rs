@@ -1,13 +1,9 @@
-//! Routing an actor's open permission prompt to the person when the
-//! director cannot answer it (field notes 1126 §5): a prompt that
-//! waits on a director who is rate-limited, stalled or gone must not
-//! wait for hours. Past a short grace the actor's open `permission
-//! prompt` — the one whose notice only the director could act on — is
-//! cleared and re-raised `needs_user`, with the reason and the wait
-//! in its detail (`the director is rate-limited until 12:10; waiting
-//! 14m`). The person is then the prompt's owner: the panel and
-//! Hollywood's `prompt` notice show it, and the director's `approve`
-//! is refused like any other user-owned prompt.
+//! Routing an actor's unanswered permission prompt (field notes
+//! 1126 §5): when the director is rate-limited, stalled, or not live,
+//! the prompt escalates to `needs_user` at once instead of waiting;
+//! when the director is live and unblocked, an actor prompt that goes
+//! unanswered past the threshold (`default_stall_limit_s`, 10 minutes)
+//! escalates to `needs_user` with the wait duration in its detail.
 
 use backlot_model::event::{EventKind, PERMISSION_PROMPT, STALLED};
 use backlot_model::state::StudioState;
@@ -16,10 +12,11 @@ use crate::act::record;
 use crate::cli::Fail;
 use crate::daemon::Stage;
 
-/// How long an actor's prompt may wait on an unavailable director
-/// before it is the person's (measured from the attention's raise —
-/// a prompt already older than this routes at once).
-pub const ROUTE_GRACE_MS: u64 = 60_000;
+/// Unanswered prompt threshold before a live, unblocked director prompt
+/// escalates to the user — reuses `default_stall_limit_s` (10 minutes).
+pub fn threshold_ms() -> u64 {
+    u64::from(backlot_model::event::default_stall_limit_s()) * 1000
+}
 
 /// Why the director cannot answer, most specific first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,9 +52,31 @@ pub fn blocker(
     None
 }
 
-/// Whether an actor's open prompt has waited past the grace.
+/// Whether an actor's open prompt has waited past the threshold.
 pub fn due(attn_ts_ms: u64, now_ms: u64) -> bool {
-    now_ms.saturating_sub(attn_ts_ms) >= ROUTE_GRACE_MS
+    now_ms.saturating_sub(attn_ts_ms) >= threshold_ms()
+}
+
+/// The detail when a live director leaves an actor's prompt unanswered
+/// past the threshold.
+pub fn unanswered_detail(waited_ms: u64) -> String {
+    let waited = backlot_model::event::age_short(waited_ms);
+    format!("director did not answer within {waited}; waiting {waited}; ")
+}
+
+fn prompt_prefix(detail: &str) -> String {
+    let head = detail
+        .split("screen saved to attention/")
+        .next()
+        .map(str::trim)
+        .unwrap_or("");
+    if head.is_empty() {
+        String::new()
+    } else if head.ends_with(';') {
+        format!("{head} ")
+    } else {
+        format!("{head}; ")
+    }
 }
 
 /// The detail the re-raised attention carries: the reason, the reset
@@ -94,10 +113,11 @@ fn director_blocker(state: &StudioState, rate_due_ms: Option<u64>) -> Option<Blo
 }
 
 impl Stage {
-    /// Re-route any actor's open, director-owned permission prompt to
-    /// the person once the director cannot answer it. Returns whether
-    /// the ledger grew, so the caller reloads before building notices
-    /// on it. An already-user-owned prompt is never touched.
+    /// Escalate any actor's open, director-owned permission prompt to
+    /// the person (`needs_user = true`) at once when the director is
+    /// rate-limited, stalled, or not live, or once unanswered past the
+    /// threshold when the director is live. Returns whether the ledger
+    /// grew, so the caller reloads before building notices on it.
     pub(crate) async fn route_prompts(
         &self,
         studio: &str,
@@ -110,73 +130,38 @@ impl Stage {
             .borrow()
             .get(&(studio.to_string(), "director".to_string()))
             .map(|p| p.reset_at_ms.unwrap_or(p.due_ms));
-        let Some(blocker) = director_blocker(state, due_ms) else {
-            return Ok(false);
-        };
+        let blocker = director_blocker(state, due_ms);
         let mut grew = false;
         for attn in state.open_attention() {
             if attn.reason != PERMISSION_PROMPT
                 || attn.needs_user
                 || !crate::permit::is_actor(&attn.role)
-                || !due(attn.ts_ms, now_ms)
             {
                 continue;
             }
-            // The same screen the first attention saved, so the
-            // person reads exactly what the director would have.
-            let saved = dir.join("attention").join(format!("{}.txt", attn.seq));
-            let text = self
-                .driver
-                .read_file(&saved)
-                .unwrap_or_else(|_| attn.detail.clone());
+            if blocker.is_none() && !due(attn.ts_ms, now_ms) {
+                continue;
+            }
+            let waited_ms = now_ms.saturating_sub(attn.ts_ms);
+            let why = match blocker {
+                Some(b) => detail(b, waited_ms, now_ms),
+                None => unanswered_detail(waited_ms),
+            };
+            let prefix = prompt_prefix(&attn.detail);
             record(
                 dir,
-                EventKind::AttentionCleared {
+                EventKind::AttentionEscalated {
                     target: attn.seq,
-                    reason: Some(format!(
-                        "routed to the user — {}",
-                        detail(blocker, now_ms.saturating_sub(attn.ts_ms), now_ms).trim_end()
-                    )),
+                    detail: format!("{why}{prefix}screen saved to attention/{}.txt", attn.seq),
                 },
             )?;
-            let why = detail(blocker, now_ms.saturating_sub(attn.ts_ms), now_ms);
-            self.raise_attention_now(dir, &attn.role, &text, &why)
-                .await?;
             grew = true;
             crate::stagelog::stage_log!(
-                "{}'s permission prompt routed to the user: {}",
+                "{}'s permission prompt escalated to the user: {}",
                 attn.role,
                 why.trim_end_matches("; ")
             );
         }
         Ok(grew)
-    }
-
-    /// The `needs_user` re-raise of a routed prompt: the same screen,
-    /// the reason prefix in the detail, and `attention/<seq>.txt`
-    /// saved by the append.
-    async fn raise_attention_now(
-        &self,
-        dir: &std::path::Path,
-        role: &str,
-        text: &str,
-        why: &str,
-    ) -> Result<(), Fail> {
-        use crate::sample::Raise;
-        let why = why.to_string();
-        self.raise_attention(
-            Raise {
-                dir,
-                role,
-                reason: PERMISSION_PROMPT,
-                text,
-                needs_user: true,
-                bound: None,
-                account: None,
-                reset_at_ms: None,
-            },
-            move |seq| format!("{why}screen saved to attention/{seq}.txt"),
-        )
-        .await
     }
 }

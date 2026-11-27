@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use crate::daemon::Stage;
-use crate::route::{Blocker, ROUTE_GRACE_MS, blocker, detail, due};
+use crate::route::{Blocker, blocker, detail, due, threshold_ms};
 use crate::store::{self, Pending};
 use crate::test_support::TestDir;
 
@@ -37,11 +37,11 @@ fn the_blocker_prefers_the_most_specific_reason() {
     assert_eq!(blocker(None, false, false, true), None);
 }
 
-/// Past the grace a prompt is due; before it is not.
+/// Past the threshold a prompt is due; before it is not.
 #[test]
-fn the_grace_is_one_minute() {
-    assert!(!due(1_000, 1_000 + ROUTE_GRACE_MS - 1));
-    assert!(due(1_000, 1_000 + ROUTE_GRACE_MS));
+fn the_threshold_is_ten_minutes() {
+    assert!(!due(1_000, 1_000 + threshold_ms() - 1));
+    assert!(due(1_000, 1_000 + threshold_ms()));
 }
 
 /// The detail names the reason and the wait — the reset time for a
@@ -232,9 +232,9 @@ fn open_ts(dir: &Path, role: &str) -> u64 {
 }
 
 /// A rate-limited director re-routes the actor's prompt to the person
-/// past the grace: the old attention clears `routed to the user`, a
-/// fresh `needs_user` one raises with the reason and the wait, and
-/// the director's `approve` is refused.
+/// A director with an open `rate limited` attention escalates at once:
+/// the existing attention becomes `needs_user` with the reason and
+/// wait in its detail, and the director's `approve` is refused.
 #[tokio::test]
 async fn a_limited_director_routes_the_prompt_to_the_user() {
     let dir = tmp();
@@ -244,40 +244,15 @@ async fn a_limited_director_routes_the_prompt_to_the_user() {
     raise(&dir, "actor-t1-c1", PERMISSION_PROMPT, false);
     let ts = open_ts(&dir, "actor-t1-c1");
 
-    // Before the grace: nothing moves.
+    // Rate-limited director escalates at once without waiting.
     let state = store::load_state(&dir).unwrap();
     assert!(
-        !st.route_prompts("acme-shop", &dir, &state, ts + 1_000)
-            .await
-            .unwrap()
-    );
-    let open: Vec<_> = attentions(&dir, PERMISSION_PROMPT)
-        .into_iter()
-        .filter(|a| a.open)
-        .collect();
-    assert_eq!(open.len(), 1);
-    assert!(!open[0].needs_user);
-
-    // Past the grace: the old one clears, a `needs_user` one takes
-    // its place naming the reason and the wait.
-    let state = store::load_state(&dir).unwrap();
-    assert!(
-        st.route_prompts("acme-shop", &dir, &state, ts + ROUTE_GRACE_MS)
+        st.route_prompts("acme-shop", &dir, &state, ts + 1_000)
             .await
             .unwrap()
     );
     let all = attentions(&dir, PERMISSION_PROMPT);
-    assert_eq!(all.len(), 2, "{all:?}");
-    assert!(!all[0].open);
-    assert!(
-        all[0]
-            .cleared_reason
-            .as_deref()
-            .unwrap_or_default()
-            .contains("routed to the user"),
-        "{:?}",
-        all[0].cleared_reason
-    );
+    assert_eq!(all.len(), 1, "{all:?}");
     let now_open = all.iter().find(|a| a.open).unwrap();
     assert!(now_open.needs_user, "{now_open:?}");
     assert!(
@@ -285,7 +260,7 @@ async fn a_limited_director_routes_the_prompt_to_the_user() {
         "{now_open:?}"
     );
 
-    // The re-raise is the user's: the director's approval is refused.
+    // The escalated attention is the user's: the director's approval is refused.
     let refused = store::append(&dir, move |_, _| {
         Ok::<_, std::convert::Infallible>(Pending {
             event: NewEvent::new(
@@ -304,8 +279,8 @@ async fn a_limited_director_routes_the_prompt_to_the_user() {
     );
 }
 
-/// A stall routes too, with the stall named in the detail; a live
-/// director with nothing open leaves the prompt alone.
+/// A stall routes at once too, with the stall named in the detail; a
+/// live director under the threshold leaves the prompt alone.
 #[tokio::test]
 async fn a_stalled_director_routes_and_a_healthy_one_does_not() {
     let st = stage().await;
@@ -318,7 +293,7 @@ async fn a_stalled_director_routes_and_a_healthy_one_does_not() {
     let ts = open_ts(&dir, "actor-t1-c1");
     let state = store::load_state(&dir).unwrap();
     assert!(
-        st.route_prompts("acme-shop", &dir, &state, ts + ROUTE_GRACE_MS)
+        st.route_prompts("acme-shop", &dir, &state, ts + 1_000)
             .await
             .unwrap()
     );
@@ -329,7 +304,7 @@ async fn a_stalled_director_routes_and_a_healthy_one_does_not() {
     assert!(now_open.needs_user);
     assert!(now_open.detail.contains("stalled"), "{now_open:?}");
 
-    // A live director with no attention open: never routed.
+    // A live director under threshold: not routed yet.
     let dir2 = tmp();
     studio(&dir2);
     store::append(&dir2, |_, _| {
@@ -352,7 +327,7 @@ async fn a_stalled_director_routes_and_a_healthy_one_does_not() {
     let ts2 = open_ts(&dir2, "actor-t1-c1");
     let state = store::load_state(&dir2).unwrap();
     assert!(
-        !st.route_prompts("acme-shop", &dir2, &state, ts2 + ROUTE_GRACE_MS)
+        !st.route_prompts("acme-shop", &dir2, &state, ts2 + 60_000)
             .await
             .unwrap()
     );
@@ -373,7 +348,7 @@ async fn only_an_actors_unflagged_prompt_is_routed() {
     let ts = open_ts(&dir, "actor-t1-c1");
     let state = store::load_state(&dir).unwrap();
     assert!(
-        !st.route_prompts("acme-shop", &dir, &state, ts + ROUTE_GRACE_MS)
+        !st.route_prompts("acme-shop", &dir, &state, ts + threshold_ms())
             .await
             .unwrap()
     );
@@ -392,8 +367,7 @@ async fn rate_limited_director_routes_using_true_reset_time() {
     let prompt_ts = open_ts(&dir, "actor-t1-c1");
 
     // Pick 09:10 local time tomorrow relative to `prompt_ts` so the test
-    // is independent of the current wall-clock hour, while still passing
-    // the route grace (`route_now > prompt_ts + ROUTE_GRACE_MS`).
+    // is independent of the current wall-clock hour.
     let now = {
         let ts = ((prompt_ts / 1000) + 86_400) as libc::time_t;
         let mut local: libc::tm = unsafe { std::mem::zeroed() };
@@ -432,7 +406,7 @@ async fn rate_limited_director_routes_using_true_reset_time() {
     .unwrap();
 
     let state = store::load_state(&dir).unwrap();
-    let route_now = now + ROUTE_GRACE_MS;
+    let route_now = now + 1_000;
     assert!(
         st.route_prompts("acme-shop", &dir, &state, route_now)
             .await
@@ -447,4 +421,82 @@ async fn rate_limited_director_routes_using_true_reset_time() {
         "expected unclamped 14:10 reset in routed prompt detail, got: {}",
         now_open.detail
     );
+}
+
+#[tokio::test]
+async fn rate_limited_director_escalates_actor_prompt_at_once() {
+    let dir = tmp();
+    studio(&dir);
+    let st = stage().await;
+    raise(&dir, "director", crate::ratelimit::RATE_LIMITED, false);
+    raise(&dir, "actor-t1-c1", PERMISSION_PROMPT, false);
+    let ts = open_ts(&dir, "actor-t1-c1");
+    let state = store::load_state(&dir).unwrap();
+    assert!(
+        st.route_prompts("acme-shop", &dir, &state, ts + 1_000)
+            .await
+            .unwrap(),
+        "rate-limited director must escalate actor prompt at once without waiting"
+    );
+    let open: Vec<_> = attentions(&dir, PERMISSION_PROMPT)
+        .into_iter()
+        .filter(|a| a.open)
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(open[0].needs_user, "{open:?}");
+    assert!(
+        open[0].detail.contains("rate-limited") && open[0].detail.contains("waiting 1s"),
+        "{}",
+        open[0].detail
+    );
+}
+
+#[tokio::test]
+async fn live_director_holds_under_threshold_and_escalates_when_unanswered_past_threshold() {
+    let dir = tmp();
+    studio(&dir);
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("director"),
+                EventKind::RoleStarted {
+                    role: "director".into(),
+                    terminal: None,
+                    actor: Some(actor()),
+                    session_id: None,
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let st = stage().await;
+    raise(&dir, "actor-t1-c1", PERMISSION_PROMPT, false);
+    let ts = open_ts(&dir, "actor-t1-c1");
+    let threshold_ms = u64::from(backlot_model::event::default_stall_limit_s()) * 1000;
+
+    let state = store::load_state(&dir).unwrap();
+    assert!(
+        !st.route_prompts("acme-shop", &dir, &state, ts + threshold_ms - 1)
+            .await
+            .unwrap(),
+        "live director with prompt under threshold must not escalate"
+    );
+    assert!(!attentions(&dir, PERMISSION_PROMPT)[0].needs_user);
+
+    let state = store::load_state(&dir).unwrap();
+    assert!(
+        st.route_prompts("acme-shop", &dir, &state, ts + threshold_ms)
+            .await
+            .unwrap(),
+        "live director prompt past threshold must escalate"
+    );
+    let open: Vec<_> = attentions(&dir, PERMISSION_PROMPT)
+        .into_iter()
+        .filter(|a| a.open)
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(open[0].needs_user, "{open:?}");
+    assert!(open[0].detail.contains("10m"), "{}", open[0].detail);
 }

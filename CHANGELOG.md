@@ -16,6 +16,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - **Telling a role from the Lot.** `t`, `r` or `i` on a row starts a tell addressed to that role without typing `/tell`. Under what you sent, the Lot shows whether it is sending, queued and why (busy, out of quota, the stage is stopped), delivered, or being worked on.
 - A single click on a role in the Lot, while the terminal has focus, shows that role's terminal and leaves the Lot focused on the row.
 
+### Fixed
+
+- Hollywood's allow lists (`claude`, `cmd`, `cursor`, `cline`), `hwcli` / `prompts/hollywood-cli.md`, and `prompts/hollywood.md` now pre-allow `backlot hollywood withdraw` and `backlot studio cast set --dry-run` and explain withdrawing stale cards (`docs/studio/{hollywood,ledger,limits,panel,guide}.md`).
+- A rate limit raises one notice per reset window (repeated hits within the same `reset_at_ms` window update nothing and raise nothing; a hit with a later reset supersedes and raises once as the next window; unknown resets fall back to bounded auto-retries, and working again clears `resumed`).
+- Permission prompts the director is handling no longer count as waiting on you or wake Hollywood, unless the director can't answer them (`AttentionClass::of("permission prompt", false)` and `AttentionClass::of("agent error", false)` are `stuck`; `StudioSummary.waiting` counts `needs you` only; `route_prompts` escalates via `attention.escalated` with the wait duration at once when the director is rate-limited, stalled, or not live, or after `default_stall_limit_s` / 10 minutes unanswered; `hnotice` holds `stuck` notices for 10 minutes and names how long an overdue actor prompt waited and why).
+
 ## 0.4.21 — 2026-11-27
 
 ### Added

@@ -225,7 +225,11 @@ stage checks" section while a task accepted over failures exists.
 
 `role.approval` records a director's or user's decision on an open `permission prompt` attention —
 refused without one, and refused for the director when the prompt is the user's (S9b): a flagged
-attention, or a prompt on a role that is not an actor. A permission prompt is flagged
+attention, or a prompt on a role that is not an actor. An actor's unflagged `permission prompt`
+opens `needs_user: false` (`stuck` — handled by the director) and escalates via `attention.escalated`
+to `needs_user: true` with its wait time and reason either at once when the director is rate-limited,
+stalled, or not live, or after `default_stall_limit_s` (10 minutes) if the director does not answer.
+A permission prompt is flagged
 `needs_user` when its saved screen, flattened of whitespace and box-drawing, reached for
 `BACKLOT_*`, `env -i` or `--ignore-environment`; such an attention owes the director no notice and
 shows as the user's. The stage sends the runner's approval key while the prompt still shows, then
@@ -346,7 +350,10 @@ notice relays: in the named studio's ledger, or Hollywood's own for card outcome
 recovered-terminal word. `source_seq` dedups a restart and names what to check for staleness;
 a `failed` notice has no event to point at and carries the stage's error text in `text` instead.
 `message.delivered` marks a sent message, `message.dropped` a queued one whose source no longer
-stands — delivered or dropped, a notice is never owed again.
+stands — delivered or dropped, a notice is never owed again. Stage wakeup notices are emitted for
+`needs you` attentions, `stuck` attentions open past `default_stall_limit_s` (10 minutes — with
+waited duration and director reason on overdue actor prompts), and kinds with their own labels
+(`finished`, `failed`, `card`, `prompt`, `recovered`).
 
 Hollywood's `message.sent` to a producer is its own copy of a `tell producer` — the studio's
 `message.queued` remains the delivery record; the file lands under Hollywood's `messages/` too.
