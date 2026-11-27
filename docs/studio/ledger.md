@@ -169,12 +169,17 @@ that is harmless.
 
 At send time every queued message carrying a `source_seq` is checked against the event it relays
 (S9d): when the source no longer stands the stage records `message.dropped` with a short reason
-and sends nothing — the table of what counts as stale is in `design.md`. A dropped message is
+and sends nothing — the table of what counts as stale is in `design.md`. Queued mail addressed to
+a specific task actor (`actor-<task>-c<n>`) whose session has closed for good (finished, closed,
+or exited with no resume and no live terminal for that actor id) likewise drops with reason
+`actor_closed`; mail to fixed roles (`producer`, `director`, `writer`) and to paused, recovering,
+reopened, restarting, or still-live actors is kept. A dropped message is
 never pending again — not for the outbox, not for the idle rule that gates nudges — but it still
 counts as handled in the dedup set, so the same notice is never re-queued; a dropped message is
-never marked `message.delivered`. Only `stage` may record the event, and only on a queued message
-still undelivered — a send already in flight is exempt, since it cannot be un-sent. Messages
-without a `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never
+never marked `message.delivered`, and remains visible with its reason in `status` and `exchange`.
+Only `stage` may record the event, and only on a queued message
+still undelivered — a send already in flight is exempt, since it cannot be un-sent. Fixed-role
+messages without a `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never
 dropped.
 
 When a role is owed two or more items at send time they go out as one digest: the stage writes

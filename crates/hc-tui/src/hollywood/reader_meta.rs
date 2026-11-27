@@ -50,6 +50,7 @@ pub(crate) struct ReaderMeta {
     pub seq: Option<u64>,
     pub from: Option<String>,
     pub to: Option<String>,
+    pub dropped_reason: Option<String>,
     pub task: Option<String>,
     pub file: Option<String>,
     pub ts_ms: Option<u64>,
@@ -385,7 +386,8 @@ fn build_row2(
                 (None, Some(t)) => Some(display_actor(t).to_string()),
                 (None, None) => None,
             };
-            let left = join_non_empty([route, m.runner.clone(), m.model.clone()]);
+            let dropped = m.dropped_reason.as_deref().map(|r| format!("dropped: {r}"));
+            let left = join_non_empty([route, dropped, m.runner.clone(), m.model.clone()]);
             let state = m.role_state.as_deref().map(|st| {
                 let (glyph, color) = square_state_mark(st, palette);
                 (st.to_string(), glyph, color)
