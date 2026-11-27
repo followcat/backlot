@@ -86,16 +86,39 @@ pub struct AgyPrep {
     pub trusted_workspace: Option<PathBuf>,
 }
 
-/// The settings file's bytes: `{"toolPermission":"always-proceed"}`
-/// written fresh, or the member spliced byte-exact into an
-/// existing object — every other member (the role's own settings)
-/// keeps its whitespace and order. `always-proceed` is the posture
-/// the measured account runs; the file is session-only, so it
-/// never rewrites the user's.
 /// Command prefixes denied by agy's session `.agy-settings.json`
 /// (`command(<prefix>)`, no trailing ` *` — measured in agy 1.5.16) as
 /// defence in depth ahead of the outward-action shims (D3).
 pub(crate) const DENY_PREFIXES: &[&str] = &[
+    "gh release create",
+    "gh release delete",
+    "gh release edit",
+    "gh release upload",
+    "gh release delete-asset",
+    "gh repo create",
+    "gh repo delete",
+    "gh repo edit",
+    "gh repo fork",
+    "gh repo rename",
+    "gh repo archive",
+    "gh repo unarchive",
+    "gh repo sync",
+    "gh repo clone",
+    "gh repo set-default",
+    "gh repo deploy-key",
+    "gh issue create",
+    "gh issue close",
+    "gh issue comment",
+    "gh issue delete",
+    "gh issue edit",
+    "gh issue reopen",
+    "gh issue transfer",
+    "gh issue lock",
+    "gh issue unlock",
+    "gh issue pin",
+    "gh issue unpin",
+    "gh issue develop",
+    "gh api",
     "hc update",
     "hc machine",
     "hc server stop",

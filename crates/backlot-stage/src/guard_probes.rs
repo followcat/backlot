@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::Env;
 use crate::design_doc::atomic_write;
-use crate::guard::{SHIM_MARKER, studio_role_from_env};
+use crate::guard::studio_role_from_env;
 use crate::guard_git::GitContext;
 use crate::guard_git_env::check_git_config_env;
 use crate::guard_git_parse::{GitParsed, parse_git_invocation};
@@ -258,10 +258,40 @@ pub(crate) fn is_suppressed_probe_refusal(env: &Env, argv: &[String], rule: Opti
     {
         return false;
     }
-    rule == "git hooksPath tampered"
-        || rule == "git path outside work area"
-        || rule.starts_with("unknown git global option (")
-        || is_benign_config_override_rule(rule)
+    rule == "git path outside work area" || is_benign_config_override_rule(rule)
+}
+
+/// Set `GIT_OPTIONAL_LOCKS=0` for read-only `git` commands running outside
+/// the role's own worktree so status/diff probes in the studio repo or a
+/// sibling worktree do not take the person's or another task's index lock.
+pub(crate) fn should_disable_optional_locks(
+    name: &str,
+    args: &[String],
+    cwd: &Path,
+    env: &Env,
+) -> bool {
+    if name != "git" {
+        return false;
+    }
+    let parsed = parse_git_invocation(args);
+    if !is_read_only_git_cmd(&parsed) {
+        return false;
+    }
+    let eff = crate::guard_git_env::normalize_resolve(
+        cwd,
+        &crate::guard_git_env::effective_cwd(cwd, &parsed.c_dirs),
+    );
+    match studio_role_from_env(env)
+        .and_then(|(sdir, role)| crate::guard::fast_work_area(&sdir, &role))
+    {
+        Some(own) => {
+            let own_norm = crate::guard_git_env::normalize_resolve(cwd, &own);
+            !crate::guard_git_env::path_inside(&eff, &[own_norm])
+        }
+        None => {
+            studio_role_from_env(env).is_some() || crate::guard::role_dir_from_env(env).is_some()
+        }
+    }
 }
 
 /// Atomically increment the studio's suppressed probe refusal counter.
@@ -289,7 +319,6 @@ pub(crate) fn record_suppressed_probe(sdir: &Path) -> Result<u64, String> {
         libc::flock(lock_f.as_raw_fd(), libc::LOCK_UN);
     }
     drop(lock_f);
-    let _ = SHIM_MARKER;
     Ok(next)
 }
 

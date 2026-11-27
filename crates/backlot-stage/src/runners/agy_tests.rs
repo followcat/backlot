@@ -140,6 +140,35 @@ fn plan_refuses_a_bad_profile_and_keeps_going_without_effort() {
 #[test]
 fn settings_splices_tool_permission_only() {
     let expected_deny = [
+        "command(gh release create)",
+        "command(gh release delete)",
+        "command(gh release edit)",
+        "command(gh release upload)",
+        "command(gh release delete-asset)",
+        "command(gh repo create)",
+        "command(gh repo delete)",
+        "command(gh repo edit)",
+        "command(gh repo fork)",
+        "command(gh repo rename)",
+        "command(gh repo archive)",
+        "command(gh repo unarchive)",
+        "command(gh repo sync)",
+        "command(gh repo clone)",
+        "command(gh repo set-default)",
+        "command(gh repo deploy-key)",
+        "command(gh issue create)",
+        "command(gh issue close)",
+        "command(gh issue comment)",
+        "command(gh issue delete)",
+        "command(gh issue edit)",
+        "command(gh issue reopen)",
+        "command(gh issue transfer)",
+        "command(gh issue lock)",
+        "command(gh issue unlock)",
+        "command(gh issue pin)",
+        "command(gh issue unpin)",
+        "command(gh issue develop)",
+        "command(gh api)",
         "command(hc update)",
         "command(hc machine)",
         "command(hc server stop)",
@@ -216,6 +245,75 @@ fn settings_splices_tool_permission_only() {
     // A non-object file is healed, not preserved.
     let healed = settings_content(Some(b"not json\n"), Some("/home/user/acme-shop")).unwrap();
     assert_eq!(healed, fresh);
+}
+
+#[test]
+fn deny_prefix_matching_blocks_gh_writes_and_api_while_allowing_gh_reads() {
+    let bytes = settings_content(None, Some("/home/user/acme-shop")).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let deny: Vec<&str> = v["permissions"]["deny"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap())
+        .collect();
+    let matches_agy_deny = |cmd: &str| {
+        deny.iter().any(|rule| {
+            let prefix = rule
+                .strip_prefix("command(")
+                .and_then(|s| s.strip_suffix(')'))
+                .expect("command(...) format");
+            cmd == prefix || cmd.starts_with(&format!("{prefix} "))
+        })
+    };
+
+    for blocked in [
+        "gh repo create acme-new --public",
+        "gh repo delete owner/repo",
+        "gh repo edit owner/repo --description x",
+        "gh repo fork owner/repo",
+        "gh repo rename new-name",
+        "gh repo archive owner/repo",
+        "gh repo sync",
+        "gh release create v1.0",
+        "gh release delete v1.0",
+        "gh release edit v1.0",
+        "gh release upload v1.0 dist.tar.gz",
+        "gh issue create --title bug",
+        "gh issue close 12",
+        "gh issue comment 12 --body hi",
+        "gh issue delete 12",
+        "gh issue edit 12 --title new",
+        "gh issue reopen 12",
+        "gh issue transfer 12 target/repo",
+        "gh issue lock 12",
+        "gh issue pin 12",
+        "gh issue develop 12",
+        "gh api repos/owner/repo",
+        "gh api -X POST repos/owner/repo/issues",
+    ] {
+        assert!(
+            matches_agy_deny(blocked),
+            "expected deny match for {blocked}"
+        );
+    }
+
+    for allowed in [
+        "gh repo view owner/repo --json name,owner",
+        "gh repo list owner --limit 20",
+        "gh issue list -R owner/repo --limit 10",
+        "gh issue view 12",
+        "gh issue status",
+        "gh release list",
+        "gh release view v1.0",
+        "gh pr view --json number,title,url,state",
+        "gh workflow run --help",
+    ] {
+        assert!(
+            !matches_agy_deny(allowed),
+            "unexpected deny match for {allowed}"
+        );
+    }
 }
 
 /// `prepare` writes `<cwd>/.agy-settings.json` mode 600 before the

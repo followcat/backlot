@@ -295,13 +295,23 @@ fn benign_gh_read_probes_and_agy_settings_allow() {
     );
 
     let settings = String::from_utf8(agy::settings_content(None, None).unwrap()).unwrap();
-    for coarse in [
-        "command(gh repo)",
-        "command(gh issue)",
-        "command(gh release)",
-        "command(gh api)",
+    for broad in [
+        "\"command(gh repo)\"",
+        "\"command(gh issue)\"",
+        "\"command(gh release)\"",
     ] {
-        assert!(!settings.contains(coarse), "{coarse} left in {settings}");
+        assert!(!settings.contains(broad), "{broad} left in {settings}");
+    }
+    for defense_in_depth in [
+        "\"command(gh api)\"",
+        "\"command(gh repo create)\"",
+        "\"command(gh release create)\"",
+        "\"command(gh issue create)\"",
+    ] {
+        assert!(
+            settings.contains(defense_in_depth),
+            "missing {defense_in_depth} in {settings}"
+        );
     }
     assert!(refused_events(&gs.sdir).is_empty());
     assert!(outward_attention_events(&gs.sdir).is_empty());
@@ -313,27 +323,10 @@ fn suppressed_probe_refusals_emit_no_ledger_events() {
     let (actor_env, _) = env_for(&gs, "actor-t1-c1", Some("t1"));
     let policy = PushPolicy::default();
 
-    // IDE git index/remote probes with `-c core.hooksPath=/dev/null` or `GIT_CONFIG_*` remain
-    // refused by the guard, yet must not append `role.refused` or raise `outward action`.
-    let ide_ls = argv(&[
-        "git",
-        "--",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.fsmonitor=",
-        "ls-files",
-        "--error-unmatch",
-        "--",
-        ".claude/settings.local.json",
-    ]);
-    assert!(matches!(
-        classify_command("git", &ide_ls[2..], &policy, &gs.work, &actor_env),
-        GuardVerdict::Refuse { .. }
-    ));
-    let (code, _) = run_in(&ide_ls, &actor_env, &gs.work, false);
-    assert_eq!(code, ExitCode::from(126));
-
+    // Evidence-backed IDE/subprocess read-probe refusals (`GIT_CONFIG_*` /
+    // `GIT_CONFIG_PARAMETERS` for `core.fsmonitor`, `core.hookspath`, `submodule.recurse`,
+    // `alias.*`, plus uncontained local cwd `git path outside work area`) stay refused by
+    // the guard yet suppress `role.refused` and `outward action`.
     let mut cfg_env = Env {
         vars: actor_env.vars.clone(),
     };
@@ -352,6 +345,26 @@ fn suppressed_probe_refusals_emit_no_ledger_events() {
     );
     assert_eq!(code_cfg, ExitCode::from(126));
 
+    let mut submod_env = Env {
+        vars: actor_env.vars.clone(),
+    };
+    submod_env
+        .vars
+        .insert("GIT_CONFIG_COUNT".into(), "1".into());
+    submod_env
+        .vars
+        .insert("GIT_CONFIG_KEY_0".into(), "submodule.recurse".into());
+    submod_env
+        .vars
+        .insert("GIT_CONFIG_VALUE_0".into(), "false".into());
+    let (code_submod, _) = run_in(
+        &argv(&["git", "--", "ls-files", "--recurse-submodules"]),
+        &submod_env,
+        &gs.work,
+        false,
+    );
+    assert_eq!(code_submod, ExitCode::from(126));
+
     let mut params_env = Env {
         vars: actor_env.vars.clone(),
     };
@@ -367,6 +380,28 @@ fn suppressed_probe_refusals_emit_no_ledger_events() {
     );
     assert_eq!(code_params, ExitCode::from(126));
 
+    let mut hp_params_env = Env {
+        vars: actor_env.vars.clone(),
+    };
+    hp_params_env.vars.insert(
+        "GIT_CONFIG_PARAMETERS".into(),
+        "'core.hooksPath=/dev/null'".into(),
+    );
+    let (code_hp, _) = run_in(
+        &argv(&[
+            "git",
+            "--",
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            ".claude/settings.local.json",
+        ]),
+        &hp_params_env,
+        &gs.work,
+        false,
+    );
+    assert_eq!(code_hp, ExitCode::from(126));
+
     // Uncontained read in `/tmp` without explicit `-C` / `GIT_DIR` escapes stays refused quietly.
     let tmp_dir = gs.scratch.files.join("unrelated-tmp");
     fs::create_dir_all(&tmp_dir).unwrap();
@@ -378,6 +413,16 @@ fn suppressed_probe_refusals_emit_no_ledger_events() {
         false,
     );
     assert_eq!(code_tmp, ExitCode::from(126));
+    assert!(matches!(
+        classify_command(
+            "git",
+            &argv(&["--no-pager", "log", "-1", "--oneline"]),
+            &policy,
+            &tmp_dir,
+            &actor_env
+        ),
+        GuardVerdict::Refuse { .. }
+    ));
 
     assert!(
         refused_events(&gs.sdir).is_empty(),
@@ -389,17 +434,166 @@ fn suppressed_probe_refusals_emit_no_ledger_events() {
         "unexpected outward action: {:?}",
         outward_attention_events(&gs.sdir)
     );
-    assert_eq!(crate::guard_probes::read_suppressed_count(&gs.sdir), 4);
+    assert_eq!(crate::guard_probes::read_suppressed_count(&gs.sdir), 5);
     let mut logged = std::collections::BTreeMap::new();
     let line = crate::daemon::Stage::flush_suppressed_in(&mut logged, "acme-shop", &gs.sdir);
     assert_eq!(
         line.as_deref(),
-        Some("acme-shop: suppressed 4 read-only probe refusal(s) (total 4)")
+        Some("acme-shop: suppressed 5 read-only probe refusal(s) (total 5)")
     );
     assert_eq!(
         crate::daemon::Stage::flush_suppressed_in(&mut logged, "acme-shop", &gs.sdir),
         None
     );
+}
+
+#[test]
+fn hooks_path_tampered_and_unknown_global_opt_still_record_refused() {
+    let gs = setup_git_studio(CAST_TOML);
+    let (actor_env, _) = env_for(&gs, "actor-t1-c1", Some("t1"));
+
+    let (code_hp, msg_hp) = run_in(
+        &argv(&["git", "--", "-c", "core.hooksPath=/dev/null", "status"]),
+        &actor_env,
+        &gs.work,
+        false,
+    );
+    assert_eq!(code_hp, ExitCode::from(126));
+    assert!(
+        msg_hp
+            .as_deref()
+            .unwrap_or("")
+            .contains("git hooksPath tampered"),
+        "{msg_hp:?}"
+    );
+
+    let (code_unk, msg_unk) = run_in(
+        &argv(&["git", "--", "--unknown-probe-flag", "status"]),
+        &actor_env,
+        &gs.work,
+        false,
+    );
+    assert_eq!(code_unk, ExitCode::from(126));
+    assert!(
+        msg_unk
+            .as_deref()
+            .unwrap_or("")
+            .contains("unknown git global option (--unknown-probe-flag)"),
+        "{msg_unk:?}"
+    );
+
+    let refused = refused_events(&gs.sdir);
+    assert_eq!(refused.len(), 2, "{refused:?}");
+    assert_eq!(outward_attention_events(&gs.sdir).len(), 2);
+    assert_eq!(crate::guard_probes::read_suppressed_count(&gs.sdir), 0);
+}
+
+#[test]
+fn optional_locks_disabled_for_read_only_git_outside_own_worktree() {
+    let gs = setup_git_studio(CAST_TOML);
+    let integration = add_integration_worktree(&gs);
+    let (actor_env, actor_rdir) = env_for(&gs, "actor-t1-c1", Some("t1"));
+    let (director_env, director_rdir) = env_for(&gs, "director", None);
+    let (producer_env, _) = env_for(&gs, "producer", None);
+
+    // Own worktree stays normal; sibling/repo read-only git sets GIT_OPTIONAL_LOCKS=0.
+    assert!(!crate::guard_probes::should_disable_optional_locks(
+        "git",
+        &argv(&["status"]),
+        &gs.work,
+        &actor_env
+    ));
+    assert!(!crate::guard_probes::should_disable_optional_locks(
+        "git",
+        &argv(&["-C", "../t1", "commit", "-m", "x"]),
+        &integration,
+        &director_env
+    ));
+    assert!(crate::guard_probes::should_disable_optional_locks(
+        "git",
+        &argv(&["-C", "../t1", "status"]),
+        &integration,
+        &director_env
+    ));
+    assert!(crate::guard_probes::should_disable_optional_locks(
+        "git",
+        &argv(&["status"]),
+        &gs.repo,
+        &director_env
+    ));
+    assert!(crate::guard_probes::should_disable_optional_locks(
+        "git",
+        &argv(&["status"]),
+        &gs.repo,
+        &producer_env
+    ));
+
+    // Verify the spawned binary receives GIT_OPTIONAL_LOCKS=0 via `run_in`.
+    let real_git = std::env::var_os("PATH")
+        .and_then(|p| {
+            std::env::split_paths(&p)
+                .map(|d| d.join("git"))
+                .find(|cand| cand.is_file())
+        })
+        .unwrap_or_else(|| PathBuf::from("/usr/bin/git"));
+    let mock_dir = gs.scratch.files.join("mock-git-bin");
+    fs::create_dir_all(&mock_dir).unwrap();
+    let seen_file = gs.scratch.files.join("opt-locks.txt");
+    let fake_git = mock_dir.join("git");
+    fs::write(
+        &fake_git,
+        format!(
+            "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = \"status\" ]; then\n    printf '%s\\n' \"${{GIT_OPTIONAL_LOCKS:-unset}}\" >> '{}'\n    exit 0\n  fi\ndone\nexec '{}' \"$@\"\n",
+            seen_file.display(),
+            real_git.display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&fake_git, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut run_env_dir = Env {
+        vars: director_env.vars.clone(),
+    };
+    run_env_dir.vars.insert(
+        "PATH".into(),
+        format!(
+            "{}:{}:/usr/bin:/bin",
+            director_rdir.join("bin").display(),
+            mock_dir.display()
+        ),
+    );
+    let (code, msg) = run_in(
+        &argv(&["git", "--", "-C", "../t1", "status"]),
+        &run_env_dir,
+        &integration,
+        false,
+    );
+    assert_eq!(code, ExitCode::SUCCESS, "{msg:?}");
+
+    let mut run_env_actor = Env {
+        vars: actor_env.vars.clone(),
+    };
+    run_env_actor.vars.insert(
+        "PATH".into(),
+        format!(
+            "{}:{}:/usr/bin:/bin",
+            actor_rdir.join("bin").display(),
+            mock_dir.display()
+        ),
+    );
+    let (code_own, msg_own) = run_in(
+        &argv(&["git", "--", "status"]),
+        &run_env_actor,
+        &gs.work,
+        false,
+    );
+    assert_eq!(code_own, ExitCode::SUCCESS, "{msg_own:?}");
+    let lines: Vec<String> = fs::read_to_string(&seen_file)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    assert_eq!(lines, vec!["0".to_string(), "unset".to_string()]);
 }
 
 #[test]
