@@ -115,10 +115,16 @@ pub fn slug(cwd: &str) -> String {
 /// forms are allowed, never the bare family.
 #[cfg(test)]
 pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
-    allow_rules_for(role, checks, false)
+    allow_rules_for(role, checks, false, false, "")
 }
 
-fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<String> {
+fn allow_rules_for(
+    role: &str,
+    checks: &[CheckDecl],
+    readonly: bool,
+    worktree: bool,
+    cwd: &str,
+) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
         // the prompt, which is the user's to answer.
@@ -130,6 +136,14 @@ fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<Stri
     let mut rules = vec!["Shell(backlot)".to_string()];
     for cmd in super::READ_ONLY {
         rules.push(format!("Shell({cmd}:*)"));
+    }
+    if worktree {
+        for cmd in super::WORKTREE_DIAGNOSTICS {
+            rules.push(format!("Shell({cmd}:*)"));
+        }
+        for cmd in super::worktree_scoped_commands(role, cwd, expressible) {
+            rules.push(format!("Shell({cmd}:*)"));
+        }
     }
     let is_actor = actor_task(role).is_some();
     if is_actor && !readonly {
@@ -326,9 +340,10 @@ pub fn session_at(
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    let readonly = match identity.permission_profile.as_str() {
-        "standard" | "worktree" => false,
-        "readonly" => true,
+    let (readonly, worktree) = match identity.permission_profile.as_str() {
+        "standard" => (false, false),
+        "worktree" => (false, true),
+        "readonly" => (true, false),
         other => return Err(PlanError::profile(other)),
     };
     let mut argv = vec!["cmd".to_string()];
@@ -346,7 +361,8 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // the sibling of its cwd. The flag only feeds the model's
     // `<workspace>` context — the permission check reads the same
     // directory from `permissions.additionalDirectories`, which
-    // `prepare` writes — so both carry this one value.
+    // `prepare` writes — so both carry the same list. Under `"worktree"`,
+    // the role's own worktree scratch directory is also included.
     let add_dir = if ctx.role == "hollywood" {
         let hdir = Path::new(ctx.studio_dir);
         hdir.parent().unwrap_or(hdir).join("studios")
@@ -354,16 +370,24 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         PathBuf::from(ctx.studio_dir)
     };
     let add_dir = add_dir.to_string_lossy().into_owned();
-    let additional_dirs = vec![add_dir.clone()];
+    let mut additional_dirs = vec![add_dir.clone()];
+    if worktree
+        && ctx.role != "hollywood"
+        && let Some(scratch) = super::cmd_scratch::worktree_dir(ctx.cwd, ctx.stage_env)
+        && scratch != add_dir
+    {
+        additional_dirs.push(scratch);
+    }
     argv.extend([
         "-m".into(),
         identity.model.clone(),
         "--trust".into(),
         "--skip-onboarding".into(),
         "--no-auto-update".into(),
-        "--add-dir".into(),
-        add_dir,
     ]);
+    for dir in &additional_dirs {
+        argv.extend(["--add-dir".into(), dir.clone()]);
+    }
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt
     {
@@ -383,7 +407,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         hooks: None,
         prep: Some(Prep::Cmd(CmdPrep {
             settings: Path::new(ctx.cwd).join(".commandcode/settings.json"),
-            allow: allow_rules_for(ctx.role, ctx.checks, readonly),
+            allow: allow_rules_for(ctx.role, ctx.checks, readonly, worktree, ctx.cwd),
             additional_dirs,
             global_mcp,
             signals: Path::new(ctx.studio_dir)
