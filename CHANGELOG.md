@@ -14,6 +14,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **`worktree` permission profile on `cmd`, `cursor`, and `claude`.** Actors and roles on `permission_profile = "worktree"` now get read-only diagnostic commands (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`), per-segment worktree-scoped `cd <own worktree>` / `git -C <own worktree> <read>` rules, and (on `cmd`) the worktree's encoded `/tmp/commandcode-<uid>/<encoded cwd>` scratch directory; `standard` and `readonly` are unchanged, `devin`/`agy`/`cline`/`codex`/`opencode` remain identical across `standard` and `worktree`, and `backlot studio new --dry-run` notes when a cast sets `worktree` on those runners (`docs/studio/runners.md`).
 
+## 0.4.24 — 2026-11-27
+
 ### Added
 
 - **Checks are proposed at the opening and switched on when you sign.** In the buildability step the director proposes the repo's real test or lint commands (`design write --slot buildability --checks-file <toml>`). Each one first runs once in the director's own worktree, under its guard and without credentials or proxies; a failing one is refused. On the Call Sheet the design shows `+N checks`, and signing (`a`) shows every command in full and lets you sign with the checks, sign without them, or cancel.
