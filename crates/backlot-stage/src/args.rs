@@ -83,6 +83,12 @@ pub enum Cmd {
     ReportShow {
         file: PathBuf,
     },
+    /// `msg show <seq> [--json]`: reads one message/design/report/finding
+    /// entry from the caller's own studio ledger — read-only.
+    MsgShow {
+        seq: u64,
+        json: bool,
+    },
     Ask {
         file: PathBuf,
     },
@@ -546,6 +552,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "report" => args_studio::report(&mut common, &mut it),
         "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
+        "msg" => args_studio::msg(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
         "priority" => args_task::priority(&mut common, &mut it),
