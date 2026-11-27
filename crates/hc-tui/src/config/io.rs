@@ -28,6 +28,7 @@ const KNOWN_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
     "remote",
     "server",
     "session",
+    "studio",
     "terminal",
     "theme",
     "ui",
@@ -48,6 +49,7 @@ const CONSUMED_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
     "ui",
     "worktrees",
     "experimental",
+    "studio",
 ];
 
 #[derive(Debug)]
