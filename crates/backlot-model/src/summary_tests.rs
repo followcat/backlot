@@ -1521,3 +1521,49 @@ fn acknowledge_clears_the_question_and_keeps_the_exchange() {
     let exchange = crate::studio_exchange::studio_exchange(&state, &BTreeMap::new());
     assert!(exchange.iter().any(|e| e.seq == 10 && e.ask));
 }
+
+#[test]
+fn director_handled_actor_prompt_has_waiting_zero_and_escalated_has_waiting_one() {
+    let mut events = base_events();
+    events.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    events.push(ev(
+        10,
+        "stage",
+        EventKind::AttentionRaised {
+            role: "actor-t1-c1".into(),
+            reason: crate::event::PERMISSION_PROMPT.into(),
+            detail: "Bash: ls; screen saved to attention/10.txt".into(),
+            needs_user: false,
+            account: None,
+            reset_at_ms: None,
+        },
+    ));
+    let unescalated = summary(
+        &[("acme-shop".into(), replay(&events))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(unescalated.studios[0].waiting, 0);
+
+    events.push(ev(
+        11,
+        "stage",
+        EventKind::AttentionEscalated {
+            target: 10,
+            detail: "the director is rate-limited; waiting 1m; screen saved to attention/10.txt"
+                .into(),
+        },
+    ));
+    let escalated = summary(
+        &[("acme-shop".into(), replay(&events))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(escalated.studios[0].waiting, 1);
+}
