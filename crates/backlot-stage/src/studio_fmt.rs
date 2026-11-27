@@ -24,6 +24,9 @@ pub(crate) fn studio_new(r: &StudioNewResult) -> String {
         if let Some(line) = &r.first_message {
             out.push_str(&format!("\nfirst message to the producer: {line}"));
         }
+        for note in &r.notes {
+            out.push_str(&format!("\nnote: {note}"));
+        }
         return out;
     }
     let seq = r.seq.unwrap_or(0);

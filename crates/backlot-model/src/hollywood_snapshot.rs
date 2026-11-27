@@ -58,9 +58,8 @@ impl CardSnapshot {
     }
 }
 
-/// SHA-256 (FIPS 180-4) as lowercase hex — the same digest the confirm
-/// tokens use, kept here so the model can hash a snapshot itself.
-pub fn sha256_hex(data: &[u8]) -> String {
+/// SHA-256 (FIPS 180-4) raw 32-byte digest.
+pub fn sha256(data: &[u8]) -> [u8; 32] {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
         0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
@@ -122,10 +121,20 @@ pub fn sha256_hex(data: &[u8]) -> String {
             *slot = slot.wrapping_add(val);
         }
     }
+    let mut out = [0u8; 32];
+    for (dst, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(h) {
+        *dst = word.to_be_bytes();
+    }
+    out
+}
+
+/// SHA-256 (FIPS 180-4) as lowercase hex — the same digest the confirm
+/// tokens use, kept here so the model can hash a snapshot itself.
+pub fn sha256_hex(data: &[u8]) -> String {
     let mut out = String::with_capacity(64);
-    for word in h {
+    for byte in sha256(data) {
         use std::fmt::Write as _;
-        let _ = write!(out, "{word:08x}");
+        let _ = write!(out, "{byte:02x}");
     }
     out
 }

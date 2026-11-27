@@ -13,6 +13,7 @@ pub mod cline;
 mod cline_hook;
 mod cline_hook_awk;
 pub mod cmd;
+mod cmd_scratch;
 mod codex;
 pub mod cursor;
 pub mod detect;
@@ -65,6 +66,45 @@ pub const READ_ONLY: &[&str] = &[
     "head",
     "backlot msg show",
 ];
+
+/// Extra read-only diagnostic commands pre-allowed in the `"worktree"`
+/// profile (`ls`, `wc` and `head` are already in [`READ_ONLY`]).
+pub const WORKTREE_DIAGNOSTICS: &[&str] = &["which", "nproc", "df", "free", "test", "ps", "tail"];
+
+/// Runners whose `"worktree"` `permission_profile` emits the exact same
+/// settings/flags as `"standard"`.
+pub(crate) const IDENTICAL_WORKTREE_RUNNERS: &[&str] =
+    &["devin", "agy", "cline", "codex", "opencode"];
+
+/// Worktree-scoped shell command stems pre-allowed in `"worktree"` for
+/// runners whose matcher splits compound commands per segment:
+/// `cd <cwd>` plus `git -C <cwd> <read>` for every git read in
+/// [`READ_ONLY`]. Returns empty when `role == "hollywood"` or `cwd` is
+/// empty, relative, contains whitespace/shell metacharacters, or fails
+/// `expressible`.
+pub(crate) fn worktree_scoped_commands(
+    role: &str,
+    cwd: &str,
+    expressible: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    if role == "hollywood"
+        || cwd.is_empty()
+        || !std::path::Path::new(cwd).is_absolute()
+        || cwd.chars().any(|c| {
+            c.is_whitespace() || matches!(c, '\'' | '"' | ';' | '&' | '|' | '<' | '>' | '$' | '`')
+        })
+        || !expressible(cwd)
+    {
+        return Vec::new();
+    }
+    let mut cmds = vec![format!("cd {cwd}")];
+    for ro in READ_ONLY {
+        if let Some(sub) = ro.strip_prefix("git ") {
+            cmds.push(format!("git -C {cwd} {sub}"));
+        }
+    }
+    cmds
+}
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -516,3 +556,5 @@ mod readonly_tests;
 mod resolve_tests;
 #[cfg(test)]
 mod work_tests;
+#[cfg(test)]
+mod worktree_profile_tests;
