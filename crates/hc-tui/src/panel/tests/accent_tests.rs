@@ -123,7 +123,6 @@ fn col_of(buf: &Buffer, area: Rect, y: u16, needle: &str) -> u16 {
 fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
     let summary = two_studio_summary();
     let palette = Palette::from_name("catppuccin").unwrap();
-    let elev = palette.elevation();
     let mut panel = Panel {
         mode: PanelMode::Expanded,
         focused: false,
@@ -131,8 +130,10 @@ fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
     };
     let area = Rect::new(0, 0, 37, 30);
 
+    let elev = palette.elevation();
     // Unfocused lot, `current = acme-shop`: single focus ring keeps both borders `border_muted`,
-    // no inverted `accent` chip, no `▌`; active terminal studio uses bold `text` `▸ acme-shop`.
+    // no inverted `accent` chip, no `▌`; active terminal studio sits in a raised `elev.raised_row`
+    // capsule (` ▸ acme-shop `) with bold `palette.text`.
     let (buf, _) = draw_cur(area, &summary, &panel, Some("acme-shop"), &palette);
     for y in area.y..area.bottom() {
         assert_eq!(buf[(area.x, y)].symbol(), "│", "dock left seam y={y}");
@@ -155,21 +156,26 @@ fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
         .map(|x| buf[(x, acme_top)].symbol())
         .collect();
     assert!(top_row.starts_with("│╭ ▸ acme-shop "), "{top_row:?}");
-    let acme_start = col_of(&buf, area, acme_top, "acme-shop");
-    assert_eq!(buf[(acme_start, acme_top)].fg, palette.text);
-    assert!(
-        buf[(acme_start, acme_top)]
-            .modifier
-            .contains(Modifier::BOLD)
-    );
-    assert_ne!(buf[(acme_start, acme_top)].bg, palette.accent);
+    for x in 2..=14 {
+        let cell = &buf[(x, acme_top)];
+        assert_eq!(cell.bg, elev.raised_row, "capsule bg x={x}: {top_row:?}");
+        assert_eq!(cell.fg, palette.text, "capsule fg x={x}");
+        assert!(cell.modifier.contains(Modifier::BOLD), "capsule bold x={x}");
+        assert_ne!(cell.bg, palette.accent);
+    }
 
-    // Unselected blog keeps plain subtext0 title, no chip background, no `▌` anywhere.
+    // Unselected blog keeps bold brightest text (`palette.text`), no capsule/chip bg, no `▌`.
     let blog_row: String = (area.x..area.x + area.width)
         .map(|x| buf[(x, blog_top)].symbol())
         .collect();
     let blog_start = col_of(&buf, area, blog_top, "blog");
-    assert_eq!(buf[(blog_start, blog_top)].fg, palette.subtext0);
+    assert_eq!(buf[(blog_start, blog_top)].fg, palette.text);
+    assert!(
+        buf[(blog_start, blog_top)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+    assert_eq!(buf[(blog_start, blog_top)].bg, elev.surface);
     assert_ne!(buf[(blog_start, blog_top)].bg, palette.accent);
     assert!(!blog_row.contains('▌') && !top_row.contains('▌'));
 
@@ -224,13 +230,24 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
         let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
 
-        // `acme-shop` still holds the focused terminal `▸` (`palette.text`), but its border is `border_muted`.
+        // `acme-shop` holds the focused terminal `▸` (` ▸ acme-shop `) capsule:
+        // `elev.raised_row` + bold `palette.text` on RGB themes, `BOLD | REVERSED` on 16-color;
+        // border stays `border_muted`.
         assert_border_fg(&buf, area, acme_top, acme_bot, elev.border_muted, theme);
-        let acme_x = (area.x..area.x + area.width)
-            .find(|&x| buf[(x, acme_top)].symbol() == "a")
-            .unwrap();
-        assert_eq!(buf[(acme_x, acme_top)].fg, palette.text);
-        assert_ne!(buf[(acme_x, acme_top)].bg, palette.accent);
+        for x in 2..=14 {
+            let cell = &buf[(x, acme_top)];
+            assert_eq!(cell.fg, palette.text, "{theme} capsule fg x={x}");
+            assert!(cell.modifier.contains(Modifier::BOLD), "{theme} bold x={x}");
+            if elev.is_terminal_16 {
+                assert!(
+                    cell.modifier.contains(Modifier::REVERSED),
+                    "{theme} 16-col reverse x={x}"
+                );
+            } else {
+                assert_eq!(cell.bg, elev.raised_row, "{theme} capsule bg x={x}");
+            }
+            assert_ne!(cell.bg, palette.accent);
+        }
 
         // `blog` is selected: border is `accent`, chip ` blog ` has `bg == accent` and `contrast_fg`, bold.
         assert_border_fg(&buf, area, blog_top, blog_bot, palette.accent, theme);
@@ -295,13 +312,13 @@ fn strip_and_stacked_selected_studio_uses_accent_when_focused_and_text_when_unfo
         let acme_y = hit_y(&strip_hits, &Target::Strip("acme-shop".into()));
         let blog_y = hit_y(&strip_hits, &Target::Strip("blog".into()));
         assert_eq!(strip_buf[(3, acme_y)].fg, palette.text);
-        assert!(!strip_buf[(3, acme_y)].modifier.contains(Modifier::BOLD));
+        assert!(strip_buf[(3, acme_y)].modifier.contains(Modifier::BOLD));
         assert_eq!(strip_buf[(3, blog_y)].fg, want_fg);
         assert!(strip_buf[(3, blog_y)].modifier.contains(Modifier::BOLD));
     }
 
     // Stacked rows, unfocused vs focused: selected `acme-shop` uses `text` BOLD when unfocused,
-    // `accent` BOLD when focused.
+    // `accent` BOLD when focused; unselected `blog` uses bold `palette.text`.
     for (focused, want_fg) in [(false, palette.text), (true, palette.accent)] {
         let mut stacked_panel = Panel {
             mode: PanelMode::Expanded,
@@ -322,8 +339,8 @@ fn strip_and_stacked_selected_studio_uses_accent_when_focused_and_text_when_unfo
         let blog_sy = hit_y(&stack_hits, &Target::Block("blog".into()));
         assert_eq!(stack_buf[(3, acme_sy)].fg, want_fg);
         assert!(stack_buf[(3, acme_sy)].modifier.contains(Modifier::BOLD));
-        assert_eq!(stack_buf[(3, blog_sy)].fg, palette.subtext0);
-        assert!(!stack_buf[(3, blog_sy)].modifier.contains(Modifier::BOLD));
+        assert_eq!(stack_buf[(3, blog_sy)].fg, palette.text);
+        assert!(stack_buf[(3, blog_sy)].modifier.contains(Modifier::BOLD));
     }
 }
 
@@ -427,5 +444,75 @@ fn screenshot_36x30_renders_selected_chip_and_accent_border_when_focused() {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(&out_path, format!("{}{}", lines.join("\n"), summary_note)).unwrap();
+    }
+}
+
+#[test]
+fn cjk_wide_studio_name_fits_inside_raised_capsule_without_clipping_tail() {
+    let mut summary = two_studio_summary();
+    summary.studios[0].id = "中文工作室名-01".into();
+    let palette = Palette::catppuccin();
+    let elev = palette.elevation();
+    let panel = Panel {
+        mode: PanelMode::Expanded,
+        focused: true,
+        selected: Some(Target::Studio("blog".into())),
+        ..Panel::new()
+    };
+    let area = Rect::new(0, 0, 38, 30);
+    let (buf, _) = draw_cur(area, &summary, &panel, Some("中文工作室名-01"), &palette);
+    let (top, _) = block_bounds(&buf, area, "中");
+    let row: String = (area.x..area.x + area.width)
+        .map(|x| buf[(x, top)].symbol())
+        .collect();
+    assert!(row.contains("▸ 中 文 工 作 室 名"), "{row:?}");
+    assert!(row.ends_with("╮"), "{row:?}");
+    let cap_cells: Vec<u16> = (0..area.width)
+        .filter(|&x| buf[(x, top)].bg == elev.raised_row)
+        .collect();
+    assert!(
+        !cap_cells.is_empty(),
+        "expected raised_row capsule on CJK name: {row:?}"
+    );
+    assert_eq!(buf[(cap_cells[0], top)].symbol(), " ");
+    assert_eq!(buf[(*cap_cells.last().unwrap(), top)].symbol(), " ");
+    // Dumps focused (blog selected, current acme capsule) and unfocused (acme capsule) when requested.
+    if std::env::var_os("LOT_CAPSULE_DUMP").is_some() {
+        let two = two_studio_summary();
+        let f_panel = Panel {
+            mode: PanelMode::Expanded,
+            focused: true,
+            selected: Some(Target::Studio("blog".into())),
+            ..Panel::new()
+        };
+        let u_panel = Panel {
+            mode: PanelMode::Expanded,
+            focused: false,
+            ..Panel::new()
+        };
+        let dump_lines = |p: &Panel| {
+            let (b, _) = draw_cur(
+                Rect::new(0, 0, 38, 32),
+                &two,
+                p,
+                Some("acme-shop"),
+                &palette,
+            );
+            (0..32)
+                .map(|y| {
+                    (0..38)
+                        .map(|x| b[(x, y)].symbol())
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        eprintln!(
+            "=== LOT_FOCUSED_CAPSULE ===\n{}\n=== LOT_UNFOCUSED_CAPSULE ===\n{}\n=== END_CAPSULE ===",
+            dump_lines(&f_panel),
+            dump_lines(&u_panel),
+        );
     }
 }

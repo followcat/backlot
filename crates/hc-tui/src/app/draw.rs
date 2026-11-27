@@ -76,8 +76,6 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.waiting,
         );
     }
-    let collapsed = app.shell_state.sidebar_collapsed;
-    app.panel.sidebar_collapsed = collapsed;
     let layout = app.chrome_layout(area.width, area.height);
     // U1: studio mode replaces the agents section with the current
     // studio's cast — borrowed views only, every machine's summaries.
@@ -166,7 +164,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_focused_workspace: &mut app.shell_state.reveal_focused_workspace,
         reveal_focused_tab: &mut app.shell_state.reveal_focused_tab,
         reveal_focused_agent: &mut app.shell_state.reveal_focused_agent,
-        sidebar_collapsed: collapsed,
+        sidebar_collapsed: app.shell_state.sidebar_collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
         tab_drag_insert_index: app.tab_drag_index,
         selected_workspace_id: app.navigate_target.as_ref(),

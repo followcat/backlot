@@ -1,20 +1,18 @@
 //! Single-line compact studio rows (`Ready`, `Calm`, `Finished`,
-//! `StageDown`, `Offline`) and the current studio's 1-line `CalmSummary`
-//! row inside its bordered card.
+//! `StageDown`, `Offline`).
 
 use backlot_model::event::age_short;
 use backlot_model::summary::{IDLE_SHOWN_MS, RoleSummary, StudioSummary};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
-use super::draw_blocks::draw_inner;
 use super::rows_fold::CompactKind;
 use crate::chrome::palette::Palette;
-use crate::chrome::render::{put_role_badged_text, put_text};
-use crate::chrome::text::{display_width, truncate_end};
-use crate::studio::glyphs::{Person, RoleBadge};
+use crate::chrome::render::put_text;
+use crate::chrome::text::display_width;
+use crate::studio::glyphs::{self, Person};
 
 /// Whether a role demands attention or is currently active/queued (stays
 /// expanded as its own 1-line row in non-current active cards and in
@@ -72,80 +70,6 @@ pub(super) fn compact_kind(
     None
 }
 
-/// Build `(idle_count, standby_badges)` from calm/standby live roles omitted
-/// from the current studio card while Left Cast is expanded.
-pub(super) fn calm_summary_parts(roles: &[&RoleSummary]) -> Option<(usize, String)> {
-    let mut idle_count = 0usize;
-    let mut standby_badges = String::new();
-    for role in roles {
-        match Person::of(role) {
-            Person::Idle | Person::Ready => idle_count += 1,
-            Person::Standby => {
-                if let Some(badge) = RoleBadge::of_role(&role.role) {
-                    standby_badges.push_str(badge.glyph());
-                } else {
-                    standby_badges.push('·');
-                }
-            }
-            _ => {}
-        }
-    }
-    (idle_count > 0 || !standby_badges.is_empty()).then_some((idle_count, standby_badges))
-}
-
-/// Draw the 1-line calm/standby summary inside the current studio's bordered card:
-/// `│ ○ 2 idle · Ⓦ standby │`.
-pub(super) fn draw_calm_summary(
-    buf: &mut Buffer,
-    rect: Rect,
-    idle_count: usize,
-    standby_badges: &str,
-    frame: Style,
-    palette: &Palette,
-) {
-    draw_inner(buf, rect, frame);
-    let inner = rect.width.saturating_sub(5);
-    if inner == 0 {
-        return;
-    }
-    if idle_count > 0 {
-        put_text(
-            buf,
-            rect.x + 2,
-            rect.y,
-            1,
-            "○",
-            Style::default().fg(palette.overlay1),
-        );
-        let text = if standby_badges.is_empty() {
-            format!("{idle_count} idle")
-        } else {
-            format!("{idle_count} idle · {standby_badges} standby")
-        };
-        let cut = truncate_end(&text, inner as usize);
-        put_role_badged_text(
-            buf,
-            rect.x + 4,
-            rect.y,
-            inner,
-            &cut,
-            Style::default().fg(palette.overlay0),
-            palette,
-        );
-    } else if !standby_badges.is_empty() {
-        let text = truncate_end(&format!("{standby_badges} standby"), inner as usize);
-        put_role_badged_text(
-            buf,
-            rect.x + 4,
-            rect.y,
-            inner,
-            &text,
-            Style::default().fg(palette.overlay0),
-            palette,
-        );
-    }
-}
-
 fn calm_idle_age(studio: &StudioSummary, now_ms: u64) -> Option<String> {
     let latest = studio
         .roles
@@ -167,18 +91,20 @@ pub(super) fn draw_compact_studio(
     studio: StudioRef<'_>,
     kind: CompactKind,
     label: &StudioLabel,
+    selected: bool,
+    focused_terminal: bool,
     now_ms: u64,
     palette: &Palette,
 ) {
     if rect.width < 4 || rect.height == 0 {
         return;
     }
-    let (glyph, glyph_fg, name_fg) = match kind {
-        CompactKind::Ready => ("✓", palette.teal, palette.subtext0),
-        CompactKind::Calm => ("○", palette.overlay1, palette.subtext0),
-        CompactKind::Finished => ("✓", palette.overlay0, palette.overlay0),
-        CompactKind::StageDown => ("◌", palette.peach, palette.subtext0),
-        CompactKind::Offline => ("×", palette.red, palette.subtext0),
+    let (glyph, glyph_fg) = match kind {
+        CompactKind::Ready => ("✓", palette.teal),
+        CompactKind::Calm => ("○", palette.overlay1),
+        CompactKind::Finished => ("✓", palette.overlay0),
+        CompactKind::StageDown => ("◌", palette.peach),
+        CompactKind::Offline => ("×", palette.red),
     };
     put_text(
         buf,
@@ -240,19 +166,32 @@ pub(super) fn draw_compact_studio(
         .map(|(t, _)| display_width(t) as u16)
         .sum();
     let label_x = rect.x + 3;
+    let capsule = focused_terminal && !selected;
     let max_label_w = right_limit
         .saturating_sub(label_x)
-        .saturating_sub(tail_w + u16::from(tail_w > 0));
+        .saturating_sub(tail_w + u16::from(tail_w > 0) + u16::from(capsule && tail_w == 0));
     if max_label_w > 0 {
         let fitted = label.fit(max_label_w as usize);
-        put_text(
-            buf,
-            label_x,
-            rect.y,
-            max_label_w,
-            &fitted,
-            Style::default().fg(name_fg),
-        );
+        if capsule {
+            let cap_style = glyphs::studio_capsule_style(palette);
+            let drawn = display_width(&fitted) as u16;
+            put_text(buf, label_x - 1, rect.y, 1, " ", cap_style);
+            put_text(buf, label_x, rect.y, max_label_w, &fitted, cap_style);
+            if drawn > 0 && label_x + drawn < right_limit {
+                put_text(buf, label_x + drawn, rect.y, 1, " ", cap_style);
+            }
+        } else {
+            put_text(
+                buf,
+                label_x,
+                rect.y,
+                max_label_w,
+                &fitted,
+                Style::default()
+                    .fg(palette.text)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
     }
 
     let mut x = right_limit.saturating_sub(tail_w);

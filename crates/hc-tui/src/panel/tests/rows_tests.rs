@@ -88,20 +88,18 @@ fn people(targets: &[Target]) -> Vec<String> {
 #[test]
 fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     let summary = summary();
-    // Collapsed left sidebar expands the full cast in Lot.
-    let mut collapsed_panel = panel(PanelMode::Expanded);
-    collapsed_panel.sidebar_collapsed = true;
     let t = targets(
         Some(&summary),
         true,
-        &collapsed_panel,
+        &panel(PanelMode::Expanded),
         Some("acme-shop"),
         100,
     );
     assert_eq!(t.first(), Some(&Target::None));
     // The top border is the only `Studio` row — the title, the three
-    // role-group dividers and the bottom border are the `Target::None`
-    // rows (A2.2).
+    // role-group dividers, the input-divider and the bottom border are the
+    // `Target::None` rows (A2.2). Every live/standby/calm role renders on its
+    // own selectable row regardless of sidebar state.
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
@@ -120,24 +118,6 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
             "producer",
             "director",
             "writer",
-            "actor-alice",
-            "actor-erin",
-            "actor-bob",
-            "actor-carol",
-        ]
-    );
-    // Open left sidebar summarizes calm director+writer on the current studio.
-    let open_t = targets(
-        Some(&summary),
-        true,
-        &panel(PanelMode::Expanded),
-        Some("acme-shop"),
-        100,
-    );
-    assert_eq!(
-        people(&open_t),
-        vec![
-            "producer",
             "actor-alice",
             "actor-erin",
             "actor-bob",
@@ -482,4 +462,110 @@ fn a_studio_needing_upgrade_shows_a_single_owed_line_in_lot() {
         })
         .collect();
     assert_eq!(upgrade_rows.len(), 1, "{out:?}");
+}
+
+#[test]
+fn spacer_separates_blocks_and_compact_groups_and_drops_first_under_height_pressure() {
+    use crate::panel::rows::Row;
+    let calm_studio = |id: &str| {
+        serde_json::json!({
+            "id": id,
+            "title": id,
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "tasks_done": 1,
+            "tasks_total": 1,
+            "roles": [
+                { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" }
+            ],
+            "tasks": [
+                { "id": "t1", "title": "First", "status": "accepted", "requirement_version": 1, "priority": "normal", "rework_rounds": 0, "rework_cap": 0 }
+            ]
+        })
+    };
+    let mut base = summary_json();
+    base["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "ship it" }
+    ]);
+    let s1 = base["studios"][0].clone();
+    let mut s2 = base["studios"][0].clone();
+    s2["id"] = serde_json::json!("blog");
+    s2["exchange"] = serde_json::json!([]);
+    let doc: Summary = serde_json::from_value(serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 1,
+        "studios": [s1, s2, calm_studio("gamma-web"), calm_studio("delta-ops")],
+    }))
+    .unwrap();
+    let list = machines(Some(&doc));
+    let p = panel(PanelMode::Expanded);
+
+    // Abundant height: spacer between Block 1 and Block 2, and between Block 2 and Compact group;
+    // NO spacer between adjacent Compact rows (`gamma-web`, `delta-ops`).
+    let roomy = rows(
+        &list,
+        |_| true,
+        |_| true,
+        &p,
+        p.mode,
+        Some(&StudioKey::local("acme-shop")),
+        60,
+    );
+    let spacer_positions: Vec<usize> = roomy
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| matches!(r, Row::Spacer).then_some(i))
+        .collect();
+    assert_eq!(spacer_positions.len(), 2, "expected 2 spacers: {roomy:?}");
+    assert!(matches!(
+        roomy[spacer_positions[0] - 1],
+        Row::BlockBottom(_)
+    ));
+    assert!(matches!(
+        roomy[spacer_positions[0] + 1],
+        Row::BlockTop { .. }
+    ));
+    assert!(matches!(
+        roomy[spacer_positions[1] - 1],
+        Row::BlockBottom(_)
+    ));
+    assert!(matches!(
+        roomy[spacer_positions[1] + 1],
+        Row::CompactStudio { .. }
+    ));
+    assert!(matches!(
+        roomy[spacer_positions[1] + 2],
+        Row::CompactStudio { .. }
+    ));
+
+    // Exact tight height (`body_rows` excluding spacers): spacers drop BEFORE talk turns or folding!
+    let content_count = roomy
+        .iter()
+        .skip(1)
+        .filter(|r| !matches!(r, Row::Spacer))
+        .count();
+    let tight = rows(
+        &list,
+        |_| true,
+        |_| true,
+        &p,
+        p.mode,
+        Some(&StudioKey::local("acme-shop")),
+        content_count as u16,
+    );
+    assert!(
+        !tight.iter().any(|r| matches!(r, Row::Spacer)),
+        "spacers must drop under height pressure"
+    );
+    assert!(
+        tight.iter().any(|r| matches!(r, Row::Talk { .. })),
+        "talk content survives ahead of blank spacer rows"
+    );
+    assert!(
+        tight.iter().any(|r| matches!(r, Row::CompactStudio { .. })),
+        "compact content survives ahead of blank spacer rows"
+    );
 }
