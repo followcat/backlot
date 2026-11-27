@@ -34,6 +34,7 @@ mod hollywood_summary;
 pub mod hollywood_switch;
 mod hollywood_validate;
 pub mod limits;
+pub mod metrics;
 pub mod progress;
 pub mod push_policy;
 pub mod recast;
@@ -92,6 +93,8 @@ mod design_tests;
 #[cfg(test)]
 mod design_validate_tests;
 #[cfg(test)]
+mod digest_tests;
+#[cfg(test)]
 mod hollywood_card_tests;
 #[cfg(test)]
 mod hollywood_setup_tests;
@@ -107,6 +110,10 @@ mod hollywood_validate_tests;
 mod limits_tests;
 #[cfg(test)]
 mod loop_tests;
+#[cfg(test)]
+mod metrics_test_fx;
+#[cfg(test)]
+mod metrics_tests;
 #[cfg(test)]
 mod migrate_tests;
 #[cfg(test)]

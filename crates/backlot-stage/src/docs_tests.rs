@@ -135,6 +135,8 @@ fn substitute(token: &str) -> String {
         "decision" => "allow",
         "verdict" => "accepted",
         "core-id" => "core",
+        "dur" => "24h",
+        "md|json" => "md",
         _ => "x",
     };
     format!("{}{}{}", &token[..start], value, &token[end..])

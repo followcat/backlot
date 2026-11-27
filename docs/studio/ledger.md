@@ -418,3 +418,11 @@ the delivery really had one. This does not imply the actor could not have fixed 
 **Record view.** Per actor identity and task kind: first-delivery result, whether rework closed defects, repeats of the
 same defect, upstream changes or takeovers, final acceptance, later defects, and wall time. Fewer than five tasks shows
 "not enough data".
+
+## Metrics and digest
+
+`backlot metrics` aggregates quality, checks, findings, continuity, attention classes, rate-limit clusters,
+approvals, guard refusals, Hollywood notices, and timing percentiles directly from studio ledgers and
+`hollywood/events.jsonl`. `backlot digest` builds the period report and `design v<N> §<id>` coverage matrix
+from the ledger plus task acceptance files. Both skip `unknown` events cleanly and see [metrics.md](metrics.md) for
+exact metric definitions and the JSON schema.

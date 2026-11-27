@@ -24,6 +24,22 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
         Cmd::Records { json, all, kind } => {
             Some(records(common, env, base, *json, *all, kind.as_deref()))
         }
+        Cmd::Metrics { json, all, since } => Some(crate::metrics_cli::metrics(
+            common,
+            env,
+            base,
+            *json,
+            *all,
+            since.as_deref(),
+        )),
+        Cmd::Digest { all, since, format } => Some(crate::metrics_cli::digest(
+            common,
+            env,
+            base,
+            *all,
+            since.as_deref(),
+            *format,
+        )),
         Cmd::CastSuggest { json } => Some(cast_suggest(common, env, base, *json)),
         // `studio cast show` only reads the ledger — the effective cast
         // as a cast file, or the same settings structured.

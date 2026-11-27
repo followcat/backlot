@@ -1274,6 +1274,22 @@ its token and cost sums after the counts. The same records feed `backlot cast --
 --suggest`, which lays them beside the studio's `[[candidates]]` for the task's kind — the
 director still casts with `--actor` and `--reason` itself.
 
+## Metrics and daily digest
+
+`backlot metrics` computes quality, checks, findings, continuity, attention classes, rate-limit
+clusters, guard refusals, Hollywood notice drop rate, and timing percentiles directly from studio
+and Hollywood ledgers (`<= 100` column tables, or `--json`). `backlot digest` builds the daily
+period summary plus the `design section -> task -> commits -> task.checked -> verdict` coverage
+matrix (`checks: none` when no checks are declared). Both are read-only and skip `unknown` events
+cleanly; see [metrics.md](metrics.md) for every metric definition and JSON schema.
+
+```sh
+backlot metrics --all --since 7d
+backlot metrics --studio acme-shop --json
+backlot digest --studio acme-shop --since 24h
+backlot digest --all --format json
+```
+
 ## The panel's config
 
 `$XDG_CONFIG_HOME/backlot/config.toml` — `~/.config/backlot/config.toml` by default:

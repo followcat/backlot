@@ -37,6 +37,8 @@ const COMMANDS: &[&str] = &[
     "correct",
     "status",
     "records",
+    "metrics",
+    "digest",
     "finding",
     "stage",
     "priority",
