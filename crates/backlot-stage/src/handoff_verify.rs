@@ -68,7 +68,7 @@ impl Stage {
             signal: sig_state,
             signal_ts_ms: sig_last.as_ref().map(|s| s.ts_ms),
             interrupted: runners::work::interrupted(&rec.target_runner, &text),
-            structured: crate::watch::structured_state(cand),
+            structured: crate::signin::effective_structured(&rec.target_runner, cand, &text),
             screen: runners::work_state(&rec.target_runner, &text),
             now_ms,
         });

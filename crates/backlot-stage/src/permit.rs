@@ -30,7 +30,7 @@ pub const EPISODE_MIN_MS: u64 = 2_000;
 /// pass is already answering that one, so it neither starts nor
 /// holds an episode. `work` still reads `blocked` for the panel.
 pub fn in_episode(work: Work, screen: &str) -> bool {
-    work == Work::Blocked && !trust_dialog(screen)
+    work == Work::Blocked && !trust_dialog(screen) && !work::agy_signing_in(screen)
 }
 
 /// The episode bookkeeping for one fresh sample: inside an episode
@@ -128,7 +128,8 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
                 .or_else(|| phrase_line(before, "Command Code needs to"))
                 .or_else(|| phrase_line(before, "needs to execute"))
                 .or_else(|| phrase_line(before, "needs to run"))
-                .or_else(|| phrase_line(before, "make this edit to"))?
+                .or_else(|| phrase_line(before, "make this edit to"))
+                .or_else(|| phrase_line(before, "Do you want to"))?
         }
         // From the last full-width `─` rule above the approval block to
         // the end — the tool name, the command preview and the

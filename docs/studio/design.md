@@ -94,9 +94,9 @@ no per-agent integration beyond the launch flags in `runners.md`.
 
 | Role | Commands |
 |---|---|
-| Producer | `backlot req revise`, `backlot plan request`, `backlot dispatch`, `backlot report` |
+| Producer | `backlot req revise`, `backlot plan request`, `backlot dispatch`, `backlot decide`, `backlot repo-note propose`, `backlot report` |
 | Writer | `backlot plan publish` |
-| Director | `backlot task new`, `backlot cast`, `backlot review`, `backlot report`, `backlot ask` |
+| Director | `backlot task new`, `backlot cast`, `backlot review`, `backlot decide`, `backlot repo-note propose`, `backlot report`, `backlot ask` |
 | Actor | `backlot deliver`, `backlot block` |
 | Any | `backlot status`, `backlot progress`, `backlot msg show <seq>`, `backlot tell <role> [--ask \| --note]`, `backlot guide` |
 
@@ -242,6 +242,7 @@ When `design_gate` is `"required"` (the default for newly created studios; set `
 - **Steps, wanted roles, and nudges:** `steps::next_steps` emits an owed step for each active phase (`open design`, `design proposal`, `design buildability`, `design summary`, `sign off or open next round`, `reject skip`, plus post-sign `derive plan from design` and `dispatch`). `wanted_roles` keeps `writer` alive through active rounds and post-sign plan derivation; `nudge` times role-owned slots and never nudges user-owned `suggest_skip` or `waiting_user`.
 - **Immutable section files, assembly, and freeze (`design_doc.rs`):** Non-empty entry bodies stage as `PendingFile` and write to immutable files under `design/v<N>/r<round>-<seq>-<slug>.md` (`proposal`, `buildability`, `summary`, `user_input`, `supplement`). Under `events.lock`, commits atomically rewrite `design/v<N>.md` (temp file + `sync_data` + rename) with `# Design discussion · req v<N>[: <summary>]`, `## R<r>`, deterministic section headings (`### §R<r>.W`, `### §R<r>.D`, `### §R<r>.P`, `### §R<r>.U`, `### §R<r>.W+` / `### §R<r>.D+`, plus `#### Questions`), and trailing `## Sign-off (#<seq>)` when signed. `approved` sign-off idempotently freezes `design/v<N>-final.md` (matching `design/v<N>.md` at sign-off; a mismatched existing `-final.md` refuses); `skipped` creates no `-final.md`.
 - **Producer terminal capture:** Unless `[design] hook_capture = false` is set in `<state_dir>/config.toml` or `~/.config/backlot/config.toml`, `backlot hook` captures non-empty, non-`[backlot]` producer terminal prompts strictly while `design_gate == required` and `phase == waiting_user` on supported runners (`claude`, `devin` `UserPromptSubmit`, `agy` `PreInvocation`) into `<studio>/design/.hook-capture.jsonl`. Stage terminal writes (`deliver`, key sends, lifecycle actions) taint and suppress spurious capture; when capture is disabled or unsupported, untainted producer turns create `<studio>/design/.pending-user-note.json`, refusing `backlot design next` until `backlot design note --from user` (or `tell producer`) lands.
+- **Shared decisions and concise task briefs:** Opening proposals name core cross-task contracts as an **Architecture Spine (`AD-1..k`)**, and role prompts standardize a 6-item task brief template (~25 lines max, paired with `--depends-on` canary sequencing for 3+ near-identical unproven tasks and optional actor sibling discoveries). Post-sign or mid-execution cross-task rulings use `backlot decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]` (`message.queued` with `purpose: "decision"`), rewriting `<studio>/decisions/current.md` atomically under `events.lock` for human/reader visibility (`hwood_read`).
 
 ## Stop conditions
 
@@ -433,7 +434,7 @@ the brief to the new producer. An `outward` card (proposed by the stage from a c
 `backlot ask --run`) re-checks work-area containment, clean local git config, `GuardVerdict::Card` classification, and
 `GitHead` / remote branch staleness, then spawns asynchronously in a stripped person environment (`BACKLOT_*` and
 `GIT_CONFIG_*` removed, guard shims filtered off `PATH`) with output saved to `outward/c<n>.log`, a 120 s timeout, and
-an `"outward"` completion notice back to the requesting role. The config gates the agent terminal, never the card pass.
+an `"outward"` completion notice back to the requesting role. A `repo-note` card (`CardAction::RepoNote`, `CardBase::RepoNoteEntry` keyed per `(canonical_repo, entry_id)`, bridged from studio `purpose: "repo_note"` messages) writes `0600` machine-local notes under `<state_dir>/repo-notes/<hash>.md` outside the target repo; whenever `director` or `writer` starts or resumes on that repository, the stage copies approved notes to a `0400` snapshot `<studio_dir>/repo-notes.md` (a disposable copy rewritten on each start, so editing it changes nothing) and injects `{repo_notes}` into their prompt across every runner without widening runner grants. The config gates the agent terminal, never the card pass.
 
 The bar in the TUI (U7, D15, D16) is studio mode's own surface, not the agent's: it draws with or without a
 `[hollywood]` table, since the studios, the new-studio frame and the setup line need no agent — the line opens the

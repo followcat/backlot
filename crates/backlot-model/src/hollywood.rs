@@ -365,6 +365,16 @@ pub enum CardAction {
         #[serde(default)]
         commits_total: u32,
     },
+    /// Append or update one `<entry_id>` section in the machine-local,
+    /// repo-scoped notes file under `<state_dir>/repo-notes/`.
+    RepoNote {
+        studio: String,
+        repo: String,
+        entry_id: String,
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_seq: Option<u64>,
+    },
 }
 
 impl CardAction {
@@ -382,7 +392,8 @@ impl CardAction {
             | CardAction::Restart { studio, .. }
             | CardAction::Cast { studio, .. }
             | CardAction::ReopenStudio { studio }
-            | CardAction::Outward { studio, .. } => studio,
+            | CardAction::Outward { studio, .. }
+            | CardAction::RepoNote { studio, .. } => studio,
             CardAction::Setup { .. } => "hollywood",
         }
     }
@@ -418,6 +429,7 @@ impl CardAction {
                 format!("setup hollywood → {}", crate::recast::identity_text(&actor))
             }
             CardAction::Outward { argv, .. } => argv.join(" "),
+            CardAction::RepoNote { entry_id, .. } => format!("repo-note {entry_id}"),
         }
     }
 
@@ -511,6 +523,14 @@ pub enum CardBase {
         remote_ref: String,
         remote_oid: String,
     },
+    /// Expected `(canonical_repo, entry_id)` section digest at proposal time
+    /// (`None` when the section did not exist yet).
+    RepoNoteEntry {
+        repo: String,
+        entry_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prev_sha256: Option<String>,
+    },
 }
 
 // ── Staleness ──────────────────────────────────────────────────
@@ -521,6 +541,10 @@ pub enum CardBase {
 pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>) -> Option<String> {
     let name = action.studio();
     match base {
+        CardBase::RepoNoteEntry { .. } => match action {
+            CardAction::RepoNote { .. } => None,
+            _ => Some("base does not match the action".into()),
+        },
         CardBase::GitHead { .. } => {
             let CardAction::Outward { .. } = action else {
                 return Some("base does not match the action".into());
@@ -721,8 +745,49 @@ pub fn supersedes(new: &CardAction, old: &CardAction) -> bool {
             ns == os
         }
         (CardAction::Setup { .. }, CardAction::Setup { .. }) => true,
+        (
+            CardAction::RepoNote {
+                repo: nr,
+                entry_id: ne,
+                ..
+            },
+            CardAction::RepoNote {
+                repo: or,
+                entry_id: oe,
+                ..
+            },
+        ) => nr == or && ne == oe,
         _ => false,
     }
+}
+
+/// Check a `RepoNote` card's [`CardBase::RepoNoteEntry`] against the current
+/// SHA-256 digest of `(canonical_repo, entry_id)` on disk.
+pub fn stale_repo_note(
+    action: &CardAction,
+    base: &CardBase,
+    current_sha256: Option<&str>,
+) -> Option<String> {
+    let (
+        CardAction::RepoNote { repo, entry_id, .. },
+        CardBase::RepoNoteEntry {
+            repo: brepo,
+            entry_id: beid,
+            prev_sha256,
+        },
+    ) = (action, base)
+    else {
+        return Some("base does not match repo-note card".into());
+    };
+    if repo != brepo || entry_id != beid {
+        return Some("base target disagrees with repo-note card".into());
+    }
+    if prev_sha256.as_deref() != current_sha256 {
+        return Some(format!(
+            "repo-note '{entry_id}' changed since this card was proposed"
+        ));
+    }
+    None
 }
 
 /// Check a `Setup` card's [`CardBase::HollywoodIdentity`] against the

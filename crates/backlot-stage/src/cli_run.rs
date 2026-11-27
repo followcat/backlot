@@ -33,6 +33,22 @@ pub(crate) fn run_stdin_with_host(
     if matches!(cmd, Cmd::StudioCheck(_)) {
         crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::StudioCheck, &common, env)?;
     }
+    if matches!(
+        cmd,
+        Cmd::RepoNote(
+            crate::args::RepoNoteCmd::Show { .. } | crate::args::RepoNoteCmd::Remove { .. }
+        )
+    ) {
+        crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::RepoNoteAdmin, &common, env)?;
+        return crate::repo_note::admin(
+            &common,
+            match cmd {
+                Cmd::RepoNote(rcmd) => rcmd,
+                _ => unreachable!(),
+            },
+            env,
+        );
+    }
     if let Some(res) =
         crate::remote_doc_cli::route(&mut common, &cmd, env, stdin, local_hostname, current_user)
     {

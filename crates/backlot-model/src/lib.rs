@@ -21,6 +21,7 @@ mod cast_diff;
 mod cast_file;
 pub mod casting;
 pub mod correct;
+pub mod decisions;
 pub mod design;
 mod design_reduce;
 pub mod design_steps;
@@ -41,6 +42,7 @@ pub mod recast;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
+pub mod repo_notes;
 pub mod req_catalog;
 pub mod req_results;
 pub mod req_wire;
@@ -82,6 +84,8 @@ mod cast_tests;
 mod casting_tests;
 #[cfg(test)]
 mod checks_tests;
+#[cfg(test)]
+mod decision_tests;
 #[cfg(test)]
 mod design_gate_steps_tests;
 #[cfg(test)]

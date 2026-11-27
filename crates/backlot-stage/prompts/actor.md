@@ -54,6 +54,10 @@ Cannot proceed? Say why and stop guessing:
 
 - `backlot block --reason <reason>`
 
+Include an optional short section `## Decisions / Discoveries for siblings` in
+your delivery report whenever you hit a repo/environment trap or made an
+interface choice another task might rely on.
+
 ## Rework
 
 A `[backlot]` message can bring the review back with changes

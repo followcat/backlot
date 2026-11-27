@@ -18,6 +18,8 @@ pub use crate::runners::devin::DEVIN_PREP_FAILED;
 /// The repo already tracks a runner's hook config file, so hooks were left off.
 pub const HOOKS_UNAVAILABLE: &str = "hooks unavailable";
 #[cfg(test)]
+pub(crate) use crate::handoff_term::AUTH_ERROR;
+#[cfg(test)]
 pub use crate::runners::{CONFIG_MALFORMED, PROFILE_NOT_SUPPORTED, RUNNER_NOT_SUPPORTED};
 #[cfg(test)]
 pub(crate) use crate::watch::{SESSION_NOT_FOUND, TRUST_REFUSED};
@@ -71,6 +73,7 @@ pub const ALL: &[&str] = &[
     crate::ratelimit::RATE_LIMITED,
     crate::ratelimit::AGENT_ERROR,
     crate::connerr::CONNECTION_ERROR,
+    AUTH_ERROR,
 ];
 
 #[cfg(test)]

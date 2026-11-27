@@ -17,7 +17,7 @@ use crate::reconcile::LiveTerminal;
 use crate::runners;
 use crate::signals;
 use crate::store::{self, StoreError};
-use crate::watch::{structured_state, work_due};
+use crate::watch::work_due;
 
 /// What a live role's samples need: its ledger view, its identity
 /// and its terminal — bundled so the pass stays readable.
@@ -118,7 +118,7 @@ impl Stage {
             signal: signal_state,
             signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
             interrupted,
-            structured: structured_state(w.term),
+            structured: crate::signin::effective_structured(w.runner, w.term, &text),
             screen: screen_work,
             now_ms,
         });
@@ -134,6 +134,7 @@ impl Stage {
             .await?;
         self.question(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
+        self.signin(studio, w, &text, now_ms).await?;
         self.stall(studio, w, work, now_ms).await?;
         self.rate_limit(studio, w, &text, screen_work, now_ms)
             .await?;
