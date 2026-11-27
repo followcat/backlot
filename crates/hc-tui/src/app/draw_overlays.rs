@@ -549,12 +549,13 @@ pub(super) fn render_overlays_and_cursor(
             app.shell.popup_backdrop,
             None,
         );
-        crate::new_studio::render_with_shadow(
+        crate::new_studio::render_styled(
             buf,
             d,
             &app.shell.palette,
             app.backlot_modal_surface(area, layout, 64),
             app.shell.popup_shadow,
+            app.shell.studio_chrome,
         )
     } else {
         crate::new_studio::NsHits::default()

@@ -7,12 +7,13 @@ use ratatui::style::{Modifier, Style};
 
 use super::super::dialogs::{button, contrast, row};
 use super::super::palette::Palette;
+use super::super::popup_deco::primary_label;
 use super::super::popup_frame::overlay_bg;
 use super::super::render::{display_width, put_right_text, put_text};
 use super::super::text::truncate_end;
 use super::super::text_editor;
 use super::{
-    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+    ChromeMode, DialogHits, cancel_button, centered_titled, dialog_width, dim_line, send_button,
 };
 use crate::studio_dialog::{RestoreDialog, RestoreStep};
 /// The archived list, its name field, and the dry-run plan.
@@ -21,7 +22,7 @@ pub(super) fn render_restore(
     band: Rect,
     d: &RestoreDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let height = match d.step {
@@ -29,10 +30,9 @@ pub(super) fn render_restore(
         RestoreStep::Name => 9,
         RestoreStep::Confirm => 18,
     };
-    let (q, i) = centered_panel(b, band, width, height, palette, shadow)?;
+    let (q, i) = centered_titled(b, band, width, height, &d.title(), mode, palette)?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
-    title_line(b, i, &d.title(), palette);
     let mut cursor = None;
     match d.step {
         RestoreStep::List => {
@@ -153,9 +153,9 @@ pub(super) fn render_restore(
                 .fg(palette.text)
                 .bg(raised)
                 .add_modifier(Modifier::BOLD);
-            button(b, *ok, " ↵ choose ", style);
+            button(b, *ok, &primary_label(" ↵ choose ", mode.deco), style);
         }
-        RestoreStep::Name => send_button(b, *ok, " ↵ dry run ", true, palette),
+        RestoreStep::Name => send_button(b, *ok, " ↵ dry run ", true, mode, palette),
         RestoreStep::Confirm => {
             let style = if d.loading || d.error.is_some() {
                 Style::default().fg(palette.overlay0).bg(raised)
@@ -165,7 +165,7 @@ pub(super) fn render_restore(
                     .bg(palette.accent)
                     .add_modifier(Modifier::BOLD)
             };
-            button(b, *ok, " ↵ restore ", style);
+            button(b, *ok, &primary_label(" ↵ restore ", mode.deco), style);
         }
     }
     cancel_button(b, *cancel, palette);

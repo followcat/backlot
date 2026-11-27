@@ -37,6 +37,7 @@ pub(crate) mod overlay;
 pub mod palette;
 pub mod panes;
 pub mod panes_draw;
+pub(crate) mod popup_deco;
 pub(crate) mod popup_frame;
 #[cfg(test)]
 mod popup_frame_tests;
@@ -60,6 +61,7 @@ pub mod text;
 pub(crate) mod text_draw;
 pub(crate) mod text_editor;
 pub(crate) mod title_text;
+pub(crate) mod toast_deco;
 pub mod tokens;
 pub(crate) mod update_modal;
 pub(crate) mod update_status;

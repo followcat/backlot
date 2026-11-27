@@ -155,9 +155,7 @@ surface's right edge under that — the dock never takes the whole surface.
 - `Enter` on a live person or studio focuses that terminal; over an overlay it also
   closes the dock.
 
-Dialogs — the sheet, the New Studio dialog, help — center inside the pane surface left of
-a beside dock (or dim the whole buffer when the dock overlays): no dialog ever crosses the
-dock's border.
+Dialogs — studio dialogs, confirms, the sheet, the New Studio wizard, help — center inside the pane surface left of a beside dock (or dim the whole buffer when the dock overlays): no dialog ever crosses the dock's border. Studio dialogs, confirms, and the New Studio wizard carry double Art-Deco borders (`╔══╡ … ╞═══╗`) with `gilt` side rails and `‹ ↵ … ›` primary buttons (`red` border + `◉` on destructive confirms, and `╔═╡ ● <studio> · THE END ╞═╗` on finished-studio toasts), leaving `--plain` and `[theme] source = "herdr"` rounded (`╭─╮`).
 
 ## The blocks
 
@@ -507,7 +505,9 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   and dock; otherwise the dock resolves to the collapsed strip — beside from 60 columns,
   a 16-column overlay under that — and the pane geometry keeps the closed shape beneath it.
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
-  foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
+  foreign-schema document renders an empty Lot plaque (`─── ✦ ───` / `no studios on the lot` /
+  `n new studio · alt+y hollywood`, or compact `✦ no studios · n new` on short panels), never an
+  error. Without a live `backlot-stage`
   or `backlot-server` terminal the panel keeps the last document and shows `stage stopped`; when
   `backlot-cat` is also present (server mode), it shows the read-only start command
   (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`)

@@ -732,7 +732,22 @@ async fn show_view_and_reader_wrap_150_char_run_at_80_columns() {
             chars
                 .trim()
                 .trim_matches(|c: char| {
-                    c == '│' || c == '╭' || c == '╮' || c == '╰' || c == '╯' || c == '─'
+                    matches!(
+                        c,
+                        '│' | '╭'
+                            | '╮'
+                            | '╰'
+                            | '╯'
+                            | '─'
+                            | '║'
+                            | '╔'
+                            | '╗'
+                            | '╚'
+                            | '╝'
+                            | '═'
+                            | '╡'
+                            | '╞'
+                    )
                 })
                 .trim()
                 .to_owned()

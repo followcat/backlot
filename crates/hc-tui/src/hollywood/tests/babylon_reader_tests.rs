@@ -31,7 +31,7 @@ fn babylon_design_lines() -> Vec<String> {
         "",
         "## R2",
         "",
-        "### §R2.D · Layout Architecture",
+        "### §R2.D · Layout & Architecture Notes",
         "",
         "需要仔细核对中文断行宽度与右边框对齐情况，不提前截断，保留 crates/hc-tui/src/hollywood/reader_wrap.rs。",
         "",
@@ -247,20 +247,20 @@ fn babylon_reader_snapshots_preserve_measure_cjk_banners_q_bars_and_hits() {
             );
         }
 
-        // Section banners (`§R2.D · Layout Architecture`) + gilt `║` Q/quote bars visible when scrolled.
+        // Section banners + gilt `║` Q/quote bars visible when scrolled.
         let body_text: Vec<String> = (bab.body.y..bab.body.bottom())
             .map(|y| wide_row(&bab_buf, bab.body.x, bab.body.right(), y))
             .collect();
         let body_joined = body_text.join("\n");
         if w >= 78 {
             assert!(
-                body_joined.contains("───══╡ ‹✦› §R2.D · Layout Architecture ‹✦› ╞══───"),
+                body_joined.contains("───══╡ ‹✦› §R2.D · Layout & Architecture Notes ‹✦› ╞══───"),
                 "{w}x{h} full chevron banner:\n{body_joined}"
             );
         } else {
             assert!(
-                body_joined.contains("══╡ ✦ §R2.D · Layout Architecture ╞══")
-                    || body_joined.contains("╡ ✦ §R2.D · Layout Architecture ╞"),
+                body_joined.contains("══╡ ✦ §R2.D · Layout & Architecture Notes ╞══")
+                    || body_joined.contains("╡ ✦ §R2.D · Layout & Architecture Notes ╞"),
                 "{w}x{h} narrow ladder banner:\n{body_joined}"
             );
         }

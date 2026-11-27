@@ -42,33 +42,86 @@ pub(crate) fn dialog_width(band_cols: u16) -> u16 {
     spec.min(band_cols.saturating_sub(4)).max(10)
 }
 
-/// Open a standard padded/guttered dialog frame centered in `band`.
-pub(super) fn centered_panel(
+#[derive(Clone, Copy)]
+pub(super) struct ChromeMode {
+    pub(super) deco: bool,
+    pub(super) shadow: bool,
+    pub(super) destructive: bool,
+}
+
+impl ChromeMode {
+    pub(super) fn border_fg(self, palette: &Palette) -> ratatui::style::Color {
+        if self.destructive {
+            palette.red
+        } else {
+            palette.accent
+        }
+    }
+}
+
+/// Open a dialog frame centered in `band`. When `mode.deco` is true, renders a
+/// `PopupChrome::Deco` frame with `title` in the top border plaque and returns
+/// an interior `Rect` aligned to the caller's post-title body offsets.
+pub(super) fn centered_titled(
     b: &mut Buffer,
     band: Rect,
     w: u16,
     h: u16,
+    title: &str,
+    mode: ChromeMode,
     palette: &Palette,
-    shadow: bool,
 ) -> Option<(Rect, Rect)> {
     let w = w.min(band.width.saturating_sub(4));
     let h = h.min(band.height.saturating_sub(2));
     if w < 10 || h < 5 {
         return None;
     }
-    let geom = popup_frame::open_centered(
-        b,
-        band,
-        w.saturating_sub(2),
-        h.saturating_sub(2),
-        10,
-        5,
-        palette.accent,
-        PopupChrome::Standard,
-        palette,
-        shadow,
-    )?;
-    Some((geom.outer, geom.inner))
+    if mode.deco {
+        let content_h = h.saturating_sub(3).max(4);
+        let border_fg = mode.border_fg(palette);
+        let geom = popup_frame::open_centered(
+            b,
+            band,
+            w.saturating_sub(2),
+            content_h,
+            10,
+            4,
+            border_fg,
+            PopupChrome::Deco,
+            palette,
+            mode.shadow,
+        )?;
+        super::popup_deco::draw_deco_title(
+            b,
+            geom.border,
+            title,
+            border_fg,
+            mode.destructive,
+            palette,
+        );
+        let virtual_inner = Rect::new(
+            geom.inner.x,
+            geom.inner.y.saturating_sub(1),
+            geom.inner.width,
+            geom.inner.height.saturating_add(1),
+        );
+        Some((geom.outer, virtual_inner))
+    } else {
+        let geom = popup_frame::open_centered(
+            b,
+            band,
+            w.saturating_sub(2),
+            h.saturating_sub(2),
+            10,
+            5,
+            palette.accent,
+            PopupChrome::Standard,
+            palette,
+            mode.shadow,
+        )?;
+        title_line(b, geom.inner, title, palette);
+        Some((geom.outer, geom.inner))
+    }
 }
 
 fn title_line(b: &mut Buffer, i: Rect, title: &str, palette: &Palette) {
@@ -98,19 +151,28 @@ fn dim_line(b: &mut Buffer, x: u16, y: u16, w: u16, text: &str, palette: &Palett
     );
 }
 
-fn send_button(b: &mut Buffer, row: Rect, label: &str, focused: bool, palette: &Palette) {
+fn send_button(
+    b: &mut Buffer,
+    row: Rect,
+    label: &str,
+    focused: bool,
+    mode: ChromeMode,
+    palette: &Palette,
+) {
+    let accent = mode.border_fg(palette);
     let style = if focused {
         Style::default()
             .fg(contrast(palette))
-            .bg(palette.accent)
+            .bg(accent)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
-            .fg(palette.accent)
+            .fg(accent)
             .bg(palette.elevation().raised_on_overlay)
             .add_modifier(Modifier::BOLD)
     };
-    button(b, row, label, style);
+    let text = super::popup_deco::primary_label(label, mode.deco);
+    button(b, row, &text, style);
 }
 
 fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
@@ -126,12 +188,14 @@ fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
 }
 
 mod archived;
+mod confirm;
 mod design_sign;
 mod kinds;
 mod lifecycle;
 use archived::render_restore;
+use confirm::render_confirm;
 use design_sign::render_design_sign;
-use kinds::{render_confirm, render_reason, render_revise, render_tell};
+use kinds::{render_reason, render_revise, render_tell};
 use lifecycle::{render_cast_edit, render_recast, render_restart};
 
 /// One render entry — the app hands the `modal_band()` rect so a
@@ -146,6 +210,7 @@ pub(crate) fn render(
     render_with_shadow(b, band, dialog, palette, true)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn render_with_shadow(
     b: &mut Buffer,
     band: Rect,
@@ -153,16 +218,51 @@ pub(crate) fn render_with_shadow(
     palette: &Palette,
     shadow: bool,
 ) -> Option<DialogHits> {
+    render_styled(b, band, dialog, palette, shadow, true)
+}
+
+pub(crate) fn render_styled(
+    b: &mut Buffer,
+    band: Rect,
+    dialog: &StudioDialog,
+    palette: &Palette,
+    shadow: bool,
+    deco: bool,
+) -> Option<DialogHits> {
+    let mode = ChromeMode {
+        deco,
+        shadow,
+        destructive: is_destructive(dialog),
+    };
     match dialog {
-        StudioDialog::Reason(d) => render_reason(b, band, d, palette, shadow),
-        StudioDialog::Confirm(d) => render_confirm(b, band, d, palette, shadow),
-        StudioDialog::DesignSign(d) => render_design_sign(b, band, d, palette, shadow),
-        StudioDialog::Tell(d) => render_tell(b, band, d, palette, shadow),
-        StudioDialog::Revise(d) => render_revise(b, band, d, palette, shadow),
-        StudioDialog::Restart(d) => render_restart(b, band, d, palette, shadow),
-        StudioDialog::Recast(d) => render_recast(b, band, d, palette, shadow),
-        StudioDialog::Restore(d) => render_restore(b, band, d, palette, shadow),
-        StudioDialog::CastEdit(d) => render_cast_edit(b, band, d, palette, shadow),
+        StudioDialog::Reason(d) => render_reason(b, band, d, palette, mode),
+        StudioDialog::Confirm(d) => render_confirm(b, band, d, palette, mode),
+        StudioDialog::DesignSign(d) => render_design_sign(b, band, d, palette, mode),
+        StudioDialog::Tell(d) => render_tell(b, band, d, palette, mode),
+        StudioDialog::Revise(d) => render_revise(b, band, d, palette, mode),
+        StudioDialog::Restart(d) => render_restart(b, band, d, palette, mode),
+        StudioDialog::Recast(d) => render_recast(b, band, d, palette, mode),
+        StudioDialog::Restore(d) => render_restore(b, band, d, palette, mode),
+        StudioDialog::CastEdit(d) => render_cast_edit(b, band, d, palette, mode),
+    }
+}
+
+fn is_destructive(dialog: &StudioDialog) -> bool {
+    use crate::studio_dialog::{ConfirmFor, ReasonFor};
+    match dialog {
+        StudioDialog::Confirm(d) => matches!(
+            d.for_,
+            ConfirmFor::DeleteStudio { .. }
+                | ConfirmFor::StageStop { .. }
+                | ConfirmFor::Close { .. }
+                | ConfirmFor::Prune { .. }
+        ),
+        StudioDialog::Reason(d) => match &d.for_ {
+            ReasonFor::TaskVerb { verb, .. } => *verb == "abandon",
+            ReasonFor::CardCancel { .. } => true,
+            ReasonFor::Finish { .. } => false,
+        },
+        _ => false,
     }
 }
 

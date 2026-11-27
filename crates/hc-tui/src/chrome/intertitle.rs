@@ -1,5 +1,5 @@
 //! Centred Babylon intertitle rules (`───══╡ ‹✦› LABEL ‹✦› ╞══───`) shared
-//! by S3 (Reader & Sheet), S4 (Lot), and S5 (Modals).
+//! by S3 (Reader & Sheet), S4 (Lot), and S5 (opening card, toasts, modals).
 
 use ratatui::{buffer::Buffer, style::Style};
 
@@ -22,6 +22,24 @@ pub(crate) enum Part {
     Label,
 }
 
+fn seg(s: impl Into<String>, part: Part) -> (String, Part) {
+    (s.into(), part)
+}
+
+fn padded_center(w: usize, core: usize, mid: Vec<(String, Part)>) -> Vec<(String, Part)> {
+    let left = (w - core) / 2;
+    let right = (w - core) - left;
+    let mut out = Vec::with_capacity(mid.len() + 2);
+    if left > 0 {
+        out.push(seg("─".repeat(left), Part::Rule));
+    }
+    out.extend(mid);
+    if right > 0 {
+        out.push(seg("─".repeat(right), Part::Rule));
+    }
+    out
+}
+
 /// The widest form that fits `width` cells, centred and padded with rule to
 /// exactly `width`.
 ///
@@ -33,7 +51,7 @@ pub(crate) fn intertitle(label: &str, width: u16, flank: Flank) -> Vec<(String, 
     if w == 0 {
         return Vec::new();
     }
-    if label.is_empty() {
+    if label.trim().is_empty() {
         return empty_intertitle(w, flank);
     }
 
@@ -42,71 +60,47 @@ pub(crate) fn intertitle(label: &str, width: u16, flank: Flank) -> Vec<(String, 
         Flank::Chevron => 16 + lw,
         Flank::Star => 12 + lw,
     };
-    if w >= full_core + 6 {
-        let (left, right) = split_rule(w - full_core);
-        return match flank {
+    if w >= full_core + 2 {
+        let mid = match flank {
             Flank::Chevron => vec![
-                (format!("{}══", "─".repeat(left)), Part::Rule),
-                ("╡ ‹".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                ("› ".to_string(), Part::Clasp),
-                (label.to_string(), Part::Label),
-                (" ‹".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                ("› ╞".to_string(), Part::Clasp),
-                (format!("══{}", "─".repeat(right)), Part::Rule),
+                seg("══╡ ‹", Part::Clasp),
+                seg("✦", Part::Star),
+                seg("› ", Part::Clasp),
+                seg(label, Part::Label),
+                seg(" ‹", Part::Clasp),
+                seg("✦", Part::Star),
+                seg("› ╞══", Part::Clasp),
             ],
             Flank::Star => vec![
-                (format!("{}══", "─".repeat(left)), Part::Rule),
-                ("╡ ".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                (" ".to_string(), Part::Clasp),
-                (label.to_string(), Part::Label),
-                (" ".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                (" ╞".to_string(), Part::Clasp),
-                (format!("══{}", "─".repeat(right)), Part::Rule),
+                seg("══╡ ", Part::Clasp),
+                seg("✦", Part::Star),
+                seg(" ", Part::Clasp),
+                seg(label, Part::Label),
+                seg(" ", Part::Clasp),
+                seg("✦", Part::Star),
+                seg(" ╞══", Part::Clasp),
             ],
         };
+        return padded_center(w, full_core, mid);
     }
-
-    if w >= 10 + lw {
-        let (left, right) = split_rule(w - (10 + lw));
-        return vec![
-            (format!("{}══", "─".repeat(left)), Part::Rule),
-            ("╡ ".to_string(), Part::Clasp),
-            ("✦".to_string(), Part::Star),
-            (" ".to_string(), Part::Clasp),
-            (label.to_string(), Part::Label),
-            (" ╞".to_string(), Part::Clasp),
-            (format!("══{}", "─".repeat(right)), Part::Rule),
-        ];
-    }
-
-    if w >= 6 + lw {
-        let (left, right) = split_rule(w - (6 + lw));
-        let mut out = Vec::new();
-        if left > 0 {
-            out.push(("─".repeat(left), Part::Rule));
+    for (overhead, lc, rc) in [(10, "══╡ ", " ╞══"), (6, "╡ ", " ╞")] {
+        if w >= overhead + lw {
+            let mid = vec![
+                seg(lc, Part::Clasp),
+                seg("✦", Part::Star),
+                seg(" ", Part::Clasp),
+                seg(label, Part::Label),
+                seg(rc, Part::Clasp),
+            ];
+            return padded_center(w, overhead + lw, mid);
         }
-        out.extend([
-            ("╡ ".to_string(), Part::Clasp),
-            ("✦".to_string(), Part::Star),
-            (" ".to_string(), Part::Clasp),
-            (label.to_string(), Part::Label),
-            (" ╞".to_string(), Part::Clasp),
-        ]);
-        if right > 0 {
-            out.push(("─".repeat(right), Part::Rule));
-        }
-        return out;
     }
 
     if w == 1 {
-        return vec![("✦".to_string(), Part::Star)];
+        return vec![seg("✦", Part::Star)];
     }
     if w == 2 {
-        return vec![("✦".to_string(), Part::Star), (" ".to_string(), Part::Rule)];
+        return vec![seg("✦", Part::Star), seg("…", Part::Label)];
     }
 
     let avail = w - 2;
@@ -117,12 +111,12 @@ pub(crate) fn intertitle(label: &str, width: u16, flank: Flank) -> Vec<(String, 
     };
     let used = 2 + display_width(&fitted);
     let mut out = vec![
-        ("✦".to_string(), Part::Star),
-        (" ".to_string(), Part::Clasp),
-        (fitted, Part::Label),
+        seg("✦", Part::Star),
+        seg(" ", Part::Clasp),
+        seg(fitted, Part::Label),
     ];
     if used < w {
-        out.push((" ".repeat(w - used), Part::Rule));
+        out.push(seg(" ".repeat(w - used), Part::Rule));
     }
     out
 }
@@ -133,68 +127,34 @@ fn empty_intertitle(w: usize, flank: Flank) -> Vec<(String, Part)> {
         Flank::Star => 11,
     };
     if w >= full_core + 10 {
-        let (left, right) = split_rule(w - full_core);
-        return match flank {
-            Flank::Chevron => vec![
-                (format!("{}═══", "─".repeat(left)), Part::Rule),
-                ("╡ ‹".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                ("› ╞".to_string(), Part::Clasp),
-                (format!("═══{}", "─".repeat(right)), Part::Rule),
-            ],
-            Flank::Star => vec![
-                (format!("{}═══", "─".repeat(left)), Part::Rule),
-                ("╡ ".to_string(), Part::Clasp),
-                ("✦".to_string(), Part::Star),
-                (" ╞".to_string(), Part::Clasp),
-                (format!("═══{}", "─".repeat(right)), Part::Rule),
-            ],
+        let (lc, rc) = match flank {
+            Flank::Chevron => ("═══╡ ‹", "› ╞═══"),
+            Flank::Star => ("═══╡ ", " ╞═══"),
         };
+        return padded_center(
+            w,
+            full_core,
+            vec![
+                seg(lc, Part::Clasp),
+                seg("✦", Part::Star),
+                seg(rc, Part::Clasp),
+            ],
+        );
     }
-
-    if w >= 9 {
-        let (left, right) = split_rule(w - 9);
-        return vec![
-            (format!("{}══", "─".repeat(left)), Part::Rule),
-            ("╡ ".to_string(), Part::Clasp),
-            ("✦".to_string(), Part::Star),
-            (" ╞".to_string(), Part::Clasp),
-            (format!("══{}", "─".repeat(right)), Part::Rule),
-        ];
-    }
-
-    if w >= 5 {
-        let (left, right) = split_rule(w - 5);
-        let mut out = Vec::new();
-        if left > 0 {
-            out.push(("─".repeat(left), Part::Rule));
+    for (core, lc, rc) in [(9, "══╡ ", " ╞══"), (5, "╡ ", " ╞")] {
+        if w >= core {
+            return padded_center(
+                w,
+                core,
+                vec![
+                    seg(lc, Part::Clasp),
+                    seg("✦", Part::Star),
+                    seg(rc, Part::Clasp),
+                ],
+            );
         }
-        out.extend([
-            ("╡ ".to_string(), Part::Clasp),
-            ("✦".to_string(), Part::Star),
-            (" ╞".to_string(), Part::Clasp),
-        ]);
-        if right > 0 {
-            out.push(("─".repeat(right), Part::Rule));
-        }
-        return out;
     }
-
-    let (left, right) = split_rule(w - 1);
-    let mut out = Vec::new();
-    if left > 0 {
-        out.push(("─".repeat(left), Part::Rule));
-    }
-    out.push(("✦".to_string(), Part::Star));
-    if right > 0 {
-        out.push(("─".repeat(right), Part::Rule));
-    }
-    out
-}
-
-fn split_rule(rem: usize) -> (usize, usize) {
-    let left = rem / 2;
-    (left, rem - left)
+    padded_center(w, 1, vec![seg("✦", Part::Star)])
 }
 
 /// Paint pre-built [`intertitle`] segments horizontally inside `[x, x + width)`
@@ -245,10 +205,8 @@ pub(crate) fn draw_intertitle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::{
-        layout::Rect,
-        style::{Color, Modifier},
-    };
+    use ratatui::layout::Rect;
+    use ratatui::style::{Color, Modifier};
 
     fn joined(segs: &[(String, Part)]) -> String {
         segs.iter().map(|(s, _)| s.as_str()).collect()
@@ -278,8 +236,12 @@ mod tests {
             "────══╡ ‹✦› Label ‹✦› ╞══─────"
         );
         assert_eq!(
-            joined(&intertitle("Label", 26, Flank::Chevron)),
-            "─────══╡ ✦ Label ╞══──────"
+            joined(&intertitle("Label", 23, Flank::Chevron)),
+            "─══╡ ‹✦› Label ‹✦› ╞══─"
+        );
+        assert_eq!(
+            joined(&intertitle("Label", 22, Flank::Chevron)),
+            "───══╡ ✦ Label ╞══────"
         );
         assert_eq!(
             joined(&intertitle("Label", 15, Flank::Chevron)),
@@ -295,7 +257,7 @@ mod tests {
         );
         assert_eq!(joined(&intertitle("Label", 6, Flank::Chevron)), "✦ Lab…");
         assert_eq!(joined(&intertitle("Label", 3, Flank::Chevron)), "✦ …");
-        assert_eq!(joined(&intertitle("Label", 2, Flank::Chevron)), "✦ ");
+        assert_eq!(joined(&intertitle("Label", 2, Flank::Chevron)), "✦…");
         assert_eq!(joined(&intertitle("Label", 1, Flank::Chevron)), "✦");
         assert!(intertitle("Label", 0, Flank::Chevron).is_empty());
     }
@@ -307,15 +269,15 @@ mod tests {
         assert_eq!(
             segs,
             vec![
-                ("───══".to_string(), Part::Rule),
-                ("╡ ".to_string(), Part::Clasp),
+                ("───".to_string(), Part::Rule),
+                ("══╡ ".to_string(), Part::Clasp),
                 ("✦".to_string(), Part::Star),
                 (" ".to_string(), Part::Clasp),
                 (" T H E   E N D ".to_string(), Part::Label),
                 (" ".to_string(), Part::Clasp),
                 ("✦".to_string(), Part::Star),
-                (" ╞".to_string(), Part::Clasp),
-                ("══───".to_string(), Part::Rule),
+                (" ╞══".to_string(), Part::Clasp),
+                ("───".to_string(), Part::Rule),
             ]
         );
         assert_eq!(
@@ -347,13 +309,9 @@ mod tests {
 
     #[test]
     fn cjk_narrow_truncation_keeps_boundary_and_width() {
-        // Width 4 with "版本": "✦ " takes 2, remaining 2 cannot fit "版…",
-        // so truncate_end("版本", 2) yields "…" (width 1) + 1 trailing space.
         let s4 = joined(&intertitle("版本", 4, Flank::Chevron));
         assert_eq!(s4, "✦ … ");
         assert_eq!(display_width(&s4), 4);
-
-        // Width 5 fits "✦ 版…" (2 + 2 + 1 = 5).
         let s5 = joined(&intertitle("版本設計", 5, Flank::Chevron));
         assert_eq!(s5, "✦ 版…");
         assert_eq!(display_width(&s5), 5);
@@ -374,16 +332,82 @@ mod tests {
         let row: String = (0..41).map(|x| buf[(x, 0)].symbol()).collect();
         assert_eq!(row, "    ───══╡ ✦  T H E   E N D  ✦ ╞══───    ");
         assert_eq!(buf[(4, 0)].fg, Color::DarkGray);
-        assert_eq!(buf[(9, 0)].fg, Color::Yellow);
+        assert_eq!(buf[(7, 0)].fg, Color::Yellow);
         assert_eq!(buf[(11, 0)].fg, Color::Red);
         assert_eq!(buf[(14, 0)].fg, Color::White);
 
-        // Clipping narrow CJK segs safely inside width=7 without overflow.
         let mut narrow = Buffer::empty(Rect::new(0, 0, 7, 1));
         let wide_segs = intertitle("版本設計圖", 16, Flank::Chevron);
         draw_intertitle(&mut narrow, 0, 0, 7, &wide_segs, |_| Style::default());
         let clipped_row: String = (0..7).map(|x| narrow[(x, 0)].symbol()).collect();
-        assert!(clipped_row.contains('✦'));
-        assert!(clipped_row.contains('…'));
+        assert!(clipped_row.contains('✦') && clipped_row.contains('…'));
+    }
+
+    #[test]
+    fn empty_label_scales_across_ladder_and_exact_widths() {
+        assert_eq!(joined(&intertitle("", 0, Flank::Chevron)), "");
+        assert_eq!(joined(&intertitle("", 1, Flank::Chevron)), "✦");
+        assert_eq!(joined(&intertitle("", 3, Flank::Chevron)), "─✦─");
+        assert_eq!(joined(&intertitle("", 5, Flank::Chevron)), "╡ ✦ ╞");
+        assert_eq!(joined(&intertitle("", 9, Flank::Chevron)), "══╡ ✦ ╞══");
+        assert_eq!(
+            joined(&intertitle("", 23, Flank::Chevron)),
+            "─────═══╡ ‹✦› ╞═══─────"
+        );
+        for w in 0..=49 {
+            let segs = intertitle("", w, Flank::Chevron);
+            assert_eq!(display_width(&joined(&segs)), w as usize, "empty width {w}");
+        }
+    }
+
+    #[test]
+    fn labeled_scales_across_full_mid_compact_and_truncated() {
+        let s = "ACT II";
+        assert_eq!(
+            joined(&intertitle(s, 28, Flank::Chevron)),
+            "───══╡ ‹✦› ACT II ‹✦› ╞══───"
+        );
+        assert_eq!(
+            joined(&intertitle(s, 18, Flank::Chevron)),
+            "─══╡ ✦ ACT II ╞══─"
+        );
+        assert_eq!(
+            joined(&intertitle(s, 16, Flank::Chevron)),
+            "══╡ ✦ ACT II ╞══"
+        );
+        assert_eq!(joined(&intertitle(s, 12, Flank::Chevron)), "╡ ✦ ACT II ╞");
+        assert_eq!(joined(&intertitle(s, 7, Flank::Chevron)), "✦ ACT …");
+        assert_eq!(joined(&intertitle(s, 2, Flank::Chevron)), "✦…");
+        assert_eq!(joined(&intertitle(s, 1, Flank::Chevron)), "✦");
+        for w in 0..=40 {
+            let segs = intertitle(s, w, Flank::Chevron);
+            assert_eq!(
+                display_width(&joined(&segs)),
+                w as usize,
+                "labeled width {w}"
+            );
+        }
+        assert_eq!(
+            joined(&intertitle(s, 22, Flank::Star)),
+            "──══╡ ✦ ACT II ✦ ╞══──"
+        );
+    }
+
+    #[test]
+    fn draw_intertitle_applies_per_part_styles() {
+        let segs = intertitle("", 23, Flank::Chevron);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 23, 1));
+        draw_intertitle(&mut buf, 0, 0, 23, &segs, |p| match p {
+            Part::Rule => Style::default().fg(Color::DarkGray),
+            Part::Clasp => Style::default().fg(Color::Yellow),
+            Part::Star => Style::default().fg(Color::Cyan),
+            Part::Label => Style::default().fg(Color::White),
+        });
+        assert_eq!(buf[(0, 0)].symbol(), "─");
+        assert_eq!(buf[(0, 0)].fg, Color::DarkGray);
+        assert_eq!(buf[(5, 0)].symbol(), "═");
+        assert_eq!(buf[(5, 0)].fg, Color::Yellow);
+        assert_eq!(buf[(11, 0)].symbol(), "✦");
+        assert_eq!(buf[(11, 0)].fg, Color::Cyan);
     }
 }

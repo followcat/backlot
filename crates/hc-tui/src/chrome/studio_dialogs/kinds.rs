@@ -3,16 +3,15 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 
-use super::super::dialogs::{button, contrast};
 use super::super::palette::Palette;
 use super::super::popup_frame::overlay_bg;
 use super::super::render::{display_width, put_text};
 use super::super::text::truncate_end;
 use super::super::text_editor;
 use super::{
-    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+    ChromeMode, DialogHits, cancel_button, centered_titled, dialog_width, dim_line, send_button,
 };
 use crate::studio_dialog::{BodyEditor, DialogField};
 
@@ -22,22 +21,31 @@ pub(super) fn render_reason(
     band: Rect,
     d: &crate::studio_dialog::ReasonDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
-    let (q, i) = centered_panel(b, band, dialog_width(band.width), 8, palette, shadow)?;
+    let h = if mode.deco { 7 } else { 8 };
+    let (q, i) = centered_titled(
+        b,
+        band,
+        dialog_width(band.width),
+        h,
+        &d.title,
+        mode,
+        palette,
+    )?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
-    title_line(b, i, &d.title, palette);
-    let input = Rect::new(i.x, i.y + 2, i.width.saturating_sub(1), 1);
+    let row_off = if mode.deco { 1 } else { 2 };
+    let input = Rect::new(i.x, i.y + row_off, i.width.saturating_sub(1), 1);
     put_text(
         b,
         i.x,
-        i.y + 2,
+        i.y + row_off,
         9,
         " reason: ",
         Style::default().fg(palette.subtext0).bg(bg),
     );
-    let field = Rect::new(i.x + 9, i.y + 2, i.width.saturating_sub(10), 1);
+    let field = Rect::new(i.x + 9, i.y + row_off, i.width.saturating_sub(10), 1);
     b.set_style(field, Style::default().fg(palette.text).bg(raised));
     let cursor = text_editor::render(
         b,
@@ -47,13 +55,20 @@ pub(super) fn render_reason(
     );
     let _ = input;
     if let Some(error) = &d.error {
-        dim_line(b, i.x, i.y + 3, i.width, &format!(" ! {error}"), palette);
+        dim_line(
+            b,
+            i.x,
+            i.y + row_off + 1,
+            i.width,
+            &format!(" ! {error}"),
+            palette,
+        );
     }
     let rs = super::super::dialogs::row(i, &[12, 12], 2, 4);
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
-    send_button(b, *ok, " ↵ submit ", true, palette);
+    send_button(b, *ok, " ↵ submit ", true, mode, palette);
     cancel_button(b, *cancel, palette);
     Some(DialogHits {
         area: q,
@@ -62,89 +77,6 @@ pub(super) fn render_reason(
         body: field,
         summary: Rect::default(),
         cursor,
-        ..DialogHits::default()
-    })
-}
-
-/// The confirm dialog (§2.2) — the wrapped explanation, `↵/y` and
-/// `esc`.
-pub(super) fn render_confirm(
-    b: &mut Buffer,
-    band: Rect,
-    d: &crate::studio_dialog::ConfirmDialog,
-    palette: &Palette,
-    shadow: bool,
-) -> Option<DialogHits> {
-    let width = dialog_width(band.width);
-    // Wrap the body at the inner width so nothing clips (A8.x rule:
-    // no silent clipping).
-    let inner = width.saturating_sub(4).max(8) as usize;
-    // A refused confirm (a stale server plan) is part of the card, not
-    // a toast: the line and the re-review offer read where the person
-    // is looking.
-    let body = match &d.error {
-        Some(error) => format!("{}\n\n{error}\n\nr review again", d.body),
-        None => d.body.clone(),
-    };
-    let mut lines = Vec::new();
-    for para in body.split('\n') {
-        if para.trim().is_empty() {
-            continue;
-        }
-        lines.extend(crate::hollywood::wrap_plain(para.trim(), inner, 0));
-    }
-    let height = (lines.len() as u16)
-        .saturating_add(6)
-        .min(band.height.saturating_sub(2));
-    let (q, i) = centered_panel(b, band, width, height, palette, shadow)?;
-    let bg = overlay_bg(palette);
-    let raised = palette.elevation().raised_on_overlay;
-    put_text(
-        b,
-        i.x,
-        i.y,
-        i.width,
-        &truncate_end(&format!(" {}", d.title), i.width as usize),
-        Style::default()
-            .fg(palette.accent)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    );
-    for (n, line) in lines.iter().enumerate() {
-        let y = i.y + 1 + n as u16;
-        if y >= i.bottom() - 2 {
-            break;
-        }
-        put_text(
-            b,
-            i.x,
-            y,
-            i.width,
-            &format!(" {line}"),
-            Style::default().fg(palette.text).bg(bg),
-        );
-    }
-    let rs = super::super::dialogs::row(i, &[19, 13], 2, i.height.saturating_sub(2));
-    let [ok, cancel] = rs.as_slice() else {
-        return None;
-    };
-    let ok_style = if d.loading {
-        Style::default().fg(palette.overlay0).bg(raised)
-    } else {
-        Style::default()
-            .fg(contrast(palette))
-            .bg(palette.accent)
-            .add_modifier(Modifier::BOLD)
-    };
-    button(b, *ok, " ↵ / y confirm ", ok_style);
-    cancel_button(b, *cancel, palette);
-    Some(DialogHits {
-        area: q,
-        send: *ok,
-        cancel: *cancel,
-        body: Rect::default(),
-        summary: Rect::default(),
-        cursor: None,
         ..DialogHits::default()
     })
 }
@@ -194,12 +126,19 @@ pub(super) fn render_tell(
     band: Rect,
     d: &crate::studio_dialog::TellDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
-    let (q, i) = centered_panel(b, band, dialog_width(band.width), 9, palette, shadow)?;
+    let (q, i) = centered_titled(
+        b,
+        band,
+        dialog_width(band.width),
+        9,
+        &d.title,
+        mode,
+        palette,
+    )?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
-    title_line(b, i, &d.title, palette);
     let body = Rect::new(i.x, i.y + 1, i.width, 4);
     let mut cursor = render_body(
         b,
@@ -227,11 +166,18 @@ pub(super) fn render_tell(
             palette,
         );
     }
-    let rs = super::super::dialogs::row(i, &[10, 12], 2, i.height.saturating_sub(1));
+    let rs = super::super::dialogs::row(i, &[12, 12], 2, i.height.saturating_sub(1));
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
-    send_button(b, *ok, " ^s send ", d.field == DialogField::Send, palette);
+    send_button(
+        b,
+        *ok,
+        " ^s send ",
+        d.field == DialogField::Send,
+        mode,
+        palette,
+    );
     cancel_button(b, *cancel, palette);
     if d.field == DialogField::Send {
         cursor = None;
@@ -254,22 +200,22 @@ pub(super) fn render_revise(
     band: Rect,
     d: &crate::studio_dialog::ReviseDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let body_rows = 10u16.min(band.height.saturating_sub(9)).max(3);
     let height = body_rows + 8;
-    let (q, i) = centered_panel(
+    let (q, i) = centered_titled(
         b,
         band,
         width,
         height.min(band.height.saturating_sub(2)).max(9),
+        &d.title,
+        mode,
         palette,
-        shadow,
     )?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
-    title_line(b, i, &d.title, palette);
     let body = Rect::new(
         i.x,
         i.y + 1,
@@ -353,11 +299,18 @@ pub(super) fn render_revise(
             dim_line(b, i.x, hint_y, i.width, hint, palette);
         }
     }
-    let rs = super::super::dialogs::row(i, &[12, 12], 2, i.height.saturating_sub(1));
+    let rs = super::super::dialogs::row(i, &[14, 12], 2, i.height.saturating_sub(1));
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
-    send_button(b, *ok, " ^s submit ", d.field == DialogField::Send, palette);
+    send_button(
+        b,
+        *ok,
+        " ^s submit ",
+        d.field == DialogField::Send,
+        mode,
+        palette,
+    );
     cancel_button(b, *cancel, palette);
     match d.field {
         DialogField::Body => {}
