@@ -407,6 +407,20 @@ backlot msg show 3 --studio acme-shop
 backlot msg show 3 --studio acme-shop --json
 ```
 
+To publish or supersede a shared cross-task architectural decision (`AD-<n>`) and notify live roles
+while keeping `<studio>/decisions/current.md` up to date, `director`, `producer`, or `user` can run
+`backlot decide`; for durable repository conventions that apply across future studios on the same
+repository (bridged through a `RepoNote` card without touching the target repo), use
+`backlot repo-note` (`show` and `remove` are user-only):
+
+```sh
+backlot decide --id AD-1 --file /home/user/ad1.md --notify active-actors --studio acme-shop --as director
+backlot decide --id AD-2 --file /home/user/ad2.md --supersedes AD-1 --notify director --studio acme-shop --as user
+backlot repo-note propose --id build-cmd --text "Run scripts/farm-test.sh before review." --why "seen failing without farm script" --studio acme-shop --as director
+backlot repo-note show --studio acme-shop
+backlot repo-note remove --id build-cmd --studio acme-shop
+```
+
 `backlot status` shows the studio's recorded state at any time:
 
 ```sh
@@ -1180,11 +1194,13 @@ default — one per core, overridable with `BACKLOT_STATE_DIR`. A studio named b
 ```
 config.toml                  optional [runner_env.<runner>] env for role terminals
 agent.env                  optional dotenv file merged under it, every runner
+repo-notes/<hash>.md       machine-local `0600` notes per canonical repository (from applied `repo-note` cards)
 studios/acme-shop/
   events.jsonl               the ledger: append-only, the source of truth
   events.lock                the flock every append takes
   req/v<N>.md                requirement versions
   design/                    opening design v<N>.md, frozen v<N>-final.md, and immutable v<N>/r*.md sections
+  decisions/current.md       derived shared `AD-<n>` decisions and history, updated under `events.lock`
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
   messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges

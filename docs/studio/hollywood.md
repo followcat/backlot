@@ -335,6 +335,7 @@ backlot hollywood propose restart --studio acme-shop --person director --why "st
 backlot hollywood propose cast --studio acme-shop --file drafts/acme-shop/cast.toml --why "cheaper actors for the second pass" --as hollywood
 backlot hollywood propose reopen-studio --studio acme-shop --why "more work on the cart" --as hollywood
 backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "person asked to switch agent" --as hollywood
+backlot hollywood propose repo-note --repo /home/user/shop --id build-cmd --text "Run scripts/farm-test.sh before review." --why "seen failing without farm script" --as hollywood
 backlot hollywood withdraw c1 --reason "the quota came back" --as hollywood
 backlot card list
 backlot card apply c1
@@ -368,6 +369,7 @@ outward card — and not one already applied, cancelled or stale.
 A **newer card replaces an older conflicting one**. When a new card targets the same single fact an
 open card already targets — a role's identity (`recast`), a person's terminal (`restart`), a
 studio's cast (`cast`), a studio's finished state (`reopen-studio`), a studio name (`studio-new`),
+a repo note `(repo, entry_id)` (`repo-note`),
 or Hollywood's own identity (`setup`) — the older card is recorded `superseded by c<n>` in the same
 append. A batch apply can therefore never run both. Cards with a sequence rather than one target
 (`pause`/`resume` on a task, `priority`, `close`/`reopen` on a person) never supersede.
@@ -393,7 +395,7 @@ action and its record repeats nothing. Cards execute whether or not `[hollywood]
 the config gates the agent, never the gate.
 
 Card actions (D18): `studio-new`, `close`, `reopen`, `reopen-studio`, `priority`, `pause`, `resume`,
-`abandon`, `recast`, `restart`, `cast`, `setup`. Nothing else — in particular, no card answers a
+`abandon`, `recast`, `restart`, `cast`, `setup`, `outward`, `repo-note`. Nothing else — in particular, no card answers a
 permission prompt; those stay yours, answered in the studio.
 
 A `recast` card swaps the agent that plays a fixed role — `producer`, `director` or `writer` —
@@ -436,6 +438,8 @@ and restarts Hollywood fresh under the new identity with a takeover first prompt
 Actionable card failures (`card.failed`, `card.stale`, `card.cancelled`) reach Hollywood's inbox as
 notices; `card.applied` emits no wakeup notice, and `card.done` stays passive context that rides
 with the next delivery.
+
+A `repo-note` card records a durable, cross-studio constraint or convention for a canonical repository path (`--id` matching `[a-z0-9_-]{1,40}`, body `<= 1024` bytes, statically checked against secret/DSN patterns at propose time). It bases on `repo_note_entry { repo, entry_id, prev_sha256 }` per `(repo, entry_id)` so unrelated notes applied in one batch never make each other stale, while a second card targeting the same `(repo, entry_id)` supersedes open ones. Both `backlot hollywood propose repo-note` and studio-side `backlot repo-note propose` (bridged once from a `purpose = "repo_note"` studio message by the stage) produce the same card. On apply, the stage atomically updates `<state_dir>/repo-notes/<sha256(canonical_repo)[..16]>.md` at mode `0600` using a `<!-- card c<seq> -->` idempotency marker — never writing inside the target repository — and injects that file's read-only `{repo_notes_file}` path whenever future `director` or `writer` sessions launch on the same repo (`backlot repo-note show|remove` let the user inspect or delete entries).
 
 ## Creating a studio in plain words
 

@@ -10,6 +10,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Shared studio architectural decisions (`backlot decide`, `decisions/current.md`).** Added `backlot decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]` (`director`, `producer`, and `user` only), backed by existing `message.queued` events (`purpose = "decision"`) without adding a studio event kind or pseudo-recipient; enforces closed-actor checks (`TellToClosedActor`) and leaves `wanted_roles` untouched while delivering to named live roles like normal tells, surfacing user decisions in Lot talk rows, and atomically rewriting `<studio>/decisions/current.md` under `events.lock` (deduped by `AD-<n>` to earliest `#<seq>`, numeric order, superseded items folded into `## History`, readable via `hwood_read`).
+- **Cross-studio repository notes (`CardAction::RepoNote`, `backlot repo-note`, `backlot hollywood propose repo-note`).** Added per-`(canonical_repo, entry_id)` `RepoNote` cards (`CardBase::RepoNoteEntry`) bridged by the stage from studio `purpose = "repo_note"` proposals (`backlot repo-note propose`) or proposed directly by Hollywood (`backlot hollywood propose repo-note`), with static secret/DSN checks at propose time, atomic `0600` storage at `<state_dir>/repo-notes/<sha256(canonical_repo)[..16]>.md` outside the target repo (`<!-- card c<seq> -->` idempotent apply), user-only `backlot repo-note show|remove`, read-only `{repo_notes_file}` injection for `director` and `writer` starts on the same repo (plus `claude`/`cmd` read allowlists), and existing Call Sheet card row + `CardSummary` rendering (`docs/studio/{ledger,hollywood,design,guide}.md`).
+- **Task brief template, `--depends-on` canary rule, Architecture Spine, and sibling discoveries (`prompts`).** Added the concise 6-item task brief template and `--depends-on` canary guidance to `director.md` and `writer.md`, `Architecture Spine (AD-1..k)` to opening design and post-sign handoff, `backlot decide` and `backlot repo-note propose` usage to `director.md`, and optional `## Decisions / Discoveries for siblings` guidance to `actor.md`.
+
 ## 0.4.21 — 2026-11-27
 
 ### Added

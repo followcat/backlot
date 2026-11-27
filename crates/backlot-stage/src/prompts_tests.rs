@@ -1134,7 +1134,7 @@ fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState
 #[test]
 fn actor_template_and_render_stay_byte_identical_across_design_gates() {
     let raw = template(RoleKind::Actor);
-    assert_eq!(raw.len(), 2931, "actor.md size must stay byte-identical");
+    assert_eq!(raw.len(), 3129, "actor.md size must stay byte-identical");
     assert!(raw.ends_with("asking to open a PR.\n"));
     assert!(!raw.contains("design_gate"));
     assert!(!raw.contains("backlot design"));
@@ -1240,13 +1240,13 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Writer,
             "writer",
-            2975usize,
+            3530usize,
             "(`backlot tell user --text <note> --note`).\n",
         ),
         (
             RoleKind::Director,
             "director",
-            6201usize,
+            7147usize,
             "is killed for you.\n",
         ),
     ] {
@@ -1331,4 +1331,63 @@ fn design_gate_required_pre_requirement_avoids_empty_backticks_and_v0() {
             "{kind:?} misses the design folder: {text}"
         );
     }
+}
+
+#[test]
+fn director_and_writer_prompts_teach_task_brief_template_canary_and_spine() {
+    for (kind, role) in [
+        (RoleKind::Director, "director"),
+        (RoleKind::Writer, "writer"),
+    ] {
+        let raw = template(kind);
+        assert!(
+            raw.contains("## Task brief template"),
+            "{role}.md misses task brief template heading"
+        );
+        for needle in [
+            "Goal",
+            "Scope",
+            "Decided contracts",
+            "Explicit No-Gos",
+            "Open to actor",
+            "Required verification",
+            "--depends-on",
+            "Architecture Spine (AD-1..k)",
+        ] {
+            assert!(raw.contains(needle), "{role}.md misses `{needle}`");
+        }
+        let template_block = raw
+            .split("## Task brief template")
+            .nth(1)
+            .unwrap_or_default()
+            .split("\n\n")
+            .take(2)
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        assert!(
+            template_block.lines().count() <= 25,
+            "{role}.md task brief template exceeds 25 lines:\n{template_block}"
+        );
+    }
+
+    let director = template(RoleKind::Director);
+    assert!(
+        director.contains("`backlot decide --id AD-<n> --file <file> --notify active-actors`"),
+        "director.md misses `backlot decide`"
+    );
+    assert!(
+        director.contains(
+            "`backlot repo-note propose --id <slug> --text \"<rule>\" --why \"<evidence>\"`"
+        ),
+        "director.md misses `backlot repo-note propose`"
+    );
+}
+
+#[test]
+fn actor_prompt_includes_optional_siblings_discoveries_section() {
+    let raw = template(RoleKind::Actor);
+    assert!(
+        raw.contains("## Decisions / Discoveries for siblings"),
+        "actor.md misses optional sibling discoveries guidance"
+    );
 }

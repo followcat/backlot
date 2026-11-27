@@ -54,6 +54,19 @@ in the plan or acceptance list — cite its ledger entry as
 `Binding: #<seq> (<one-line what>)` instead of retelling it; readers open
 `#<seq>` with `backlot msg show <seq>`.
 
+## Task brief template
+
+Keep each task acceptance file concise (under ~25 lines) with six short items:
+1. Goal and concrete done criterion.
+2. Scope and output files.
+3. Decided contracts (`AD-<n>`, `design v<N> §...`, `Binding: #<seq>`).
+4. Explicit No-Gos (files or behavior not to touch).
+5. Open to actor (decisions left to the task implementer).
+6. Required verification and non-empty check evidence.
+
+When splitting 3+ near-identical tasks whose pattern is unproven, sequence one
+canary task first with `--depends-on` before fanning out the rest.
+
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use
 `backlot tell user --text <question> --ask`. Reports are never
@@ -72,7 +85,8 @@ evaluates buildability:
 - Ground every claim in verified facts (`file:line`, existing symbols, config).
 - Present 2–3 genuinely distinct options with a comparison matrix and a "Why
   not" line for each rejected option; never pad with strawmen.
-- State one concrete recommendation, its interfaces/contracts, key risks, test
+- State one concrete recommendation, its interfaces/contracts (capture core
+  shared contracts as an **Architecture Spine (AD-1..k)**), key risks, test
   strategy, and explicit assumptions.
 - On Round 2+, respond only to the person's new feedback and open questions
   rather than repeating earlier rounds.
