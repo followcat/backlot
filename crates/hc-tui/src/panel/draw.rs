@@ -21,7 +21,7 @@ use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_su
 use super::draw_compact::draw_compact_studio;
 use super::draw_deco::render_lot_seam_and_header;
 use super::draw_deco_blocks::{
-    BlockWeight, draw_block_bottom, draw_divider, frame_style, stamp_block_sides,
+    BlockWeight, draw_block_bottom, draw_divider, frame_style, is_marquee, stamp_block_sides,
 };
 use super::draw_tasks::{draw_closed_fold, draw_drawer, draw_fold, draw_task};
 use super::rows::{Row, Target};
@@ -213,14 +213,17 @@ pub(crate) fn render(
     let selected = panel.selected.as_ref();
     let studio_refs = super::data::studios(machines);
     let selected_studio = super::rows_fold::selected_studio(&studio_refs, panel, current);
+    let sel = selected_studio.as_ref();
+    let weight_of = |studio: &StudioKey| BlockWeight::of(panel, lot_focused, studio);
+    let marquee_of = |s: &StudioKey| is_marquee(panel, lot_focused, sel, mark, s);
     let frame_of = |studio: &StudioKey| {
         frame_style(
-            lot_focused && selected_studio.as_ref() == Some(studio),
+            lot_focused && sel == Some(studio),
+            marquee_of(studio),
             panel.plain_chrome,
             palette,
         )
     };
-    let weight_of = |studio: &StudioKey| BlockWeight::of(panel, lot_focused, studio);
     let mut y = body.y;
     for row in all.iter().skip(1 + start) {
         let height = row.height();
@@ -357,9 +360,8 @@ pub(crate) fn render(
                 );
             }
             Row::BlockTop { studio, health } => {
-                let is_selected = lot_focused && selected_studio.as_ref() == Some(&studio.key());
-                let frame = frame_of(&studio.key());
-                let weight = weight_of(&studio.key());
+                let key = studio.key();
+                let is_selected = lot_focused && selected_studio.as_ref() == Some(&key);
                 draw_top(
                     buf,
                     rect,
@@ -367,10 +369,11 @@ pub(crate) fn render(
                     &label(*studio),
                     *health,
                     is_selected,
-                    mark == Some(&studio.key()),
-                    weight,
+                    mark == Some(&key),
+                    weight_of(&key),
+                    marquee_of(&key),
                     panel.plain_chrome,
-                    frame,
+                    frame_of(&key),
                     palette,
                 );
             }
@@ -382,7 +385,14 @@ pub(crate) fn render(
             }
             Row::BlockBottom(studio) => {
                 let key = studio.key();
-                draw_block_bottom(buf, rect, weight_of(&key), frame_of(&key));
+                draw_block_bottom(
+                    buf,
+                    rect,
+                    weight_of(&key),
+                    frame_of(&key),
+                    marquee_of(&key),
+                    palette,
+                );
             }
             Row::Person { studio, role } => {
                 hits.working_drawn |= matches!(Person::of(role), Person::Working);

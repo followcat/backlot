@@ -68,14 +68,37 @@ impl BlockWeight {
     }
 }
 
-pub(super) fn frame_style(focused_selected: bool, plain_chrome: bool, palette: &Palette) -> Style {
+pub(super) fn is_marquee(
+    panel: &Panel,
+    lot_focused: bool,
+    selected_studio: Option<&StudioKey>,
+    mark: Option<&StudioKey>,
+    studio: &StudioKey,
+) -> bool {
+    !panel.plain_chrome
+        && mark == Some(studio)
+        && BlockWeight::of(panel, lot_focused, studio) == BlockWeight::Resting
+        && !(lot_focused && selected_studio == Some(studio))
+}
+
+pub(super) fn frame_style(
+    focused_selected: bool,
+    current_marquee: bool,
+    plain_chrome: bool,
+    palette: &Palette,
+) -> Style {
     let elev = palette.elevation();
     if focused_selected {
         Style::default().fg(palette.accent)
     } else if plain_chrome {
         Style::default().fg(elev.border_muted)
     } else {
-        let mut s = Style::default().fg(elev.gilt);
+        let fg = if current_marquee {
+            elev.bulb_warm
+        } else {
+            elev.gilt
+        };
+        let mut s = Style::default().fg(fg);
         if elev.is_terminal_16 {
             s = s.add_modifier(Modifier::DIM);
         }
@@ -83,20 +106,70 @@ pub(super) fn frame_style(focused_selected: bool, plain_chrome: bool, palette: &
     }
 }
 
-pub(super) fn draw_block_bottom(buf: &mut Buffer, rect: Rect, weight: BlockWeight, frame: Style) {
+/// Draw a horizontal border rule across `[start_x, end_x)` on row `y`.
+/// When `marquee` is true, places `▪` bulbs in `palette.accent` every
+/// 3 cells aligned to `block_x` (`(x - block_x) % 3 == 2`).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_rule_segment(
+    buf: &mut Buffer,
+    block_x: u16,
+    start_x: u16,
+    end_x: u16,
+    y: u16,
+    fill_glyph: &str,
+    frame: Style,
+    marquee: bool,
+    palette: &Palette,
+) {
+    if end_x <= start_x {
+        return;
+    }
+    if !marquee {
+        put_text(
+            buf,
+            start_x,
+            y,
+            end_x - start_x,
+            &fill_glyph.repeat((end_x - start_x) as usize),
+            frame,
+        );
+        return;
+    }
+    let bulb = Style::default().fg(palette.accent);
+    for x in start_x..end_x {
+        let (sym, style) = if (x - block_x) % 3 == 2 {
+            ("▪", bulb)
+        } else {
+            (fill_glyph, frame)
+        };
+        put_text(buf, x, y, 1, sym, style);
+    }
+}
+
+pub(super) fn draw_block_bottom(
+    buf: &mut Buffer,
+    rect: Rect,
+    weight: BlockWeight,
+    frame: Style,
+    marquee: bool,
+    palette: &Palette,
+) {
     if rect.width == 0 {
         return;
     }
     let (left, fill, right) = weight.bottom_corners();
     put_text(buf, rect.x, rect.y, 1, left, frame);
     if rect.width > 2 {
-        put_text(
+        draw_rule_segment(
             buf,
+            rect.x,
             rect.x + 1,
+            rect.x + rect.width - 1,
             rect.y,
-            rect.width.saturating_sub(2),
-            &fill.repeat(rect.width.saturating_sub(2) as usize),
+            fill,
             frame,
+            marquee && weight == BlockWeight::Resting,
+            palette,
         );
     }
     if rect.width > 1 {

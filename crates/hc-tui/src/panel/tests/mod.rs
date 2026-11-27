@@ -3,6 +3,7 @@
 //! `alice`, `host-a`.
 mod accent_tests;
 mod babylon_lot_tests;
+mod babylon_marquee_tests;
 mod config_tests;
 mod data_tests;
 mod design_tests;
