@@ -51,7 +51,22 @@ pub struct CastSet {
 /// (the effort, cline-model and limit rules, the check declarations)
 /// and then the defaults.
 pub(crate) fn read(path: &Path) -> Result<CastSettings, Fail> {
+    read_preserving(path, &[])
+}
+
+/// Like [`read`], preserving check origin from matching existing checks.
+pub(crate) fn read_preserving(
+    path: &Path,
+    existing_checks: &[backlot_model::event::CheckDecl],
+) -> Result<CastSettings, Fail> {
     let file = commands::read_cast(path)?;
+    let mut checks =
+        crate::checks::declarations(&file.check_env, &file.checks).map(|(_, checks)| checks)?;
+    for c in &mut checks {
+        if let Some(prev) = existing_checks.iter().find(|p| p.same_spec(c)) {
+            c.origin = prev.origin;
+        }
+    }
     Ok(CastSettings {
         roles: backlot_model::event::RoleConfigs {
             producer: file.producer.clone(),
@@ -72,8 +87,7 @@ pub(crate) fn read(path: &Path) -> Result<CastSettings, Fail> {
             .escalate_after_s
             .unwrap_or_else(backlot_model::event::default_escalate_after_s),
         check_env: file.check_env.clone(),
-        checks: crate::checks::declarations(&file.check_env, &file.checks)
-            .map(|(_, checks)| checks)?,
+        checks,
         task_budget_s: file.task_budget_s,
         limits: file.limits.clone(),
         max_actors: file

@@ -10,7 +10,7 @@ use backlot_model::{EventBy, NewEvent};
 
 use crate::checkrun::LOG_CAP;
 use crate::cli::Env;
-use crate::guard_prep::is_guard_shim_file;
+use crate::guard_prep::strip_shim_dirs;
 use crate::store::{self, Pending};
 
 const TAIL_BYTES: usize = 2048;
@@ -51,7 +51,6 @@ pub(crate) fn person_exec_env(
     stage_env: &BTreeMap<String, String>,
     role_bin: Option<&Path>,
 ) -> Vec<(String, String)> {
-    let canon_role_bin = role_bin.and_then(|p| fs::canonicalize(p).ok());
     let mut out = Vec::with_capacity(stage_env.len() + 2);
     for (k, v) in stage_env {
         if k.starts_with("BACKLOT_")
@@ -62,25 +61,7 @@ pub(crate) fn person_exec_env(
             continue;
         }
         if k == "PATH" {
-            let filtered: Vec<&str> = v
-                .split(':')
-                .filter(|seg| !seg.is_empty())
-                .filter(|seg| {
-                    let dir = Path::new(seg);
-                    if let Some(rb) = role_bin
-                        && dir == rb
-                    {
-                        return false;
-                    }
-                    if let (Some(crb), Ok(cd)) = (&canon_role_bin, fs::canonicalize(dir))
-                        && cd == *crb
-                    {
-                        return false;
-                    }
-                    !is_guard_shim_file(&dir.join("git")) && !is_guard_shim_file(&dir.join("gh"))
-                })
-                .collect();
-            out.push(("PATH".into(), filtered.join(":")));
+            out.push(("PATH".into(), strip_shim_dirs(v, role_bin)));
             continue;
         }
         out.push((k.clone(), v.clone()));

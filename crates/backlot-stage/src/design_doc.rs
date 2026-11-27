@@ -316,6 +316,18 @@ fn render_version_markdown(
                     );
                 }
             }
+            if !e.checks.is_empty() {
+                let _ = writeln!(out, "\n#### Proposed checks\n\n```");
+                for c in &e.checks {
+                    let _ = writeln!(out, "{} (timeout {}s)", c.name, c.timeout_s);
+                    let _ = writeln!(out, "  run: {}", c.run);
+                    if let Some(pat) = &c.expect {
+                        let min = c.effective_min_matches();
+                        let _ = writeln!(out, "  expect: {pat} (min {min})");
+                    }
+                }
+                let _ = writeln!(out, "```");
+            }
         }
     }
     if only_round.is_none() && d.phase == DesignPhase::Signed {

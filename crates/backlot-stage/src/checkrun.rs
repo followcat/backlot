@@ -195,3 +195,48 @@ pub fn real_spawn_argv(
         readers,
     }))
 }
+
+/// Output captured by [`run_shell_bounded`].
+pub struct BoundedOut {
+    pub exit_code: Option<i32>,
+    pub timed_out: bool,
+    pub output: Vec<u8>,
+}
+
+/// Run `sh -c <run>` under `dir` and explicit `env`, sharing this module's
+/// process-group isolation and capped output capture with a TERM → 5s KILL timeout.
+pub fn run_shell_bounded(
+    run: &str,
+    dir: &Path,
+    env: &[(String, String)],
+    timeout: std::time::Duration,
+) -> Result<BoundedOut, String> {
+    let args = vec!["-c".to_string(), run.to_string()];
+    let mut child = real_spawn_argv(Path::new("sh"), &args, dir, env)?;
+    let start = std::time::Instant::now();
+    let mut term_at: Option<std::time::Instant> = None;
+    let mut killed = false;
+    loop {
+        if let Some(poll) = child.poll() {
+            return Ok(BoundedOut {
+                exit_code: poll.code,
+                timed_out: term_at.is_some(),
+                output: poll.output,
+            });
+        }
+        if start.elapsed() >= timeout {
+            match term_at {
+                None => {
+                    child.term();
+                    term_at = Some(std::time::Instant::now());
+                }
+                Some(t) if t.elapsed() >= std::time::Duration::from_secs(5) && !killed => {
+                    child.kill();
+                    killed = true;
+                }
+                _ => {}
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}

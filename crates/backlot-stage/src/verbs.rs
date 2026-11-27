@@ -112,6 +112,7 @@ fn tell_file_inner(
                         source: Some(backlot_model::design::EntrySource::Tell),
                         refs: vec![seq],
                         questions: Vec::new(),
+                        checks: Vec::new(),
                     },
                 ),
                 files: vec![store::PendingFile {
@@ -414,8 +415,13 @@ pub(crate) fn cast_set(
     }
     let dir = store::studio_dir(base, &caller.studio);
     require_studio_dir(&dir, &caller.studio)?;
-    let next = crate::studio_cast::read(file)?;
     let state = store::load_state(&dir).map_err(crate::hwood::store_fail)?;
+    let existing_checks = state
+        .studio
+        .as_ref()
+        .map(|s| s.checks.as_slice())
+        .unwrap_or(&[]);
+    let next = crate::studio_cast::read_preserving(file, existing_checks)?;
     crate::studio_cast::check(base, env, &state, &next)?;
     let old = backlot_model::cast::CastSettings::of(&state)
         .ok_or_else(|| Fail::refused(format!("no studio '{}'", caller.studio)))?;

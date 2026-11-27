@@ -365,16 +365,8 @@ fn claude_pre_allows_per_role() {
     // gets before its own additions.
     let base = base_rules();
     let checks = [
-        CheckDecl {
-            name: "unit".into(),
-            run: "cargo test --lib".into(),
-            timeout_s: 600,
-        },
-        CheckDecl {
-            name: "lint".into(),
-            run: "cargo clippy".into(),
-            timeout_s: 600,
-        },
+        CheckDecl::new("unit", "cargo test --lib", 600),
+        CheckDecl::new("lint", "cargo clippy", 600),
     ];
     // Producer and writer: base + read-only, nothing a job adds.
     for role in ["producer", "writer"] {
@@ -433,11 +425,7 @@ fn claude_pre_allows_per_role() {
     }
     // A `run` with a parenthesis is not expressible in the rule
     // syntax — the cast accepted it, no rule carries it.
-    let paren = [CheckDecl {
-        name: "odd".into(),
-        run: "make (all)".into(),
-        timeout_s: 600,
-    }];
+    let paren = [CheckDecl::new("odd", "make (all)", 600)];
     let l = plan(
         &actor("claude", "standard"),
         &role_ctx(&env, "actor-t1-c1", None, None, &paren),

@@ -51,6 +51,7 @@ pub(crate) enum CliVerb<'a> {
     ServerControl,
     HollywoodControl,
     DesignSign,
+    StudioCheck,
     Approve { person: &'a str },
 }
 
@@ -244,6 +245,22 @@ pub(crate) fn check_cli_gate_with(
             {
                 return Err(Fail::refused(format!(
                     "signing off the opening design is the user's call — cannot run --as '{flag_role}'"
+                )));
+            }
+            Ok(())
+        }
+        CliVerb::StudioCheck => {
+            refuse_role_gate(
+                env_role,
+                anc.as_ref(),
+                "changing studio checks is the user's call",
+                "",
+            )?;
+            if let Some(flag_role) = common.role.as_deref()
+                && flag_role != "user"
+            {
+                return Err(Fail::refused(format!(
+                    "changing studio checks is the user's call — cannot run --as '{flag_role}'"
                 )));
             }
             Ok(())

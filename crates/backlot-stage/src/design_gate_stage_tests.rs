@@ -68,6 +68,7 @@ fn entry(seq: u64, role: &str, version: u32, round: u32, slot: DesignSlot) -> Ev
                 Vec::new()
             },
             questions: Vec::new(),
+            checks: Vec::new(),
         },
     )
 }

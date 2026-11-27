@@ -112,6 +112,8 @@ fn outcome(r: &backlot_model::state::CheckedRecord) -> String {
         "pass".into()
     } else if r.timed_out {
         "timed out".into()
+    } else if let Some(msg) = &r.expect_failed {
+        format!("fail ({msg})")
     } else {
         match r.exit_code {
             Some(code) => format!("fail (exit {code})"),
