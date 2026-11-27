@@ -161,6 +161,8 @@ The commands you will use most:
 | `backlot tell director --file note.md --studio acme-shop --as user` | A recorded message to a role. |
 | `backlot approve --person actor-t1-c1 --decision allow --studio acme-shop --as user` | Answer a permission prompt that is yours. |
 | `backlot records --studio acme-shop` | What each actor delivered and how the reviews went. |
+| `backlot metrics --all --since 7d` | Read-only quality, attention, guard, Hollywood, and timing metrics across studios. |
+| `backlot digest --studio acme-shop --since 24h` | Daily summary and `design v<N> §<id>` coverage matrix for a studio. |
 | `backlot tell hollywood "what is waiting on me?"` | Ask the overseer. It answers with a report. |
 | `backlot card list`, `backlot card apply c1`, `backlot card cancel c1` | Hollywood's proposals: look, then apply or cancel. |
 | `backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user` | Close the studio. |
@@ -254,6 +256,7 @@ To run the tests: `git submodule update --init --depth 1`, then `cargo test`.
 
 - [Run a studio](docs/studio/guide.md)
 - [Hollywood, the overseer](docs/studio/hollywood.md)
+- [Studio metrics and digest](docs/studio/metrics.md)
 - [The studio panel](docs/studio/panel.md)
 - [Request, result, and catalog documents](docs/studio/requests.md)
 - [Studio: what has and has not been tried](docs/studio/limits.md)

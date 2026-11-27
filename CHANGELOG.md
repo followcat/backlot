@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- `backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone
+
 ## 0.4.21 — 2026-11-27
 
 ### Added
