@@ -83,8 +83,7 @@ pub(crate) fn compute_attention(
 }
 
 fn waiting_until_token(detail: &str) -> Option<&str> {
-    let idx = detail.find("waiting until ")?;
-    let rest = &detail[idx + "waiting until ".len()..];
+    let (_, rest) = detail.split_once("waiting until ")?;
     let token = rest
         .split_whitespace()
         .next()?

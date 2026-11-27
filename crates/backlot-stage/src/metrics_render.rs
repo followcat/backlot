@@ -2,6 +2,8 @@
 
 use std::fmt::Write as _;
 
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
 use backlot_model::metrics::{AggregateMetrics, AttentionMetrics, MetricsReport, StudioMetrics};
 
 const MAX_COLS: usize = 100;
@@ -35,21 +37,44 @@ struct GuardsCols<'a> {
     pause_t: usize,
 }
 
-fn trunc(s: &str, width: usize) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= width {
+fn trunc_width(s: &str, max_width: usize) -> String {
+    if UnicodeWidthStr::width(s) <= max_width {
         return s.to_string();
     }
-    if width <= 1 {
-        return chars.into_iter().take(width).collect();
+    if max_width == 0 {
+        return String::new();
     }
-    let mut out: String = chars.into_iter().take(width - 1).collect();
+    if max_width == 1 {
+        return s
+            .chars()
+            .next()
+            .filter(|c| c.width().unwrap_or(0) <= 1)
+            .map(|_| "…".to_string())
+            .unwrap_or_default();
+    }
+    let budget = max_width - 1;
+    let mut out = String::new();
+    let mut w = 0usize;
+    for ch in s.chars() {
+        let cw = ch.width().unwrap_or(0);
+        if w + cw > budget {
+            break;
+        }
+        out.push(ch);
+        w += cw;
+    }
     out.push('…');
     out
 }
 
+fn pad_left_col(s: &str, width: usize) -> String {
+    let fitted = trunc_width(s, width);
+    let pad = width.saturating_sub(UnicodeWidthStr::width(fitted.as_str()));
+    format!("{fitted}{}", " ".repeat(pad))
+}
+
 fn push_line(out: &mut String, line: &str) {
-    let clean = trunc(line.trim_end(), MAX_COLS);
+    let clean = trunc_width(line.trim_end(), MAX_COLS);
     out.push_str(&clean);
     out.push('\n');
 }
@@ -99,11 +124,14 @@ fn wrap_items(prefix: &str, items: &[String], out: &mut String) {
         return;
     }
     let mut cur = prefix.to_string();
-    let indent = " ".repeat(prefix.chars().count());
+    let indent_w = UnicodeWidthStr::width(prefix);
+    let indent = " ".repeat(indent_w);
     for (idx, item) in items.iter().enumerate() {
-        let sep = if cur.len() == prefix.len() { "" } else { ", " };
-        let next_len = cur.chars().count() + sep.len() + item.chars().count();
-        if idx > 0 && next_len > MAX_COLS && cur.len() > prefix.len() {
+        let sep = if cur == prefix { "" } else { ", " };
+        let next_w = UnicodeWidthStr::width(cur.as_str())
+            + UnicodeWidthStr::width(sep)
+            + UnicodeWidthStr::width(item.as_str());
+        if idx > 0 && next_w > MAX_COLS && cur != prefix {
             push_line(out, &cur);
             cur = format!("{indent}{item}");
         } else {
@@ -116,8 +144,8 @@ fn wrap_items(prefix: &str, items: &[String], out: &mut String) {
 
 fn push_quality_row(out: &mut String, r: QualityCols<'_>) {
     let line = format!(
-        "{:<16}  {:>5}  {:>8}  {:>7}  {:>5}  {:>7}  {:>9}  {:>5}  {:>6}",
-        trunc(r.name, 16),
+        "{}  {:>5}  {:>8}  {:>7}  {:>5}  {:>7}  {:>9}  {:>5}  {:>6}",
+        pad_left_col(r.name, 16),
         r.deliv,
         fmt_pct(r.pass_rate),
         fmt_pct(r.cr_rate),
@@ -132,8 +160,8 @@ fn push_quality_row(out: &mut String, r: QualityCols<'_>) {
 
 fn push_attn_row(out: &mut String, name: &str, attn: &AttentionMetrics) {
     let line = format!(
-        "{:<16}  {:>7}  {:>11}  {:>11}  {:>11}  {:>11}  {:>13}",
-        trunc(name, 16),
+        "{}  {:>7}  {:>11}  {:>11}  {:>11}  {:>11}  {:>13}",
+        pad_left_col(name, 16),
         format!("{}({})", attn.total, attn.open),
         fmt_count_dur(
             attn.by_class.needs_you.count,
@@ -155,8 +183,8 @@ fn push_attn_row(out: &mut String, name: &str, attn: &AttentionMetrics) {
 
 fn push_guards_row(out: &mut String, r: GuardsCols<'_>) {
     let line = format!(
-        "{:<16}  {:>8}  {:>10}  {:>9}  {:>6}  {:>13}  {:>8}  {:>7}",
-        trunc(r.name, 16),
+        "{}  {:>8}  {:>10}  {:>9}  {:>6}  {:>13}  {:>8}  {:>7}",
+        pad_left_col(r.name, 16),
         format!("{}/{}", r.allow, r.deny),
         format!("{}/{}", r.ref_tot, r.ref_no209),
         format!("{}/{}", r.hw_drop, r.hw_sent),

@@ -39,7 +39,8 @@ fn verdict_label(v: Verdict) -> &'static str {
 
 fn parse_design_ref_at(text: &str, idx: usize) -> Option<(u32, String)> {
     if idx > 0
-        && text[..idx]
+        && text
+            .get(..idx)?
             .chars()
             .next_back()
             .is_some_and(|c| c.is_ascii_alphanumeric())
@@ -47,30 +48,31 @@ fn parse_design_ref_at(text: &str, idx: usize) -> Option<(u32, String)> {
         return None;
     }
     let after = text.get(idx..)?;
-    if after.len() < 6 || !after[..6].eq_ignore_ascii_case("design") {
+    if !after
+        .as_bytes()
+        .get(..6)
+        .is_some_and(|head| head.eq_ignore_ascii_case(b"design"))
+    {
         return None;
     }
-    let mut rest = &after[6..];
-    let ws1 = rest.len() - rest.trim_start().len();
-    if ws1 == 0 {
+    // Safe: the leading 6 bytes match ASCII "design".
+    let after_kw = after.get(6..)?;
+    let rest = after_kw.trim_start();
+    if rest.len() == after_kw.len() {
         return None;
     }
-    rest = &rest[ws1..];
-    if !(rest.starts_with('v') || rest.starts_with('V')) {
-        return None;
-    }
-    rest = &rest[1..];
+    let rest = rest.strip_prefix(['v', 'V'])?;
     let v_digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
     if v_digits.is_empty() {
         return None;
     }
     let version: u32 = v_digits.parse().ok()?;
-    rest = &rest[v_digits.len()..];
-    let ws2 = rest.len() - rest.trim_start().len();
-    if ws2 == 0 {
+    let after_ver = rest.get(v_digits.len()..)?;
+    let rest = after_ver.trim_start();
+    if rest.len() == after_ver.len() {
         return None;
     }
-    rest = rest[ws2..].strip_prefix('§')?.trim_start();
+    let rest = rest.strip_prefix('§')?.trim_start();
     let raw_id: String = rest
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '+' | '/'))

@@ -40,7 +40,7 @@ pub(crate) fn parse_duration_ms(raw: &str) -> Result<u64, String> {
         let n: u64 = digits
             .parse()
             .map_err(|_| format!("duration overflow in '{raw}'"))?;
-        rest = &rest[digits.len()..];
+        rest = rest.get(digits.len()..).unwrap_or("");
         let unit: String = rest
             .chars()
             .take_while(|c| c.is_ascii_alphabetic())
@@ -48,7 +48,7 @@ pub(crate) fn parse_duration_ms(raw: &str) -> Result<u64, String> {
         if unit.is_empty() {
             return Err(format!("missing unit in duration '{raw}' (ms|s|m|h|d|w)"));
         }
-        rest = &rest[unit.len()..];
+        rest = rest.get(unit.len()..).unwrap_or("");
         let mult: u64 = match unit.as_str() {
             "ms" => 1,
             "s" => 1_000,

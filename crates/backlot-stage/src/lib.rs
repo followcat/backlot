@@ -333,6 +333,8 @@ mod loop_cmd_tests;
 #[cfg(test)]
 mod metrics_cli_tests;
 #[cfg(test)]
+mod metrics_digest_cli_tests;
+#[cfg(test)]
 mod migrate_tests;
 #[cfg(test)]
 mod msg_show_extra_tests;

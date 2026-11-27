@@ -12,14 +12,14 @@ use backlot_model::testkit::{actor, studio_kind};
 
 use crate::cli_testkit::*;
 
-fn now_ms() -> u64 {
+pub(super) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(1_000_000)
 }
 
-fn evt(seq: u64, ts_ms: u64, role: &str, kind: EventKind) -> Event {
+pub(super) fn evt(seq: u64, ts_ms: u64, role: &str, kind: EventKind) -> Event {
     Event {
         v: LEDGER_VERSION,
         seq,
@@ -29,7 +29,13 @@ fn evt(seq: u64, ts_ms: u64, role: &str, kind: EventKind) -> Event {
     }
 }
 
-fn studio_ev(seq: u64, ts_ms: u64, title: &str, repo_path: &str, checks: Vec<CheckDecl>) -> Event {
+pub(super) fn studio_ev(
+    seq: u64,
+    ts_ms: u64,
+    title: &str,
+    repo_path: &str,
+    checks: Vec<CheckDecl>,
+) -> Event {
     let mut kind = studio_kind();
     if let EventKind::StudioCreated {
         title: ref mut t,
@@ -45,7 +51,7 @@ fn studio_ev(seq: u64, ts_ms: u64, title: &str, repo_path: &str, checks: Vec<Che
     evt(seq, ts_ms, "user", kind)
 }
 
-fn write_events(dir: &Path, events: &[Event], raw_tail: Option<&str>) {
+pub(super) fn write_events(dir: &Path, events: &[Event], raw_tail: Option<&str>) {
     fs::create_dir_all(dir).unwrap();
     let mut out = String::new();
     for e in events {

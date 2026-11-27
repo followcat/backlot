@@ -196,6 +196,20 @@ Ignore trailing punctuation (design v1 §R3.W), duplicates like design v1 §R1.
 }
 
 #[test]
+fn extract_design_refs_handles_cjk_and_multibyte_text() {
+    let md = "验收：已完成 design v1 §R1 的接口，见 design v2 §R2.W";
+    assert_eq!(
+        extract_design_refs(md),
+        vec!["design v1 §R1".to_string(), "design v2 §R2.W".to_string()]
+    );
+    // Also exercise multibyte text right after every word/symbol boundary.
+    assert_eq!(
+        extract_design_refs("design版本；设计 v1 §R1；design v1；design v1 §R2的接口"),
+        vec!["design v1 §R2".to_string()]
+    );
+}
+
+#[test]
 fn digest_builds_coverage_matrix_and_activity_sections() {
     let mut acceptance_texts = BTreeMap::new();
     acceptance_texts.insert(
