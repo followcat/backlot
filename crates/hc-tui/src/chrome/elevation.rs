@@ -4,7 +4,7 @@
 //! CIE lightness `L*`, and WCAG contrast ratio.
 
 use ratatui::buffer::Cell;
-use ratatui::style::{Color, Modifier};
+use ratatui::style::{Color, Modifier, Style};
 
 use super::palette::Palette;
 
@@ -160,6 +160,16 @@ impl Elevation {
             muted_raised: to_color(muted_raised),
             is_dark,
             is_terminal_16: false,
+        }
+    }
+
+    /// Foreground gilt style on `bg`, adding `DIM` on 16-color terminals.
+    pub(crate) fn gilt_style(&self, bg: Color) -> Style {
+        let style = Style::default().fg(self.gilt).bg(bg);
+        if self.is_terminal_16 {
+            style.add_modifier(Modifier::DIM)
+        } else {
+            style
         }
     }
 

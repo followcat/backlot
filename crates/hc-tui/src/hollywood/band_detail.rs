@@ -5,15 +5,52 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::band::MARGIN;
+use super::MARGIN;
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
 
+/// Draw left rail (`▌` if focused/selected else `║`) and right gilt rail (`║`).
+fn draw_detail_rails(
+    buf: &mut Buffer,
+    rect: Rect,
+    y: u16,
+    colour: ratatui::style::Color,
+    bg: ratatui::style::Color,
+    active_rail: bool,
+    palette: &Palette,
+) {
+    let elev = palette.elevation();
+    let rail = elev.gilt_style(elev.surface);
+    if active_rail {
+        put_text(
+            buf,
+            rect.x,
+            y,
+            1,
+            "▌",
+            Style::default().fg(palette.accent).bg(bg),
+        );
+    } else {
+        put_text(buf, rect.x, y, 1, "║", rail);
+    }
+    if rect.width >= 2 {
+        put_text(buf, rect.x + rect.width - 1, y, 1, "║", rail);
+    }
+    put_text(
+        buf,
+        rect.x + MARGIN,
+        y,
+        1,
+        "▎",
+        Style::default().fg(colour).bg(bg),
+    );
+}
+
 /// A waiting row's second line: indented directly under the head verb,
-/// keeping the col-2 severity bar.
+/// keeping the col-2 severity bar and `└─` tree branch.
 pub(super) fn draw_detail(
     buf: &mut Buffer,
     rect: Rect,
@@ -30,30 +67,23 @@ pub(super) fn draw_detail(
         elev.surface
     };
     buf.set_style(rect, Style::default().bg(bg));
-    if zone_focused || selected {
-        put_text(
-            buf,
-            rect.x,
-            rect.y,
-            1,
-            "▌",
-            Style::default().fg(palette.accent).bg(bg),
-        );
-    }
     let colour = super::items::glyph_colour(wait, palette);
-    put_text(
-        buf,
-        rect.x + MARGIN,
-        rect.y,
-        1,
-        "▎",
-        Style::default().fg(colour).bg(bg),
-    );
-    let x = rect.x + MARGIN + 4;
-    let width = rect.width.saturating_sub(MARGIN * 2 + 4);
+    let active_rail = zone_focused || selected;
+    draw_detail_rails(buf, rect, rect.y, colour, bg, active_rail, palette);
+
+    let branch_x = rect.x + MARGIN + 4;
+    let show_branch = rect.width >= MARGIN * 2 + 10;
+    let x = branch_x + if show_branch { 3 } else { 0 };
+    let width = rect
+        .width
+        .saturating_sub(MARGIN * 2 + 4 + if show_branch { 3 } else { 0 });
+
     if let Some(Confirm::Finish(key)) = hollywood.confirm.as_ref()
         && wait.target() == super::Target::Ready(key.clone())
     {
+        if show_branch {
+            put_text(buf, branch_x, rect.y, 2, "└─", elev.gilt_style(bg));
+        }
         let pending =
             matches!(wait, Wait::Ready(item) if crate::panel::data::report_pending(item.studio));
         let text = if pending {
@@ -76,27 +106,15 @@ pub(super) fn draw_detail(
     }
     if let Wait::Decision(item) = wait {
         let lines = super::decision::detail_lines(item);
-        for (idx, line) in lines.into_iter().take(rect.height as usize).enumerate() {
+        let take = lines.len().min(rect.height as usize);
+        for (idx, line) in lines.into_iter().take(take).enumerate() {
             let y = rect.y + idx as u16;
             if idx > 0 {
-                if zone_focused || selected {
-                    put_text(
-                        buf,
-                        rect.x,
-                        y,
-                        1,
-                        "▌",
-                        Style::default().fg(palette.accent).bg(bg),
-                    );
-                }
-                put_text(
-                    buf,
-                    rect.x + MARGIN,
-                    y,
-                    1,
-                    "▎",
-                    Style::default().fg(colour).bg(bg),
-                );
+                draw_detail_rails(buf, rect, y, colour, bg, active_rail, palette);
+            }
+            if show_branch {
+                let b = if idx + 1 == take { "└─" } else { "├─" };
+                put_text(buf, branch_x, y, 2, b, elev.gilt_style(bg));
             }
             put_text(
                 buf,
@@ -110,6 +128,9 @@ pub(super) fn draw_detail(
         return;
     }
     if let Some(text) = super::items::detail_text(wait) {
+        if show_branch {
+            put_text(buf, branch_x, rect.y, 2, "└─", elev.gilt_style(bg));
+        }
         put_text(
             buf,
             x,
@@ -162,6 +183,9 @@ pub(super) fn draw_detail(
         }
         _ => return,
     };
+    if show_branch {
+        put_text(buf, branch_x, rect.y, 2, "└─", elev.gilt_style(bg));
+    }
     put_text(
         buf,
         x,

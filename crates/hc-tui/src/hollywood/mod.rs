@@ -74,6 +74,10 @@ pub(crate) use view::{CardView, ReaderRenderOpts, render_view_with_opts};
 #[cfg(test)]
 pub(crate) use view::{render_view, render_view_at, render_view_with_compose};
 
+/// Outer horizontal gutter keeping vertical rails (`col 0`, `col width - 1`)
+/// one air column outside zone content across the whole Call Sheet band.
+pub(crate) const MARGIN: u16 = 2;
+
 use crate::chrome::text_editor::TextEditor;
 
 /// How the layer sits on screen. `Hidden` draws nothing — the

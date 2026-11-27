@@ -4,11 +4,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::Hollywood;
-use super::band::MARGIN;
 use super::draw::{CHIP_GAP, HollywoodRender};
 use super::items::{chip_text, chips_of, default_chip_index, target_label, ultra_head};
 use super::sheet::Wait;
+use super::{Hollywood, MARGIN};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
@@ -58,6 +57,7 @@ pub(super) fn draw_wait(
         parts.gap = " ";
     }
     let head_plain = format!("{}{}{}{}", parts.verb, parts.gap, parts.studio, parts.rest);
+    let rail = elev.gilt_style(elev.surface);
     if zone_focused || selected {
         put_text(
             buf,
@@ -67,6 +67,11 @@ pub(super) fn draw_wait(
             "▌",
             Style::default().fg(palette.accent).bg(bg),
         );
+    } else {
+        put_text(buf, rect.x, rect.y, 1, "║", rail);
+    }
+    if rect.width >= 2 {
+        put_text(buf, rect.x + rect.width - 1, rect.y, 1, "║", rail);
     }
     if selected {
         put_text(
@@ -104,15 +109,23 @@ pub(super) fn draw_wait(
     } else {
         chips_of(wait)
     };
+    let focused_chip = selected.then(|| {
+        hollywood
+            .chip_index
+            .unwrap_or_else(|| default_chip_index(wait, &chips))
+            .min(chips.len().saturating_sub(1))
+    });
     let gaps = chips.len().saturating_sub(1) as u16 * CHIP_GAP;
     let full_w: u16 = chips
         .iter()
-        .map(|c| display_width(&chip_text(c, false)) as u16)
+        .enumerate()
+        .map(|(i, c)| display_width(&chip_text(c, false, focused_chip == Some(i))) as u16)
         .sum::<u16>()
         + gaps;
     let compact_w: u16 = chips
         .iter()
-        .map(|c| display_width(&chip_text(c, true)) as u16)
+        .enumerate()
+        .map(|(i, c)| display_width(&chip_text(c, true, focused_chip == Some(i))) as u16)
         .sum::<u16>()
         + gaps;
     let head_x = glyph_x + 2;
@@ -189,12 +202,6 @@ pub(super) fn draw_wait(
             );
         }
     }
-    let focused_chip = selected.then(|| {
-        hollywood
-            .chip_index
-            .unwrap_or_else(|| default_chip_index(wait, &chips))
-            .min(chips.len().saturating_sub(1))
-    });
     super::draw::paint_wait_chips(
         buf,
         rect.y,

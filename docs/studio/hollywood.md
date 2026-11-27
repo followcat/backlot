@@ -29,13 +29,19 @@ layout, so toggling it resizes nothing.
   `Cards`, `Ready`) in the expanded Call Sheet.
 - **Expanded** is the **Call Sheet** — a focus-driven docked band dropped from the top over the
   pane + dock width (`surface`), capped at half the frame height (`12..=h/2`, or `h.min(16)` on a
-  mobile width), ending in a single `▀▀` bottom perforation edge with no top perforation row and
-  no external drop shadow (a beside Lot dock starts directly below `▀▀`, and a click below `▀▀`
-  is outside the sheet). Zones appear in fixed top-to-bottom **screen order**:
-  1. **Title** (`1` row): `✦  H O L L Y W O O D` (`✦ HOLLYWOOD` under 100 columns) with the agent's
-     square, state and `runner / model / effort` on the left, and Lot-pill-matching bucket counts
-     (`<S> studios · !B · ?A · Cc · ✓R ready`, plus `{top}–{bot}/{N}` when waiting overflows) on
-     the right.
+  mobile width), enclosed in an antique brass (`elevation.gilt`) frame: `║` side rails (`▌` in
+  `palette.accent` down the Tab-focused zone's left edge) occupy the outer column of the 2-column
+  horizontal `MARGIN` without shrinking content width, closed below by a single mirror-symmetric
+  marquee sill (`╚══▪══ … ╡ ✦ ╞ … ══▪══╝`, with `bulb_warm` `▪` bulbs every 3 cells around `✦`) on
+  recessed `elevation.stage_well` (replacing `▀▀`), with no top perforation row and no external drop
+  shadow (a beside Lot dock starts directly below the sill, and a click below it is outside the
+  sheet). Zones join the rails via full-width crossbars in fixed top-to-bottom **screen order**:
+  1. **Title** (`1` row on `stage_well`): `╔═╡ ‹✦› H O L L Y W O O D ‹✦› ╞═ … ╞═╗` at 120 columns
+     and wider, `╔═╡ ✦ H O L L Y W O O D ╞═ … ╞═╗` from 100 to 119, and `╔╡✦ HOLLYWOOD╞═ … ╞╗`
+     below 100. Carries the agent's status (`◉ !B` crimson tally light replacing green `●` while any
+     blocking item waits) and `runner / model / effort` on the left, and Lot-pill-matching bucket
+     counts (`<S> studios · !B · ?A · Cc · ✓R ready`, plus `{top}–{bot}/{N}` when waiting overflows)
+     on the right.
   2. **WAITING** (omitted completely when nothing waits — no `WAITING ON YOU` rule and no calm filler
      row): one needs-you list across every machine in urgency order — user prompts (`Prompt`),
      needs-you/asking roles (`Role`), Hollywood prompts/blocks (`Wait::Hollywood`), opening-design
@@ -44,32 +50,40 @@ layout, so toggling it resizes nothing.
      machines (`Stage`), open cards (`Card`), outward cards (`Outward`), then ready studios
      (`Ready`). Unfocused, each item is **1 line** (no detail lines, no action chips). When
      `WAITING` is focused, a `palette.accent` `▌` gutter runs down column 0 of the entire zone and
-     only the selected item expands (`why:`, `Q1..Q3`, or inline `finish studio? y/n` + action
-     chips on the right). If tight height sheds the Title row while waiting items scroll,
-     `{top}–{bot}/{N}` moves onto the first waiting row.
-  3. **HOLLYWOOD**: unfocused, shows the newest **1** talk line (clipped with `…`, ending in
-     `<age> · <N> earlier` or `<age>`) plus the `tell hollywood…` compose field on `raised_field`
-     (or `⏎ hollywood setup` when unconfigured). When `HOLLYWOOD` is focused, draws the
-     `── HOLLYWOOD ──` zone rule (`<N> earlier · ↵ read` on the right when earlier turns fold),
-     up to 8 newest talk lines with their 2-line CJK-aware wraps, the optional live progress /
-     non-duplicate headline row, and compose (dropping the zone rule first when space is scarce
-     while keeping `<N> earlier` inline).
-  4. **STUDIOS**: unfocused, renders a **1-row chip strip** (`STUDIOS N  [▸acme-shop ✓ 3c] … [+ new]`)
-     marking the active main-pane studio with `▸` and appending per-studio `!B`/`?A`/`Cc` or live
-     `done/total`, with `[+ new]` pinned at the right and `‹`/`›` sideways scrolling on the rest.
-     When `STUDIOS` is focused and space permits, it expands to the centered
-     `▄▄ ▄▄ …  STUDIOS N  … ▄▄ ▄▄` perforation header plus frames — `7` rows full (role badge + next
-     step + cast dots), `5` rows compact (dropping the role badge and next/blank row), or `3` rows
-     micro (border + `state · round · done/total` + border) — falling back to the focused 1-row
-     strip (`▌` + accent `STUDIOS N`) when fewer than `4` rows remain.
-  5. **Footer** (`Hints` row + `▀▀` bottom edge).
+     only the selected item expands (`└─` detail branch for `why:`, `Q1..Q3`, or inline
+     `finish studio? y/n`, plus action chips on the right with the active chip highlighted as
+     `‹ k label ›` on `palette.accent`). If tight height sheds the Title row while waiting items
+     scroll, `{top}–{bot}/{N}` moves onto the first waiting row.
+  3. **HOLLYWOOD**: unfocused, optionally led by the spare-funded `╟── HOLLYWOOD ── <age · N earlier> ──╢`
+     crossbar when items wait, showing the newest **1** talk line (clipped with `…`, keeping
+     `<age> · <N> earlier` inline when the crossbar is absent) plus the rail-joined `tell hollywood…`
+     compose crossbar (`╟─┤ › … ├─╢`, switching to `╠═╡ › … ╞═╣` while editing) on `raised_field` (or
+     `⏎ hollywood setup` when unconfigured). When `HOLLYWOOD` is focused, draws the clasped
+     `╠══╡ ‹✦› H O L L Y W O O D ‹✦› ╞══ … ╞══╣` zone crossbar (`<N> earlier · ↵ read` plaque on the
+     right when earlier turns fold), up to 8 newest talk lines with their 2-line CJK-aware wraps, the
+     optional live progress / non-duplicate headline row, and compose (dropping the zone crossbar
+     first when space is scarce while keeping `<N> earlier` inline).
+  4. **STUDIOS**: unfocused, renders the rail-joined **1-row chip strip**
+     (`╟─ STUDIOS N ─ [▸acme-shop ✓ 3c] … ─ [+ new] ─╢`) with a `gilt` leader rule filling trailing
+     slack, marking the active main-pane studio with `▸` and appending per-studio `!B`/`?A`/`Cc` or
+     live `done/total`, with `[+ new]` pinned at the right and `‹`/`›` sideways scrolling on the rest.
+     When `STUDIOS` is focused and space permits, it expands to the centered 35mm sprocket header
+     `╠═▄▄══▄▄═╡ ‹✦› S T U D I O S · N ‹✦› ╞═▄▄══▄▄═╣` plus frames — selected frame in `╔═╗`
+     (`palette.accent` on `raised_row`), siblings in `╭─╮` (`elevation.gilt` on `stage_well`), `+ new`
+     in `╭┄╮` — at `7` rows full (role badge + next step + cast dots), `5` rows compact (dropping the
+     role badge and next/blank row), or `3` rows micro (border + `state · round · done/total` +
+     border), falling back to the focused 1-row strip (`▌` + accent `STUDIOS N`) when fewer than `4`
+     rows remain.
+  5. **Footer** (`Hints` row + mirror-symmetric marquee sill on `elevation.stage_well`).
 
   **Two-phase height rule:** every zone is laid out unfocused first; if it exceeds the cap,
-  chrome and unfocused lines shed in order (`hints` → `▀▀` → unfocused talk → title → unfocused
-  studio strip → scroll waiting window keeping selection, leaving compose and the selected wait
-  intact). Only the currently focused zone then expands into remaining rows (`cap - base`),
-  never shrinking another zone's unfocused lines (an inline `finish studio? y/n` confirm also keeps
-  its 1-line ask visible when armed from `STUDIOS`).
+  chrome and unfocused lines shed in order (unfocused `HOLLYWOOD` crossbar → `hints` → unfocused
+  talk → scroll `WAITING` down to `min(3, n)` → unfocused studio strip → `title` → scroll `WAITING`
+  to `1` → marquee sill only when `cap < 3`, leaving compose and the selected wait intact). Only the
+  currently focused zone then expands into remaining rows (`cap - base`), never shrinking another
+  zone's unfocused lines (an inline `finish studio? y/n` confirm also keeps its 1-line ask visible
+  when armed from `STUDIOS`); any leftover spare rows after focused expansion fund the unfocused
+  `╟── HOLLYWOOD ──╢` crossbar when items wait.
 
 The start policy is **`collapsed`** by default (`[hollywood] start` — `collapsed`,
 `when_waiting`, or `expanded`), applied once the first settled `backlot` read lands.
@@ -133,7 +147,7 @@ a click on a waiting row or talk line selects it (shifting focus to that zone) w
 item's action chip (including `↵ read` on a talk line) runs that action, a click on a studio chip or
 frame opens that studio and collapses the sheet, clicking `STUDIOS N` focuses `STUDIOS`, clicking
 `[+ new]` opens the new-studio wizard, the wheel scrolls frames/strip sideways and waiting rows
-vertically, and a click outside (including immediately below the `▀▀` bottom edge) collapses the
+vertically, and a click outside (including immediately below the bottom marquee sill) collapses the
 bar to the pill and hands the keys to what is under it — a typed letter lands in the pane.
 Right-click on the title or a row opens the same context menu `m` opens.
 
@@ -173,11 +187,10 @@ from the screen's wrapping: the whole command for cmd, the question for the othe
 and detail reading raise a role's `permission prompt` attention.
 
 The talk above the input keeps up to the **8 newest entries** when `HOLLYWOOD` is focused (folding
-older turns onto the right end of the `── HOLLYWOOD ──` rule as `<k> earlier · ↵ read`), laid out
+older turns onto the right end of the clasped `╠══╡ … HOLLYWOOD … ╞══╣` crossbar as `<k> earlier · ↵ read`), laid out
 with a fixed speaker column (`✦ hollywood` / `› you` wide, `✦ hw` / `› you` narrow) and
 right-aligned relative age (swapping for ` ↵ read ` when selected). Unfocused (when `WAITING` or
-`STUDIOS` is focused), `HOLLYWOOD` collapses to the single newest talk line ending in `<age> · <N>
-earlier` (or `<age>`) above compose. Enter on the fold badge or ` ↵ read ` chip opens the Reader,
+`STUDIOS` is focused), `HOLLYWOOD` collapses to the single newest talk line (showing `<age> · <N> earlier` on the spare-funded `╟── HOLLYWOOD ──╢` crossbar when shown, or inline on the talk row when tight) above compose. Enter on the fold badge or ` ↵ read ` chip opens the Reader,
 where `←`/`→` still step through every earlier line. In focused `HOLLYWOOD`, any message wraps up to
 two lines at the band's width using the same CJK-aware wrap the Reader body uses, clamping with
 `…`; as height shrinks, older wraps and older lines give way back to `<k> earlier` without ever

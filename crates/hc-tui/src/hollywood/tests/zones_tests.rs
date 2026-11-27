@@ -141,19 +141,29 @@ fn surface_differs_from_terminal_background_across_all_19_bundled_themes() {
         let palette = Palette::from_name(name).expect(name);
         let elev = palette.elevation();
         let (buf, hits) = draw(area, Some(&summary), true, &layer, false, &palette);
-        let body_bg = buf[(area.x + 2, hits.title.y)].bg;
+        let title_bg = buf[(area.x + 2, hits.title.y)].bg;
         assert_eq!(
-            body_bg, elev.surface,
+            title_bg, elev.stage_well,
+            "{name} title must use elevation.stage_well"
+        );
+        let body_bg = buf[(area.x + 2, hits.input.y)].bg;
+        assert_eq!(
+            body_bg, elev.raised_field,
+            "{name} compose field must use elevation.raised_field"
+        );
+        let body_surface = buf[(area.x + 2, hits.title.y + 1)].bg;
+        assert_eq!(
+            body_surface, elev.surface,
             "{name} body must use elevation.surface"
         );
         if !elev.is_terminal_16 {
             assert_ne!(
-                body_bg, palette.panel_bg,
+                body_surface, palette.panel_bg,
                 "{name} surface must separate cleanly from panel_bg"
             );
         }
         if palette.sidebar_bg == Color::Rgb(12, 14, 21) {
-            assert_ne!(body_bg, Color::Reset, "{name}");
+            assert_ne!(body_surface, Color::Reset, "{name}");
         }
     }
 }
@@ -262,7 +272,10 @@ fn busy_callsheet_200x44_and_100x40_preserve_focus_dock_zones_without_shadow() {
         &palette,
     );
     let text_fold = lines(&buf_fold, area_fold).join("\n");
-    assert!(text_fold.contains("── HOLLYWOOD"), "{text_fold}");
+    assert!(
+        text_fold.contains("╠══╡ ✦ H O L L Y W O O D ╞"),
+        "{text_fold}"
+    );
     assert!(text_fold.contains("earlier · ↵ read"), "{text_fold}");
     assert!(
         text_fold.contains('…'),
@@ -458,7 +471,7 @@ fn compose_keeps_italic_placeholder_while_editing_empty_and_selection_highlights
     let (ebuf, ehits) = draw(area, Some(&summary), true, &editing_hw, false, &palette);
     let fx = ehits.input.x;
     let fy = ehits.input.y;
-    assert_eq!(ebuf[(fx, fy)].symbol(), "▌");
+    assert_eq!(ebuf[(fx, fy)].symbol(), "╡");
     assert_eq!(ebuf[(fx, fy)].fg, palette.accent);
     assert_eq!(ebuf[(fx + 4, fy)].symbol(), "t");
     assert_eq!(ebuf[(fx + 4, fy)].fg, elev.muted_raised);
@@ -496,7 +509,7 @@ fn compose_keeps_italic_placeholder_while_editing_empty_and_selection_highlights
         .expect("fold badge hit")
         .0;
     let fold_row = row_text(&fbuf, area, fold_rect.y);
-    assert!(fold_row.contains("HOLLYWOOD"), "{fold_row}");
+    assert!(fold_row.contains("‹✦› H O L L Y W O O D ‹✦›"), "{fold_row}");
     assert!(fold_row.contains("▸ 1 earlier · ↵ read"), "{fold_row}");
     assert_eq!(fbuf[(fold_rect.x + 1, fold_rect.y)].fg, palette.accent);
     assert_eq!(fbuf[(fold_rect.x + 1, fold_rect.y)].bg, elev.raised_row);
@@ -528,7 +541,7 @@ fn non_agent_drops_hollywood_rule_for_hairline() {
     let (buf, _) = draw_without_agent(area, Some(&summary), true, &hw, &palette);
     let text = lines(&buf, area).join("\n");
     assert!(
-        !text.contains("── HOLLYWOOD"),
+        !text.contains("╟── HOLLYWOOD") && !text.contains("╠══╡"),
         "no HOLLYWOOD rule without agent:\n{text}"
     );
     assert!(text.contains("hollywood setup"), "{text}");

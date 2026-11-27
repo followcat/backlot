@@ -671,3 +671,72 @@ async fn clicking_recast_card_rows_and_chips_on_ready_studio_targets_each_card()
         &["card", "apply", "c1374", "--as", "user"]
     );
 }
+
+#[tokio::test]
+async fn rail_crossbar_and_sill_clicks_keep_exact_hit_rect_parity() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 28);
+    alt_y(&mut app);
+    draw_to(&mut app, 120, 28);
+
+    // 1. Clicking col 0 (`▌`/`║`) or col `width - 1` (`║`) on a wait row selects it identically to clicking inner margin.
+    let (card_rect, _) = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Card(id) if id == "c4"))
+        .cloned()
+        .expect("c4 row hit");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        card_rect.x,
+        card_rect.y,
+    ));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c4".into())));
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+
+    // Right rail (`width - 1`) on `c3` also selects `c3`.
+    let (c3_rect, _) = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Card(id) if id == "c3"))
+        .cloned()
+        .expect("c3 row hit");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        c3_rect.right() - 1,
+        c3_rect.y,
+    ));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+
+    // 2. Compose crossbar inner field (`field.x`) enters compose editing; `hits.input` spans `[MARGIN .. width - MARGIN)`.
+    let input_rect = app.hollywood_hits.input;
+    assert_eq!(input_rect.x, app.hollywood_hits.area.x + 2);
+    assert_eq!(input_rect.right(), app.hollywood_hits.area.right() - 2);
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        input_rect.x,
+        input_rect.y,
+    ));
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
+
+    // 3. Clicking the marquee sill (`area.bottom() - 1`) stays inside the band (does not collapse);
+    // clicking immediately below it (`area.bottom()`) collapses.
+    let sill_y = app.hollywood_hits.area.bottom() - 1;
+    let mid_x = app.hollywood_hits.area.x + app.hollywood_hits.area.width / 2;
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        mid_x,
+        sill_y,
+    ));
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        mid_x,
+        sill_y + 1,
+    ));
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+}

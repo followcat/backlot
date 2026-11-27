@@ -212,10 +212,10 @@ fn the_band_draws_sprockets_title_and_counts() {
     );
     let text = lines(&buf, area).join("\n");
     let elev = palette.elevation();
-    // Title sits directly on row 0 (no top perforation), bottom `▀▀` edge on last row.
-    assert_eq!(buf[(0, 0)].bg, elev.surface);
+    // Title sits on `stage_well`, bottom marquee sill `╚══▪══…╡ ✦ ╞…╝` on last row.
+    assert_eq!(buf[(0, 0)].bg, elev.stage_well);
     let title = row_of(&buf, area, 0);
-    assert!(title.contains("✦  H O L L Y W O O D"), "{title}");
+    assert!(title.contains("‹✦› H O L L Y W O O D ‹✦›"), "{title}");
     assert!(title.contains("live"), "{title}");
     assert!(title.contains("fake / model-h / high"), "{title}");
     assert!(title.contains("3 studios"), "{title}");
@@ -226,15 +226,21 @@ fn the_band_draws_sprockets_title_and_counts() {
         .collect();
     assert!(!peach.is_empty(), "{title}: the waiting bucket count");
     let bottom = row_of(&buf, area, hits.area.height - 1);
-    assert!(bottom.contains("▀▀"), "{bottom}");
-    assert_eq!(buf[(1, hits.area.height - 1)].bg, palette.panel_bg);
+    assert!(
+        bottom.starts_with('╚')
+            && bottom.contains('▪')
+            && bottom.contains("╡ ✦ ╞")
+            && bottom.ends_with('╝'),
+        "{bottom}"
+    );
+    assert_eq!(buf[(1, hits.area.height - 1)].bg, elev.stage_well);
     // Unfocused layout shows headline/wait rows, 1-row studio strip, and hints.
     assert!(text.contains("acme-shop needs a look"), "{text}");
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
     assert!(text.contains("STUDIOS 3"), "{text}");
     assert!(!hits.shadow_drawn);
     assert!(
-        !text.contains("apply a"),
+        !text.contains("a apply"),
         "chips belong to the selected row only: {text}"
     );
     assert!(
@@ -515,7 +521,12 @@ fn a_card_line_draws_and_the_idle_row_names_the_missing_answer() {
         .iter()
         .position(|l| l.contains("proposed card c3 · acme-shop · pause t1"))
         .expect("the card line");
-    assert!(rows[card].trim_start().starts_with('✦'), "{rows:?}");
+    assert!(
+        rows[card]
+            .trim_start_matches(['▌', '║', ' '])
+            .starts_with('✦'),
+        "{rows:?}"
+    );
     assert!(
         rows[card - 1].contains("› you")
             && rows[card - 1].contains("recast the producer and the director"),
@@ -591,8 +602,9 @@ fn the_newest_report_wraps_and_clamps_at_two_lines() {
         .position(|l| l.contains("✦ hw") && l.contains("the producer of acme-shop"))
         .expect("the wrap's first row");
     // Wraps to 2 lines with continuation indented under body, clamped with `…`.
+    let cont = rows[first + 1].trim_end().trim_end_matches('║').trim_end();
     assert!(
-        !rows[first + 1].contains("✦ hw") && rows[first + 1].trim_end().ends_with('…'),
+        !rows[first + 1].contains("✦ hw") && cont.ends_with('…'),
         "2nd line continues body with ellipsis: {:?}",
         &rows[first..=(first + 2).min(rows.len() - 1)]
     );
@@ -937,7 +949,7 @@ fn without_an_agent_the_band_is_the_setup_line() {
         &palettes()[0],
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("✦  H O L L Y W O O D"), "{text}");
+    assert!(text.contains("‹✦› H O L L Y W O O D ‹✦›"), "{text}");
     assert!(text.contains("no agent"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
     // R22: the line is the dialog's button — `⏎ hollywood setup`.
@@ -997,16 +1009,16 @@ fn every_studio_is_a_frame_and_the_selected_one_is_accent() {
     }
     let frame = frame_hit(&hits, &selected).expect("acme-shop's frame");
     assert_eq!(frame.height, 7);
-    // The top edge: `╭─ acme-shop ─…╮` in accent, the id bold text.
+    // The top edge: `╔═ ▸ acme-shop ═…╗` (or `╔═ acme-shop ═…╗`) in accent, the id bold text.
     let top = row_of(&buf, area, frame.y);
-    assert!(top.contains("╭─ acme-shop"), "{top}");
+    assert!(top.contains("╔═ acme-shop"), "{top}");
     assert_eq!(buf[(frame.x, frame.y)].fg, palette.accent);
-    // The inside is selection_bg; another frame's is panel_bg.
+    // The inside is raised_row; another frame's is stage_well with gilt border.
     let elev = palette.elevation();
     assert_eq!(buf[(frame.x + 1, frame.y + 1)].bg, elev.raised_row);
     let other = frame_hit(&hits, &Target::Studio("beta-tools".into())).expect("beta-tools");
-    assert_eq!(buf[(other.x + 1, other.y + 1)].bg, palette.panel_bg);
-    assert_eq!(buf[(other.x, other.y)].fg, elev.border_muted);
+    assert_eq!(buf[(other.x + 1, other.y + 1)].bg, elev.stage_well);
+    assert_eq!(buf[(other.x, other.y)].fg, elev.gilt);
 }
 
 #[test]
@@ -1098,6 +1110,9 @@ fn every_colour_is_a_palette_entry() {
             elev.raised_row,
             elev.raised_field,
             elev.border_muted,
+            elev.gilt,
+            elev.stage_well,
+            elev.bulb_warm,
             elev.muted_surface,
             elev.muted_raised,
             crate::studio::glyphs::contrast_fg(&palette),
@@ -2285,8 +2300,8 @@ fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
     assert!(text.contains("— What should we build?"), "{text}");
     assert!(!text.contains("· +1"), "{text}");
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
-    assert!(text.contains(" reply r "), "{text}");
-    assert!(text.contains(" ack x "), "{text}");
+    assert!(text.contains("‹ r reply ›"), "{text}");
+    assert!(text.contains(" x ack "), "{text}");
 }
 
 #[test]
@@ -2415,7 +2430,9 @@ fn six_studios_ready_recast_200x17_and_100x17_show_every_card_and_match_header_c
             "{text}"
         );
         assert!(
-            text.contains("apply a") && text.contains("cancel x") && text.contains("show ↵"),
+            text.contains(" a apply ")
+                && text.contains(" x cancel ")
+                && text.contains("‹ ↵ show ›"),
             "{text}"
         );
         assert!(text.contains("why: producer hit quota limit"), "{text}");
@@ -2557,8 +2574,8 @@ fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
     assert!(hits.area.height <= 17, "height={} > 17", hits.area.height);
     let bottom = row_of(&buf, area, hits.area.bottom() - 1);
     assert!(
-        bottom.contains("▀▀"),
-        "bottom sprocket kept inside area: {bottom}"
+        bottom.contains("╚") && bottom.contains('▪') && bottom.contains("╝"),
+        "bottom marquee sill kept inside area: {bottom}"
     );
     let text = lines(&buf, Rect::new(0, 0, 100, hits.area.height)).join("\n");
     assert!(text.contains("CARD c7"), "{text}");
@@ -2631,9 +2648,9 @@ fn repo_note_card_renders_like_other_cards_on_call_sheet() {
         "{rendered}"
     );
     assert!(
-        rendered.contains("apply a")
-            && rendered.contains("cancel x")
-            && rendered.contains("show ↵"),
+        rendered.contains(" a apply ")
+            && rendered.contains(" x cancel ")
+            && rendered.contains("‹ ↵ show ›"),
         "{rendered}"
     );
     println!("CALL_SHEET_REPO_NOTE_BEGIN\n{rendered}\nCALL_SHEET_REPO_NOTE_END");

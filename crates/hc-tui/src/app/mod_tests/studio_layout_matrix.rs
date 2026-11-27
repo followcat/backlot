@@ -519,7 +519,12 @@ async fn studio_chrome_all_19_bundled_themes_and_plain_herdr_matrix() {
         app.hollywood.mode = LayerMode::Expanded;
         let sheet = draw_to(&mut app, 160, 44);
         let (hx, hy) = (app.hollywood_hits.area.x + 2, app.hollywood_hits.title.y);
-        assert_eq!(sheet.buffer()[(hx, hy)].bg, elev.surface, "{name}");
+        assert_eq!(sheet.buffer()[(hx, hy)].bg, elev.stage_well, "{name}");
+        assert_eq!(
+            sheet.buffer()[(hx, app.hollywood_hits.body.y)].bg,
+            elev.surface,
+            "{name}"
+        );
     }
 
     app.hollywood.mode = LayerMode::Collapsed;

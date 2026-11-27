@@ -167,8 +167,8 @@ fn callsheet_decision_200x44_and_100x40_render_summary_q1_q3_and_chips() {
             text.contains("§R2.W") && text.contains("keep single crate"),
             "{cols}x{rows} missing section_ref / recommendation:\n{text}"
         );
-        // Selected row renders action chips (`read o`, `reply r`, `sign a`, `open ↵`).
-        for tok in ["read o", "reply r", "sign a", "open ↵"] {
+        // Selected row renders action chips (`o read`, `r reply`, `a sign`, `‹ ↵ open ›`).
+        for tok in ["o read", "r reply", "a sign", "‹ ↵ open ›"] {
             assert!(
                 text.contains(tok),
                 "{cols}x{rows} missing chip `{tok}`:\n{text}"
@@ -214,9 +214,9 @@ fn callsheet_suggest_skip_renders_skip_suggested_discuss_and_skip() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("DECISION"), "{text}");
     assert!(text.contains("skip suggested"), "{text}");
-    assert!(text.contains("discuss r"), "{text}");
-    assert!(text.contains("skip a"), "{text}");
-    assert!(text.contains("read o"), "{text}");
+    assert!(text.contains("r discuss"), "{text}");
+    assert!(text.contains("a skip"), "{text}");
+    assert!(text.contains("o read"), "{text}");
 }
 
 #[test]
@@ -309,7 +309,7 @@ fn callsheet_decision_renders_proposed_checks_count_badge() {
         "DECISION row must gain `+2 checks` mark:\n{text}"
     );
     assert!(
-        text.contains("show ↵"),
-        "DECISION row with proposed checks must show `show ↵` chip:\n{text}"
+        text.contains("‹ ↵ show ›"),
+        "DECISION row with proposed checks must show `‹ ↵ show ›` chip:\n{text}"
     );
 }

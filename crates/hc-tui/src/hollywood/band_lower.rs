@@ -5,10 +5,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::Hollywood;
-use super::band::MARGIN;
 use super::draw::HollywoodRender;
 use super::rows::{HollywoodActivity, Live, SETUP_COMMAND, SETUP_LEAD};
+use super::{Hollywood, MARGIN};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
@@ -19,6 +18,7 @@ pub(super) fn draw_live(
     rect: Rect,
     live: &Live<'_>,
     selected: bool,
+    zone_focused: bool,
     palette: &Palette,
 ) {
     let elev = palette.elevation();
@@ -37,7 +37,7 @@ pub(super) fn draw_live(
         Live::Idle => (elev.muted_surface, false),
     };
     let mut x = rect.x;
-    if selected {
+    if zone_focused || selected {
         put_text(
             buf,
             x,
@@ -46,6 +46,10 @@ pub(super) fn draw_live(
             "▌",
             Style::default().fg(palette.accent).bg(bg),
         );
+    } else {
+        put_text(buf, x, rect.y, 1, "║", elev.gilt_style(elev.surface));
+    }
+    if selected {
         put_text(
             buf,
             x + 1,
@@ -53,6 +57,16 @@ pub(super) fn draw_live(
             1,
             "▸",
             Style::default().fg(palette.accent).bg(bg),
+        );
+    }
+    if rect.width >= 2 {
+        put_text(
+            buf,
+            rect.x + rect.width - 1,
+            rect.y,
+            1,
+            "║",
+            elev.gilt_style(elev.surface),
         );
     }
     x += MARGIN;
@@ -67,7 +81,7 @@ pub(super) fn draw_live(
     let glyph_w = display_width(glyph) as u16;
     put_text(buf, x, rect.y, glyph_w, glyph, glyph_style);
     let text_x = x + glyph_w + 1;
-    let width = rect.width.saturating_sub(MARGIN + glyph_w + 1);
+    let width = rect.width.saturating_sub(MARGIN * 2 + glyph_w + 1);
     put_text(
         buf,
         text_x,
@@ -78,7 +92,8 @@ pub(super) fn draw_live(
     );
 }
 
-/// The `tell hollywood` line on `elevation.raised_field`.
+/// The rail-joined `tell hollywood` compose crossbar:
+/// `╟─┤ › tell hollywood… ├─╢` resting / `╠═╡ › … ╞═╣` while editing.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_input(
     buf: &mut Buffer,
@@ -104,37 +119,52 @@ pub(super) fn draw_input(
     let field_bg = elev.raised_field;
     buf.set_style(field, Style::default().bg(field_bg));
     let editing = hollywood.editing && !suppress_highlights;
-    let (bar_sym, bar_fg, prompt_style) = if editing {
-        (
-            "▌",
-            palette.accent,
-            Style::default()
-                .fg(palette.accent)
-                .bg(field_bg)
-                .add_modifier(Modifier::BOLD),
-        )
+    let gilt_frame = elev.gilt_style(elev.surface);
+    let gilt_field = elev.gilt_style(field_bg);
+
+    let (left_frame, left_clasp, right_clasp, right_frame, left_style, prompt_style) = if editing {
+        let active = Style::default()
+            .fg(palette.accent)
+            .bg(elev.surface)
+            .add_modifier(Modifier::BOLD);
+        let active_clasp = Style::default()
+            .fg(palette.accent)
+            .bg(field_bg)
+            .add_modifier(Modifier::BOLD);
+        ("╠═", "╡", "╞", "═╣", active, active_clasp)
     } else if selected && !suppress_highlights {
-        (
-            "▎",
-            palette.accent,
-            Style::default().fg(palette.accent).bg(field_bg),
-        )
+        let sel_prompt = Style::default().fg(palette.accent).bg(field_bg);
+        ("╟─", "┤", "├", "─╢", gilt_frame, sel_prompt)
     } else {
         (
-            "▎",
-            elev.border_muted,
+            "╟─",
+            "┤",
+            "├",
+            "─╢",
+            gilt_frame,
             Style::default().fg(elev.muted_raised).bg(field_bg),
         )
     };
+    let left_clasp_style = if editing { prompt_style } else { gilt_field };
+    put_text(buf, rect.x, rect.y, MARGIN, left_frame, left_style);
+    put_text(buf, field.x, field.y, 1, left_clasp, left_clasp_style);
+    put_text(buf, field.x + 2, field.y, 1, "›", prompt_style);
     put_text(
         buf,
-        field.x,
+        field.x + field.width - 1,
         field.y,
         1,
-        bar_sym,
-        Style::default().fg(bar_fg).bg(field_bg),
+        right_clasp,
+        gilt_field,
     );
-    put_text(buf, field.x + 2, field.y, 1, "›", prompt_style);
+    put_text(
+        buf,
+        rect.x + rect.width - MARGIN,
+        rect.y,
+        MARGIN,
+        right_frame,
+        gilt_frame,
+    );
     hits.input = field;
     let glyph = crate::studio::glyphs::Person::Working.glyph(hollywood.spin);
     let badge = match activity {
@@ -156,7 +186,7 @@ pub(super) fn draw_input(
     let text = Rect::new(
         field.x + 4,
         field.y,
-        (field.width - 4).saturating_sub(badge_w),
+        field.width.saturating_sub(5 + badge_w),
         1,
     );
     let placeholder = match hollywood.reply_to.as_ref() {
@@ -215,7 +245,7 @@ pub(super) fn draw_input(
     if let Some((badge, fg)) = badge {
         put_text(
             buf,
-            field.x + field.width - badge_w,
+            field.x + field.width - 1 - badge_w,
             field.y,
             badge_w,
             &badge,
@@ -224,14 +254,29 @@ pub(super) fn draw_input(
     }
 }
 
-pub(super) fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
+pub(super) fn draw_setup(buf: &mut Buffer, rect: Rect, active_rail: bool, palette: &Palette) {
     let elev = palette.elevation();
-    let x = rect.x + MARGIN;
     let base = Style::default().bg(elev.surface);
+    if active_rail {
+        put_text(buf, rect.x, rect.y, 1, "▌", base.fg(palette.accent));
+    } else {
+        put_text(buf, rect.x, rect.y, 1, "║", elev.gilt_style(elev.surface));
+    }
+    if rect.width >= 2 {
+        put_text(
+            buf,
+            rect.x + rect.width - 1,
+            rect.y,
+            1,
+            "║",
+            elev.gilt_style(elev.surface),
+        );
+    }
+    let x = rect.x + MARGIN;
     // R3-M13: the lead shortens before the button ever clips — the
     // full sentence while both fit, the short lead under ~84 cols,
     // the bare button at the narrowest.
-    let room = rect.width.saturating_sub(MARGIN);
+    let room = rect.width.saturating_sub(MARGIN * 2);
     let cmd_w = display_width(SETUP_COMMAND);
     let lead = if room as usize >= display_width(SETUP_LEAD) + 1 + cmd_w {
         format!("{SETUP_LEAD} ")
