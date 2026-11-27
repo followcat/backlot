@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The New Studio dialog can create a studio on this machine again: since 0.4.25 its check failed with a TOML parse error.** A failed check now shows its reason.
+
 ## 0.4.27 — 2026-11-27
 
 ### Changed

@@ -2,8 +2,6 @@
 //! size guideline): parse → identity → the no-ledger arms → the
 //! reads → G2's `--text`/`--stdin` materialization → `exec_event`.
 
-use std::path::PathBuf;
-
 use crate::args::{Cmd, parse};
 use crate::cli::{Env, Fail, base, check_identity, check_stage_caller, exec_event};
 
@@ -33,6 +31,9 @@ pub(crate) fn run_stdin_with_host(
     if matches!(cmd, Cmd::StudioCheck(_)) {
         crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::StudioCheck, &common, env)?;
     }
+    // `-` and `--stdin` are one stream: stage them before the remote
+    // route, the reads, the wizard or the write can ask for them again.
+    let _staged = crate::stdin_stage::materialize(&mut cmd, stdin)?;
     if matches!(
         cmd,
         Cmd::RepoNote(
@@ -302,96 +303,8 @@ pub(crate) fn run_stdin_with_host(
     if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
         return out;
     }
-    // G2: `--text`/`--stdin`/`--report -` land in a temp file cleaned up after exec_event.
-    let temp = materialize(&mut cmd, stdin)?;
-    let out = exec_event(common, cmd, env, &base);
-    if let Some(path) = temp {
-        let _ = std::fs::remove_file(&path);
-        if let Some(dir) = path.parent().filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.starts_with("backlot-report-"))
-        }) {
-            let _ = std::fs::remove_dir(dir);
-        }
-    }
-    out
-}
-
-fn read_stdin_body(stdin: Option<&str>) -> Result<String, Fail> {
-    match stdin {
-        Some(text) => Ok(text.to_string()),
-        None => std::io::read_to_string(std::io::stdin())
-            .map_err(|e| Fail::refused(format!("cannot read stdin: {e}"))),
-    }
-}
-
-/// `--text`/`--stdin`/`--report -` materialization (G2): stage into a
-/// temp file removed after append; empty bodies refuse before writing.
-fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
-    if let Cmd::Deliver { report, .. } = cmd {
-        if report != std::path::Path::new("-") {
-            return Ok(None);
-        }
-        let body = read_stdin_body(stdin)?;
-        if body.trim().is_empty() {
-            return Err(Fail::refused("the report body is empty"));
-        }
-        let path = stage_body("report", &body, true)?;
-        *report = path.clone();
-        return Ok(Some(path));
-    }
-    use crate::args::TextSource;
-    let source = match cmd {
-        Cmd::Tell { source, .. }
-        | Cmd::ReqRevise { source, .. }
-        | Cmd::Progress { source }
-        | Cmd::Design(crate::args::DesignCmd::Note { source, .. }) => source,
-        Cmd::StudioNew {
-            ask: Some(source), ..
-        } => source,
-        _ => return Ok(None),
-    };
-    let body = match source {
-        TextSource::File(_) => return Ok(None),
-        TextSource::Text(text) => text.clone(),
-        TextSource::Stdin => read_stdin_body(stdin)?,
-    };
-    if body.trim().is_empty() {
-        return Err(Fail::refused("the message body is empty"));
-    }
-    let path = stage_body("message", &body, false)?;
-    *source = TextSource::File(path.clone());
-    Ok(Some(path))
+    exec_event(common, cmd, env, &base)
 }
 
 #[cfg(test)]
-thread_local! {
-    /// Bodies staged on this thread, so a test checks only the files its own runs staged:
-    /// other tests stage bodies in the same temp dir at the same time.
-    pub(crate) static STAGED_BODIES: std::cell::RefCell<Vec<PathBuf>> =
-        const { std::cell::RefCell::new(Vec::new()) };
-}
-
-fn stage_body(label: &str, body: &str, nested_report: bool) -> Result<PathBuf, Fail> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let id = format!(
-        "{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    );
-    let path = if nested_report {
-        let dir = std::env::temp_dir().join(format!("backlot-report-{id}"));
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
-        dir.join("report.md")
-    } else {
-        std::env::temp_dir().join(format!("backlot-body-{id}.txt"))
-    };
-    std::fs::write(&path, body)
-        .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
-    #[cfg(test)]
-    STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
-    Ok(path)
-}
+pub(crate) use crate::stdin_stage::STAGED_BODIES;

@@ -166,3 +166,35 @@ fn wizard_72_cols_step2_renders_deco_greenlight_and_plaque_step_row() {
     assert!(plain_dump.contains("2 ID & Title"), "{plain_dump}");
     assert!(!plain_dump.contains("✦ NEW STUDIO"), "{plain_dump}");
 }
+
+#[test]
+fn a_failed_dry_run_shows_the_first_line_and_the_reason() {
+    let band = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(band);
+    let palette = Palette::backlot();
+    let mut ns = NewStudio::new();
+    ns.step = super::Step::CheckStart;
+    ns.dry = super::Probe::Failed(
+        "--cast -: TOML parse error at line 1, column 1\n  |\n1 |\n  | ^\nmissing field `producer`"
+            .into(),
+    );
+
+    render(&mut buf, &ns, &palette, band);
+    let dump: String = (0..band.height)
+        .map(|y| {
+            (0..band.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        dump.contains("--cast -: TOML parse error"),
+        "the error's first line is missing:\n{dump}"
+    );
+    assert!(
+        dump.contains("missing field `producer`"),
+        "the error's reason is missing:\n{dump}"
+    );
+}
