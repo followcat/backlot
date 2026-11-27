@@ -223,6 +223,11 @@ pub(crate) struct Stage {
     /// session (S9f) — the first work source, the signal stall's
     /// clock and the approval bind's request identity.
     pub(crate) last_signal: std::cell::RefCell<BTreeMap<(String, String), signals::Signal>>,
+    /// `(studio, role)` → screen interrupt marker tracker so leftover
+    /// scrollback markers from an earlier interrupted turn never cancel
+    /// a newer turn's fresh working signal.
+    pub(crate) interrupt_track:
+        std::cell::RefCell<BTreeMap<(String, String), signals::InterruptTrack>>,
     /// `(studio, role)` -> unified D4 liveness evidence track (hook signal,
     /// activity revision, normalised screen, local process tree, local work
     /// area, and role ledger activity).
@@ -426,6 +431,9 @@ impl Stage {
             .retain(|(s, _), _| keep(s));
         self.idle_since.borrow_mut().retain(|(s, _), _| keep(s));
         self.last_signal.borrow_mut().retain(|(s, _), _| keep(s));
+        self.interrupt_track
+            .borrow_mut()
+            .retain(|(s, _), _| keep(s));
         self.liveness.borrow_mut().retain(|(s, _), _| keep(s));
         self.rate_pace.borrow_mut().retain(|(s, _), _| keep(s));
         self.conn_pace.borrow_mut().retain(|(s, _), _| keep(s));
@@ -476,6 +484,9 @@ impl Stage {
             .retain(|(s, _), _| s != name);
         self.idle_since.borrow_mut().retain(|(s, _), _| s != name);
         self.last_signal.borrow_mut().retain(|(s, _), _| s != name);
+        self.interrupt_track
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
         self.liveness.borrow_mut().retain(|(s, _), _| s != name);
         self.rate_pace.borrow_mut().retain(|(s, _), _| s != name);
         self.conn_pace.borrow_mut().retain(|(s, _), _| s != name);
@@ -1023,6 +1034,7 @@ impl Stage {
             q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
+            interrupt_track: std::cell::RefCell::new(BTreeMap::new()),
             liveness: std::cell::RefCell::new(BTreeMap::new()),
             proc_read: Box::new(crate::liveness_probe::real_proc_tree),
             work_area_read: Box::new(crate::liveness_diff::real_work_area),
@@ -1170,6 +1182,7 @@ async fn run_impl(
         q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
+        interrupt_track: std::cell::RefCell::new(BTreeMap::new()),
         liveness: std::cell::RefCell::new(BTreeMap::new()),
         proc_read: Box::new(crate::liveness_probe::real_proc_tree),
         work_area_read: Box::new(crate::liveness_diff::real_work_area),

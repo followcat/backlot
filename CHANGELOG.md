@@ -20,6 +20,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **A role whose turn you interrupted shows as idle instead of working** (`backlot-stage`, `docs/studio/design.md`). Recognized Claude Code's captured interrupt screen line (`Interrupted · What should Claude do instead?`, tracked across turns so older scrollback markers never cancel a new turn), let `StatusSource::Native` / `ForkInference` `idle`/`done`/`waiting` core status + `Waiting` screen override `Working` hook signals older than `SIGNAL_STALE_MS` (5 s) while preserving `Working` during the grace window and keeping `Blocked` highest priority from any source.
 - Retarget the main pane (and studio role cursor / remembered member) to a role's new live terminal when the role resumes, restarts, recasts, or reopens from a finished terminal, while preserving keyboard focus and leaving non-resumed finished terminals alone.
 - The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
 

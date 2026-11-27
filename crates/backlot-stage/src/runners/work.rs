@@ -25,6 +25,31 @@ pub(crate) fn work_state(runner: &str, screen: &str) -> Work {
     Work::Waiting
 }
 
+/// The runner's captured screen line printed when a turn is interrupted
+/// (with no `Stop` hook emitted). Only runners with a captured/measured
+/// marker are listed here.
+pub(crate) fn interrupt_marker(runner: &str) -> Option<&'static str> {
+    match runner {
+        "claude" => Some("Interrupted · What should Claude do instead?"),
+        _ => None,
+    }
+}
+
+/// How many times `runner`'s interrupt marker appears on `screen`.
+pub(crate) fn interrupt_count(runner: &str, screen: &str) -> usize {
+    interrupt_marker(runner).map_or(0, |m| screen.match_indices(m).count())
+}
+
+/// True when `screen` sits at an interrupted turn: its interrupt marker
+/// appears and no working marker appears below it.
+pub(crate) fn interrupted(runner: &str, screen: &str) -> bool {
+    interrupt_marker(runner).is_some_and(|m| {
+        screen
+            .rsplit_once(m)
+            .is_some_and(|(_, after)| !working(runner, after))
+    })
+}
+
 /// cmd's picker: the option cursor plus both neighbouring options.
 /// Joined first, so the option texts wrapping across lines cannot
 /// hide the picker (S12a).

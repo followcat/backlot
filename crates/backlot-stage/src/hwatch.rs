@@ -105,7 +105,33 @@ impl Stage {
             Err(_) => return,
         };
         let session = role.session_id.clone();
-        let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
+        let (signal, signal_state) = session
+            .as_deref()
+            .map(|sid| {
+                let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
+                (
+                    crate::signals::last_work(&tail, sid),
+                    crate::signals::state(&tail, sid, &std::collections::BTreeSet::new()),
+                )
+            })
+            .unwrap_or((None, None));
+        let interrupted = crate::signals::note_role_interrupt(
+            &self.interrupt_track,
+            &pair,
+            runner,
+            &text,
+            signal.as_ref(),
+            signal_state,
+        );
+        let work = crate::signals::combine(&crate::signals::WorkInputs {
+            runner,
+            signal: signal_state,
+            signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
+            interrupted,
+            structured: structured_state(t),
+            screen: runners::work_state(runner, &text),
+            now_ms,
+        });
         self.work.borrow_mut().insert(pair.clone(), work);
         let retry_send = {
             let mut rp = self.hrate_pace.borrow_mut();
@@ -222,20 +248,31 @@ pub(crate) fn hollywood_prompt(runner: &str, screen: &str, work: Work) -> Option
 
 /// Combine Hollywood's hook `signals.jsonl` state, the terminal's
 /// structured state and the runner's screen classification.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn hsignal_work(
     hdir: &Path,
     session_id: Option<&str>,
     term: &LiveTerminal,
     runner: &str,
     text: &str,
+    now_ms: u64,
 ) -> backlot_model::summary::Work {
-    let signal_state = session_id.and_then(|sid| {
-        let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
-        crate::signals::state(&tail, sid, &std::collections::BTreeSet::new())
-    });
-    crate::signals::combine(
-        signal_state,
-        structured_state(term),
-        runners::work_state(runner, text),
-    )
+    let (signal, signal_state) = session_id
+        .map(|sid| {
+            let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
+            (
+                crate::signals::last_work(&tail, sid),
+                crate::signals::state(&tail, sid, &std::collections::BTreeSet::new()),
+            )
+        })
+        .unwrap_or((None, None));
+    crate::signals::combine(&crate::signals::WorkInputs {
+        runner,
+        signal: signal_state,
+        signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
+        interrupted: runners::work::interrupted(runner, text),
+        structured: structured_state(term),
+        screen: runners::work_state(runner, text),
+        now_ms,
+    })
 }

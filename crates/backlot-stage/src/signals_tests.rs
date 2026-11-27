@@ -118,40 +118,243 @@ fn last_ignores_other_sessions_and_bad_lines() {
     assert!(signals::last_work("", "a").is_none());
 }
 
-/// The combine: Blocked wins from any source, otherwise signal,
-/// then structured, then the screen (S12d).
+/// The combine: Blocked wins from any source, interrupt markers end
+/// working turns, trustworthy `Waiting` structured + screen beats a
+/// working signal past `SIGNAL_STALE_MS`, and fresh signals stay Working.
 #[test]
 fn combine_puts_signals_first_and_blocked_over_all() {
-    for (signal, structured, screen, want) in [
-        (Some(Work::Blocked), None, Work::Waiting, Work::Blocked),
-        (Some(Work::Waiting), None, Work::Blocked, Work::Blocked),
-        (None, Some(Work::Blocked), Work::Working, Work::Blocked),
+    let now = 20_000;
+    let fresh = Some(now - signals::SIGNAL_STALE_MS);
+    let stale = Some(now - signals::SIGNAL_STALE_MS - 1);
+    for (label, inputs, want) in [
         (
-            Some(Work::Working),
-            Some(Work::Blocked),
-            Work::Waiting,
+            "blocked signal beats waiting screen",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Blocked),
+                signal_ts_ms: stale,
+                interrupted: true,
+                structured: None,
+                screen: Work::Waiting,
+                now_ms: now,
+            },
             Work::Blocked,
         ),
         (
-            Some(Work::Working),
-            Some(Work::Waiting),
+            "blocked screen beats waiting signal",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Waiting),
+                signal_ts_ms: fresh,
+                interrupted: false,
+                structured: None,
+                screen: Work::Blocked,
+                now_ms: now,
+            },
+            Work::Blocked,
+        ),
+        (
+            "blocked structured beats working screen",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: None,
+                signal_ts_ms: None,
+                interrupted: false,
+                structured: Some(Work::Blocked),
+                screen: Work::Working,
+                now_ms: now,
+            },
+            Work::Blocked,
+        ),
+        (
+            "stale working signal never hides blocked structured",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: stale,
+                interrupted: false,
+                structured: Some(Work::Blocked),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
+            Work::Blocked,
+        ),
+        (
+            "stale working signal yields to trustworthy idle core and waiting screen",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: stale,
+                interrupted: false,
+                structured: Some(Work::Waiting),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
             Work::Waiting,
+        ),
+        (
+            "fresh working signal stays working during grace even when core and screen read waiting",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: fresh,
+                interrupted: false,
+                structured: Some(Work::Waiting),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
             Work::Working,
         ),
         (
-            Some(Work::Waiting),
-            Some(Work::Working),
-            Work::Working,
+            "interrupt marker ends even a fresh working signal",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: fresh,
+                interrupted: true,
+                structured: Some(Work::Working),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
             Work::Waiting,
         ),
-        (None, Some(Work::Working), Work::Waiting, Work::Working),
-        (None, None, Work::Working, Work::Working),
-        (None, None, Work::Waiting, Work::Waiting),
+        (
+            "stale working signal stays working when upstream core reports no structured status",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: stale,
+                interrupted: false,
+                structured: None,
+                screen: Work::Waiting,
+                now_ms: now,
+            },
+            Work::Working,
+        ),
+        (
+            "stale working signal stays working when screen still shows active work",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Working),
+                signal_ts_ms: stale,
+                interrupted: false,
+                structured: Some(Work::Waiting),
+                screen: Work::Working,
+                now_ms: now,
+            },
+            Work::Working,
+        ),
+        (
+            "screen-only runners never let structured waiting override a working signal",
+            signals::WorkInputs {
+                runner: "fake",
+                signal: Some(Work::Working),
+                signal_ts_ms: stale,
+                interrupted: false,
+                structured: Some(Work::Waiting),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
+            Work::Working,
+        ),
+        (
+            "stop signal beats working structured and screen",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: Some(Work::Waiting),
+                signal_ts_ms: fresh,
+                interrupted: false,
+                structured: Some(Work::Working),
+                screen: Work::Working,
+                now_ms: now,
+            },
+            Work::Waiting,
+        ),
+        (
+            "no signal falls back to structured then screen",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: None,
+                signal_ts_ms: None,
+                interrupted: false,
+                structured: Some(Work::Working),
+                screen: Work::Waiting,
+                now_ms: now,
+            },
+            Work::Working,
+        ),
+        (
+            "screen fallback when both signal and structured absent",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: None,
+                signal_ts_ms: None,
+                interrupted: false,
+                structured: None,
+                screen: Work::Working,
+                now_ms: now,
+            },
+            Work::Working,
+        ),
+        (
+            "all idle yields waiting",
+            signals::WorkInputs {
+                runner: "claude",
+                signal: None,
+                signal_ts_ms: None,
+                interrupted: false,
+                structured: None,
+                screen: Work::Waiting,
+                now_ms: now,
+            },
+            Work::Waiting,
+        ),
     ] {
-        assert_eq!(
-            signals::combine(signal, structured, screen),
-            want,
-            "{signal:?}/{structured:?}/{screen:?}"
+        assert_eq!(signals::combine(&inputs), want, "{label}");
+    }
+
+    for runner in [
+        "claude", "codex", "devin", "opencode", "cursor", "cmd", "agy",
+    ] {
+        assert!(signals::structured_idle_trustworthy(runner), "{runner}");
+        let out = signals::combine(&signals::WorkInputs {
+            runner,
+            signal: Some(Work::Working),
+            signal_ts_ms: stale,
+            interrupted: false,
+            structured: Some(Work::Waiting),
+            screen: Work::Waiting,
+            now_ms: now,
+        });
+        assert_eq!(out, Work::Waiting, "{runner}");
+    }
+    for runner in ["cline", "fake", "unknown-runner"] {
+        assert!(!signals::structured_idle_trustworthy(runner), "{runner}");
+    }
+}
+
+/// Neutral Claude capture with `Interrupted · What should Claude do instead?`
+/// triggers the interrupt detector unless a newer turn's working marker
+/// appears below it.
+#[test]
+fn claude_interrupt_capture_ends_working_turn_until_next_working_turn() {
+    let capture = include_str!("../tests/fixtures/claude/interrupted-turn.txt");
+    assert_eq!(crate::runners::work_state("claude", capture), Work::Waiting);
+    assert!(crate::runners::work::interrupted("claude", capture));
+
+    let resumed_below = format!("{capture}\n❯ Fix the tests\n· Schlepping… (4s)\n");
+    assert!(!crate::runners::work::interrupted("claude", &resumed_below));
+    assert_eq!(
+        crate::runners::work_state("claude", &resumed_below),
+        Work::Working
+    );
+
+    for other in [
+        "codex", "devin", "cmd", "agy", "cursor", "opencode", "cline", "fake",
+    ] {
+        assert!(
+            !crate::runners::work::interrupted(other, capture),
+            "{other}"
         );
     }
 }
@@ -1148,4 +1351,354 @@ async fn a_notification_does_not_restart_a_stalled_turn() {
         }
         _ => unreachable!(),
     }
+}
+
+fn claude_actor_cfg() -> backlot_model::event::ActorIdentity {
+    backlot_model::event::ActorIdentity {
+        runner: "claude".into(),
+        runner_version: None,
+        model: "sonnet".into(),
+        effort: Some("high".into()),
+        permission_profile: "standard".into(),
+    }
+}
+
+fn setup_claude_studio(base: &Path) -> std::path::PathBuf {
+    let dir = store::studio_dir(base, "acme-shop");
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("user"),
+                EventKind::StudioCreated {
+                    title: "acme-shop".into(),
+                    repo: "/home/user/acme-shop".into(),
+                    members: Vec::new(),
+                    no_git: false,
+                    mode: backlot_model::event::StudioMode::Standard,
+                    roles: Box::new(backlot_model::event::RoleConfigs {
+                        producer: claude_actor_cfg(),
+                        director: claude_actor_cfg(),
+                        writer: claude_actor_cfg(),
+                    }),
+                    candidates: Vec::new(),
+                    rework_cap: 2,
+                    stall_limit_s: 600,
+                    nudge_after_s: 180,
+                    escalate_after_s: 600,
+                    check_env: Vec::new(),
+                    checks: Vec::new(),
+                    task_budget_s: None,
+                    limits: Default::default(),
+                    max_actors: backlot_model::event::default_max_actors(),
+                    push: Default::default(),
+                    design_gate: backlot_model::event::DesignGate::Off,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "producer".into(),
+                    terminal: Some("bl-acme-shop-producer".into()),
+                    session_id: Some("s-claude-1".into()),
+                    actor: Some(claude_actor_cfg()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    dir
+}
+
+/// Fail-first / regression sample-pass test: a Claude Code role started 31h
+/// ago emits `UserPromptSubmit` (`Working`, no `Stop`), then the person hits
+/// Esc — the screen shows `Interrupted · What should Claude do instead?`
+/// and the core goes `idle`. The summary's work must flip to `Waiting` and
+/// the `working 31h` duration must stop counting. A later turn recovers.
+#[tokio::test]
+async fn sample_pass_interrupted_claude_turn_becomes_waiting_and_stops_working_duration() {
+    let base = tmp();
+    let dir = setup_claude_studio(base.path());
+    let state = store::load_state(&dir).unwrap();
+    let started_ms = state.roles["producer"].since_ms;
+    let h31_ms = started_ms + 31 * 3_600_000;
+
+    let mut term = LiveTerminal {
+        name: "bl-acme-shop-producer".into(),
+        address: "t-prod".into(),
+        cwd: "/home/user/acme-shop".into(),
+        status: Some(hc_proto::terminal::Status {
+            state: "working".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (mut stage, fake) = stage().await;
+    stage.base = base.path().to_path_buf();
+    stage.cached.insert("acme-shop".into(), state.clone());
+
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": h31_ms, "event": "UserPromptSubmit", "session_id": "s-claude-1"}),
+    );
+    fake.lock().unwrap().screen = "✻ Orbiting… (12s · ↑ 1.2k tokens · esc to interrupt)\n".into();
+    let watched = Watched {
+        dir: &dir,
+        state: &state,
+        role: "producer",
+        runner: "claude",
+        term: &term,
+    };
+    stage
+        .sample_work("acme-shop", &watched, h31_ms)
+        .await
+        .unwrap();
+    stage
+        .nudge(
+            "acme-shop",
+            &dir,
+            &state,
+            std::slice::from_ref(&term),
+            h31_ms,
+        )
+        .unwrap();
+    let summary_before = stage.summary_view_at(&BTreeMap::new(), h31_ms);
+    let prod_before = summary_before.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert_eq!(prod_before.work, Some(Work::Working));
+    let live_before = crate::live::from_summary(&summary_before, h31_ms);
+    let status_before = crate::render::status(
+        "acme-shop",
+        &state,
+        &BTreeMap::new(),
+        h31_ms,
+        &crate::live::LiveView {
+            work: crate::live::work_map(&live_before),
+            running_cmds: crate::live::running_map(&live_before),
+            idle: crate::live::idle_map(&live_before),
+            running: true,
+        },
+    );
+    assert!(status_before.contains("working 31h"), "{status_before}");
+
+    // Person presses Esc: screen shows Claude's interrupt marker, core reports `idle`, no Stop hook fires.
+    fake.lock().unwrap().screen =
+        include_str!("../tests/fixtures/claude/interrupted-turn.txt").into();
+    term.status = Some(hc_proto::terminal::Status {
+        state: "idle".into(),
+        ..Default::default()
+    });
+    let after_ms = h31_ms + 1_000;
+    let watched = Watched {
+        dir: &dir,
+        state: &state,
+        role: "producer",
+        runner: "claude",
+        term: &term,
+    };
+    stage
+        .sample_work("acme-shop", &watched, after_ms)
+        .await
+        .unwrap();
+    stage
+        .nudge(
+            "acme-shop",
+            &dir,
+            &state,
+            std::slice::from_ref(&term),
+            after_ms,
+        )
+        .unwrap();
+    let summary_after = stage.summary_view_at(&BTreeMap::new(), after_ms);
+    let prod_after = summary_after.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert_eq!(prod_after.work, Some(Work::Waiting));
+    assert!(prod_after.running.is_none());
+    let live_after = crate::live::from_summary(&summary_after, after_ms);
+    let status_after = crate::render::status(
+        "acme-shop",
+        &state,
+        &BTreeMap::new(),
+        after_ms,
+        &crate::live::LiveView {
+            work: crate::live::work_map(&live_after),
+            running_cmds: crate::live::running_map(&live_after),
+            idle: crate::live::idle_map(&live_after),
+            running: true,
+        },
+    );
+    assert!(!status_after.contains("working"), "{status_after}");
+    assert!(status_after.contains("waiting"), "{status_after}");
+
+    // Another hour passes: working duration stays gone (`idle`, never `working 32h`).
+    let later_ms = after_ms + 3_600_000;
+    stage
+        .sample_work("acme-shop", &watched, later_ms)
+        .await
+        .unwrap();
+    stage
+        .nudge(
+            "acme-shop",
+            &dir,
+            &state,
+            std::slice::from_ref(&term),
+            later_ms,
+        )
+        .unwrap();
+    let summary_later = stage.summary_view_at(&BTreeMap::new(), later_ms);
+    let prod_later = summary_later.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert_eq!(prod_later.work, Some(Work::Waiting));
+    assert_eq!(prod_later.idle_since_ms, Some(after_ms));
+    let live_later = crate::live::from_summary(&summary_later, later_ms);
+    let status_later = crate::render::status(
+        "acme-shop",
+        &state,
+        &BTreeMap::new(),
+        later_ms,
+        &crate::live::LiveView {
+            work: crate::live::work_map(&live_later),
+            running_cmds: crate::live::running_map(&live_later),
+            idle: crate::live::idle_map(&live_later),
+            running: true,
+        },
+    );
+    assert!(!status_later.contains("working"), "{status_later}");
+    assert!(status_later.contains("idle 1h"), "{status_later}");
+
+    // Starting a new turn (`UserPromptSubmit`) makes the role `Working` again
+    // even while the earlier turn's interrupt marker stays in scrollback.
+    let turn2_ms = later_ms + 5_000;
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": turn2_ms, "event": "UserPromptSubmit", "session_id": "s-claude-1"}),
+    );
+    fake.lock().unwrap().screen = format!(
+        "{}\n❯ Continue\n",
+        include_str!("../tests/fixtures/claude/interrupted-turn.txt")
+    );
+    stage
+        .sample_work("acme-shop", &watched, turn2_ms + 1_000)
+        .await
+        .unwrap();
+    stage
+        .nudge(
+            "acme-shop",
+            &dir,
+            &state,
+            std::slice::from_ref(&term),
+            turn2_ms + 1_000,
+        )
+        .unwrap();
+    let summary_turn2 = stage.summary_view_at(&BTreeMap::new(), turn2_ms + 1_000);
+    let prod_turn2 = summary_turn2.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert_eq!(prod_turn2.work, Some(Work::Working));
+    assert_eq!(prod_turn2.idle_since_ms, None);
+
+    // Interrupting Turn 2 as well (a second marker on screen) immediately ends Turn 2.
+    fake.lock().unwrap().screen = format!(
+        "{}\n{}",
+        include_str!("../tests/fixtures/claude/interrupted-turn.txt"),
+        include_str!("../tests/fixtures/claude/interrupted-turn.txt"),
+    );
+    stage
+        .sample_work("acme-shop", &watched, turn2_ms + 2_000)
+        .await
+        .unwrap();
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Waiting));
+}
+
+/// Fail-first / regression sample-pass test: when a trustworthy core reports
+/// `idle` and the screen reads `Waiting` with no interrupt marker, a fresh
+/// `UserPromptSubmit` stays `Working` during the grace window, then becomes
+/// `Waiting` once stale (tested for both fork-inference `claude` and native
+/// 7501 `agy`; `fake` `ScreenOnly` stays signal-driven).
+#[tokio::test]
+async fn sample_pass_stale_working_signal_yields_to_idle_core_and_waiting_screen() {
+    let base = tmp();
+    let dir = setup_claude_studio(base.path());
+    let state = store::load_state(&dir).unwrap();
+    let t0 = state.roles["producer"].since_ms + 60_000;
+    let term = LiveTerminal {
+        name: "bl-acme-shop-producer".into(),
+        address: "t-prod".into(),
+        cwd: "/home/user/acme-shop".into(),
+        status: Some(hc_proto::terminal::Status {
+            state: "idle".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (stage, fake) = stage().await;
+    fake.lock().unwrap().screen = "❯ \n".into();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "UserPromptSubmit", "session_id": "s-claude-1"}),
+    );
+    let watched = Watched {
+        dir: &dir,
+        state: &state,
+        role: "producer",
+        runner: "claude",
+        term: &term,
+    };
+    stage
+        .sample_work("acme-shop", &watched, t0 + 1_000)
+        .await
+        .unwrap();
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Working));
+
+    stage
+        .sample_work("acme-shop", &watched, t0 + 10_000)
+        .await
+        .unwrap();
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Waiting));
+
+    // Native OSC 7501 runner (`agy`) also yields past grace on `idle` + waiting composer.
+    fake.lock().unwrap().screen = include_str!("../tests/fixtures/agy/idle-after-turn.txt").into();
+    let agy_watched = Watched {
+        dir: &dir,
+        state: &state,
+        role: "producer",
+        runner: "agy",
+        term: &term,
+    };
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 20_000, "event": "UserPromptSubmit", "session_id": "s-claude-1"}),
+    );
+    stage
+        .sample_work("acme-shop", &agy_watched, t0 + 21_000)
+        .await
+        .unwrap();
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Working));
+    stage
+        .sample_work("acme-shop", &agy_watched, t0 + 30_000)
+        .await
+        .unwrap();
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Waiting));
 }

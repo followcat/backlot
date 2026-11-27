@@ -99,9 +99,27 @@ impl Stage {
         // Structured state sits between the signal and the screen
         // (S12d): a core that reports — natively or through screen
         // inference — is believed ahead of the stage's own read;
-        // a `blocked` from any source still wins the map.
+        // an interrupt marker on screen or a stale Working signal past
+        // SIGNAL_STALE_MS on a trustworthy idle core + waiting screen
+        // ends the turn, while `Blocked` from any source still wins.
         let screen_work = runners::work_state(w.runner, &text);
-        let work = signals::combine(signal_state, structured_state(w.term), screen_work);
+        let interrupted = signals::note_role_interrupt(
+            &self.interrupt_track,
+            &pair,
+            w.runner,
+            &text,
+            signal.as_ref(),
+            signal_state,
+        );
+        let work = signals::combine(&signals::WorkInputs {
+            runner: w.runner,
+            signal: signal_state,
+            signal_ts_ms: signal.as_ref().map(|s| s.ts_ms),
+            interrupted,
+            structured: structured_state(w.term),
+            screen: screen_work,
+            now_ms,
+        });
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.

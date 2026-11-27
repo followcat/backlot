@@ -55,15 +55,23 @@ impl Stage {
             Err(_) => String::new(),
         };
         let sig_tail = candidate_signal_tail(hdir, rec);
+        let sig_last = rec
+            .candidate_session
+            .as_deref()
+            .and_then(|sid| crate::signals::last_work(&sig_tail, sid));
         let sig_state = rec
             .candidate_session
             .as_deref()
             .and_then(|sid| crate::signals::state(&sig_tail, sid, &BTreeSet::new()));
-        let work = crate::signals::combine(
-            sig_state,
-            crate::watch::structured_state(cand),
-            runners::work_state(&rec.target_runner, &text),
-        );
+        let work = crate::signals::combine(&crate::signals::WorkInputs {
+            runner: &rec.target_runner,
+            signal: sig_state,
+            signal_ts_ms: sig_last.as_ref().map(|s| s.ts_ms),
+            interrupted: runners::work::interrupted(&rec.target_runner, &text),
+            structured: crate::watch::structured_state(cand),
+            screen: runners::work_state(&rec.target_runner, &text),
+            now_ms,
+        });
         if tail_has_hook_activity(&sig_tail) {
             rec.saw_hook_activity = true;
         }
