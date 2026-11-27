@@ -242,6 +242,30 @@ fn parse_screen_delta(text: &str, now_ms: u64) -> Option<u64> {
     parse::parse_wait(region, now_ms)
 }
 
+/// Whether the limit hit's parsed reset time is anchored to a calendar
+/// or wall-clock timestamp rather than a floating relative offset.
+pub(crate) fn anchored_reset(term: &LiveTerminal, screen: &str, now_ms: u64) -> bool {
+    let tail = fresh_tail(screen);
+    let screen_anchored = {
+        let lower = screen.to_lowercase();
+        let region = last_limit_line(&lower).unwrap_or(&lower);
+        parse::has_anchored_reset(region, now_ms)
+    };
+    if let Some(status) = term.status.as_ref()
+        && status.state == "error"
+    {
+        let msg = status.msg.to_lowercase();
+        if limit_text(&msg) {
+            return parse::has_anchored_reset(&msg, now_ms) || screen_anchored;
+        }
+        if limit_text(tail) {
+            return screen_anchored;
+        }
+        return false;
+    }
+    screen_anchored
+}
+
 /// Clamped auto-retry wait (for tests exercising the default/clamp fallback).
 #[cfg(test)]
 fn reset_ms(text: &str, now_ms: u64) -> u64 {
@@ -283,6 +307,52 @@ pub(crate) enum Step {
     /// The budget is spent — the open stage-owned attention
     /// resolves and a `needs_user` one raises.
     Escalate,
+}
+
+/// Millisecond tolerance when comparing `reset_at_ms` across polls for
+/// the same clock/calendar window (`localtime_r` truncates sub-second ms).
+const SAME_RESET_SLOP_MS: u64 = 1_000;
+const DAY_MS: u64 = 86_400_000;
+
+/// How an observed hit compares to an existing reset timestamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WindowMatch {
+    Same,
+    Next,
+    Fallback,
+}
+
+/// Compare a new limit hit's reset timestamp against an existing one.
+pub(crate) fn classify_hit_window(
+    hit_reset: Option<u64>,
+    open_reset: Option<u64>,
+    anchored: bool,
+    auto_continue: bool,
+    now_ms: u64,
+) -> WindowMatch {
+    let (Some(new), Some(old)) = (hit_reset, open_reset) else {
+        return WindowMatch::Fallback;
+    };
+    if !anchored {
+        // Relative resets (e.g. `in 30s`) drift with `now_ms`; a much
+        // later reset while the current window has not elapsed starts a
+        // new window, while polling the same banner uses existing pace.
+        if now_ms < old && new > old.saturating_add(60_000) {
+            return WindowMatch::Next;
+        }
+        return WindowMatch::Fallback;
+    }
+    if new <= old.saturating_add(SAME_RESET_SLOP_MS) {
+        return WindowMatch::Same;
+    }
+    // An untouched `HH:MM` clock banner wraps +24h once `old` passes on
+    // an auto-continuing banner; keep falling through so reset-passed
+    // handling can escalate rather than opening tomorrow's window.
+    let day_wrap = new.saturating_sub(old).abs_diff(DAY_MS) <= SAME_RESET_SLOP_MS;
+    if auto_continue && now_ms >= old && day_wrap {
+        return WindowMatch::Fallback;
+    }
+    WindowMatch::Next
 }
 
 /// The pace decision for a still-limited role with an open

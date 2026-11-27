@@ -1362,3 +1362,78 @@ async fn rate_limit_attention_raised_records_account_and_reset_at_ms() {
         _ => unreachable!(),
     }
 }
+
+#[tokio::test]
+async fn ten_hits_in_one_window_raise_one_attention_and_later_reset_raises_next() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let mut tm = term();
+    let (stage, fake) = stage().await;
+
+    let t0 = {
+        let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        unsafe { libc::localtime_r(&ts, &mut local) };
+        local.tm_hour = 9;
+        local.tm_min = 10;
+        local.tm_sec = 0;
+        local.tm_isdst = -1;
+        (unsafe { libc::mktime(&mut local) } as u64) * 1000
+    };
+
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: waiting\n\
+                                   You've hit your usage limit · resets 2:10pm\n"
+        .into();
+
+    let rate_limit_raised = || {
+        events(&dir, "attention.raised")
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    &e.kind,
+                    EventKind::AttentionRaised { reason, .. }
+                        if reason == crate::ratelimit::RATE_LIMITED
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+
+    for i in 0..10 {
+        sample(&stage, &dir, &tm, "actor-t1-c1", t0 + i * 30_000).await;
+    }
+    assert_eq!(rate_limit_raised().len(), 1);
+    assert!(events(&dir, "attention.cleared").is_empty());
+    assert!(events(&dir, "attention.escalated").is_empty());
+
+    // New, later reset window raises once as the next window.
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: waiting\n\
+                                   You've hit your usage limit · resets 7:10pm\n"
+        .into();
+    sample(&stage, &dir, &tm, "actor-t1-c1", t0 + 11 * 30_000).await;
+    let raised = rate_limit_raised();
+    assert_eq!(raised.len(), 2, "{raised:?}");
+    let open: Vec<_> = store::load_state(&dir)
+        .unwrap()
+        .open_attention()
+        .filter(|a| a.reason == crate::ratelimit::RATE_LIMITED)
+        .cloned()
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert_eq!(open[0].reset_at_ms, Some(t0 + 10 * 3_600_000));
+
+    // Clears when the role works again.
+    tm.status = Some(hc_proto::terminal::Status {
+        state: "working".into(),
+        ..Default::default()
+    });
+    sample(&stage, &dir, &tm, "actor-t1-c1", t0 + 12 * 30_000).await;
+    let remaining: Vec<_> = store::load_state(&dir)
+        .unwrap()
+        .open_attention()
+        .cloned()
+        .collect();
+    assert!(remaining.is_empty(), "{remaining:?}");
+}

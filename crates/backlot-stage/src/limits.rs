@@ -17,13 +17,99 @@ use crate::permit;
 use crate::sample::{Raise, Watched};
 
 impl Stage {
+    async fn raise_rate_limit(
+        &self,
+        studio: &str,
+        w: &Watched<'_>,
+        model: &str,
+        text: &str,
+        hit: crate::ratelimit::LimitHit,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        use crate::ratelimit as rl;
+        let (dir, role) = (w.dir, w.role);
+        let pair = (studio.to_string(), role.to_string());
+        let display_reset_ms = hit
+            .reset_at_ms
+            .unwrap_or_else(|| now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS);
+        let until = rl::format_reset_local(display_reset_ms, now_ms);
+        let weekly_choice = rl::weekly_choice_dialog(text);
+        let acct = self.derive_role_account(w.runner, model);
+        let acct_detail = if hit.escalate_now {
+            if let Some(reset) = hit.reset_at_ms {
+                format!(
+                    "weekly/monthly limit; resets {}",
+                    rl::format_reset_local(reset, now_ms)
+                )
+            } else {
+                "weekly or monthly limit exhausted".into()
+            }
+        } else {
+            format!("waiting until {until}")
+        };
+        self.raise_attention(
+            Raise {
+                dir,
+                role,
+                reason: rl::RATE_LIMITED,
+                text,
+                needs_user: hit.escalate_now,
+                bound: None,
+                account: Some(acct.id),
+                reset_at_ms: hit.reset_at_ms,
+            },
+            move |seq| {
+                if hit.escalate_now {
+                    if weekly_choice {
+                        format!("weekly limit reached: options 1–2 wait, 3–4 cost money; needs the user — screen saved to attention/{seq}.txt")
+                    } else {
+                        format!("weekly or monthly limit exhausted; needs the user — screen saved to attention/{seq}.txt")
+                    }
+                } else {
+                    format!("waiting until {until}; auto-retry after the reset; screen saved to attention/{seq}.txt")
+                }
+            },
+        )
+        .await?;
+        self.record_account_stall(
+            studio,
+            role,
+            w.runner,
+            model,
+            now_ms,
+            hit.reset_at_ms,
+            hit.window,
+            &acct_detail,
+        );
+        // The sentinel: a long quota spends the budget at once, so a
+        // cleared attention never re-raises while the same window holds.
+        let retries = if hit.escalate_now { rl::MAX_RETRIES } else { 0 };
+        self.rate_pace.borrow_mut().insert(
+            pair,
+            rl::RatePace {
+                retries,
+                due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
+                reset_at_ms: hit.reset_at_ms,
+            },
+        );
+        eprintln!(
+            "stage: {role} {}",
+            if hit.escalate_now {
+                "weekly/monthly limit"
+            } else {
+                "rate limited"
+            }
+        );
+        Ok(())
+    }
+
     /// The S12d error-taxonomy pass on one fresh sample. A limited
-    /// role gets one stage-owned attention while the stage waits
-    /// the parsed reset out and sends `continue`; three retries
+    /// role gets one stage-owned attention per reset window while the
+    /// stage waits the parsed reset out and sends `continue`; three retries
     /// and the episode escalates `needs_user`. A `continue` that
-    /// worked — the limit lifted — resolves `resumed`; a cleared
-    /// or escalated episode never re-raises while the limit
-    /// holds. Counted by its own reason, never as stall or rework.
+    /// worked — the limit lifted — resolves `resumed`; a hit in the
+    /// same reset window updates nothing and raises nothing, while a
+    /// hit with a later reset raises once as the next window.
     /// A bare `error` status — no limit text in `status.msg` or the
     /// screen's fresh tail — is `agent error` instead: never an
     /// auto-`continue`, an actor's goes to the director and
@@ -48,6 +134,7 @@ impl Stage {
             .open_attention()
             .find(|a| a.role == role && a.reason == rl::RATE_LIMITED);
         let model = crate::stage_accounts::studio_role_model(state, role);
+        let anchored = rl::anchored_reset(w.term, text, now_ms);
         match (limited, open) {
             (None, Some(attn)) => {
                 record(
@@ -65,83 +152,47 @@ impl Stage {
                 self.clear_account_stall_for_role(studio, role);
             }
             (Some(hit), None) => {
-                if self.rate_pace.borrow().contains_key(&pair) {
+                let held_same_window = self.rate_pace.borrow().get(&pair).is_some_and(|p| {
+                    rl::classify_hit_window(
+                        hit.reset_at_ms,
+                        p.reset_at_ms,
+                        anchored,
+                        hit.auto_continue,
+                        now_ms,
+                    ) != rl::WindowMatch::Next
+                });
+                if held_same_window {
                     return Ok(());
                 }
-                let display_reset_ms = hit
-                    .reset_at_ms
-                    .unwrap_or_else(|| now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS);
-                let until = rl::format_reset_local(display_reset_ms, now_ms);
-                let weekly_choice = rl::weekly_choice_dialog(text);
-                let acct = self.derive_role_account(w.runner, model);
-                let acct_detail = if hit.escalate_now {
-                    if let Some(reset) = hit.reset_at_ms {
-                        format!(
-                            "weekly/monthly limit; resets {}",
-                            rl::format_reset_local(reset, now_ms)
-                        )
-                    } else {
-                        "weekly or monthly limit exhausted".into()
-                    }
-                } else {
-                    format!("waiting until {until}")
-                };
-                self.raise_attention(
-                    Raise {
-                        dir,
-                        role,
-                        reason: rl::RATE_LIMITED,
-                        text,
-                        needs_user: hit.escalate_now,
-                        bound: None,
-                        account: Some(acct.id),
-                        reset_at_ms: hit.reset_at_ms,
-                    },
-                    move |seq| {
-                        if hit.escalate_now {
-                            if weekly_choice {
-                                format!("weekly limit reached: options 1–2 wait, 3–4 cost money; needs the user — screen saved to attention/{seq}.txt")
-                            } else {
-                                format!("weekly or monthly limit exhausted; needs the user — screen saved to attention/{seq}.txt")
-                            }
-                        } else {
-                            format!("waiting until {until}; auto-retry after the reset; screen saved to attention/{seq}.txt")
-                        }
-                    },
-                )
-                .await?;
-                self.record_account_stall(
-                    studio,
-                    role,
-                    w.runner,
-                    model,
-                    now_ms,
-                    hit.reset_at_ms,
-                    hit.window,
-                    &acct_detail,
-                );
-                // The sentinel: a long quota spends the budget at
-                // once, so a cleared attention never re-raises while
-                // the banner holds.
-                let retries = if hit.escalate_now { rl::MAX_RETRIES } else { 0 };
-                self.rate_pace.borrow_mut().insert(
-                    pair,
-                    rl::RatePace {
-                        retries,
-                        due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
-                        reset_at_ms: hit.reset_at_ms,
-                    },
-                );
-                eprintln!(
-                    "stage: {role} {}",
-                    if hit.escalate_now {
-                        "weekly/monthly limit"
-                    } else {
-                        "rate limited"
-                    }
-                );
+                self.raise_rate_limit(studio, w, model, text, hit, now_ms)
+                    .await?;
             }
             (Some(hit), Some(attn)) => {
+                match rl::classify_hit_window(
+                    hit.reset_at_ms,
+                    attn.reset_at_ms,
+                    anchored,
+                    hit.auto_continue,
+                    now_ms,
+                ) {
+                    rl::WindowMatch::Same => {
+                        return Ok(());
+                    }
+                    rl::WindowMatch::Next => {
+                        record(
+                            dir,
+                            EventKind::AttentionCleared {
+                                target: attn.seq,
+                                reason: Some("superseded by next reset window".into()),
+                            },
+                        )?;
+                        self.rate_pace.borrow_mut().remove(&pair);
+                        self.raise_rate_limit(studio, w, model, text, hit, now_ms)
+                            .await?;
+                        return Ok(());
+                    }
+                    rl::WindowMatch::Fallback => {}
+                }
                 self.record_account_stall(
                     studio,
                     role,
