@@ -2,10 +2,10 @@
 //! `expect` / `expect_failed` / `origin` / `DesignEntry.checks` / `DesignSummary.proposed_checks`.
 //! Neutral fixtures only (`acme-shop`, `actor-a`, `/home/user/acme-shop`).
 
+use crate::Event;
 use crate::design::DesignPhase;
 use crate::state::replay;
 use crate::summary::Summary;
-use crate::Event;
 
 #[test]
 fn legacy_ledger_without_check_activation_fields_replays_unchanged() {
@@ -77,7 +77,7 @@ fn legacy_summary_without_proposed_checks_deserializes() {
 fn expect_failed_keeps_exit_code_zero_and_refuses_accepted_review() {
     use crate::event::{CheckDecl, EventKind, Verdict};
     use crate::testkit::*;
-    use crate::validate::{validate, Refusal};
+    use crate::validate::{Refusal, validate};
 
     let mut kind = studio_kind();
     let EventKind::StudioCreated { checks, .. } = &mut kind else {

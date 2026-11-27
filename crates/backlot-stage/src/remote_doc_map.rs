@@ -307,8 +307,7 @@ pub(super) fn map(
             note,
             no_checks,
         }) => {
-            let (skip, reason, note, no_checks) =
-                (*skip, reason.clone(), note.clone(), *no_checks);
+            let (skip, reason, note, no_checks) = (*skip, reason.clone(), note.clone(), *no_checks);
             with_studio(common, env, move |studio| ReqAction::DesignSign {
                 studio,
                 skip,

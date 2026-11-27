@@ -126,7 +126,10 @@ pub fn validate_one_check(check: &CastCheck, origin: CheckOrigin) -> Result<Chec
             )));
         }
         compile_expect(pat).map_err(|e| {
-            Fail::usage(format!("check '{}' bad expect regex '{pat}': {e}", check.name))
+            Fail::usage(format!(
+                "check '{}' bad expect regex '{pat}': {e}",
+                check.name
+            ))
         })?;
     }
     Ok(CheckDecl {
@@ -176,7 +179,11 @@ pub fn declarations(
 
 /// Check captured stdout+stderr against `expect` and `min_matches`.
 /// Returns `Some(reason)` when the expectation is not met.
-pub fn check_expect(expect: Option<&str>, min_matches: Option<u32>, output: &[u8]) -> Option<String> {
+pub fn check_expect(
+    expect: Option<&str>,
+    min_matches: Option<u32>,
+    output: &[u8],
+) -> Option<String> {
     let pat = expect?;
     let re = match compile_expect(pat) {
         Ok(re) => re,

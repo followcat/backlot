@@ -83,9 +83,16 @@ fn run_owed_checks_once(sdir: &std::path::Path, env: &Env) {
     let owed = checks::owed(&state).expect("expected an owed check");
     let mut git_fn = crate::workareas::real_git;
     let spawn_fn = &checkrun::real_spawn;
-    let mut running =
-        checkwork::start(&mut git_fn, spawn_fn, &state, sdir, &stage_vars, &owed, 1000)
-            .expect("start owed check");
+    let mut running = checkwork::start(
+        &mut git_fn,
+        spawn_fn,
+        &state,
+        sdir,
+        &stage_vars,
+        &owed,
+        1000,
+    )
+    .expect("start owed check");
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let out = loop {
         if let Some(outcome) = running.poll(2000) {
@@ -142,9 +149,7 @@ fn bad_expect_regex_and_zero_min_matches_are_usage_errors() {
     let bad_re = fixture(
         &scratch,
         "bad-re.toml",
-        &format!(
-            "{CAST_TOML}\n\n[[checks]]\nname = \"scan\"\nrun = \"true\"\nexpect = \"[\"\n"
-        ),
+        &format!("{CAST_TOML}\n\n[[checks]]\nname = \"scan\"\nrun = \"true\"\nexpect = \"[\"\n"),
     );
     let err = run(
         &[
@@ -264,7 +269,10 @@ fn preflight_env_strips_secrets_and_applies_director_guard_before_running() {
     assert!(!map.contains_key("BACKLOT_ROLE"));
     assert!(!map.contains_key("HC_SESSION"));
     assert!(!map.contains_key("GITHUB_TOKEN"));
-    assert_eq!(map.get("CARGO_HOME").map(String::as_str), Some("/opt/cargo"));
+    assert_eq!(
+        map.get("CARGO_HOME").map(String::as_str),
+        Some("/opt/cargo")
+    );
     let path = map.get("PATH").expect("PATH present");
     assert!(
         path.starts_with(&format!("{}:", role_dir.join("bin").display())),
@@ -320,7 +328,10 @@ fn design_write_preflight_refuses_nonzero_expect_miss_timeout_and_bad_slot_witho
         ],
     );
     let req = fixture(&scratch, "req.md", "# Req\n");
-    ok(&env, &format!("req revise --file {req} --summary v1 --as producer"));
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary v1 --as producer"),
+    );
     ok(&env, "design open --as producer");
     let w1 = fixture(&scratch, "w1.md", "Proposal.\n");
     ok(
@@ -332,9 +343,7 @@ fn design_write_preflight_refuses_nonzero_expect_miss_timeout_and_bad_slot_witho
     let mut stage_env = Env {
         vars: env.vars.clone(),
     };
-    stage_env
-        .vars
-        .insert("PATH".into(), "/usr/bin:/bin".into());
+    stage_env.vars.insert("PATH".into(), "/usr/bin:/bin".into());
 
     // 1. Non-zero exit returns output tail and appends nothing.
     let d1 = fixture(&scratch, "d1.md", "Buildability.\n");
@@ -360,7 +369,10 @@ fn design_write_preflight_refuses_nonzero_expect_miss_timeout_and_bad_slot_witho
     )
     .unwrap_err();
     let msg = format!("{err:?}");
-    assert!(msg.contains("oops_line_tail") && msg.contains("exited 7"), "{msg}");
+    assert!(
+        msg.contains("oops_line_tail") && msg.contains("exited 7"),
+        "{msg}"
+    );
     assert_eq!(store::load_events(&sdir).unwrap().0.len(), before_count);
 
     // 2. Missed expect with exit 0 refuses without appending.
@@ -438,10 +450,7 @@ fn design_write_preflight_refuses_nonzero_expect_miss_timeout_and_bad_slot_witho
         &stage_env,
     )
     .unwrap_err();
-    assert!(
-        format!("{err:?}").contains("timed out after 1s"),
-        "{err:?}"
-    );
+    assert!(format!("{err:?}").contains("timed out after 1s"), "{err:?}");
     assert_eq!(store::load_events(&sdir).unwrap().0.len(), before_count);
 }
 
@@ -492,10 +501,16 @@ fn studio_cast_show_set_preserves_design_and_user_check_origins() {
         "studio check add --name user_check --run true --expect ^$",
     );
     let req = fixture(&scratch, "req.md", "# v1\n");
-    ok(&env, &format!("req revise --file {req} --summary v1 --as producer"));
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary v1 --as producer"),
+    );
     ok(&env, "design open --as producer");
     let w1 = fixture(&scratch, "w1.md", "Proposal.\n");
-    ok(&env, &format!("design write --slot proposal --file {w1} --as writer"));
+    ok(
+        &env,
+        &format!("design write --slot proposal --file {w1} --as writer"),
+    );
     let d1 = fixture(&scratch, "d1.md", "Build.\n");
     let cf = fixture(
         &scratch,
@@ -523,7 +538,10 @@ fn studio_cast_show_set_preserves_design_and_user_check_origins() {
     )
     .unwrap();
     let s1 = fixture(&scratch, "s1.md", "Summary.\n");
-    ok(&env, &format!("design write --slot summary --file {s1} --as producer"));
+    ok(
+        &env,
+        &format!("design write --slot summary --file {s1} --as producer"),
+    );
     ok(&env, "design sign");
 
     // `studio cast show` -> `studio cast set` without changes still says "nothing changes".

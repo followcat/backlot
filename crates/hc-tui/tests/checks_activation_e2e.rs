@@ -22,10 +22,7 @@ fn init_studio_with_worktree(s: &Scratch, extra_cast: &str) -> (PathBuf, PathBuf
     fs::write(repo.join("README.md"), "acme shop\n").unwrap();
     git(&repo, &["add", "."]);
     git(&repo, &["commit", "-m", "init"]);
-    git(
-        &repo,
-        &["remote", "add", "origin", bare.to_str().unwrap()],
-    );
+    git(&repo, &["remote", "add", "origin", bare.to_str().unwrap()]);
 
     let cast = s.fixture(
         "cast.toml",
@@ -62,7 +59,10 @@ fn init_studio_with_worktree(s: &Scratch, extra_cast: &str) -> (PathBuf, PathBuf
 }
 
 fn open_to_buildability(s: &Scratch, req_summary: &str, proposal_name: &str) {
-    let req = s.fixture(&format!("req-{proposal_name}.md"), &format!("# {req_summary}\n"));
+    let req = s.fixture(
+        &format!("req-{proposal_name}.md"),
+        &format!("# {req_summary}\n"),
+    );
     ok(
         s,
         &[
@@ -81,14 +81,7 @@ fn open_to_buildability(s: &Scratch, req_summary: &str, proposal_name: &str) {
     ok(
         s,
         &[
-            "design",
-            "write",
-            "--slot",
-            "proposal",
-            "--file",
-            &p,
-            "--as",
-            "writer",
+            "design", "write", "--slot", "proposal", "--file", &p, "--as", "writer",
         ],
     );
 }
@@ -225,15 +218,7 @@ timeout_s = 60
     let non_user = run(
         &s,
         &[
-            "studio",
-            "check",
-            "add",
-            "--name",
-            "nope",
-            "--run",
-            "true",
-            "--as",
-            "director",
+            "studio", "check", "add", "--name", "nope", "--run", "true", "--as", "director",
         ],
     );
     assert!(!non_user.status.success(), "director must not add checks");
@@ -291,14 +276,7 @@ timeout_s = 45
     ok(
         &s,
         &[
-            "design",
-            "write",
-            "--slot",
-            "summary",
-            "--file",
-            &sum1,
-            "--as",
-            "producer",
+            "design", "write", "--slot", "summary", "--file", &sum1, "--as", "producer",
         ],
     );
     ok(&s, &["design", "sign", "--no-checks"]);
@@ -330,14 +308,7 @@ timeout_s = 45
     ok(
         &s,
         &[
-            "design",
-            "write",
-            "--slot",
-            "summary",
-            "--file",
-            &sum1,
-            "--as",
-            "producer",
+            "design", "write", "--slot", "summary", "--file", &sum1, "--as", "producer",
         ],
     );
     ok(&s, &["design", "sign"]);
@@ -379,14 +350,7 @@ timeout_s = 25
     ok(
         &s,
         &[
-            "design",
-            "write",
-            "--slot",
-            "summary",
-            "--file",
-            &sum1,
-            "--as",
-            "producer",
+            "design", "write", "--slot", "summary", "--file", &sum1, "--as", "producer",
         ],
     );
     ok(&s, &["design", "sign"]);

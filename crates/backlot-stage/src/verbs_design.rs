@@ -20,12 +20,7 @@ use crate::render;
 use crate::store::{self, Pending, PendingFile};
 use crate::verbs::require_studio_dir;
 
-pub(crate) fn run(
-    base: &Path,
-    env: &Env,
-    caller: &Caller,
-    cmd: DesignCmd,
-) -> Result<String, Fail> {
+pub(crate) fn run(base: &Path, env: &Env, caller: &Caller, cmd: DesignCmd) -> Result<String, Fail> {
     match cmd {
         DesignCmd::Open {
             req,

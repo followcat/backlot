@@ -64,7 +64,9 @@ pub(crate) fn build_director_preflight_env(
     };
     let exe_dir = resolve_exe_dir(&clean_path);
     let role_dir = studio_dir.join("roles").join("director");
-    if !role_dir.join("bin/git").is_file() && crate::runners::executable(&Path::new(&exe_dir).join("backlot")) {
+    if !role_dir.join("bin/git").is_file()
+        && crate::runners::executable(&Path::new(&exe_dir).join("backlot"))
+    {
         guard::prepare_role(&role_dir, &exe_dir)
             .map_err(|e| Fail::refused(format!("director guard setup: {e}")))?;
     }
@@ -153,7 +155,8 @@ fn run_checks_list(
                 .unwrap_or_else(|| "killed by signal".to_string());
             return Err(format_preflight_fail(&c.name, &status, &tail));
         }
-        if let Some(reason) = checks::check_expect(c.expect.as_deref(), c.min_matches, &res.output) {
+        if let Some(reason) = checks::check_expect(c.expect.as_deref(), c.min_matches, &res.output)
+        {
             return Err(format_preflight_fail(&c.name, &reason, &tail));
         }
     }
@@ -164,8 +167,6 @@ fn format_preflight_fail(name: &str, why: &str, tail: &str) -> Fail {
     if tail.is_empty() {
         Fail::refused(format!("preflight check '{name}' failed ({why})"))
     } else {
-        Fail::refused(format!(
-            "preflight check '{name}' failed ({why}):\n{tail}"
-        ))
+        Fail::refused(format!("preflight check '{name}' failed ({why}):\n{tail}"))
     }
 }

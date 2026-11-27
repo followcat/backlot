@@ -147,10 +147,20 @@ pub(crate) fn show_body(design: &DesignSummary) -> String {
         sections.push(checks);
     }
     if design.suggest_skip {
-        if let Some(reason) = design.skip_reason.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(reason) = design
+            .skip_reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             sections.push(format!("Skip suggested: {reason}"));
         }
-    } else if let Some(summary) = design.summary.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    } else if let Some(summary) = design
+        .summary
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         sections.push(summary.to_owned());
     }
     if !design.questions.is_empty() {

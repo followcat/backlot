@@ -5,9 +5,9 @@
 
 use std::path::Path;
 
+use backlot_model::NewEvent;
 use backlot_model::cast::{self, CastSettings};
 use backlot_model::event::CheckOrigin;
-use backlot_model::NewEvent;
 
 use crate::args_studio_check::CheckCmd;
 use crate::checks::{self, CastCheck};
@@ -16,12 +16,7 @@ use crate::cli::{Caller, Env, Fail};
 use crate::store::{self, Pending};
 use crate::verbs::require_studio_dir;
 
-pub(crate) fn run(
-    base: &Path,
-    env: &Env,
-    caller: &Caller,
-    cmd: CheckCmd,
-) -> Result<String, Fail> {
+pub(crate) fn run(base: &Path, env: &Env, caller: &Caller, cmd: CheckCmd) -> Result<String, Fail> {
     if caller.role != "user" {
         return Err(Fail::refused(format!(
             "role '{}' cannot do this; only the user can",
@@ -80,8 +75,8 @@ fn add(
     let by = caller.by();
     let check_name = decl.name.clone();
     let event = store::append(dir, move |state, _| {
-        let mut next = CastSettings::of(state)
-            .ok_or_else(|| Fail::refused("no studio recorded yet"))?;
+        let mut next =
+            CastSettings::of(state).ok_or_else(|| Fail::refused("no studio recorded yet"))?;
         if next.checks.iter().any(|c| c.name == decl.name) {
             return Err(Fail::refused(format!(
                 "check '{}' is already declared",
@@ -95,7 +90,10 @@ fn add(
             files: Vec::new(),
         })
     })?;
-    Ok(format!("event {}: studio.cast +check {check_name}", event.seq))
+    Ok(format!(
+        "event {}: studio.cast +check {check_name}",
+        event.seq
+    ))
 }
 
 fn remove(dir: &Path, caller: &Caller, name: &str) -> Result<String, Fail> {
@@ -105,8 +103,8 @@ fn remove(dir: &Path, caller: &Caller, name: &str) -> Result<String, Fail> {
     let by = caller.by();
     let target = name.to_string();
     let event = store::append(dir, move |state, _| {
-        let mut next = CastSettings::of(state)
-            .ok_or_else(|| Fail::refused("no studio recorded yet"))?;
+        let mut next =
+            CastSettings::of(state).ok_or_else(|| Fail::refused("no studio recorded yet"))?;
         let Some(pos) = next.checks.iter().position(|c| c.name == target) else {
             return Err(Fail::refused(format!("unknown check '{target}'")));
         };
