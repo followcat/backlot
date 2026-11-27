@@ -111,6 +111,31 @@ async fn a_group_that_survives_the_grace_period_is_killed() {
     );
 }
 
+/// A binary that is still open for writing makes `exec` fail `ETXTBSY`
+/// (a freshly written file whose descriptor another thread's forked
+/// child still holds). The probe waits for the writer instead of
+/// reporting no version.
+#[tokio::test]
+async fn the_version_probe_waits_out_a_binary_still_open_for_writing() {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TestDir::new("hctui-probe-busy");
+    std::fs::create_dir_all(&dir).unwrap();
+    let bin = dir.join("backlot");
+    let mut writer = std::fs::File::create(&bin).unwrap();
+    writer
+        .write_all(b"#!/bin/sh\necho 'backlot 0.1.14'\n")
+        .unwrap();
+    writer.flush().unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let closer = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        drop(writer);
+    });
+    assert_eq!(probe_version(bin).await.as_deref(), Some("backlot 0.1.14"));
+    closer.await.unwrap();
+}
+
 #[tokio::test]
 async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
     use std::os::unix::fs::PermissionsExt;

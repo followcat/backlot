@@ -54,7 +54,7 @@ fn argv(s: &str) -> Vec<String> {
 /// The resolved base a named studio lands on — `Err` is the refusal.
 fn resolved(env: &Env, base: &std::path::Path, args: &str) -> Result<std::path::PathBuf, Fail> {
     let (common, _) = parse(&argv(args)).unwrap();
-    crate::cli::resolve_base(env, &common, base, "aiflows")
+    crate::cli::resolve_base(env, &common, base, "orchard")
 }
 
 #[test]
@@ -62,28 +62,28 @@ fn a_studio_on_another_core_resolves_for_reads_and_writes() {
     let root = TestDir::new("backlot-xdg");
     let core_a = core(&root, "core-a");
     let core_b = core(&root, "core-b");
-    make_studio(&root, &core_b, "aiflows", "Flows");
+    make_studio(&root, &core_b, "orchard", "Orchard");
     let env = shell_env(&root);
 
     // A write command resolved against core-a lands on core-b's log.
     let (common, cmd) = parse(&argv(
-        "studio finish --studio aiflows --reason done --force --as user",
+        "studio finish --studio orchard --reason done --force --as user",
     ))
     .unwrap();
     let out = crate::cli::exec_event(common, cmd, &env, &core_a).unwrap();
     assert!(out.contains("studio.finished"), "{out}");
-    let state = crate::store::load_state(&core_b.join("studios/aiflows")).unwrap();
+    let state = crate::store::load_state(&core_b.join("studios/orchard")).unwrap();
     assert!(
         state.finished.is_some(),
         "the event reached core-b: {state:?}"
     );
     assert!(
-        !core_a.join("studios/aiflows").exists(),
+        !core_a.join("studios/orchard").exists(),
         "nothing was created under core-a"
     );
 
     // A read resolves it the same way.
-    let (common, cmd) = parse(&argv("status --studio aiflows --json")).unwrap();
+    let (common, cmd) = parse(&argv("status --studio orchard --json")).unwrap();
     let out = crate::hwood_read::read(&common, &cmd, &env, &core_a)
         .expect("status is a read")
         .unwrap();
@@ -94,11 +94,11 @@ fn a_studio_on_another_core_resolves_for_reads_and_writes() {
 fn several_cores_holding_the_name_refuse_with_the_list() {
     let root = TestDir::new("backlot-xdg");
     let core_a = core(&root, "core-a");
-    make_studio(&root, &core(&root, "core-b"), "aiflows", "Flows");
-    make_studio(&root, &core(&root, "core-c"), "aiflows", "Flows");
+    make_studio(&root, &core(&root, "core-b"), "orchard", "Orchard");
+    make_studio(&root, &core(&root, "core-c"), "orchard", "Orchard");
     let env = shell_env(&root);
 
-    let m = resolved(&env, &core_a, "status --studio aiflows").unwrap_err();
+    let m = resolved(&env, &core_a, "status --studio orchard").unwrap_err();
     let m = m.message();
     assert!(m.contains("several"), "{m}");
     assert!(m.contains("core-b") && m.contains("core-c"), "{m}");
@@ -112,15 +112,15 @@ fn no_match_anywhere_keeps_the_plain_refusal() {
     make_studio(&root, &core(&root, "core-b"), "other", "Other");
     let env = shell_env(&root);
 
-    let m = resolved(&env, &core(&root, "core-a"), "status --studio aiflows").unwrap_err();
-    assert_eq!(m.message(), "no studio 'aiflows'");
+    let m = resolved(&env, &core(&root, "core-a"), "status --studio orchard").unwrap_err();
+    assert_eq!(m.message(), "no studio 'orchard'");
 }
 
 #[test]
 fn a_pinned_base_never_scans_siblings() {
     let root = TestDir::new("backlot-xdg");
     let core_a = core(&root, "core-a");
-    make_studio(&root, &core(&root, "core-b"), "aiflows", "Flows");
+    make_studio(&root, &core(&root, "core-b"), "orchard", "Orchard");
 
     // `BACKLOT_STATE_DIR` pins — role terminals carry it.
     let mut env = shell_env(&root);
@@ -128,16 +128,16 @@ fn a_pinned_base_never_scans_siblings() {
         "BACKLOT_STATE_DIR".into(),
         core_a.to_string_lossy().into_owned(),
     );
-    let m = resolved(&env, &core_a, "status --studio aiflows").unwrap_err();
-    assert_eq!(m.message(), "no studio 'aiflows'");
+    let m = resolved(&env, &core_a, "status --studio orchard").unwrap_err();
+    assert_eq!(m.message(), "no studio 'orchard'");
 
     // `--session` and `--remote` pin too — they already say which core.
     let env = shell_env(&root);
     for args in [
-        "status --studio aiflows --session other",
-        "status --studio aiflows --remote host-a",
+        "status --studio orchard --session other",
+        "status --studio orchard --remote host-a",
     ] {
         let m = resolved(&env, &core_a, args).unwrap_err();
-        assert_eq!(m.message(), "no studio 'aiflows'", "{args}");
+        assert_eq!(m.message(), "no studio 'orchard'", "{args}");
     }
 }

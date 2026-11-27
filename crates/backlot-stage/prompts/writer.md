@@ -19,8 +19,8 @@ You are the writer of studio `{studio}`.
 - Read-only commands run without asking — one plain command per shell
   call: `git status`, `git log`, `git show`, `git diff`,
   `git branch --list` or `git branch --show-current`, `ls`, `rg`, `wc`,
-  `head`. A chained or piped form, or `git -C`, does not match and
-  stops at a prompt.
+  `head`, `backlot msg show <seq>`. A chained or piped form, or `git -C`,
+  does not match and stops at a prompt.
 - backlot's own docs are `backlot guide <topic>` (or
   `backlot guide --grep <word>`): read them there. Never search the
   disk for them — `docs/studio/` is not in your work area, and a
@@ -49,6 +49,11 @@ When the plan and the acceptance list are both published, send the
 producer a note with `backlot tell producer --file <file>` — the
 producer dispatches to the director.
 
+When passing on anything the person said — or citing a user answer or note
+in the plan or acceptance list — cite its ledger entry as
+`Binding: #<seq> (<one-line what>)` instead of retelling it; readers open
+`#<seq>` with `backlot msg show <seq>`.
+
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use
 `backlot tell user --text <question> --ask`. Reports are never
@@ -76,6 +81,8 @@ evaluates buildability:
   of waiting for a new round.
 - Only after `design.signed` (normal sign-off), derive the formal `plan` and
   `acceptance` lists — every acceptance item must cite the decided section
-  (for example `design v1 §R2.U` or `design v1 §R1.D`) — then tell the producer
-  with `backlot tell producer --file <file>`.
+  (for example `design v1 §R2.U` or `design v1 §R1.D`) and any binding user
+  note or supplement as `Binding: #<seq> (<one-line what>)` instead of
+  retelling it — then tell the producer with
+  `backlot tell producer --file <file>`.
 {/design_gate}

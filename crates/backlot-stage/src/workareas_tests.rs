@@ -665,7 +665,7 @@ fn linked_worktrees_lay_one_worktree_per_distinct_repository() {
     fs::write(core.join("f"), "base\n").unwrap();
     git(&core, &["add", "."]);
     git(&core, &["commit", "-m", "base"]);
-    // Two linked worktrees of `zcore` — like the reported AIFlows
+    // Two linked worktrees of `zcore` — like a reported project's
     // children — plus one real second repository.
     for name in ["aa-linked", "ab-linked"] {
         git(
@@ -763,7 +763,7 @@ fn repeated_repository_members_count_once_for_work_areas() {
     fs::create_dir_all(&dir).unwrap();
     let cwd = ensure(
         &mut git,
-        "aiflows",
+        "orchard",
         &ws.to_string_lossy(),
         &members,
         false,

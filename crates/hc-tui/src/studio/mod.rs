@@ -95,6 +95,12 @@ pub(crate) struct Studio {
     /// studio header, rebuilt by `sync_studio`.
     pub(crate) lot: crate::chrome::lot::Lot,
     last_focused_terminal: Option<String>,
+    /// `(studio, role, terminal)` for `App::focused` while it still
+    /// points at that role's current (or since-paused) terminal.
+    focused_role: Option<(StudioKey, String, String)>,
+    /// Last terminal seen for each `(studio, role)` in the summary, so
+    /// `StudioFocus::Role` follows a role's restart even off-pane.
+    role_terminals: BTreeMap<(StudioKey, String), String>,
 }
 
 impl Studio {
@@ -143,24 +149,34 @@ impl Studio {
         if focus_changed {
             self.last_focused_terminal = focused.map(str::to_owned);
         }
-        let matched = focused.and_then(|terminal| {
-            studios
-                .iter()
-                .find_map(|s| {
-                    s.studio
-                        .roles
-                        .iter()
-                        .find(|role| role.terminal.as_deref() == Some(terminal))
-                        .map(|role| (s.key(), role.role.clone(), terminal.to_owned()))
-                })
-                .or_else(|| {
-                    shell_key
-                        .clone()
-                        .filter(|key| studios.iter().any(|s| &s.key() == key))
-                        .map(|key| (key, terminal.to_owned(), terminal.to_owned()))
-                })
+        let role_match = focused.and_then(|terminal| {
+            studios.iter().find_map(|s| {
+                s.studio
+                    .roles
+                    .iter()
+                    .find(|role| role.terminal.as_deref() == Some(terminal))
+                    .map(|role| (s.key(), role.role.clone(), terminal.to_owned()))
+            })
+        });
+        let matched = role_match.clone().or_else(|| {
+            focused.and_then(|terminal| {
+                shell_key
+                    .clone()
+                    .filter(|key| studios.iter().any(|s| &s.key() == key))
+                    .map(|key| (key, terminal.to_owned(), terminal.to_owned()))
+            })
         });
         if focus_changed {
+            if role_match.is_some() {
+                self.focused_role = role_match.clone();
+            } else if self
+                .focused_role
+                .as_ref()
+                .map(|(_, _, terminal)| terminal.as_str())
+                != focused
+            {
+                self.focused_role = None;
+            }
             if let Some((key, member, terminal)) = matched {
                 self.current = Some(key.clone());
                 self.remembered.insert(key.clone(), member);
@@ -191,6 +207,15 @@ impl Studio {
             self.remembered.insert(key.clone(), member);
             self.focus = Some(StudioFocus::Role(key, terminal));
         }
+        if self.focused_role.is_none() {
+            self.focused_role = role_match;
+        }
+        if let Some((key, role_name, _)) = &self.focused_role
+            && find_role(&studios, key, role_name).is_none()
+        {
+            self.focused_role = None;
+        }
+        self.record_role_terminals(&studios);
         // A current studio that left every machine's document falls
         // back to the aggregate's order, like the start does.
         if self
@@ -200,6 +225,73 @@ impl Studio {
         {
             self.current = studios.first().map(|s| s.key());
         }
+    }
+
+    fn record_role_terminals(&mut self, studios: &[crate::panel::data::StudioRef<'_>]) {
+        self.role_terminals
+            .retain(|(key, role_name), _| find_role(studios, key, role_name).is_some());
+        for s in studios {
+            let key = s.key();
+            for role in &s.studio.roles {
+                if let Some(terminal) = &role.terminal {
+                    self.role_terminals
+                        .insert((key.clone(), role.role.clone()), terminal.clone());
+                }
+            }
+        }
+    }
+
+    fn update_role_cursor(&mut self, key: &StudioKey, old: &str, new: &str) {
+        if let Some(StudioFocus::Role(focus_key, focus_term)) = &mut self.focus
+            && focus_key == key
+            && focus_term == old
+        {
+            *focus_term = new.to_owned();
+        }
+        if self.remembered.get(key).is_some_and(|m| m == old) {
+            self.remembered.insert(key.clone(), new.to_owned());
+        }
+    }
+
+    /// Retarget `Studio` state when a resumed role receives a new live
+    /// terminal, returning the new terminal if `App::focused` should move.
+    pub(crate) fn retarget_resumed(
+        &mut self,
+        machines: &[MachineSummary],
+        focused: Option<&str>,
+        is_live: impl Fn(&str) -> bool,
+    ) -> Option<String> {
+        if machines.is_empty() {
+            return None;
+        }
+        let studios = crate::panel::data::studios(machines);
+        let live_for = |key: &StudioKey, role_name: &str| {
+            find_role(&studios, key, role_name)
+                .and_then(live_terminal)
+                .filter(|t| is_live(t))
+                .map(str::to_owned)
+        };
+
+        if let Some(StudioFocus::Role(key, old)) = self.focus.clone()
+            && let Some(new_term) = self.role_terminals.iter().find_map(|((k, role), prev)| {
+                (k == &key && prev == &old)
+                    .then(|| live_for(k, role))
+                    .flatten()
+                    .filter(|t| t != &old)
+            })
+        {
+            self.update_role_cursor(&key, &old, &new_term);
+        }
+
+        let (key, role_name, old_term) = self.focused_role.as_ref()?.clone();
+        if focused != Some(old_term.as_str()) {
+            return None;
+        }
+        let new_term = live_for(&key, &role_name).filter(|t| t != &old_term)?;
+        self.update_role_cursor(&key, &old_term, &new_term);
+        self.focused_role = Some((key, role_name, new_term.clone()));
+        self.last_focused_terminal = Some(new_term.clone());
+        Some(new_term)
     }
 
     /// The current studio's index in the aggregate's order — `None`
@@ -285,6 +377,17 @@ pub(crate) fn working_count(studio: &StudioSummary) -> usize {
         .iter()
         .filter(|role| role.work == Some(backlot_model::summary::Work::Working))
         .count()
+}
+
+fn find_role<'a>(
+    studios: &'a [crate::panel::data::StudioRef<'a>],
+    key: &StudioKey,
+    role_name: &str,
+) -> Option<&'a RoleSummary> {
+    studios
+        .iter()
+        .find(|s| &s.key() == key)
+        .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
 }
 
 #[cfg(test)]

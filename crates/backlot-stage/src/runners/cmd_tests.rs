@@ -43,14 +43,14 @@ fn slug_is_command_codes() {
     );
 }
 
-/// The S12e run's real slugs: `AIcontrol` is `a-icontrol` — the
+/// An acronym before a lowercase word: `AIworks` is `a-iworks` — the
 /// acronym's last capital starts the lowercase word, so the split
-/// lands before `Icontrol`, not after `AI`. The external run
-/// harness's ad-hoc `tr` acronym computed `aicontrol` and missed
+/// lands before `Iworks`, not after `AI`. The external run
+/// harness's ad-hoc `tr` acronym computed `aiworks` and missed
 /// the session; the adapter's own function was never wrong.
 #[test]
 fn slug_splits_an_acronym_boundary() {
-    assert_eq!(slug("/home/user/AIcontrol"), "home-user-a-icontrol");
+    assert_eq!(slug("/home/user/AIworks"), "home-user-a-iworks");
     assert_eq!(slug("/home/user/s12e"), "home-user-s12e");
     assert_eq!(slug("/home/user/acme-shop"), "home-user-acme-shop");
 }
@@ -77,6 +77,7 @@ fn rules_per_role() {
         "Shell(rg:*)",
         "Shell(wc:*)",
         "Shell(head:*)",
+        "Shell(backlot msg show:*)",
     ];
     let director: Vec<String> = std::iter::once("Shell(backlot)".to_string())
         .chain(read_only.iter().map(|r| r.to_string()))

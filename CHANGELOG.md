@@ -10,8 +10,18 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Read one studio message by ledger `seq` (`backlot msg show`) and cite `#<seq>` in role prompts (`backlot-stage`, docs).** Added the read-only `backlot msg show <seq> [--json]` command (accepting `<seq>` or `#<seq>`, strictly scoped to the caller's own studio) to print sender, recipient, UTC timestamp, kind (`tell`, `ask` with its resolving `answer`, `design note`, `supplement`, `design proposal`/`buildability`/`summary`/`sign-off`, `report`, `finding`), and full body under strict studio-path containment; added `backlot msg show` to the shared `READ_ONLY` runner allowlist (`claude`, `cursor`, `cmd`, `cline`, `devin`); updated `director.md`, `actor.md`, `producer.md`, and `writer.md` (keeping gate-off and `{#design_gate}` sections consistent) to cite binding messages as `Binding: #<seq> (<one-line what>)` instead of retelling them and to open cited `#<seq>` entries before acting; and updated `docs/studio/{design,guide,runners}.md`.
+
+### Changed
+
+- Test fixtures and docs use neutral names only.
+
 ### Fixed
 
+- Retarget the main pane (and studio role cursor / remembered member) to a role's new live terminal when the role resumes, restarts, recasts, or reopens from a finished terminal, while preserving keyboard focus and leaving non-resumed finished terminals alone.
+- The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
 - **Drop queued mail targeting permanently closed task actors (`actor_closed`) and surface drop reasons (`backlot-model`, `backlot-stage`, `hc-tui`).** `deliver` now drops undelivered `message.queued` items addressed to an `actor-<task>-c<n>` whose session has closed for good (finished, closed, or exited with no resume and no live terminal for that actor id) via `message.dropped` with `reason: "actor_closed"` instead of retrying forever, cleaning old ledgers on the next stage pass without rewriting history. Fixed-role mail (`producer`, `director`, `writer`) and mail for paused, recovering, reopened, restarting, or still-live actors are preserved, and dropped user-facing messages remain visible with `dropped_reason` in `backlot status`, `StudioExchange`, Lot Dock, and Reader metadata while no longer counting as pending (`docs/studio/ledger.md`).
 
 ## 0.4.20 — 2026-11-27

@@ -154,7 +154,7 @@ fn a_broken_git_mark_counts_as_no_repository() {
     let files = &scratch.files;
 
     // The reported case: a `.git` directory that is empty.
-    let broken = files.join("aiflows");
+    let broken = files.join("orchard");
     fs::create_dir_all(broken.join(".git")).unwrap();
     assert_eq!(paths::classify(&broken), PathShape::Plain);
 

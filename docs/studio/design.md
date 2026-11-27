@@ -98,13 +98,13 @@ no per-agent integration beyond the launch flags in `runners.md`.
 | Writer | `backlot plan publish` |
 | Director | `backlot task new`, `backlot cast`, `backlot review`, `backlot report`, `backlot ask` |
 | Actor | `backlot deliver`, `backlot block` |
-| Any | `backlot status`, `backlot progress`, `backlot tell <role> [--ask \| --note]`, `backlot guide` |
+| Any | `backlot status`, `backlot progress`, `backlot msg show <seq>`, `backlot tell <role> [--ask \| --note]`, `backlot guide` |
 
 `backlot guide [<topic>] [--grep <word>]` prints backlot's own docs, compiled into the binary from
 `docs/studio/` (one topic per file) — no studio, ledger or core. Every role prompt says its docs come
 from there and never from a disk search, and the launch pre-allows it like any other `backlot`
 command. The shared read-only command set — `git status`, `git log`, `git show`, `git diff`,
-`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head` — is pre-allowed for every
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show` — is pre-allowed for every
 role on every runner that carries an allow list (`runners.md`), so a role's forensic reads never ask a
 person; one plain command per shell call, since a chained or `git -C` form does not match.
 
