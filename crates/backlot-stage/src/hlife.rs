@@ -79,6 +79,9 @@ impl Stage {
         if let Err(e) = self.propose_outward(&hdir) {
             self.hlog(&format!("outward: {}", e.message()));
         }
+        if let Err(e) = self.propose_repo_notes(&hdir) {
+            self.hlog(&format!("repo-note: {}", e.message()));
+        }
         if let Err(e) = self.hcards(&hdir) {
             self.hlog(&format!("cards: {}", e.message()));
         }

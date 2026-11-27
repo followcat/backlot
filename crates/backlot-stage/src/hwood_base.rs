@@ -71,6 +71,21 @@ pub(crate) fn resolve_action(
             crate::hsetup::validate_hollywood_target(env, runner, model, effort.as_deref())?;
             Ok(action.clone())
         }
+        CardAction::RepoNote {
+            repo,
+            entry_id,
+            text,
+            ..
+        } => {
+            crate::args_studio::check_repo_absolute(repo)?;
+            if !backlot_model::repo_notes::valid_entry_id(entry_id) {
+                return Err(Fail::refused(format!(
+                    "invalid --id '{entry_id}' (expected [a-z0-9_-]{{1,40}})"
+                )));
+            }
+            backlot_model::repo_notes::check_text_safe(text).map_err(Fail::refused)?;
+            Ok(action.clone())
+        }
         _ => Ok(action.clone()),
     }
 }
@@ -230,5 +245,13 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
             Ok(CardBase::StudioFinished)
         }
         CardAction::Outward { .. } => Err(Fail::refused("outward cards are proposed by the stage")),
+        CardAction::RepoNote { repo, entry_id, .. } => {
+            let canon = crate::args_studio::canonical_repo(repo);
+            Ok(CardBase::RepoNoteEntry {
+                prev_sha256: crate::repo_note::entry_digest(base, &canon, entry_id),
+                repo: canon,
+                entry_id: entry_id.clone(),
+            })
+        }
     }
 }

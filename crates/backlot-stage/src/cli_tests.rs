@@ -666,6 +666,7 @@ fn every_command_word_is_registered() {
         "ask",
         "tell",
         "decide",
+        "repo-note",
         "msg",
         "task",
         "cast",

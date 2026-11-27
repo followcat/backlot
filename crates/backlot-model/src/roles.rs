@@ -219,7 +219,9 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         EventKind::MessageQueued {
             purpose: Some(purpose),
             ..
-        } if purpose == "decision" && !matches!(role, "director" | "producer" | "user") => {
+        } if matches!(purpose.as_str(), "decision" | "repo_note")
+            && !matches!(role, "director" | "producer" | "user") =>
+        {
             return Err(cannot(role, who_can(&new.kind)));
         }
         _ => {}
@@ -273,7 +275,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         EventKind::MessageQueued { purpose, .. } => {
             if purpose.is_none() {
                 "a person"
-            } else if purpose.as_deref() == Some("decision") {
+            } else if matches!(purpose.as_deref(), Some("decision") | Some("repo_note")) {
                 "the user, the producer or the director"
             } else {
                 "the producer or the stage"

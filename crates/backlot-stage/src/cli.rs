@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "ask",
     "tell",
     "decide",
+    "repo-note",
     "msg",
     "progress",
     "task",
@@ -282,7 +283,7 @@ impl From<StoreError<Fail, backlot_model::hollywood::HRefusal>> for Fail {
     }
 }
 
-fn load(dir: &Path) -> Result<StudioState, Fail> {
+pub(crate) fn load(dir: &Path) -> Result<StudioState, Fail> {
     store::load_state(dir).map_err(|e| match e {
         StoreError::Io(e) => refused(e),
         StoreError::Corrupt(c) => refused(c),
@@ -625,6 +626,9 @@ pub(crate) fn exec_event(
             supersedes.as_deref(),
             notify.as_deref(),
         )?),
+        Cmd::RepoNote(crate::args::RepoNoteCmd::Propose { id, text, why }) => Some(
+            crate::repo_note::propose_in_studio(base, &caller, &id, &text, &why)?,
+        ),
         other => {
             let built = commands::build(&caller, other, env, base)?;
             let recast_note = std::cell::Cell::new(None);

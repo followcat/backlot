@@ -328,7 +328,11 @@ pub fn session_at(
     best.map(|(_, id)| id)
 }
 
-pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
+pub(crate) fn plan(
+    identity: &ActorIdentity,
+    ctx: &LaunchCtx,
+    repo_notes_file: Option<&str>,
+) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}
         other => return Err(PlanError::profile(other)),
@@ -356,6 +360,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         PathBuf::from(ctx.studio_dir)
     };
     let add_dir = add_dir.to_string_lossy().into_owned();
+    let mut additional_dirs = vec![add_dir.clone()];
     argv.extend([
         "-m".into(),
         identity.model.clone(),
@@ -363,8 +368,17 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "--skip-onboarding".into(),
         "--no-auto-update".into(),
         "--add-dir".into(),
-        add_dir.clone(),
+        add_dir,
     ]);
+    if let Some(note_file) = repo_notes_file
+        && let Some(notes_dir) = Path::new(note_file).parent()
+    {
+        let extra = notes_dir.to_string_lossy().into_owned();
+        if !additional_dirs.contains(&extra) {
+            argv.extend(["--add-dir".into(), extra.clone()]);
+            additional_dirs.push(extra);
+        }
+    }
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt
     {
@@ -385,7 +399,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         prep: Some(Prep::Cmd(CmdPrep {
             settings: Path::new(ctx.cwd).join(".commandcode/settings.json"),
             allow: allow_rules(ctx.role, ctx.checks),
-            additional_dirs: vec![add_dir],
+            additional_dirs,
             global_mcp,
             signals: Path::new(ctx.studio_dir)
                 .join("roles")

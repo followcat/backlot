@@ -1133,3 +1133,101 @@ pub(crate) fn decide(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), 
         },
     ))
 }
+
+/// `repo-note propose|show|remove`
+pub(crate) fn repo_note(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let Some(sub) = it.next() else {
+        return Err(usage("missing repo-note subcommand", U_REPO_NOTE));
+    };
+    if sub == "-h" || sub == "--help" {
+        return Ok((std::mem::take(common), Cmd::Help(U_REPO_NOTE)));
+    }
+    match sub.as_str() {
+        "propose" => {
+            let mut id = None;
+            let mut text = None;
+            let mut why = None;
+            while let Some(arg) = it.next() {
+                if arg == "-h" || arg == "--help" {
+                    return Ok((std::mem::take(common), Cmd::Help(U_REPO_NOTE)));
+                }
+                if common_flag(it, common, &arg, U_REPO_NOTE)? {
+                    continue;
+                }
+                match arg.as_str() {
+                    "--id" => id = Some(it.value("--id", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--id").is_some() => id = eq(&arg, "--id").map(String::from),
+                    "--text" => text = Some(it.value("--text", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--text").is_some() => {
+                        text = eq(&arg, "--text").map(String::from)
+                    }
+                    "--why" => why = Some(it.value("--why", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
+                    _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPO_NOTE)),
+                }
+            }
+            Ok((
+                std::mem::take(common),
+                Cmd::RepoNote(RepoNoteCmd::Propose {
+                    id: id.ok_or_else(|| usage("missing --id", U_REPO_NOTE))?,
+                    text: text.ok_or_else(|| usage("missing --text", U_REPO_NOTE))?,
+                    why: why.ok_or_else(|| usage("missing --why", U_REPO_NOTE))?,
+                }),
+            ))
+        }
+        "show" => {
+            let mut repo = None;
+            while let Some(arg) = it.next() {
+                if arg == "-h" || arg == "--help" {
+                    return Ok((std::mem::take(common), Cmd::Help(U_REPO_NOTE)));
+                }
+                if common_flag(it, common, &arg, U_REPO_NOTE)? {
+                    continue;
+                }
+                match arg.as_str() {
+                    "--repo" => repo = Some(it.value("--repo", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--repo").is_some() => {
+                        repo = eq(&arg, "--repo").map(String::from)
+                    }
+                    _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPO_NOTE)),
+                }
+            }
+            Ok((
+                std::mem::take(common),
+                Cmd::RepoNote(RepoNoteCmd::Show { repo }),
+            ))
+        }
+        "remove" => {
+            let mut id = None;
+            let mut repo = None;
+            while let Some(arg) = it.next() {
+                if arg == "-h" || arg == "--help" {
+                    return Ok((std::mem::take(common), Cmd::Help(U_REPO_NOTE)));
+                }
+                if common_flag(it, common, &arg, U_REPO_NOTE)? {
+                    continue;
+                }
+                match arg.as_str() {
+                    "--id" => id = Some(it.value("--id", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--id").is_some() => id = eq(&arg, "--id").map(String::from),
+                    "--repo" => repo = Some(it.value("--repo", U_REPO_NOTE)?),
+                    _ if eq(&arg, "--repo").is_some() => {
+                        repo = eq(&arg, "--repo").map(String::from)
+                    }
+                    _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPO_NOTE)),
+                }
+            }
+            Ok((
+                std::mem::take(common),
+                Cmd::RepoNote(RepoNoteCmd::Remove {
+                    id: id.ok_or_else(|| usage("missing --id", U_REPO_NOTE))?,
+                    repo,
+                }),
+            ))
+        }
+        _ => Err(usage(
+            format!("unknown repo-note subcommand '{sub}'"),
+            U_REPO_NOTE,
+        )),
+    }
+}

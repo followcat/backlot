@@ -361,14 +361,23 @@ pub fn decide_start(
 
 /// The runner's plan for `identity` in `ctx`, or why it cannot run.
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
+    plan_with_notes(identity, ctx, None)
+}
+
+/// [`plan`] with an optional read-only `<state_dir>/repo-notes/<hash>.md` file.
+pub(crate) fn plan_with_notes(
+    identity: &ActorIdentity,
+    ctx: &LaunchCtx,
+    repo_notes_file: Option<&str>,
+) -> Result<Launch, PlanError> {
     match identity.runner.as_str() {
         "fake" => fake::plan(identity, ctx),
-        "claude" => claude::plan(identity, ctx),
+        "claude" => claude::plan(identity, ctx, repo_notes_file),
         "codex" => codex::plan(identity, ctx),
         "devin" => devin::plan(identity, ctx),
         "opencode" => opencode::plan(identity, ctx),
         "cursor" => cursor::plan(identity, ctx),
-        "cmd" => cmd::plan(identity, ctx),
+        "cmd" => cmd::plan(identity, ctx, repo_notes_file),
         "cline" => cline::plan(identity, ctx),
         "agy" => agy::plan(identity, ctx),
         other => Err(PlanError::runner(other, ctx)),

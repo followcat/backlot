@@ -41,6 +41,7 @@ pub mod recast;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
+pub mod repo_notes;
 pub mod req_catalog;
 pub mod req_results;
 pub mod req_wire;

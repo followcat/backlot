@@ -120,6 +120,8 @@ pub enum Cmd {
         supersedes: Option<String>,
         notify: Option<String>,
     },
+    /// `repo-note propose|show|remove`: machine-local, repo-scoped operator notes.
+    RepoNote(RepoNoteCmd),
     /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
     Progress {
         source: TextSource,
@@ -358,6 +360,23 @@ pub enum ServerCmd {
 pub use crate::args_design::{DesignCmd, QuestionInput};
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
 
+/// Subcommands under `backlot repo-note`.
+#[derive(Debug)]
+pub enum RepoNoteCmd {
+    Propose {
+        id: String,
+        text: String,
+        why: String,
+    },
+    Show {
+        repo: Option<String>,
+    },
+    Remove {
+        id: String,
+        repo: Option<String>,
+    },
+}
+
 /// Tail line of every command's usage text.
 pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t> --server <host>[/<session>]";
 
@@ -560,6 +579,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
         "decide" => args_studio::decide(&mut common, &mut it),
+        "repo-note" => args_studio::repo_note(&mut common, &mut it),
         "msg" => args_studio::msg(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),

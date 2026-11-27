@@ -19,9 +19,9 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 - `backlot studio new --title <t> --repo <path> --cast <file.toml> [--ask <text> | --ask-file <f>] [--mode standard|experimental] [--dry-run]`
   flags: --title --repo --cast --ask --ask-file --mode --dry-run
 
-- `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>] [--answers <seqs>] --why <line>`
-  flags: --studio --task --person --level --runner --model --effort --title --repo --cast --brief --fresh --file --answers --why
-  actions: studio-new | close | reopen | reopen-studio | priority | pause | resume | abandon | recast | restart | cast | setup
+- `backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] [--title <t>] [--repo <path>] [--id <slug>] [--text <text>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>] [--answers <seqs>] --why <line>`
+  flags: --studio --task --person --level --runner --model --effort --title --repo --id --text --cast --brief --fresh --file --answers --why
+  actions: studio-new | close | reopen | reopen-studio | priority | pause | resume | abandon | recast | restart | cast | setup | repo-note
   example (`propose setup`): `backlot hollywood propose setup --runner claude --model claude-opus-5-5 --effort xhigh --why "switch agent"`
   examples: `propose restart --studio <s> --person <key> [--fresh] --why "stuck"`,
   `propose cast --studio <s> --file drafts/<studio>/cast.toml --why "cheaper actors"`

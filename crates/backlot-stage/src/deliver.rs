@@ -96,7 +96,8 @@ fn item_line(it: &OutItem, dir: &Path) -> String {
 pub fn outbox(state: &StudioState, dir: &Path) -> Vec<Outbound> {
     let mut by_role: BTreeMap<String, Vec<OutItem>> = BTreeMap::new();
     for m in &state.messages {
-        if !m.delivered && !m.dropped && m.to != "user" {
+        if !m.delivered && !m.dropped && m.to != "user" && m.purpose.as_deref() != Some("repo_note")
+        {
             by_role
                 .entry(m.to.clone())
                 .or_default()

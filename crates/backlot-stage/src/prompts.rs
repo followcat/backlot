@@ -281,6 +281,16 @@ pub fn prepare(
         text.push_str(&render(RECAST, &fields));
     }
     text.push_str(mode_guidance(start.kind, state));
+    if matches!(start.kind, RoleKind::Director | RoleKind::Writer)
+        && let Some(notes_path) =
+            crate::repo_note::existing_notes_path_for_studio_dir(dir, &start.repo)
+    {
+        text.push_str(&format!(
+            "\n## Repository notes (read-only)\n\nRead-only operator notes for `{}` live at `{}`.\nRead them at session start; never copy credentials or edit this file directly (propose updates with `backlot repo-note propose`).\n",
+            start.repo,
+            notes_path.display()
+        ));
+    }
     let file = prompts.join(format!("{}.md", start.role));
     fs::write(&file, text)?;
     Ok(file)

@@ -780,10 +780,13 @@ pub fn summary_with_running(
                 .collect(),
             roles,
             exchange: crate::studio_exchange::studio_exchange(state, &studio_snippets),
-            pending_tell: state
-                .messages
-                .iter()
-                .any(|m| m.from == "user" && m.to != "user" && !m.delivered && !m.dropped),
+            pending_tell: state.messages.iter().any(|m| {
+                m.from == "user"
+                    && m.to != "user"
+                    && !m.delivered
+                    && !m.dropped
+                    && m.purpose.as_deref() != Some("repo_note")
+            }),
             outward_cards: Vec::new(),
             needs_upgrade: !state.unknown_kinds.is_empty(),
             unknown_kinds: state.unknown_kinds.iter().cloned().collect(),

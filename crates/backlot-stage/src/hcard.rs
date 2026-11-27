@@ -105,6 +105,7 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
         CardAction::Setup { .. } => false,
         CardAction::Outward { .. } => s.has_outward_completion(card.seq),
+        CardAction::RepoNote { .. } => false,
     }
 }
 
@@ -142,6 +143,10 @@ impl Stage {
     /// One applied card: already-done, stale-check, then the action
     /// — and its outcome in Hollywood's ledger.
     fn hcard(&self, hdir: &Path, card: &Card, now_ms: u64) -> Result<(), Fail> {
+        if matches!(&card.action, CardAction::RepoNote { .. }) {
+            let step = self.repo_note_step(card);
+            return self.finish_card_step(hdir, None, card, step);
+        }
         // A card's identifiers came in over the ledger — refuse a
         // hostile studio name before it builds a path (D17a).
         if !crate::cli::valid_studio_name(card.action.studio()) {
@@ -159,6 +164,7 @@ impl Stage {
         let step = match &card.action {
             CardAction::StudioNew { .. } => self.studio_new_step(hdir, &sdir, card, sstate),
             CardAction::Setup { .. } => return self.setup_step(hdir, card),
+            CardAction::RepoNote { .. } => unreachable!("repo-note handled above"),
             CardAction::Cast { .. } => self.cast_step(hdir, &sdir, card, sstate),
             CardAction::Outward { .. } => match &sstate {
                 None => Step::Fail(format!("no studio '{}'", card.action.studio())),
@@ -176,6 +182,44 @@ impl Stage {
                 },
             },
         };
+        self.finish_card_step(hdir, Some(&sdir), card, step)
+    }
+
+    fn repo_note_step(&self, card: &Card) -> Step {
+        let CardAction::RepoNote {
+            repo,
+            entry_id,
+            text,
+            ..
+        } = &card.action
+        else {
+            return Step::Fail("not a repo-note card".into());
+        };
+        let path = crate::repo_note::notes_path(&self.base, repo);
+        if let Ok(existing) = std::fs::read_to_string(&path)
+            && backlot_model::repo_notes::has_card_marker(&existing, entry_id, card.seq)
+        {
+            return Step::Done;
+        }
+        let current = crate::repo_note::entry_digest(&self.base, repo, entry_id);
+        if let Some(reason) =
+            hollywood::stale_repo_note(&card.action, &card.base, current.as_deref())
+        {
+            return Step::Stale(reason);
+        }
+        match crate::repo_note::apply_card(&self.base, repo, entry_id, card.seq, text) {
+            Ok(_) => Step::Done,
+            Err(e) => Step::Fail(e.message().to_string()),
+        }
+    }
+
+    fn finish_card_step(
+        &self,
+        hdir: &Path,
+        sdir: Option<&Path>,
+        card: &Card,
+        step: Step,
+    ) -> Result<(), Fail> {
         match step {
             Step::InFlight => {}
             Step::Done => {
@@ -208,28 +252,33 @@ impl Stage {
                 )?;
                 crate::stagelog::stage_log!("card c{} failed", card.seq);
             }
-            Step::Act(kind) => match append_studio(&sdir, *kind) {
-                Ok(note) => {
-                    self.happend(
-                        hdir,
-                        HollywoodKind::CardDone {
-                            card: card.seq,
-                            note: note.unwrap_or("").into(),
-                        },
-                    )?;
-                    crate::stagelog::stage_log!("card c{} done", card.seq);
+            Step::Act(kind) => {
+                let Some(sdir) = sdir else {
+                    unreachable!("Step::Act requires studio dir");
+                };
+                match append_studio(sdir, *kind) {
+                    Ok(note) => {
+                        self.happend(
+                            hdir,
+                            HollywoodKind::CardDone {
+                                card: card.seq,
+                                note: note.unwrap_or("").into(),
+                            },
+                        )?;
+                        crate::stagelog::stage_log!("card c{} done", card.seq);
+                    }
+                    Err(e) => {
+                        self.happend(
+                            hdir,
+                            HollywoodKind::CardFailed {
+                                card: card.seq,
+                                reason: e.clone(),
+                            },
+                        )?;
+                        crate::stagelog::stage_log!("card c{} failed: {e}", card.seq);
+                    }
                 }
-                Err(e) => {
-                    self.happend(
-                        hdir,
-                        HollywoodKind::CardFailed {
-                            card: card.seq,
-                            reason: e.clone(),
-                        },
-                    )?;
-                    crate::stagelog::stage_log!("card c{} failed: {e}", card.seq);
-                }
-            },
+            }
         }
         Ok(())
     }
@@ -433,6 +482,7 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
         CardAction::Setup { .. } => Err("setup is handled apart".into()),
         CardAction::Outward { .. } => Err("outward is handled apart".into()),
+        CardAction::RepoNote { .. } => Err("repo-note is handled apart".into()),
     }
 }
 

@@ -128,6 +128,7 @@ mod reasons;
 pub mod reconcile;
 mod relabel;
 pub mod render;
+mod repo_note;
 mod repos;
 mod restore;
 mod route;
@@ -374,6 +375,8 @@ mod refused_noise_tests;
 mod render_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
+#[cfg(test)]
+mod repo_note_tests;
 #[cfg(test)]
 mod repos_tests;
 #[cfg(test)]
