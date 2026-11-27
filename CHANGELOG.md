@@ -17,13 +17,18 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- The Call Sheet compose line always shows whether Enter tells Hollywood or replies to a studio role, and a reply target no longer sticks after you leave Compose, close the sheet, or the question is answered elsewhere; sent replies appear in the sheet's history.
-- **Closed roles fold into one line in the Cast; click it to pick one to reopen.** Clicking a closed role no longer shows a disconnected-terminal error.
 - **The producer no longer sends questions to itself.** `backlot ask` from the producer is refused with a hint to use `backlot tell user --file <file> --ask`, and the producer now prints the decision it needs and a copyable answer in its own terminal alongside the ledger question. Decisions you make in its terminal are recorded at once with `backlot decide`.
 
 ### Fixed
 
 - **`backlot task new --readonly` now explains itself.** Instead of "unexpected argument", it says `--readonly` is set when casting and that `--kind audit` makes the audit task.
+
+## 0.4.29 — 2026-11-28
+
+### Changed
+
+- The Call Sheet compose line always shows whether Enter tells Hollywood or replies to a studio role, and a reply target no longer sticks after you leave Compose, close the sheet, or the question is answered elsewhere; sent replies appear in the sheet's history.
+- **Closed roles fold into one line in the Cast; click it to pick one to reopen.** Clicking a closed role no longer shows a disconnected-terminal error.
 
 ## 0.4.28 — 2026-11-28
 
