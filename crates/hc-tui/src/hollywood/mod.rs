@@ -9,6 +9,7 @@
 //! `--plain` keeps the layer `Hidden`: no cells, no consumed key, no
 //! timer — the frame is byte-identical to herdr (D15, D6).
 
+mod architrave;
 mod band;
 mod band_detail;
 mod band_lower;

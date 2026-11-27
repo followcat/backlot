@@ -1,91 +1,18 @@
-//! The band's top title architrave and bottom marquee sill:
-//! - `╔═╡ ‹✦› H O L L Y W O O D ‹✦› ╞═ … ╞═╗` (`>= 120` cols),
-//!   `╔═╡ ✦ H O L L Y W O O D ╞═ … ╞═╗` (`100..=119` cols),
-//!   `╔╡✦ HOLLYWOOD╞═ … ╞╗` (`< 100` cols), on `elev.stage_well`;
-//! - crimson tally `◉ !B` replacing green `●` whenever blocking > 0;
-//! - bottom marquee sill `╚══▪══ … ╡ ✦ ╞ … ══▪══╝` on `elev.stage_well`.
+//! Title status and bucket-count composition (`draw_title`), framed by the
+//! ornamental architrave width ladder in `architrave`.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
-use super::Target;
+use super::architrave::{finish_title_frame, init_title_frame, width_of};
 use super::draw::HollywoodRender;
 use super::items::WaitBucket;
 use super::rows;
 use super::sheet::Wait;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
-use crate::chrome::text::display_width;
 use crate::panel::data::{MachineSummary, studio_count};
-
-/// Bottom marquee sill `╚══▪══ … ╡ ✦ ╞ … ══▪══╝` on `elev.stage_well`,
-/// mirror-symmetric around the centered `╡ ✦ ╞` clasp with `▪` every 3 cells.
-pub(crate) fn draw_marquee_sill(buf: &mut Buffer, area: Rect, y: u16, palette: &Palette) {
-    let w = area.width;
-    if w == 0 {
-        return;
-    }
-    let elev = palette.elevation();
-    let well = elev.stage_well;
-    buf.set_style(Rect::new(area.x, y, w, 1), Style::default().bg(well));
-    let brass = elev.gilt_style(well);
-    let bulb = Style::default().fg(elev.bulb_warm).bg(well);
-    let gem = Style::default()
-        .fg(palette.accent)
-        .bg(well)
-        .add_modifier(Modifier::BOLD);
-
-    if w == 1 {
-        put_text(buf, area.x, y, 1, "╚", brass);
-        return;
-    }
-    if w == 2 {
-        put_text(buf, area.x, y, 2, "╚╝", brass);
-        return;
-    }
-
-    put_text(buf, area.x, y, 1, "╚", brass);
-    put_text(buf, area.x + w - 1, y, 1, "╝", brass);
-
-    let (clasp_x, clasp_right) = if w >= 11 {
-        let cx = area.x + (w - 5) / 2;
-        put_text(buf, cx, y, 2, "╡ ", brass);
-        put_text(buf, cx + 2, y, 1, "✦", gem);
-        put_text(buf, cx + 3, y, 2, " ╞", brass);
-        (cx, cx + 5)
-    } else if w >= 5 {
-        let cx = area.x + w / 2;
-        put_text(buf, cx, y, 1, "✦", gem);
-        (cx, cx + 1)
-    } else {
-        for x in area.x + 1..area.x + w - 1 {
-            put_text(buf, x, y, 1, "═", brass);
-        }
-        return;
-    };
-
-    for x in area.x + 1..clasp_x {
-        let dist = clasp_x - x;
-        if dist.is_multiple_of(3) {
-            put_text(buf, x, y, 1, "▪", bulb);
-        } else {
-            put_text(buf, x, y, 1, "═", brass);
-        }
-    }
-    for x in clasp_right..area.x + w - 1 {
-        let dist = x - clasp_right + 1;
-        if dist.is_multiple_of(3) {
-            put_text(buf, x, y, 1, "▪", bulb);
-        } else {
-            put_text(buf, x, y, 1, "═", brass);
-        }
-    }
-}
-
-fn width_of(text: &str) -> u16 {
-    display_width(text) as u16
-}
 
 #[derive(Clone, Copy)]
 enum RightTier {
@@ -166,46 +93,6 @@ fn segs_width(segs: &[(String, Style)]) -> u16 {
     segs.iter().map(|(s, _)| width_of(s)).sum()
 }
 
-fn draw_title_prefix(buf: &mut Buffer, area: Rect, y: u16, palette: &Palette) -> u16 {
-    let elev = palette.elevation();
-    let well = elev.stage_well;
-    let brass = elev.gilt_style(well);
-    let mark_style = Style::default()
-        .fg(palette.accent)
-        .bg(well)
-        .add_modifier(Modifier::BOLD);
-    let mut x = area.x;
-    let limit = area.x + area.width;
-    let put = |b: &mut Buffer, cx: &mut u16, s: &str, st: Style| {
-        let w = display_width(s) as u16;
-        let take = w.min(limit.saturating_sub(*cx));
-        if take > 0 {
-            put_text(b, *cx, y, take, s, st);
-            *cx += take;
-        }
-    };
-    if area.width >= 120 {
-        put(buf, &mut x, "╔═╡ ", brass);
-        put(buf, &mut x, "‹", brass);
-        put(buf, &mut x, "✦", mark_style);
-        put(buf, &mut x, "›", brass);
-        put(buf, &mut x, " H O L L Y W O O D ", mark_style);
-        put(buf, &mut x, "‹", brass);
-        put(buf, &mut x, "✦", mark_style);
-        put(buf, &mut x, "›", brass);
-        put(buf, &mut x, " ╞═ ", brass);
-    } else if area.width >= 100 {
-        put(buf, &mut x, "╔═╡ ", brass);
-        put(buf, &mut x, "✦ H O L L Y W O O D", mark_style);
-        put(buf, &mut x, " ╞═ ", brass);
-    } else {
-        put(buf, &mut x, "╔╡", brass);
-        put(buf, &mut x, "✦ HOLLYWOOD", mark_style);
-        put(buf, &mut x, "╞═ ", brass);
-    }
-    x
-}
-
 /// The title row: brass marquee architrave on `elev.stage_well` + agent status
 /// (crimson tally `◉ !B` while blocking > 0) + right-aligned bucket counts.
 #[allow(clippy::too_many_arguments)]
@@ -222,23 +109,10 @@ pub(crate) fn draw_title(
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
-    let row = Rect::new(area.x, y, area.width, 1);
-    hits.title = row;
-    hits.rows.push((row, Target::Title));
+    let frame = init_title_frame(buf, area, y, palette, hits);
     let elev = palette.elevation();
-    let well = elev.stage_well;
-    let base = Style::default().bg(well);
-    let brass = elev.gilt_style(well);
-    buf.set_style(row, base);
-
-    let x = draw_title_prefix(buf, area, y, palette);
-    let right_cap = if area.width >= 100 {
-        " ╞═╗"
-    } else {
-        " ╞╗"
-    };
-    let right_cap_w = width_of(right_cap);
-    let clasp_w = 2u16; // `"╡ "`
+    let base = frame.base;
+    let x = frame.x;
 
     let studios = studio_count(machines);
     let full_right = build_right_segs(studios, waits, title_scroll, RightTier::Full, palette);
@@ -295,12 +169,7 @@ pub(crate) fn draw_title(
     let tally_w = width_of(&tally_prefix);
 
     let pick_for = |right_w: u16| -> Option<String> {
-        let right_total = if right_w > 0 {
-            clasp_w + right_w + right_cap_w
-        } else {
-            right_cap_w
-        };
-        let right_start = (area.x + area.width).saturating_sub(right_total);
+        let right_start = frame.right_start(area, right_w);
         // Reserve `glyph (1) + ' ' (1)` before text and ` ' '` after text before beam/clasp.
         let room = right_start.saturating_sub(x + 3);
         let full_w = tally_w + width_of(&agent_line);
@@ -366,12 +235,7 @@ pub(crate) fn draw_title(
         ("·", elev.muted_surface, false)
     };
     let right_w = segs_width(&chosen_right);
-    let right_total = if right_w > 0 {
-        clasp_w + right_w + right_cap_w
-    } else {
-        right_cap_w
-    };
-    let right_start = (area.x + area.width).saturating_sub(right_total);
+    let right_start = frame.right_start(area, right_w);
 
     if x + 1 < right_start {
         let mut gstyle = base.fg(colour);
@@ -419,22 +283,5 @@ pub(crate) fn draw_title(
         beam_start = tx + tw + 1;
     }
 
-    if beam_start < right_start {
-        let fill = right_start - beam_start;
-        put_text(buf, beam_start, y, fill, &"═".repeat(fill as usize), brass);
-    }
-
-    if right_w > 0 && right_start >= x {
-        put_text(buf, right_start, y, clasp_w, "╡ ", brass);
-        let mut rx = right_start + clasp_w;
-        for (seg, style) in chosen_right {
-            let sw = width_of(&seg);
-            put_text(buf, rx, y, sw, &seg, style);
-            rx += sw;
-        }
-        put_text(buf, rx, y, right_cap_w, right_cap, brass);
-    } else if area.width >= right_cap_w {
-        let cap_x = (area.x + area.width).saturating_sub(right_cap_w);
-        put_text(buf, cap_x, y, right_cap_w, right_cap, brass);
-    }
+    finish_title_frame(buf, area, y, &frame, beam_start, &chosen_right, right_w);
 }

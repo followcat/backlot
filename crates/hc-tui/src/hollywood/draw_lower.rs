@@ -10,7 +10,7 @@ use super::band::RowExtras;
 use super::draw::HollywoodRender;
 use super::draw_sections::BandCtx;
 use super::rows::{self, Row, Target};
-use super::{band, hints, title};
+use super::{architrave, band, hints};
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::list_scroll_metrics;
 
@@ -244,6 +244,6 @@ pub(super) fn draw_footer(
         y += 1;
     }
     if ctx.plan.bottom_edge {
-        title::draw_marquee_sill(buf, ctx.area, y, ctx.palette);
+        architrave::draw_marquee_sill(buf, ctx.area, y, ctx.palette);
     }
 }
