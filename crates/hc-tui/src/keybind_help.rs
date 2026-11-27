@@ -270,10 +270,7 @@ pub(crate) fn backlot_help_groups(
                 entry(chord(panel_tail), "studio dock"),
                 (
                     studio_key(panel.keys.focus_lot),
-                    Cow::Owned(format!(
-                        "focus lot (last row){}",
-                        shadow(panel.keys.focus_lot)
-                    )),
+                    Cow::Owned(format!("focus / enter lot{}", shadow(panel.keys.focus_lot))),
                 ),
                 (
                     sheet.label(&crate::config::format_prefix_combos(prefixes)),
@@ -285,7 +282,13 @@ pub(crate) fn backlot_help_groups(
                 ),
                 (
                     format!("{} t", crate::config::format_prefix_combos(prefixes)),
-                    Cow::Borrowed("focus the left tree (esc back, ↑↓ move, ⏎ act, m menu)")
+                    Cow::Borrowed(
+                        "focus the left tree (tab cast, esc back, ↑↓ move, ⏎ act, m menu)",
+                    ) as Cow<'static, str>,
+                ),
+                (
+                    format!("{} a", crate::config::format_prefix_combos(prefixes)),
+                    Cow::Borrowed("focus left cast (tab tree, ←→ chips, t/r tell, esc back)")
                         as Cow<'static, str>,
                 ),
             ],

@@ -45,4 +45,8 @@ recover with passive `resumed` attaches. Real local allocation changes, tab
 entry or focus can reclaim size; transport recovery alone cannot displace
 another viewer. Already forwarded held-key releases can still drain on their
 original parked input wire. See [parity](parity.md) for appearance limitations
-and the client-local acknowledgement/older-stream stall race.
+borders, stalled-stream limitations, and the single visible focus ring rule across
+the main pane (muted border with `[unfocused · Esc returns]` and `FOCUS: <region>`
+modebar breadcrumb whenever focus leaves the terminal), left sidebar (`Tree`/`Cast`),
+right Lot dock (heavy accent `┏`/`┃` focus rail and `entered studio` header when entered),
+and Call Sheet.

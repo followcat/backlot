@@ -245,8 +245,13 @@ impl App {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.sheet = None;
             }
-            KeyCode::Tab | KeyCode::BackTab => {
+            KeyCode::Tab | KeyCode::Right => {
                 sheet.tab = sheet.tab.next();
+                sheet.sel = 0;
+                sheet.scroll = 0;
+            }
+            KeyCode::BackTab | KeyCode::Left => {
+                sheet.tab = sheet.tab.prev();
                 sheet.sel = 0;
                 sheet.scroll = 0;
             }

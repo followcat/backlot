@@ -18,6 +18,7 @@ pub mod copy_mode;
 pub(crate) mod copy_window;
 pub mod core_start;
 pub mod diag;
+pub(crate) mod focus;
 pub mod host;
 pub mod input;
 mod live_exe;

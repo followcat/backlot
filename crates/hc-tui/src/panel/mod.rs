@@ -6,6 +6,7 @@
 //! to herdr: no columns are reserved, no keys are consumed and no
 //! timer is armed.
 
+pub(crate) mod chips;
 mod config;
 pub(crate) mod data;
 mod draw;
@@ -21,6 +22,7 @@ mod row_lines;
 mod rows;
 mod rows_fit;
 mod rows_fold;
+mod talk_status;
 mod update;
 
 pub(crate) use config::{
@@ -121,6 +123,17 @@ pub(crate) struct Panel {
     /// One-line start command when `backlot-cat` is present while the server
     /// terminal is gone.
     pub(crate) server_stopped_cmd: Option<String>,
+    /// Studio currently entered via `FocusState` (`InsideStudio` / `RowActions` / `Compose`).
+    pub entered_studio: Option<crate::studio::StudioKey>,
+    /// Highlighted inline action chip index when `LotLevel::RowActions` is active.
+    pub active_chip: Option<usize>,
+    /// True while navigating across studios at `LotLevel::Studios` so cursoring
+    /// onto another studio's rows does not eagerly promote into `InsideStudio`.
+    pub lot_studios_browse: bool,
+    /// Recipient when `LotLevel::Compose` is active (`producer`, role, or `hollywood`).
+    pub tell_target: crate::focus::TellTarget,
+    /// Role under the cursor when entering Compose, used by empty `Tab` cycling.
+    pub compose_cursor_role: Option<String>,
 }
 
 #[cfg(test)]
@@ -155,6 +168,11 @@ impl Panel {
             update: None,
             stopped: None,
             server_stopped_cmd: None,
+            entered_studio: None,
+            active_chip: None,
+            lot_studios_browse: false,
+            tell_target: crate::focus::TellTarget::default(),
+            compose_cursor_role: None,
         }
     }
 

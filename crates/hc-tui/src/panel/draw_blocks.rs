@@ -49,12 +49,27 @@ pub(super) fn draw_top(
     health: Health,
     selected: bool,
     focused_terminal: bool,
+    entered: bool,
     frame: Style,
     palette: &Palette,
 ) {
     let right = rect.x + rect.width;
-    put_text(buf, rect.x, rect.y, rect.width.min(1), "╭", frame);
-    put_text(buf, right.saturating_sub(1), rect.y, 1, "╮", frame);
+    put_text(
+        buf,
+        rect.x,
+        rect.y,
+        rect.width.min(1),
+        if entered { "┏" } else { "╭" },
+        frame,
+    );
+    put_text(
+        buf,
+        right.saturating_sub(1),
+        rect.y,
+        1,
+        if entered { "┓" } else { "╮" },
+        frame,
+    );
     // The right-hand tail: `● r1·1/4 !1` when the whole label fits
     // beside it, else `●!1` — the progress part drops before the
     // waiting count does.
@@ -80,10 +95,18 @@ pub(super) fn draw_top(
     let has_pill = selected || focused_terminal;
     let chip_pad = u16::from(has_pill);
     let interior = rect.width.saturating_sub(4 + chip_pad);
-    let full_fits = display_width(&label.full) as u16 + display_width(&full_tail) as u16
-        <= interior.saturating_sub(marker_w);
-    let tail = if full_fits || waiting == 0 {
+    let entered_w = if entered { 15u16 } else { 0 };
+    let full_fits =
+        display_width(&label.full) as u16 + display_width(&full_tail) as u16 + entered_w
+            <= interior.saturating_sub(marker_w);
+    let tail = if full_fits {
         full_tail
+    } else if waiting == 0 {
+        if entered {
+            health.glyph().to_string()
+        } else {
+            full_tail
+        }
     } else {
         format!("{}!{waiting}", health.glyph())
     };
@@ -175,6 +198,19 @@ pub(super) fn draw_top(
     }
     let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
+    if entered && fill_start + 15 <= id_end {
+        put_text(
+            buf,
+            fill_start,
+            rect.y,
+            14,
+            "entered studio",
+            Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD),
+        );
+        fill_start += 15;
+    }
     if badge && fill_start + 3 < id_end {
         put_text(
             buf,
@@ -188,13 +224,14 @@ pub(super) fn draw_top(
         );
         fill_start += 4;
     }
+    let fill_glyph = if entered { "━" } else { "─" };
     if id_end > fill_start {
         put_text(
             buf,
             fill_start,
             rect.y,
             id_end - fill_start,
-            &"─".repeat((id_end - fill_start) as usize),
+            &fill_glyph.repeat((id_end - fill_start) as usize),
             frame,
         );
     }
@@ -293,6 +330,7 @@ pub(super) fn draw_input(
     buf: &mut Buffer,
     rect: Rect,
     draft: &crate::chrome::text_editor::TextEditor,
+    target_label: &str,
     selected: bool,
     composing: bool,
     cue: Option<(&str, ratatui::style::Color)>,
@@ -359,12 +397,13 @@ pub(super) fn draw_input(
             Style::default().fg(palette.text).bg(field_bg),
         );
         if draft.as_str().is_empty() && width > 0 {
+            let ph = format!("tell {target_label} · / actions");
             put_text(
                 buf,
                 text.x,
                 text.y,
                 width,
-                &truncate_end("tell producer · / actions", width as usize),
+                &truncate_end(&ph, width as usize),
                 Style::default()
                     .fg(ph_fg)
                     .bg(field_bg)
@@ -373,12 +412,13 @@ pub(super) fn draw_input(
         }
         cursor
     } else if draft.as_str().is_empty() {
+        let ph = format!("tell {target_label} · / actions");
         put_text(
             buf,
             text.x,
             text.y,
             width,
-            &truncate_end("tell producer · / actions", width as usize),
+            &truncate_end(&ph, width as usize),
             Style::default()
                 .fg(ph_fg)
                 .bg(field_bg)

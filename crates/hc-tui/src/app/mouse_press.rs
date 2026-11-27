@@ -109,6 +109,9 @@ impl App {
         // U1: the cast's `others` row expands herdr's agents in place.
         if self.studio.active && contains(hits.cast_others, point) {
             self.studio.others_expanded = !self.studio.others_expanded;
+            self.cast_focus = Some(crate::focus::CastTarget::OthersToggle);
+            self.cast_remembered = self.cast_focus.clone();
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
             return;
         }
         // The sidebar's `menu` button (or bottom-left `? keys`) opens `Ctrl+B ?`
@@ -129,6 +132,9 @@ impl App {
             .find(|h| contains(h.rect, point))
             .cloned()
         {
+            if self.studio.active {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Tree);
+            }
             self.studio_row_activated(&hit, point);
             return;
         }
@@ -138,6 +144,11 @@ impl App {
         // is the reachable one.
         if let Some(hit) = hits.machines.iter().find(|h| contains(h.rect, point)) {
             let id = hit.endpoint_id.clone();
+            if self.studio.active {
+                self.tree_focus = Some(crate::chrome::studio_tree::SidebarRow::Machine(id.clone()));
+                self.tree_remembered = self.tree_focus.clone();
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Tree);
+            }
             if (contains(hit.collapse_toggle, point)
                 || contains(hit.status_badge, point)
                 || id == self.projection.active_endpoint_id)
@@ -174,8 +185,11 @@ impl App {
                 self.panel.mode = crate::panel::PanelMode::Expanded;
             }
             self.panel.focused = true;
-            self.panel.selected = Some(crate::panel::Target::Studio(key));
+            self.panel.selected = Some(crate::panel::Target::Studio(key.clone()));
             self.panel.selected_row = None;
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                crate::focus::LotLevel::InsideStudio(key),
+            ));
             self.panel_reveal_selected();
             return;
         }
@@ -259,10 +273,17 @@ impl App {
             return;
         }
         if let Some((_, pane_id)) = hits.agents.iter().find(|(rect, _)| contains(*rect, point)) {
-            self.focus_pane(pane_id.clone());
+            self.focus_pane_preserving_focus(pane_id.clone());
+            if self.studio.active {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
+                self.cast_follow_active();
+            } else {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+            }
             return;
         }
         if let Some(hit) = hits.panes.iter().find(|h| contains(h.rect, point)).cloned() {
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
             if let (Some(track), Some(metrics)) = (hit.scrollbar_rect, hit.scroll)
                 && contains(track, point)
             {
@@ -285,6 +306,14 @@ impl App {
                 self.press_pane_selection(&hit, mouse, previous_pane_click);
             }
             self.focus_pane(hit.pane_id.clone());
+            return;
+        }
+        if self.studio.active {
+            if contains(hits.agent_body, point) {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
+            } else if contains(hits.workspace_body, point) {
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Tree);
+            }
         }
     }
 }

@@ -275,7 +275,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
     v["studios"][0]["exchange"].as_array_mut().unwrap().push(
         serde_json::json!({ "seq": 2, "who": "producer", "text": "all clear", "file": "messages/2.md" }),
     );
-    let s_done: Summary = serde_json::from_value(v).unwrap();
+    let s_done: Summary = serde_json::from_value(v.clone()).unwrap();
     let mut buf3 = Buffer::empty(area);
     let hits3 = render(
         &mut buf3,
@@ -302,4 +302,35 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
     let text_done = lines(&buf3, area).join("\n");
     assert!(!text_done.contains("queued"), "{text_done}");
     assert!(!text_done.contains("thinking"), "{text_done}");
+
+    // 4. Delivered waiting turn with timestamp renders `✓ delivered · 4m ago`.
+    v["studios"][0]["roles"][0]["work"] = serde_json::json!("waiting");
+    v["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "to": "producer", "ts_ms": 10_000, "text": "check status" }
+    ]);
+    let s_deliv: Summary = serde_json::from_value(v).unwrap();
+    let mut buf4 = Buffer::empty(area);
+    let _hits4 = render(
+        &mut buf4,
+        area,
+        &machines(Some(&s_deliv)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        Some(&current),
+        0,
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        true,
+        &Default::default(),
+        &palette,
+        250_000,
+    );
+    let text_deliv = lines(&buf4, area).join("\n");
+    assert!(text_deliv.contains("✓ delivered · 4m ago"), "{text_deliv}");
 }

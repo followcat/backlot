@@ -27,9 +27,37 @@ expanded by default; `--plain` starts it closed for the parity harness's frame. 
 in herdr's defaults and the parity scripts never send it. A configured herdr binding on the same
 tail still wins while the panel is closed or unfocused.
 
-`Alt+L` (`[keys] focus_lot`) opens or expands the dock if hidden or collapsed, moves focus to it,
-and scrolls the selection to its last selectable row without starting compose; pressing it while
-focused jumps back to the last row and never closes the dock.
+`Alt+L` (`[keys] focus_lot`) opens or expands the dock and enters the target studio on its priority
+landing row (`InsideStudio`: prompt → open ask → needs-you/design/card → active member → `producer`
+→ `›`); from `Lot(Studios)` it enters the selected studio, and a second `Alt+L` inside a studio
+jumps straight into `Compose`.
+
+## Focus model & inline navigation
+
+Only one region owns keyboard focus (`FocusState`: `Terminal`, `Tree`, `Cast`, `Lot(Studios | InsideStudio |
+RowActions | Compose)`, or `CallSheet`):
+
+- **Single focus ring & modebar:** Whenever focus is outside `Terminal`, bordered panes mute with
+  `[unfocused · Esc returns]` in their border title and borderless studio headers carry the cue at
+  the right end of the top bar (never drawn over terminal content), the modebar shows `FOCUS:
+  <region>` (for example `FOCUS: lot › acme-shop › ask`), and entered Lot studios draw heavy accent
+  rails (`┏`/`┃`) with `entered studio` in the header. Remembered cursors in non-focused lists show
+  a faint `·` without `selection_bg`.
+- **Keyboard in Cast (`Ctrl+B a`) & Tree (`Ctrl+B t`):** Focuses the left sidebar sections (`Tab`/`Shift+Tab`
+  between them, `Esc` returns to `Terminal`). In Cast, `←`/`→` steps inline action chips on urgent roles,
+  `t`/`r` opens targeted Lot compose, and `x` acknowledges an open ask.
+- **In-studio Lot grammar (`InsideStudio`):** `j`/`k` and `↑`/`↓` stay bounded within the entered studio;
+  `Tab`/`Shift+Tab` jumps non-empty sections (`Header` → `People` → `Tasks` → `Exchange` → `›` Input),
+  wrapping across studios (`InsideStudio` follows the target studio);
+  `←`/`→` steps into `RowActions` to cycle inverted `« chip »` action pills (`Enter` executes the chip,
+  `Esc` returns to the row); `Esc` steps back one level (`Compose` / `RowActions` → `InsideStudio` →
+  `Studios` when ≥ 2 studios exist → `Terminal`).
+- **Targeted compose & TALK delivery lifecycle:** Pressing `t` or `i` (or `r` on an ask) pre-targets the
+  selected role without inserting `/tell <role> ` clutter into the input buffer (`Tab` on an empty buffer
+  cycles `producer → cursor role → hollywood`, while `/…` keeps `/verb` completion). Under the newest
+  `user` turn in `TALK`, a live status line renders `… sending…`, `… queued · <reason>` (`RoleSummary.queue`
+  and client-derived `stage stopped — [s] start`), `✓ delivered · <age>`, or `⠶ thinking…`, clearing once
+  a reply lands.
 
 ## Focused keys
 
@@ -445,6 +473,8 @@ next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"
+focus_tree = "prefix+t"
+focus_cast = "prefix+a"
 call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
 prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
 

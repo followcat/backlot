@@ -277,13 +277,22 @@ impl App {
             return;
         }
         match key.input.key {
-            Key::Tab | Key::BackTab | Key::ArrowUp | Key::ArrowDown => {
+            Key::Tab | Key::ArrowDown => {
                 let d = self.new_studio.as_mut().unwrap();
                 d.field = match d.field {
                     Step2Field::Id => Step2Field::Title,
                     Step2Field::Title => Step2Field::Mode,
                     Step2Field::Mode => Step2Field::Build,
                     Step2Field::Build => Step2Field::Id,
+                };
+            }
+            Key::BackTab | Key::ArrowUp => {
+                let d = self.new_studio.as_mut().unwrap();
+                d.field = match d.field {
+                    Step2Field::Id => Step2Field::Build,
+                    Step2Field::Title => Step2Field::Id,
+                    Step2Field::Mode => Step2Field::Title,
+                    Step2Field::Build => Step2Field::Mode,
                 };
             }
             Key::Enter => {

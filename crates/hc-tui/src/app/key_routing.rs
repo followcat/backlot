@@ -158,6 +158,7 @@ impl App {
     }
 
     fn route_key_press(&mut self, key: &TerminalKey, width: u16) -> Option<u64> {
+        self.sync_focus_before_key();
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);
@@ -230,17 +231,11 @@ impl App {
             return None;
         }
         // The reference's Ctrl+G arm precedes the lock:
-        // copy mode exits without copying, selections clear, then the
-        // lock toggles.
+        // allowed only when already locked or in bare `WorkspaceRegion::Terminal`
+        // with no stacked modals (`FocusState::allows_keyboard_lock`).
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
-            && (self.keyboard_locked
-                || (!self.help
-                    && self.dialog.is_none()
-                    && self.new_studio.is_none()
-                    && self.menu.is_none()
-                    && self.navigator.is_none()
-                    && self.settings.is_none()))
+            && (self.keyboard_locked || self.focus.allows_keyboard_lock())
         {
             if key.input.action == Action::Press {
                 self.exit_copy_mode(false);
@@ -293,30 +288,10 @@ impl App {
         if self.peek_key(&press) {
             return None;
         }
-        // Every open modal owns the key before pane dispatch (S3's
-        // dialogs and menu among them); `Esc` inside restores the
-        // owner's focus.
+        // Every open modal owns the key before pane/region dispatch;
+        // `Esc` inside restores the underlying `WorkspaceRegion`.
         if self.modal_key(&press, width) {
-            return None;
-        }
-        // W1b: the left machines tree owns every key while focused,
-        // like the dock does. A modal above already took its press;
-        // the tree's own chord was intercepted earlier so `Ctrl+B t`
-        // can re-enter, and a stray armed prefix disarms here.
-        if self.tree_focused() {
-            if self.prefix.armed() {
-                self.prefix.reset();
-                self.prefix.swallow(&press);
-                return None;
-            }
-            if self
-                .live
-                .matches_prefix(&crate::input::terminal_key_of(&press))
-            {
-                let _ = self.prefix.feed(&press, &self.live);
-                return None;
-            }
-            self.handle_tree_key(&press);
+            self.sync_focus();
             return None;
         }
         // The reference clears the word gesture on any key and lets a
@@ -382,12 +357,15 @@ impl App {
         // every other key.
         if self.prefix.armed() && self.panel_key_press(&press) {
             let matched = crate::input::terminal_key_of(&press);
-            if self.panel_focused()
-                || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
             {
                 self.prefix.reset();
                 self.prefix.swallow(&press);
                 self.panel_toggle();
+                self.sync_focus();
                 return None;
             }
         }
@@ -398,13 +376,12 @@ impl App {
             self.prefix.reset();
             self.prefix.swallow(&press);
             self.panel_close();
+            self.sync_focus();
             return None;
         }
         // `Ctrl+B m` from a focused pane opens that pane's studio
         // menu — a role pane's role menu, a shell pane's studio menu
-        // (S3 §1). Studio mode only: herdr's own `m` tail never
-        // existed, so `--plain` and a studio-less client forward `m`
-        // to the pane exactly as before.
+        // (S3 §1).
         if self.prefix.armed() && self.studio.active {
             let matched = crate::input::terminal_key_of(&press);
             if matched.code == crossterm::event::KeyCode::Char('m') && matched.modifiers.is_empty()
@@ -412,74 +389,141 @@ impl App {
                 self.prefix.reset();
                 self.prefix.swallow(&press);
                 self.pane_menu();
+                self.sync_focus();
                 return None;
             }
         }
-        // W1b: `Ctrl+B t` hands the keys to the left machines tree
-        // (studio mode only). The tree owns every key while focused —
-        // checked below, after the modal stack, so an open dialog or
-        // menu keeps its own.
+        // W1b: `Ctrl+B t` (`[keys] focus_tree`) focuses the left machines tree.
         if self.prefix.armed() && self.tree_focus_press(&press) {
+            let matched = crate::input::terminal_key_of(&press);
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.tree_focus_enter();
+                self.sync_focus();
+                return None;
+            }
+        }
+        // `Ctrl+B a` (`[keys] focus_cast`) focuses the left Cast section.
+        if self.prefix.armed() && self.cast_focus_press(&press) {
+            let matched = crate::input::terminal_key_of(&press);
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.cast_focus_enter();
+                self.sync_focus();
+                return None;
+            }
+        }
+        if !self.prefix.armed() && self.tree_focus_direct_press(&press) {
             self.prefix.reset();
             self.prefix.swallow(&press);
             self.tree_focus_enter();
+            self.sync_focus();
+            return None;
+        }
+        if !self.prefix.armed() && self.cast_focus_direct_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.cast_focus_enter();
+            self.sync_focus();
             return None;
         }
         // U1: studio keys win over herdr direct bindings from anywhere
         // in studio mode; role keys win only inside a studio workspace.
-        // Outside studio mode the key falls through unchanged.
         if let Some(nav) = self.studio_nav_for_key(&crate::input::terminal_key_of(&press)) {
-            // Like the panel chord: an armed prefix disarms on
-            // the intercepted press.
             self.prefix.reset();
             self.prefix.swallow(&press);
             self.studio_nav(nav);
+            self.sync_focus();
             return None;
         }
-        // H4: Hollywood's own binding — `alt+y` direct by default, or
-        // the `[hollywood] key` override as a direct binding or a
-        // `prefix+` chord. Intercepted exactly like the studio keys:
-        // it wins over a herdr direct binding, fires while the panel
-        // or the layer itself owns keys, and an armed prefix disarms
-        // and swallows on the press. `hollywood_key_press` is false
-        // without `[hollywood]`, so Alt+Y reaches the program then.
+        // H4: Hollywood Call Sheet toggle (`alt+y` / `Ctrl+B i`). Works across
+        // all non-modal workspace regions (`Terminal`, `Tree`, `Cast`, `Lot`, `CallSheet`).
         if self.hollywood_key_press(&press) {
             self.prefix.reset();
             self.prefix.swallow(&press);
             self.hollywood_toggle();
+            self.sync_focus();
             return None;
         }
-        // The stopped-stage toast's `s` offer (R3 §1b) outranks the
-        // surfaces that would own a bare letter — a mutation that
-        // completed under an open Call Sheet or Dock still answers
-        // `s`. A surface reading `s` as text or an answer keeps it
-        // (the check itself knows those), and every modal above
-        // already took the press.
+        // The stopped-stage toast's `s` offer outranks region keys.
         if self.action_toast_start_key(&press) {
+            self.sync_focus();
             return None;
         }
-        // The expanded layer (or an open read-only CardView) owns
-        // every key like the focused panel does; the toggle and the
-        // studio keys already took theirs.
-        if self.hollywood.expanded() || self.hollywood.view.is_some() {
-            self.handle_hollywood_key(&press);
-            return None;
-        }
-        // `focus_lot` (`alt+l` by default): opens/focuses the lot on
-        // its last selectable row without starting compose; yields to
-        // floats, modals, Call Sheet overlays, and running compose.
-        if self.focus_lot_press(&press) {
+        // `focus_lot` (`alt+l`): evaluated BEFORE `CallSheet` / `Lot` / `Tree` / `Cast`
+        // dispatch so `Alt+L` jumps cleanly between regions and enters studios,
+        // while still yielding to `hollywood.view` (Reader) and active compose drafts.
+        if self.hollywood.view.is_none() && self.focus_lot_press(&press) {
             self.prefix.reset();
             self.prefix.swallow(&press);
             if key.input.action == Action::Press {
                 self.focus_lot();
             }
+            self.sync_focus();
             return None;
         }
-        // A focused panel owns every key like the navigator does; the
-        // prefix itself still arms so the toggle chord stays reachable.
-        if self.panel_focused() {
+        // Non-terminal region dispatch — prefix arming stays uniform across
+        // Tree, Cast, Lot, and CallSheet so `Ctrl+B <key>` chords stay reachable.
+        if self.hollywood.view.is_some()
+            || matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::CallSheet(_)
+            )
+            || self.hollywood.expanded()
+        {
+            self.handle_hollywood_key(&press);
+            self.sync_focus();
+            return None;
+        }
+        if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Tree) {
+            if self.prefix.armed() {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                return None;
+            }
+            if self
+                .live
+                .matches_prefix(&crate::input::terminal_key_of(&press))
+            {
+                let _ = self.prefix.feed(&press, &self.live);
+                return None;
+            }
+            self.handle_tree_key(&press);
+            self.sync_focus();
+            return None;
+        }
+        if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Cast) {
+            if self.prefix.armed() {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                return None;
+            }
+            if self
+                .live
+                .matches_prefix(&crate::input::terminal_key_of(&press))
+            {
+                let _ = self.prefix.feed(&press, &self.live);
+                return None;
+            }
+            self.handle_cast_key(&press);
+            self.sync_focus();
+            return None;
+        }
+        if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Lot(_))
+            || self.panel_focused()
+        {
             self.handle_panel_key(&press);
+            self.sync_focus();
             return None;
         }
         // The failure toast's own keys (§3.3): `C` writes the exact

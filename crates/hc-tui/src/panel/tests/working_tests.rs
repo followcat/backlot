@@ -38,6 +38,7 @@ fn base_role(work: Work, since_ms: u64) -> RoleSummary {
         can_answer_prompt: true,
         restarted_ms: None,
         idle_since_ms: None,
+        queue: None,
         account: None,
     }
 }
@@ -129,10 +130,7 @@ fn panel_renders_inline_working_detail_with_progress_priority_and_omits_extra_ro
 
     // Wide panel renders `progress` in the 1-line inline tail, not a 2nd row.
     let wide = render_panel(studio_with(working.clone(), now_ms), 64);
-    let working_rows: Vec<&String> = wide
-        .iter()
-        .filter(|l| l.contains("working 47m"))
-        .collect();
+    let working_rows: Vec<&String> = wide.iter().filter(|l| l.contains("working 47m")).collect();
     assert_eq!(working_rows.len(), 1, "{wide:#?}");
     assert!(
         working_rows[0].contains("working 47m · running the parity suite"),

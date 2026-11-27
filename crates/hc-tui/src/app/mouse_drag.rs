@@ -173,15 +173,21 @@ impl App {
         self.sidebar_section_split_manual = true;
     }
 
-    /// Focus helpers — a "focus" is the single attach: the terminal
-    /// behind the hit becomes `focused`, the workspace's active tab
-    /// is marked seen, and the pane re-syncs.
-    pub(in crate::app) fn focus_pane(&mut self, pane_id: String) {
+    /// Focus a pane without discarding non-Terminal workspace focus
+    /// (used by studio-nav and Decision #2 single clicks in Lot).
+    pub(in crate::app) fn focus_pane_preserving_focus(&mut self, pane_id: String) {
         self.focused = Some(pane_id);
         self.studio.clear_focus_latch();
         self.refresh_projection();
         self.mark_active_seen();
         self.sync_target();
+    }
+
+    /// Focus helpers — a "focus" is the single attach: the terminal
+    /// behind the hit becomes `focused`, the workspace's active tab
+    /// is marked seen, and the pane re-syncs.
+    pub(in crate::app) fn focus_pane(&mut self, pane_id: String) {
+        self.focus_pane_preserving_focus(pane_id);
     }
 
     /// Workspace row click: its active tab's first pane. In studio

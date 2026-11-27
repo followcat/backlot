@@ -202,6 +202,16 @@ impl App {
         self.hollywood.history.reset_nav();
         self.hollywood.view = None;
         self.hollywood.confirm = None;
+        let back = self
+            .call_sheet_return
+            .take()
+            .unwrap_or(crate::focus::WorkspaceRegion::Terminal);
+        if matches!(
+            self.focus.workspace,
+            crate::focus::WorkspaceRegion::CallSheet(_)
+        ) {
+            self.set_workspace_focus(back);
+        }
     }
 
     /// `1`–`9` select that studio's frame; `0` the new-studio frame.

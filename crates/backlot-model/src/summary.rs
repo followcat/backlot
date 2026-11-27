@@ -321,6 +321,10 @@ pub struct RoleSummary {
     /// `waiting`. Documents an older stage wrote have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_since_ms: Option<u64>,
+    /// Summary of queued undelivered messages for this role and why
+    /// they are waiting (§1.3.2). Absent on older stage documents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue: Option<QueueStatus>,
     /// Derived `<runner>:<label>` account identifier when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
@@ -720,6 +724,7 @@ pub fn summary_with_running(
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
                 restarted_ms: None,
                 idle_since_ms: None,
+                queue: None,
                 account: None,
             });
         }

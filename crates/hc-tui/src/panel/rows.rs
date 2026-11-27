@@ -222,6 +222,12 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         line: &'a StudioExchange,
     },
+    /// Delivery status line (`… sending…`, `… queued · <reason>`,
+    /// `✓ delivered · <age>`, `⠶ thinking…`) directly under the newest user tell.
+    TalkStatus {
+        studio: StudioRef<'a>,
+        line: &'a StudioExchange,
+    },
     /// The `├──┤` rule separating open roles/tasks/talk from the studio's
     /// `›` compose field.
     InputDivider {
@@ -314,6 +320,7 @@ impl Row<'_> {
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
+            Row::TalkStatus { .. } => Target::None,
             Row::Input { studio } => Target::Input(studio.key()),
             Row::ReopenProducer { studio } => Target::ReopenProducer(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
@@ -327,6 +334,46 @@ impl Row<'_> {
     /// in line steps.
     pub fn height(&self) -> u16 {
         1
+    }
+
+    /// Studio owning this rendered row (including chrome/divider/owed lines
+    /// whose [`Target`] is [`Target::None`]).
+    pub(crate) fn owning_studio(&self) -> Option<StudioKey> {
+        match self {
+            Row::BlockTop { studio, .. }
+            | Row::Owed { studio, .. }
+            | Row::Usage { studio }
+            | Row::BlockBottom(studio)
+            | Row::Person { studio, .. }
+            | Row::Divider { studio }
+            | Row::CompactStudio { studio, .. }
+            | Row::Task { studio, .. }
+            | Row::OutwardCard { studio, .. }
+            | Row::DesignHeader { studio, .. }
+            | Row::DesignPreview { studio, .. }
+            | Row::DesignActions { studio, .. }
+            | Row::AcceptedFold { studio, .. }
+            | Row::ClosedFold { studio, .. }
+            | Row::Drawer { studio, .. }
+            | Row::Talk { studio, .. }
+            | Row::TalkStatus { studio, .. }
+            | Row::InputDivider { studio }
+            | Row::Input { studio }
+            | Row::ReopenProducer { studio }
+            | Row::Stacked(studio)
+            | Row::Strip { studio, .. }
+            | Row::StripRole { studio, .. }
+            | Row::StripSummary { studio, .. } => Option::Some(studio.key()),
+            Row::Title
+            | Row::Spacer
+            | Row::StageDown { .. }
+            | Row::ServerStopped { .. }
+            | Row::Empty
+            | Row::StoppedLedger { .. }
+            | Row::Offline { .. }
+            | Row::SetupHint
+            | Row::Update { .. } => Option::None,
+        }
     }
 
     /// Which studio block and section an actionable row belongs to, for
@@ -370,6 +417,7 @@ impl Row<'_> {
             | Row::Empty
             | Row::Owed { .. }
             | Row::Usage { .. }
+            | Row::TalkStatus { .. }
             | Row::InputDivider { .. }
             | Row::BlockBottom(_)
             | Row::Spacer
@@ -522,9 +570,19 @@ fn block_rows<'a>(
     }
     if talk_limit > 0 {
         let ex = &studio.studio.exchange;
-        let skip = ex.len().saturating_sub(talk_limit);
+        let last_user = ex.last().filter(|l| l.who == "user");
+        let show_status = last_user.is_some() && talk_limit >= 2;
+        let turns = if show_status {
+            talk_limit.saturating_sub(1)
+        } else {
+            talk_limit
+        };
+        let skip = ex.len().saturating_sub(turns);
         for line in &ex[skip..] {
             out.push(Row::Talk { studio, line });
+        }
+        if show_status && let Some(line) = last_user {
+            out.push(Row::TalkStatus { studio, line });
         }
     }
     // The `›` tell/command line closes the block — the studio's own
