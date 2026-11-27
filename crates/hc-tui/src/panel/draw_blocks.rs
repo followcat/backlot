@@ -9,7 +9,8 @@ use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
 use super::draw_deco_blocks::{
-    BlockWeight, draw_entered_tag, entered_width, finished_top_tail, paint_finished_tail,
+    BlockWeight, draw_entered_tag, draw_rule_segment, entered_width, finished_top_tail,
+    paint_finished_tail,
 };
 use super::rows::Owed;
 use crate::chrome::palette::Palette;
@@ -42,6 +43,7 @@ pub(super) fn draw_top(
     selected: bool,
     focused_terminal: bool,
     weight: BlockWeight,
+    marquee: bool,
     plain_chrome: bool,
     frame: Style,
     palette: &Palette,
@@ -227,16 +229,17 @@ pub(super) fn draw_top(
         );
         fill_start += 4;
     }
-    if id_end > fill_start {
-        put_text(
-            buf,
-            fill_start,
-            rect.y,
-            id_end - fill_start,
-            &fill_glyph.repeat((id_end - fill_start) as usize),
-            frame,
-        );
-    }
+    draw_rule_segment(
+        buf,
+        rect.x,
+        fill_start,
+        id_end,
+        rect.y,
+        fill_glyph,
+        frame,
+        marquee && weight == BlockWeight::Resting,
+        palette,
+    );
 }
 
 /// The owed-step subheader: `→ <label> · <name>` and its state
