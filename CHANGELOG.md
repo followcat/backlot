@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.25 — 2026-11-27
+
 ### Added
 
 - **You or any role can stop a studio from starting new work with `backlot halt --reason <text>`.** Work already running carries on: deliveries, reviews, tells and questions still go through, and nothing is killed. Only you, the producer or the director can lift it with `backlot resume`. A halted studio shows a red `! HALTED` row on the Call Sheet, and Enter shows who stopped it and why. `backlot status`, the `backlot/1` summary and `backlot metrics` show it too. Two quiet alerts reach the director or producer, never you:
