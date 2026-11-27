@@ -2,6 +2,7 @@
 //! directory, the append-only ledger store, the `backlot` studio
 //! commands and the stage process that schedules role terminals.
 
+mod accounts;
 mod act;
 pub mod args;
 mod args_card;
