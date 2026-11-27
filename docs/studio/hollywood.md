@@ -96,10 +96,12 @@ notice that names the file and never echoes the value. Known costs, said plainly
    fixes it.
 3. On **macOS**, the terminal must send Option as Meta.
 
-The studio panel keeps `prefix+y` to toggle, and **`alt+l`** (`[keys] focus_lot`, `""` unbinds)
-focuses the right-hand lot (`lot · N`) on its last selectable row — opening it if hidden or
-collapsed without starting compose or toggling closed (shown in the lot header, `?`, and the
-launcher; falls through under `--plain`).
+The studio panel keeps `prefix+y` to toggle into `Studios` level, and **`alt+l`** (`[keys] focus_lot`,
+`""` unbinds) switches straight into the selected studio frame on its priority landing row (`InsideStudio`,
+with a 2nd press jumping to `Compose`). `Ctrl+B t` (`[keys] focus_tree`) and `Ctrl+B a`
+(`[keys] focus_cast`) focus the left Tree and Cast sections (`Tab` swaps between them). All non-modal
+region chords (`Alt+L`, `Alt+Y`, `Ctrl+B y/t/a`) cross cleanly between regions without trapping
+(`docs/keys.md`). Under `--plain`, `Alt+L` and `Alt+Y` fall through to the program.
 
 Inside the expanded bar: `Tab` / `Shift+Tab` cycles the three zones — `Compose (›)` →
 `Waiting/Exchange` (first waiting item, or newest exchange row) → `Studios` (upper frames) —

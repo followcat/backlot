@@ -149,6 +149,9 @@ async fn single_focus_ring_invariant_and_breadcrumb_200x44() {
     );
     let lot_buf = draw_to(&mut app, 200, 44);
     let lot_text = screen_lines(&lot_buf).join("\n");
+    if std::env::var_os("FOCUS_VISUALS_DUMP").is_some() {
+        eprintln!("=== 200x44 ===\n{lot_text}\n=== END 200x44 ===");
+    }
     assert!(
         lot_text.contains("[unfocused · Esc returns]"),
         "pane top border shows unfocused marker:\n{lot_text}"
@@ -208,6 +211,9 @@ async fn narrow_overlay_focus_visuals_100x40() {
     );
     let buf = draw_to(&mut app, 100, 40);
     let screen = screen_lines(&buf).join("\n");
+    if std::env::var_os("FOCUS_VISUALS_DUMP").is_some() {
+        eprintln!("=== 100x40 ===\n{screen}\n=== END 100x40 ===");
+    }
     assert!(
         screen.contains("FOCUS: lot › acme-shop"),
         "narrow overlay still displays modebar breadcrumb:\n{screen}"

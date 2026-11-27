@@ -353,13 +353,7 @@ people, the role keys reach them after the people, and the stage never touches t
 nudging, sampling, counting, reaping, relabelling all skip a `backlot.shell` terminal. A finished
 studio keeps its shells for as long as it stays in the document.
 
-Four direct keys move around without the prefix: `Alt+PageUp`/`Alt+PageDown` step to the previous
-or next studio, `Alt+Up`/`Alt+Down` to the previous or next person of the current studio's cast —
-live people first, then the shells. A studio step also switches the main pane to that studio's last
-member (a role or a shell, else its producer, else its first live person, else its first live
-shell); stepping from a terminal moves the keys there, while stepping from the lot or the machines
-tree swaps the pane and leaves that surface in charge. Their defaults are `keys.previous_studio`
-and friends in backlot's config; `Alt+Left`/`Alt+Right` stay free for the terminal.
+Four direct keys (`Alt+PageUp`/`Alt+PageDown` for studios following `studio-follow`, `Alt+Up`/`Alt+Down` for roles and shells) preserve active keyboard focus in `Lot`, `Tree`, or `Cast` when one of them holds the ring. `Alt+L` enters the active studio on its priority landing row (`Ctrl+B y` opens `Lot(Studios)`, `Ctrl+B t` / `Ctrl+B a` focus left `Tree` / `Cast` with `Tab` between them). Targeted `t`/`r` compose and `TALK` delivery status cues (`… sending…`, `… queued · <reason>`, `✓ delivered`, `⠶ thinking…`) track every message until a reply arrives (use `w` or `Switch agent…` for `backlot hollywood switch`).
 
 Every studio command also accepts `--session <s>` and `--remote <t>` to reach another core, the
 same flags the TUI takes.
@@ -535,15 +529,18 @@ The title line counts the studios (`lot · 2`). `stage stopped` means no live
 16-column strip shows each studio's health, a short `id·machine` label and progress or
 attention, and one row per active or blocked role.
 
-Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` focuses a
-live person's terminal (a closed person reopens a resumable or fixed seat through the action
-tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens the Task &
-Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
-`+`/`-` raise and lower a task's priority, `s`/`f` start the stage and finish the studio,
-`c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
-beside the panes and closes it outright over an overlay.
-While the panel is focused it owns the keys — `Ctrl+B y` again closes it — except the four
-`Alt+arrow` studio keys, which still switch studios and roles.
+Panel keys use one unified focus grammar across levels (`Studios → InsideStudio → RowActions /
+Compose`): `j`/`k` or `↑`/`↓` move the selection (bounded within the studio once entered), `Tab` /
+`Shift+Tab` jumps sections (`Needs You → People → Tasks → Talk → Compose`) or steps action chips in
+`RowActions`, `←`/`→` steps into and across inline chips (`« chip »`) or folds at studio headers,
+`Enter` enters a studio / executes a chip / focuses a live person's terminal, `Space` opens a drawer
+or folds a studio, `v` opens the Task & Delivery Sheet, `p` peeks, `y`/`d` answer a user-owned
+prompt, `t`/`i` (and `r` on open asks) start targeted inline compose without seeding `/tell <role> `,
+`x` acknowledges an open ask, `w` recasts a quota/error role, `+`/`-` raise/lower a task's priority,
+`s`/`f` start the stage/finish the studio, `c` switches collapsed/expanded, `q` closes, `?` opens
+help, and `Esc` unwinds one level (`Compose` / `RowActions` → `InsideStudio` → `Studios` when ≥ 2
+studios exist → `Terminal` or close over an overlay). Prefix chords (`Ctrl+B y/t/a`) and direct
+`Alt+L` / `Alt+Y` / `Alt+arrows` chords switch between regions cleanly without trapping.
 
 ## Hollywood above the studios
 
