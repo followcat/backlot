@@ -9,6 +9,9 @@ pub(crate) enum PopupChrome {
     /// Dialogs & wizards: 1-cell outer gutter, rounded border, `2/1` padding,
     /// full backdrop dim (applied by caller), and 1-cell drop shadow.
     Standard,
+    /// Studio Art-Deco modals & wizards: 1-cell outer gutter, `╔══╡ … ╞═══╗`
+    /// double border, `2/1` padding, backdrop dim, and 1-cell drop shadow.
+    Deco,
     /// Border-joined panels (Reader, Task Sheet, Navigator): 1-cell outer
     /// gutter, rounded border, `0/0` border padding (body keeps its own
     /// horizontal margins & divider breathing room), dim + shadow.
@@ -25,13 +28,13 @@ impl PopupChrome {
     pub(crate) const fn gutter(self) -> u16 {
         match self {
             Self::Menu => 0,
-            Self::Standard | Self::BorderJoined | Self::Terminal => 1,
+            Self::Standard | Self::Deco | Self::BorderJoined | Self::Terminal => 1,
         }
     }
 
     pub(crate) const fn pad(self) -> (u16, u16) {
         match self {
-            Self::Standard => (2, 1),
+            Self::Standard | Self::Deco => (2, 1),
             Self::Menu => (1, 0),
             Self::BorderJoined | Self::Terminal => (0, 0),
         }

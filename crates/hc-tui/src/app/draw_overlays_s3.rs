@@ -54,6 +54,7 @@ pub(super) fn draw_action_toast(
         chip,
         offset,
         &app.shell.palette,
+        app.shell.studio_chrome,
     );
     app.action_toast_hit = rect;
     app.action_chip_hit = chip_hit;
@@ -173,12 +174,13 @@ pub(super) fn draw_studio_dialog(
             app.shell.popup_backdrop,
             None,
         );
-        crate::chrome::studio_dialogs::render_with_shadow(
+        crate::chrome::studio_dialogs::render_styled(
             buf,
             app.backlot_modal_surface(area, layout, 64),
             d,
             &app.shell.palette,
             app.shell.popup_shadow,
+            app.shell.studio_chrome,
         )
         .unwrap_or_default()
     } else {

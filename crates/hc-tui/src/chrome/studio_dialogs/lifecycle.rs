@@ -11,7 +11,7 @@ use super::super::popup_frame::overlay_bg;
 use super::super::render::put_text;
 use super::super::text::truncate_end;
 use super::{
-    DialogHits, cancel_button, centered_panel, dialog_width, dim_line, send_button, title_line,
+    ChromeMode, DialogHits, cancel_button, centered_titled, dialog_width, dim_line, send_button,
 };
 use crate::new_studio::Probe;
 use crate::studio_dialog::{CastEditDialog, CastEditStep, RecastDialog, RecastStep, RestartDialog};
@@ -22,13 +22,12 @@ pub(super) fn render_restart(
     band: Rect,
     d: &RestartDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let (q, i) = centered_panel(b, band, width, 9, palette, shadow)?;
+    let (q, i) = centered_titled(b, band, width, 9, &d.title, mode, palette)?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
-    title_line(b, i, &d.title, palette);
     dim_line(
         b,
         i.x,
@@ -69,7 +68,7 @@ pub(super) fn render_restart(
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
-    send_button(b, *ok, " ↵ restart ", true, palette);
+    send_button(b, *ok, " ↵ restart ", true, mode, palette);
     cancel_button(b, *cancel, palette);
     Some(DialogHits {
         area: q,
@@ -85,11 +84,10 @@ pub(super) fn render_recast(
     band: Rect,
     d: &RecastDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let (q, i) = centered_panel(b, band, width, 16, palette, shadow)?;
-    title_line(b, i, &d.title, palette);
+    let (q, i) = centered_titled(b, band, width, 16, &d.title, mode, palette)?;
     let step_label = match d.step {
         RecastStep::Runner => "1/3 runner",
         RecastStep::Model => "2/3 model",
@@ -201,7 +199,7 @@ pub(super) fn render_recast(
     } else {
         " ↵ next "
     };
-    send_button(b, *ok, label, true, palette);
+    send_button(b, *ok, label, true, mode, palette);
     cancel_button(b, *cancel, palette);
     Some(DialogHits {
         area: q,
@@ -245,12 +243,11 @@ pub(super) fn render_cast_edit(
     band: Rect,
     d: &CastEditDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
-    let (q, i) = centered_panel(b, band, width, 16, palette, shadow)?;
+    let (q, i) = centered_titled(b, band, width, 16, &d.title, mode, palette)?;
     let bg = overlay_bg(palette);
-    title_line(b, i, &d.title, palette);
     let step = match d.step {
         CastEditStep::Loading => "reading the cast…",
         CastEditStep::Editing => "open in your editor — save and close to check it",
@@ -296,7 +293,7 @@ pub(super) fn render_cast_edit(
         return None;
     };
     let apply = d.step == CastEditStep::Diff && d.ready && !d.busy;
-    send_button(b, *send, " ↵ / y apply ", apply, palette);
+    send_button(b, *send, " ↵ / y apply ", apply, mode, palette);
     cancel_button(b, *cancel, palette);
     Some(DialogHits {
         area: q,

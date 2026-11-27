@@ -10,6 +10,7 @@
 //! owns — title, step tabs, hint row and the dim backdrop are the
 //! `Ctrl+B ?` overlay's.
 
+mod chrome;
 mod model;
 mod step1;
 mod step2;
@@ -27,12 +28,11 @@ pub(crate) use model::{
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 
 use crate::chrome::help::CursorState;
 use crate::chrome::palette::Palette;
-use crate::chrome::render::{put_right_text, put_text};
-use crate::chrome::text::{display_width, fit_hints};
+use crate::chrome::render::put_text;
 use crate::chrome::text_editor::TextEditor;
 
 /// Step 2's focusable fields — `Mode` is a two-value toggle, not
@@ -286,145 +286,8 @@ impl NewStudio {
 /// The dialog's outer rect: a centered frame taking most of the
 /// screen — capped so very wide terminals keep margins, and near
 /// full-frame at 80×24 like the mockups.
-fn frame_content_size(area: Rect) -> Option<(u16, u16)> {
-    let w = area.width.saturating_sub(2).min(96);
-    let h = (area.height.saturating_mul(5) / 6)
-        .min(area.height.saturating_sub(2))
-        .min(30);
-    if w < 24 || h < 10 {
-        return None;
-    }
-    Some((w.saturating_sub(2), h.saturating_sub(2)))
-}
-
-/// The frame, title row, step tabs and hint row every step shares.
-/// Returns the content rect the step draws into and the hits the
-/// tabs/edges registered.
-fn chrome(
-    b: &mut Buffer,
-    band: Rect,
-    d: &NewStudio,
-    p: &Palette,
-    hints: &mut NsHits,
-    hint_tiers: &[&str],
-    shadow: bool,
-) -> Option<Rect> {
-    let (cw, ch) = frame_content_size(band)?;
-    let geom = crate::chrome::popup_frame::open_centered(
-        b,
-        band,
-        cw,
-        ch,
-        24,
-        10,
-        p.accent,
-        crate::chrome::popup_frame::PopupChrome::Standard,
-        p,
-        shadow,
-    )?;
-    let inner = geom.inner;
-    let bg = crate::chrome::popup_frame::overlay_bg(p);
-    hints.area = geom.outer;
-    // Title: `New studio · [n/4] Step Name` left, `esc …` right.
-    // The title is clipped short of the right hint so they never
-    // collide at narrow widths.
-    let esc = match d.step {
-        Step::MachineRepo => "esc cancel",
-        _ => "esc step back",
-    };
-    let title_w = inner.width.saturating_sub(display_width(esc) as u16 + 1);
-    let title = format!(" New studio · [{}/4] {} ", d.step.index(), d.step.label());
-    put_text(
-        b,
-        inner.x,
-        inner.y,
-        title_w,
-        &crate::chrome::text::truncate_end(&title, title_w as usize),
-        Style::default()
-            .fg(p.accent)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    );
-    put_right_text(
-        b,
-        inner,
-        inner.y,
-        esc,
-        Style::default().fg(p.overlay0).bg(bg),
-    );
-    // Step tabs on the second row — the current one highlighted. When
-    // the four tabs cannot all fit the strip collapses to the compact
-    // `n/4 <label>` form so the current step is always readable.
-    let steps = [
-        Step::MachineRepo,
-        Step::IdTitle,
-        Step::Cast,
-        Step::CheckStart,
-    ];
-    let tab_w: u16 = steps
-        .iter()
-        .map(|step| display_width(&format!(" {} {} ", step.index(), step.label())) as u16 + 1)
-        .sum();
-    let y = inner.y + 1;
-    if tab_w <= inner.width + 1 {
-        let mut x = inner.x;
-        for step in steps {
-            let label = format!(" {} {} ", step.index(), step.label());
-            let w = display_width(&label) as u16;
-            let style = if step == d.step {
-                Style::default()
-                    .fg(crate::chrome::dialogs::contrast(p))
-                    .bg(p.accent)
-                    .add_modifier(Modifier::BOLD)
-            } else if step.index() < d.step.index() {
-                Style::default().fg(p.subtext0).bg(bg)
-            } else {
-                Style::default().fg(p.overlay0).bg(bg)
-            };
-            put_text(
-                b,
-                x,
-                y,
-                w.min(inner.right().saturating_sub(x)),
-                &label,
-                style,
-            );
-            if step.index() < d.step.index() {
-                hints.push(Rect::new(x, y, w, 1), NsHit::StepTab(step));
-            }
-            x += w + 1;
-        }
-    } else {
-        let compact = format!(" {}/4 {} ", d.step.index(), d.step.label());
-        put_text(
-            b,
-            inner.x,
-            y,
-            inner.width,
-            &crate::chrome::text::truncate_end(&compact, inner.width as usize),
-            Style::default()
-                .fg(crate::chrome::dialogs::contrast(p))
-                .bg(p.accent)
-                .add_modifier(Modifier::BOLD),
-        );
-    }
-    // Bottom hint row — `fit_hints` picks the longest tier that fits.
-    let hint_y = inner.bottom().saturating_sub(1);
-    let hint = fit_hints(hint_tiers, usize::from(inner.width));
-    put_text(
-        b,
-        inner.x,
-        hint_y,
-        inner.width,
-        hint,
-        Style::default().fg(p.overlay0).bg(bg),
-    );
-    Some(Rect::new(
-        inner.x,
-        inner.y + 2,
-        inner.width,
-        inner.height.saturating_sub(3),
-    ))
+pub(super) fn frame_content_size(area: Rect) -> Option<(u16, u16)> {
+    chrome::frame_content_size(area)
 }
 
 /// The selected-row marker and background — the panel's own
@@ -459,6 +322,17 @@ pub(crate) fn render_with_shadow(
     p: &Palette,
     band: Rect,
     shadow: bool,
+) -> NsHits {
+    render_styled(b, d, p, band, shadow, true)
+}
+
+pub(crate) fn render_styled(
+    b: &mut Buffer,
+    d: &NewStudio,
+    p: &Palette,
+    band: Rect,
+    shadow: bool,
+    deco: bool,
 ) -> NsHits {
     let mut hits = NsHits::default();
     if frame_content_size(band).is_none() {
@@ -498,7 +372,15 @@ pub(crate) fn render_with_shadow(
             "⏎  esc",
         ],
     };
-    let Some(body) = chrome(b, band, d, p, &mut hits, tiers, shadow) else {
+    let Some(body) = chrome::draw_chrome(
+        b,
+        band,
+        d,
+        p,
+        &mut hits,
+        tiers,
+        chrome::ChromeStyle { shadow, deco },
+    ) else {
         return hits;
     };
     match d.step {

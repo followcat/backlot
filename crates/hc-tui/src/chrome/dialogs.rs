@@ -56,40 +56,43 @@ pub(crate) fn contrast(p: &Palette) -> ratatui::style::Color {
     }
 }
 
-pub(crate) fn render_rename_with_shadow(
+pub(crate) fn render_rename_styled(
     b: &mut Buffer,
     v: &Rename,
     p: &Palette,
     shadow: bool,
+    deco: bool,
 ) -> Option<DialogRender> {
+    let chrome = if deco {
+        super::popup_frame::PopupChrome::Deco
+    } else {
+        super::popup_frame::PopupChrome::Standard
+    };
+    let content_h = if deco { 3 } else { 5 };
     let geom = super::popup_frame::open_centered(
-        b,
-        b.area,
-        54,
-        5,
-        4,
-        4,
-        p.accent,
-        super::popup_frame::PopupChrome::Standard,
-        p,
-        shadow,
+        b, b.area, 54, content_h, 4, 3, p.accent, chrome, p, shadow,
     )?;
     let q = geom.outer;
     let i = geom.inner;
     let bg = super::popup_frame::overlay_bg(p);
     let field_bg = p.elevation().raised_on_overlay;
-    put_text(
-        b,
-        i.x,
-        i.y,
-        i.width,
-        v.title,
-        Style::default()
-            .fg(p.text)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    );
-    let input = Rect::new(i.x, i.y + 2, i.width, 1);
+    if deco {
+        super::popup_deco::draw_deco_title(b, geom.border, v.title, p.accent, false, p);
+    } else {
+        put_text(
+            b,
+            i.x,
+            i.y,
+            i.width,
+            v.title,
+            Style::default()
+                .fg(p.text)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+    let input_y = if deco { i.y } else { i.y + 2 };
+    let input = Rect::new(i.x, input_y, i.width, 1);
     b.set_style(input, Style::default().fg(p.text).bg(field_bg));
     let cursor = text_editor::render(
         b,
@@ -97,14 +100,19 @@ pub(crate) fn render_rename_with_shadow(
         &v.input,
         Style::default().fg(p.text).bg(field_bg),
     );
-    let rs = row(i, &[8, 10, 12], 2, 3);
+    let rs = if deco {
+        row(i, &[10, 10, 12], 2, 2)
+    } else {
+        row(i, &[8, 10, 12], 2, 3)
+    };
     let [save, clear, cancel] = rs.as_slice() else {
         return None;
     };
+    let save_label = super::popup_deco::primary_label(" ↵ save ", deco);
     button(
         b,
         *save,
-        " ↵ save ",
+        &save_label,
         Style::default()
             .fg(contrast(p))
             .bg(p.accent)
@@ -125,55 +133,63 @@ pub(crate) fn render_rename_with_shadow(
     })
 }
 
-pub(crate) fn render_confirm_with_shadow(
+pub(crate) fn render_confirm_styled(
     b: &mut Buffer,
     c: &Confirm,
     p: &Palette,
     shadow: bool,
+    deco: bool,
 ) -> Option<DialogRender> {
+    let chrome = if deco {
+        super::popup_frame::PopupChrome::Deco
+    } else {
+        super::popup_frame::PopupChrome::Standard
+    };
+    let content_h = if deco { 3 } else { 4 };
     let geom = super::popup_frame::open_centered(
-        b,
-        b.area,
-        62,
-        4,
-        4,
-        4,
-        p.red,
-        super::popup_frame::PopupChrome::Standard,
-        p,
-        shadow,
+        b, b.area, 62, content_h, 4, 3, p.red, chrome, p, shadow,
     )?;
     let q = geom.outer;
     let i = geom.inner;
     let bg = super::popup_frame::overlay_bg(p);
     let field_bg = p.elevation().raised_on_overlay;
+    if deco {
+        super::popup_deco::draw_deco_title(b, geom.border, &c.title, p.red, true, p);
+    } else {
+        put_text(
+            b,
+            i.x,
+            i.y,
+            i.width,
+            &format!(" {}", c.title),
+            Style::default()
+                .fg(p.red)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+    let detail_y = if deco { i.y } else { i.y + 1 };
     put_text(
         b,
         i.x,
-        i.y,
-        i.width,
-        &format!(" {}", c.title),
-        Style::default()
-            .fg(p.red)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    );
-    put_text(
-        b,
-        i.x,
-        i.y + 1,
+        detail_y,
         i.width,
         &format!(" {}", c.detail),
         Style::default().fg(p.text).bg(bg),
     );
-    let rs = row(i, &[13, 12], 2, 3);
+    let rs = if deco {
+        row(i, &[13, 12], 2, 2)
+    } else {
+        row(i, &[13, 12], 2, 3)
+    };
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
+    let ok_label = super::popup_deco::primary_label(" ↵ confirm ", deco);
     button(
         b,
         *ok,
-        " ↵ confirm ",
+        &ok_label,
         Style::default()
             .fg(contrast(p))
             .bg(p.red)

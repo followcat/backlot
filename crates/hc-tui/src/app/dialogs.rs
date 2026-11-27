@@ -450,17 +450,19 @@ impl App {
             None,
         );
         self.dialog_hits = match &dialog.body {
-            Body::Rename(rename) => crate::chrome::dialogs::render_rename_with_shadow(
+            Body::Rename(rename) => crate::chrome::dialogs::render_rename_styled(
                 buf,
                 rename,
                 &self.shell.palette,
                 self.shell.popup_shadow,
+                self.shell.studio_chrome,
             ),
-            Body::Confirm(confirm) => crate::chrome::dialogs::render_confirm_with_shadow(
+            Body::Confirm(confirm) => crate::chrome::dialogs::render_confirm_styled(
                 buf,
                 confirm,
                 &self.shell.palette,
                 self.shell.popup_shadow,
+                self.shell.studio_chrome,
             ),
         }
         .unwrap_or_default();

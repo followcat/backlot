@@ -170,7 +170,10 @@ pub(crate) fn paint_frame_clipped(
             }
             super::overlay::fill_default_bg(buf, geom.inner.intersection(buf.area), palette);
         }
-        PopupChrome::Standard | PopupChrome::BorderJoined | PopupChrome::Menu => {
+        PopupChrome::Standard
+        | PopupChrome::Deco
+        | PopupChrome::BorderJoined
+        | PopupChrome::Menu => {
             for y in outer.y..outer.bottom() {
                 for x in outer.x..outer.right() {
                     buf[(x, y)].set_symbol(" ").set_style(background);
@@ -179,7 +182,15 @@ pub(crate) fn paint_frame_clipped(
         }
     }
 
-    draw_rounded_border(buf, border, border_style);
+    match chrome {
+        PopupChrome::Deco => {
+            super::popup_deco::paint_deco_border(buf, border, border_fg, palette, bg)
+        }
+        PopupChrome::Standard
+        | PopupChrome::BorderJoined
+        | PopupChrome::Terminal
+        | PopupChrome::Menu => draw_rounded_border(buf, border, border_style),
+    }
     draw_drop_shadow(buf, outer, clip, palette, shadow);
     Some(geom)
 }
