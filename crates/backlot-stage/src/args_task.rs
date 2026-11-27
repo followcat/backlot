@@ -37,6 +37,18 @@ pub(crate) fn task_new(common: &mut Common, it: &mut It) -> Result<(Common, Cmd)
             _ if eq(&arg, "--depends-on").is_some() => {
                 deps.push(eq(&arg, "--depends-on").unwrap().to_string())
             }
+            "--readonly" => {
+                return Err(usage(
+                    "--readonly is set when casting: backlot cast … --readonly (task new --kind audit makes the audit task)",
+                    U_TASK,
+                ));
+            }
+            _ if eq(&arg, "--readonly").is_some() => {
+                return Err(usage(
+                    "--readonly is set when casting: backlot cast … --readonly (task new --kind audit makes the audit task)",
+                    U_TASK,
+                ));
+            }
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_TASK)),
         }
     }
