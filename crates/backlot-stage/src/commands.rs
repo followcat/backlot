@@ -553,7 +553,14 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             }))
         }
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
-        Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
+        Cmd::Ask { file } => {
+            if caller.role == "producer" {
+                return Err(Fail::refused(
+                    "the producer asks the person with: backlot tell user --file <file> --ask",
+                ));
+            }
+            message_cmd(by, file, "producer".into(), None)
+        }
         Cmd::AskAcknowledge { role, target } => {
             if caller.role != "user" {
                 return Err(Fail::refused("acknowledging a question is the user's"));

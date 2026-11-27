@@ -89,6 +89,7 @@ mod studio_layout_matrix;
 mod studio_machines;
 mod studio_mouse;
 mod studio_notify;
+mod studio_ping;
 mod sync_output;
 mod update_card;
 mod update_source;

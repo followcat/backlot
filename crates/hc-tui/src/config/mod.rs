@@ -22,6 +22,7 @@ mod registry;
 mod shell_command;
 mod sidebar;
 mod sound;
+mod studio;
 mod theme;
 mod toast;
 pub(crate) mod write;
@@ -40,6 +41,7 @@ pub use sidebar::{
     SpaceSidebarToken, SpacesSidebarConfig,
 };
 pub use sound::{AgentSoundOverrides, AgentSoundSetting, SoundConfig};
+pub use studio::StudioConfig;
 pub use theme::{CustomThemeColors, ModeThemeColors, ThemeConfig};
 pub use toast::{
     ClipboardToastConfig, HerdrToastConfig, ToastClipboardPosition, ToastConfig, ToastDelivery,
@@ -110,6 +112,8 @@ pub struct Config {
     pub ui: UiConfig,
     pub worktrees: WorktreesConfig,
     pub experimental: ExperimentalConfig,
+    /// backlot's own `[studio]` switches (the reference has no studios).
+    pub studio: StudioConfig,
     /// `[advanced]`: Herdr's scrollback budget and hc-tui's attach history.
     pub advanced: AdvancedConfig,
 }

@@ -169,3 +169,54 @@ fn a_blocked_hollywood_an_unreachable_machine_and_no_requirement_stay_quiet() {
     }))];
     assert!(derive(&machines, &unreachable).is_empty());
 }
+
+/// Item 7: the ping text. A question pings `<studio> · <role> asks: <first
+/// line>`, a card `<studio> · card c<n>: <summary>`, and every other kind
+/// carries no ping.
+#[test]
+fn the_ping_names_the_question_and_the_card() {
+    let machines = [summary(studio_json(
+        serde_json::json!([{ "role": "producer", "name": "producer",
+            "state": "live", "asks": "which shop?\nand which region?" }]),
+        serde_json::json!({
+            "exchange": [{ "seq": 4, "who": "producer", "text": "which shop?" }],
+        }),
+    ))];
+    let events = derive(&machines, &up);
+    let asks = events
+        .iter()
+        .find(|e| e.kind == StudioEventKind::Asks)
+        .expect("the ask");
+    assert_eq!(
+        asks.ping.as_deref(),
+        Some("acme-shop · producer asks: which shop?"),
+        "a multi-line question pings its first line only"
+    );
+
+    let machines = [summary(doc_json(
+        serde_json::json!([{ "role": "producer", "name": "producer", "state": "closed" }]),
+        serde_json::json!({}),
+        serde_json::json!({
+            "hollywood": {
+                "state": "live",
+                "headline": "all quiet", "headline_seq": 12,
+                "exchange": [{ "seq": 12, "who": "hollywood", "text": "all quiet" }],
+                "cards": [{ "id": "c4", "studio": "acme-shop",
+                            "action": "resume t2", "why": "blocked" }]
+            }
+        }),
+    ))];
+    let events = derive(&machines, &up);
+    let card = events
+        .iter()
+        .find(|e| e.kind == StudioEventKind::Card)
+        .expect("the card");
+    assert_eq!(card.ping.as_deref(), Some("acme-shop · card c4: resume t2"));
+
+    // A reply is not a ping: only a question or a card waits on the person.
+    let reply = events
+        .iter()
+        .find(|e| e.kind == StudioEventKind::HollywoodReply)
+        .expect("the reply");
+    assert!(reply.ping.is_none());
+}

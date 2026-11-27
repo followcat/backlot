@@ -82,7 +82,7 @@ fn cli_halt_resume_status_and_metrics_end_to_end() {
     actor_env.vars.insert("BACKLOT_TASK".into(), "t1".into());
     run_args(&actor_env, &["progress", "--text", "still moving"]);
     let ask_f = fixture(&scratch, "ask.md", "Need clarification on fixture?\n");
-    ok(&env, &format!("ask --file {ask_f} --as producer"));
+    ok(&env, &format!("ask --file {ask_f} --as director"));
     let rpt = fixture(&scratch, "rpt.md", "# Report\n\nAll good.\n");
     ok(
         &env,

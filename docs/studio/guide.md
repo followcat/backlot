@@ -833,9 +833,12 @@ an **actor**, by its key `actor-<task>-c<n>` (the key `backlot status` shows for
 current actor):
 
 ```sh
-backlot recast --person director --runner cmd --model deepseek-v4.1-flash --reason "quota errors" --studio acme-shop
+backlot recast --person director --runner cmd --model deepseek/deepseek-v4.1-flash --reason "quota errors" --studio acme-shop
 backlot recast --person actor-t1-c1 --runner codex --model gpt-5.3-codex --effort medium --reason "the runner keeps timing out" --studio acme-shop
 ```
+
+Write a model id exactly as that runner lists it. For example, Command Code's is
+`deepseek/deepseek-v4.1-flash`, and Command Code takes no effort.
 
 The new identity takes the runner, model, effort, permission profile and, at launch, the runner
 version. `--permission-profile standard|worktree|readonly` overrides the profile the role plays now; without
@@ -871,10 +874,10 @@ not.
 Hollywood may propose the same change as a card (see [hollywood.md](hollywood.md)):
 
 ```sh
-backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "quota errors" --as hollywood
+backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek/deepseek-v4.1-flash --why "quota errors" --as hollywood
 ```
 
-The card shows `recast director → cmd/deepseek-v4.1-flash`; applying it re-checks the role's
+The card shows `recast director → cmd/deepseek/deepseek-v4.1-flash`; applying it re-checks the role's
 identity, and the stage records one `role.recast` with the card's marker.
 
 The client offers the same command as **`Recast…`** on every live person's role menu — a fixed

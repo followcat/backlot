@@ -885,8 +885,32 @@ fn the_producers_tell_user_is_preallowed() {
 /// on their own screen, using `backlot ask` / `backlot tell` instead.
 #[test]
 fn prompts_forbid_on_screen_questions() {
+    let producer = template(RoleKind::Producer);
+    assert!(
+        producer.contains("Ask a role with `backlot tell <role> --file <file>`"),
+        "producer.md misses role-tell instruction"
+    );
+    assert!(
+        producer.contains("`backlot tell user --file <file> --ask`"),
+        "producer.md misses tell user --ask"
+    );
+    assert!(
+        producer.contains("never `backlot ask --file <file>`"),
+        "producer.md misses prohibition on backlot ask"
+    );
+    assert!(
+        producer.contains("`backlot tell <role> --file <file>`"),
+        "producer.md misses backlot tell"
+    );
+    assert!(
+        producer
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .contains("shortest command or answer the person"),
+        "producer.md misses copyable answer hint"
+    );
     for (kind, name) in [
-        (RoleKind::Producer, "producer"),
         (RoleKind::Writer, "writer"),
         (RoleKind::Director, "director"),
         (RoleKind::Actor, "actor"),
@@ -1304,19 +1328,19 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Producer,
             "producer",
-            6049usize,
+            7086usize,
             "`--false-positive` when the stop was a false alarm).\n",
         ),
         (
             RoleKind::Writer,
             "writer",
-            3744usize,
+            3767usize,
             "(`backlot tell user --text <note> --note`).\n",
         ),
         (
             RoleKind::Director,
             "director",
-            8960usize,
+            9027usize,
             "`--false-positive` if the alarm was false).\n",
         ),
     ] {
@@ -1362,6 +1386,10 @@ fn design_gate_off_omits_design_section_byte_identically() {
                 dir.join("design/v2.md").to_string_lossy().into_owned(),
             ),
             ("repo_notes".into(), String::new()),
+            (
+                "person_only_actions".into(),
+                crate::person_only::rendered_section(false),
+            ),
         ]);
         assert_eq!(
             render(raw, &fields),

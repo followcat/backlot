@@ -21,7 +21,7 @@ fn doc_key() -> DocKey {
 /// A document with one `acme-shop` studio. `studio` holds the studio's
 /// own fields (roles and its exchange among them) and `doc` the
 /// document's — Hollywood lives at the root, never on a studio.
-fn doc(studio: Value, doc: Value) -> Value {
+pub(super) fn doc(studio: Value, doc: Value) -> Value {
     let mut entry = json!({
         "id": "acme-shop", "title": "Acme shop", "state": "live",
         "requirement_version": 1, "mode": "standard",
@@ -38,7 +38,7 @@ fn doc(studio: Value, doc: Value) -> Value {
 }
 
 /// The usual three people, so each test names only what it changes.
-fn roles() -> Value {
+pub(super) fn roles() -> Value {
     json!([
         { "role": "producer", "name": "producer", "terminal": "t1", "state": "live" },
         { "role": "director", "name": "director", "terminal": "t2", "state": "live" },
@@ -47,7 +47,7 @@ fn roles() -> Value {
     ])
 }
 
-fn hollywood(headline: &str, seq: u64, cards: Value) -> Value {
+pub(super) fn hollywood(headline: &str, seq: u64, cards: Value) -> Value {
     json!({
         "hollywood": {
             "state": "live",
@@ -58,7 +58,7 @@ fn hollywood(headline: &str, seq: u64, cards: Value) -> Value {
     })
 }
 
-fn card(id: &str, action: &str) -> Value {
+pub(super) fn card(id: &str, action: &str) -> Value {
     json!([{ "id": id, "studio": "acme-shop", "action": action, "why": "the actor is looping" }])
 }
 
@@ -77,7 +77,7 @@ fn the_fixtures_parse() {
 /// which seeds the studio events silently. The focus sits on `t5`, an
 /// ordinary terminal outside every studio, so no target starts focused
 /// (and therefore suppressed) unless a test moves it there.
-fn app_with(value: Value) -> App {
+pub(super) fn app_with(value: Value) -> App {
     let mut app = app_alerts();
     app.set_plain(false);
     let mut stage = crate::sidebar::fixture::term("t9");
@@ -105,7 +105,7 @@ fn app_with(value: Value) -> App {
 
 /// Replace the document and run the publish path — projection, pane
 /// alerts and the studio events — exactly as the loop does.
-fn publish(app: &mut App, value: Value) {
+pub(super) fn publish(app: &mut App, value: Value) {
     app.view.documents_mut().insert(
         doc_key(),
         Document {
@@ -153,7 +153,7 @@ fn titles(app: &App) -> Vec<String> {
 /// The seeding document: an ask, a user prompt, a Hollywood prompt, a
 /// reply and a card already present — old news the client must not
 /// announce.
-fn seeded_doc() -> Value {
+pub(super) fn seeded_doc() -> Value {
     doc(
         json!({
             "roles": [
@@ -270,7 +270,7 @@ async fn a_focused_target_suppresses_its_event() {
 }
 
 /// The usual three roles, the producer carrying an unanswered question.
-fn roles_with_ask(question: &str) -> Value {
+pub(super) fn roles_with_ask(question: &str) -> Value {
     json!([
         { "role": "producer", "name": "producer", "terminal": "t1",
           "state": "live", "asks": question },

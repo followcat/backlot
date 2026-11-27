@@ -130,6 +130,9 @@ pub struct ClientShellConfig {
     /// `[ui.toast] studio` — whether the studio layer's own events
     /// notify (backlot-only; the reference has no studio layer).
     pub toast_studio: bool,
+    /// `[studio] notify_asks` — a desktop ping when the studio layer
+    /// starts waiting on the person (a role's `--ask` or a card).
+    pub studio_notify_asks: bool,
     /// `[ui.toast.clipboard]` — the copied-to-clipboard card.
     pub clipboard_toast_enabled: bool,
     pub clipboard_toast_position: crate::config::ToastClipboardPosition,
@@ -244,6 +247,7 @@ impl ClientShellConfig {
             toast_delay_seconds: ui.toast.delay_seconds,
             toast_position: ui.toast.herdr.position,
             toast_studio: ui.toast.studio,
+            studio_notify_asks: config.studio.notify_asks,
             clipboard_toast_enabled: ui.toast.clipboard.enabled,
             clipboard_toast_position: ui.toast.clipboard.position,
             sound: ui.sound.clone(),

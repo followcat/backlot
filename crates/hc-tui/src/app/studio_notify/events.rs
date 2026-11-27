@@ -50,6 +50,10 @@ pub(crate) struct StudioEvent {
     pub title: String,
     pub body: Option<String>,
     pub target: crate::hollywood::Target,
+    /// The desktop ping text for the two event kinds the person asked to
+    /// be told about — a role's `--ask` and a card waiting — and `None`
+    /// for every other kind.
+    pub ping: Option<String>,
 }
 
 /// ` · host-b` for a remote studio, nothing on this core — the same
@@ -109,6 +113,21 @@ fn newest_reply(machines: &[MachineSummary]) -> Option<(u64, String)> {
         })
 }
 
+/// The desktop ping's length budget — the outer terminal truncates its
+/// own way, but a one-line body reads best short.
+const PING_MAX: usize = 120;
+
+/// The first line of a multi-line question, trimmed — what the ping
+/// shows after `asks:`.
+fn first_line(text: &str) -> &str {
+    text.lines().next().unwrap_or("").trim()
+}
+
+/// A desktop ping's text, truncated to one short line.
+fn ping_text(text: String) -> String {
+    crate::chrome::text::truncate_end(&text, PING_MAX)
+}
+
 /// Every studio event the documents describe right now, in the
 /// needs-you list's own order. A blocked Hollywood and an unreachable
 /// machine are not events: N1 names prompts, asks, replies, cards,
@@ -138,9 +157,11 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 ),
                 body: None,
                 target,
+                ping: None,
             },
             Wait::Role(item) if item.asks => {
                 let seq = ask_seq(item.studio, &item.role.role);
+                let question = item.role.asks.as_deref().unwrap_or("a question");
                 StudioEvent {
                     kind: StudioEventKind::Asks,
                     key: format!(
@@ -157,11 +178,18 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                     title: format!(
                         "{} asks: {}{}",
                         item.role.name,
-                        item.role.asks.as_deref().unwrap_or("a question"),
+                        question,
                         suffix(item.machine)
                     ),
                     body: None,
                     target,
+                    // The person asked to be told: `<studio> · <role> asks: <first line>`.
+                    ping: Some(ping_text(format!(
+                        "{} · {} asks: {}",
+                        item.studio.id,
+                        item.role.name,
+                        first_line(question)
+                    ))),
                 }
             }
             Wait::Role(item) => StudioEvent {
@@ -184,6 +212,7 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 ),
                 body: None,
                 target,
+                ping: None,
             },
             Wait::Hollywood(hw) if hw.attention_user => StudioEvent {
                 kind: StudioEventKind::HollywoodNeedsYou,
@@ -197,6 +226,7 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 ),
                 body: None,
                 target,
+                ping: None,
             },
             Wait::Card(card) => StudioEvent {
                 kind: StudioEventKind::Card,
@@ -204,6 +234,11 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 title: format!("card waiting: {}", card.action),
                 body: Some(format!("{} · {}", card.studio, card.why)),
                 target,
+                // A card waiting for the person: `<studio> · card c<n>: <summary>`.
+                ping: Some(ping_text(format!(
+                    "{} · card {}: {}",
+                    card.studio, card.id, card.action
+                ))),
             },
             Wait::Outward(item) => StudioEvent {
                 kind: StudioEventKind::Card,
@@ -216,6 +251,10 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                 title: format!("card waiting: {}", item.card.command),
                 body: Some(format!("{} · {}", item.studio.id, item.card.why)),
                 target,
+                ping: Some(ping_text(format!(
+                    "{} · card {}: {}",
+                    item.studio.id, item.card.id, item.card.command
+                ))),
             },
             Wait::Ready(item) => StudioEvent {
                 kind: StudioEventKind::Ready,
@@ -230,6 +269,7 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                     item.studio.tasks_done, item.studio.tasks_total
                 )),
                 target,
+                ping: None,
             },
             Wait::Stage(item) if !item.offline => {
                 let machine = item.machine.unwrap_or(crate::project::LOCAL_LABEL);
@@ -243,6 +283,7 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
                         if item.studios == 1 { "" } else { "s" }
                     )),
                     target,
+                    ping: None,
                 }
             }
             // A blocked Hollywood with no prompt, an unreachable machine,
@@ -258,6 +299,7 @@ pub(crate) fn derive(machines: &[MachineSummary], status: &Status<'_>) -> Vec<St
             title: format!("hollywood replied: {text}"),
             body: None,
             target: crate::hollywood::Target::Talk(seq),
+            ping: None,
         });
     }
     out

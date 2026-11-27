@@ -10,6 +10,19 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **A new question from a studio now raises a desktop notification.** In studio mode your terminal tells you when a role asks you something or a card is waiting for you — once per item, never for what was already open when you started, and never when you answer one. It is on by default and turns off with `[studio] notify_asks = false` ([docs/studio/panel.md](docs/studio/panel.md)).
+- **Every role is now told which actions are yours alone.** The producer, director and writer prompts list the commands only you may run — applying a card, changing the cast, signing off the design, protected or new-remote pushes and the like — and ask them to prepare what they can and tell you instead of stalling.
+
+### Changed
+
+- **The producer no longer sends questions to itself.** `backlot ask` from the producer is refused with a hint to use `backlot tell user --file <file> --ask`, and the producer now prints the decision it needs and a copyable answer in its own terminal alongside the ledger question. Decisions you make in its terminal are recorded at once with `backlot decide`.
+
+### Fixed
+
+- **`backlot task new --readonly` now explains itself.** Instead of "unexpected argument", it says `--readonly` is set when casting and that `--kind audit` makes the audit task.
+
 ## 0.4.29 — 2026-11-28
 
 ### Changed
