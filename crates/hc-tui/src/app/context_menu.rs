@@ -201,13 +201,25 @@ impl App {
             return;
         };
         match combo.code {
-            KeyCode::Esc => self.menu = None,
-            KeyCode::Up => {
+            KeyCode::Esc | KeyCode::Left => self.menu = None,
+            KeyCode::Up | KeyCode::Char('k') => {
                 menu.highlighted = menu.highlighted.saturating_sub(1);
             }
-            KeyCode::Down => {
+            KeyCode::Down | KeyCode::Char('j') => {
                 let items = menu.items().len();
                 menu.highlighted = (menu.highlighted + 1).min(items.saturating_sub(1));
+            }
+            KeyCode::Tab => {
+                let items = menu.items().len();
+                if items > 0 {
+                    menu.highlighted = (menu.highlighted + 1) % items;
+                }
+            }
+            KeyCode::BackTab => {
+                let items = menu.items().len();
+                if items > 0 {
+                    menu.highlighted = (menu.highlighted + items - 1) % items;
+                }
             }
             KeyCode::Enter => {
                 let index = menu.highlighted;

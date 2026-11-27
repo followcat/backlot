@@ -337,10 +337,10 @@ async fn a_submitted_dialog_returns_the_keys_to_the_dock() {
 }
 
 #[tokio::test]
-async fn esc_on_a_cast_menu_returns_the_keys_to_the_pane() {
-    // The sidebar's cast rows have no key focus of their own — the
-    // menu was opened over a focused pane, so Esc hands the keys
-    // back to it and `m` types into the terminal.
+async fn esc_on_a_cast_menu_restores_cast_focus_then_esc_returns_to_pane() {
+    // Right-clicking a Cast row focuses Cast (`WorkspaceRegion::Cast`) under
+    // the context menu; 1st Esc returns to Cast (`m` reopens menu), and 2nd Esc
+    // returns keyboard focus to the main terminal pane.
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     draw_to(&mut app, 120, 24);
@@ -359,6 +359,16 @@ async fn esc_on_a_cast_menu_returns_the_keys_to_the_pane() {
     assert!(studio_menu_open(&app), "right-click opened alice's menu");
     key(&mut app, hc_vt::Key::Escape);
     assert!(app.menu.is_none());
+    assert_eq!(
+        app.focus.workspace,
+        crate::focus::WorkspaceRegion::Cast,
+        "Esc pops menu back to Cast"
+    );
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert!(studio_menu_open(&app), "`m` in Cast reopens role menu");
+    key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.focus.workspace, crate::focus::WorkspaceRegion::Terminal);
     let before = backlog(&app);
     key(&mut app, hc_vt::Key::Char('m'));
     assert_eq!(

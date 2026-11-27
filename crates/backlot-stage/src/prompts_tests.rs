@@ -402,10 +402,12 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
             "backlot studio new" => {
                 "backlot studio new --title T --repo /home/user/r --cast c.toml --dry-run"
             }
+            "backlot studio cast set" => "backlot studio cast set --file c.toml --dry-run",
             "backlot hollywood propose" => {
                 "backlot hollywood propose pause --studio s --task t1 --why x"
             }
             "backlot hollywood report" => "backlot hollywood report \"h\"",
+            "backlot hollywood withdraw" => "backlot hollywood withdraw c1 --reason stale",
             // The guide's own reading forms: the listing, a topic and
             // a grep.
             "backlot guide" => "backlot guide guide --grep permission",
@@ -425,14 +427,19 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
             args::Cmd::StudioNew { dry_run, .. } => {
                 assert!(dry_run, "`{concrete}` is not the dry run")
             }
+            args::Cmd::StudioCast(args::CastCmd::Set { dry_run, .. }) => {
+                assert!(dry_run, "`{concrete}` is not the dry run")
+            }
             _ => panic!("`{concrete}` is outside Hollywood's gate"),
         }
-        // `tell` is allowed as `tell producer`; `studio new` as its
-        // `--dry-run` form; `progress` as `backlot progress`.
+        // `tell` is allowed as `tell producer`; `studio new` and `studio
+        // cast set` as their `--dry-run` form; `progress` as `backlot
+        // progress`.
         let allowed_form = match prefix {
             "backlot tell" => "backlot tell producer",
             "backlot progress" => "backlot progress",
             "backlot studio new" => "backlot studio new --dry-run",
+            "backlot studio cast set" => "backlot studio cast set --dry-run",
             // `guide` is pre-allowed by its prefix, either form.
             "backlot guide" => "backlot guide",
             _ => concrete,
@@ -1389,5 +1396,49 @@ fn actor_prompt_includes_optional_siblings_discoveries_section() {
     assert!(
         raw.contains("## Decisions / Discoveries for siblings"),
         "actor.md misses optional sibling discoveries guidance"
+    );
+}
+
+#[test]
+fn hollywood_allow_list_contains_withdraw_and_cast_dry_run_for_every_runner() {
+    for needed in [
+        "backlot hollywood withdraw",
+        "backlot studio cast set --dry-run",
+    ] {
+        assert!(
+            crate::runners::claude::hollywood_commands().contains(&needed),
+            "claude misses `{needed}`"
+        );
+        let hw_claude = crate::runners::claude::allowed_tools("/state/hollywood", "hollywood", &[]);
+        assert!(
+            hw_claude.contains(&format!("Bash({needed} *)")),
+            "claude allowed_tools misses `{needed}`: {hw_claude}"
+        );
+        assert!(
+            crate::runners::cmd::allow_rules("hollywood", &[])
+                .iter()
+                .any(|r| r == &format!("Shell({needed}:*)")),
+            "cmd misses `{needed}`"
+        );
+        assert!(
+            crate::runners::cursor::allow_rules("hollywood", &[])
+                .iter()
+                .any(|r| r == &format!("Shell({needed})")),
+            "cursor misses `{needed}`"
+        );
+        assert!(
+            crate::runners::cline::allow_commands("hollywood", &[])
+                .iter()
+                .any(|r| r == needed),
+            "cline misses `{needed}`"
+        );
+    }
+    assert!(
+        HOLLYWOOD.contains("backlot hollywood withdraw"),
+        "hollywood.md misses withdraw guidance"
+    );
+    assert!(
+        crate::hwcli::generate().contains("backlot hollywood withdraw"),
+        "hwcli reference misses withdraw"
     );
 }

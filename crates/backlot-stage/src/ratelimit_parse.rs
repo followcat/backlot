@@ -70,6 +70,15 @@ pub(crate) fn parse_wait(text: &str, now_ms: u64) -> Option<u64> {
         .or_else(|| parse_in(text))
 }
 
+/// Whether `text` carries a clock or calendar reset timestamp (rather
+/// than only a floating relative duration such as `in 30s`).
+pub(crate) fn has_anchored_reset(text: &str, now_ms: u64) -> bool {
+    parse_month_day_time(text, now_ms).is_some()
+        || parse_weekday_time(text, now_ms).is_some()
+        || parse_at(text, now_ms).is_some()
+        || parse_local_ampm(text, now_ms).is_some()
+}
+
 fn word_boundary_before(s: &str, byte_idx: usize) -> bool {
     s[..byte_idx]
         .chars()

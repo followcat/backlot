@@ -115,25 +115,10 @@ pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
         // the prompt, which is the user's to answer.
-        return [
-            "backlot status",
-            "backlot records",
-            "backlot tell producer",
-            "backlot progress",
-            "backlot hollywood propose",
-            "backlot hollywood report",
-            "backlot studio new --dry-run",
-            // Read-only: Hollywood may check its own CLI's flags
-            // without stopping at a prompt.
-            "backlot --help",
-            "backlot help",
-            // Read-only, compiled into the binary: the docs, no disk
-            // search.
-            "backlot guide",
-        ]
-        .iter()
-        .map(|c| format!("Shell({c}:*)"))
-        .collect();
+        return super::claude::hollywood_commands()
+            .iter()
+            .map(|c| format!("Shell({c}:*)"))
+            .collect();
     }
     let mut rules = vec!["Shell(backlot)".to_string()];
     for cmd in super::READ_ONLY {

@@ -57,6 +57,7 @@ fn every_listed_command_is_pre_allowed() {
         let allowed = allow.iter().any(|a| {
             prefix.starts_with(a)
                 || (prefix == "backlot studio new" && a.starts_with("backlot studio new"))
+                || (prefix == "backlot studio cast set" && a.starts_with("backlot studio cast set"))
                 || (prefix.starts_with("backlot hollywood ") && a.starts_with("backlot hollywood"))
                 || (prefix == "backlot tell" && a.starts_with("backlot tell"))
         });

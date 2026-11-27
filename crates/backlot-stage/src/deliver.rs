@@ -414,6 +414,14 @@ impl Stage {
                 continue;
             }
             let role = state.roles.get(&out.role);
+            let rate_blocked = crate::queue_status::role_delivery_blocked(
+                state,
+                &out.role,
+                self.rate_pace.borrow().contains_key(&pair),
+            );
+            if rate_blocked {
+                continue;
+            }
             let gate = Gate {
                 live: role.is_some_and(|r| r.live),
                 work: self.work.borrow().get(&pair).copied(),

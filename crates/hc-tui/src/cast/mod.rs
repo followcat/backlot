@@ -68,9 +68,16 @@ pub(crate) struct CastView<'a> {
     /// exists at all — the body's one dim line `stage stopped — s to
     /// start` instead of a blank cast.
     pub(crate) stopped: bool,
-    /// `backlot-cat` is on the core while the server terminal is down
-    /// (read-only: never shows `s to start`).
+    /// Read-only role view (`stage` / `cat`).
     pub(crate) server_stopped: bool,
+    /// True while `WorkspaceRegion::Cast` owns keyboard focus.
+    pub(crate) region_focused: bool,
+    /// Focused row inside Cast when `region_focused` is true.
+    pub(crate) cursor_target: Option<crate::focus::CastTarget>,
+    /// Last-remembered Cast cursor drawn with faint `·` when unfocused.
+    pub(crate) remembered_target: Option<crate::focus::CastTarget>,
+    /// Active inline chip index for Cast (`←`/`→`).
+    pub(crate) active_chip: Option<usize>,
 }
 
 impl<'a> CastView<'a> {
@@ -196,6 +203,10 @@ impl<'a> CastView<'a> {
             hint,
             stopped: false,
             server_stopped: false,
+            region_focused: false,
+            cursor_target: None,
+            remembered_target: None,
+            active_chip: None,
         }
     }
 }

@@ -903,6 +903,18 @@ impl Stage {
                         .get(&(studio.id.clone(), role.role.clone()))
                         .copied();
                 }
+                let pair = (studio.id.clone(), role.role.clone());
+                let work = self.work.borrow().get(&pair).copied().or(role.work);
+                let rate_active = self.rate_pace.borrow().contains_key(&pair);
+                let terminal_live = role.state == "live" && role.terminal.is_some();
+                role.queue = crate::queue_status::role_queue_status(
+                    state,
+                    role,
+                    work,
+                    rate_active,
+                    terminal_live,
+                    now_ms,
+                );
             }
         }
         // The optional `hollywood` object — absent unless `[hollywood]`

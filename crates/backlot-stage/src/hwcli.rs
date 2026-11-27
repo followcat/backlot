@@ -61,12 +61,22 @@ const COMMANDS: &[Cmd] = &[
         subst: None,
     },
     Cmd {
+        pick: "backlot studio cast set",
+        usage: U_STUDIO,
+        subst: None,
+    },
+    Cmd {
         pick: "backlot hollywood propose",
         usage: U_HOLLYWOOD,
         subst: None,
     },
     Cmd {
         pick: "backlot hollywood report",
+        usage: U_HOLLYWOOD,
+        subst: None,
+    },
+    Cmd {
+        pick: "backlot hollywood withdraw",
         usage: U_HOLLYWOOD,
         subst: None,
     },

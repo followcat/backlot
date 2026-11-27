@@ -353,13 +353,7 @@ people, the role keys reach them after the people, and the stage never touches t
 nudging, sampling, counting, reaping, relabelling all skip a `backlot.shell` terminal. A finished
 studio keeps its shells for as long as it stays in the document.
 
-Four direct keys move around without the prefix: `Alt+PageUp`/`Alt+PageDown` step to the previous
-or next studio, `Alt+Up`/`Alt+Down` to the previous or next person of the current studio's cast —
-live people first, then the shells. A studio step also switches the main pane to that studio's last
-member (a role or a shell, else its producer, else its first live person, else its first live
-shell); stepping from a terminal moves the keys there, while stepping from the lot or the machines
-tree swaps the pane and leaves that surface in charge. Their defaults are `keys.previous_studio`
-and friends in backlot's config; `Alt+Left`/`Alt+Right` stay free for the terminal.
+Four direct keys (`Alt+PageUp`/`Alt+PageDown` for studios following `studio-follow`, `Alt+Up`/`Alt+Down` for roles and shells) preserve active keyboard focus in `Lot`, `Tree`, or `Cast` when one of them holds the ring. `Alt+L` enters the active studio on its priority landing row (`Ctrl+B y` opens `Lot(Studios)`, `Ctrl+B t` / `Ctrl+B a` focus left `Tree` / `Cast` with `Tab` between them). Targeted `t`/`r` compose and `TALK` delivery status cues (`… sending…`, `… queued · <reason>`, `✓ delivered`, `⠶ thinking…`) track every message until a reply arrives (use `w` or `Switch agent…` for `backlot hollywood switch`).
 
 Every studio command also accepts `--session <s>` and `--remote <t>` to reach another core, the
 same flags the TUI takes.
@@ -558,15 +552,21 @@ The title line counts the studios (`lot · 2`). `stage stopped` means no live
 16-column strip shows each studio's health, a short `id·machine` label and progress or
 attention, and one row per active or blocked role.
 
-Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Tab`/`Shift+Tab` jump across block sections (header, people, tasks, exchange, `›` input) and wrap between studios, `Enter` focuses a
-live person's terminal (a closed person reopens a resumable or fixed seat through the action
-tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens the Task &
-Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
-`+`/`-` raise and lower a task's priority, `s`/`f` start the stage and finish the studio,
-`c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
-beside the panes and closes it outright over an overlay.
-While the panel is focused it owns the keys — `Ctrl+B y` again closes it — except the four
-`Alt+arrow` studio keys, which still switch studios and roles.
+Panel keys use one unified focus grammar across levels (`Studios → InsideStudio → RowActions /
+Compose`): `j`/`k` or `↑`/`↓` move the selection (bounded within the studio once entered), `Tab` /
+`Shift+Tab` jump across block sections (`header → people → tasks → exchange → ›` input) and wrap
+into the next studio (`InsideStudio` follows the target studio), or step action chips in
+`RowActions` (while composing, `Tab` cycles the tell target on an empty buffer and completes
+`/verbs` on `/…`), `←`/`→` steps into and across inline chips (`« chip »`) or folds at studio
+headers, `Enter` enters a studio / executes a chip / focuses a live person's terminal, `Space` opens
+a drawer or folds a studio, `v` opens the Task & Delivery Sheet, `p` peeks, `y`/`d` answer a
+user-owned prompt, `t`/`i` (and `r` on open asks) start targeted inline compose without seeding
+`/tell <role> `, `x` acknowledges an open ask, `w` recasts a quota/error role, `+`/`-` raise/lower a
+task's priority, `s`/`f` start the stage/finish the studio, `c` switches collapsed/expanded, `q`
+closes, `?` opens help, and `Esc` unwinds one level (`Compose` / `RowActions` → `InsideStudio` →
+`Studios` when ≥ 2 studios exist → `Terminal` or close over an overlay). Prefix chords (`Ctrl+B
+y/t/a`) and direct `Alt+L` / `Alt+Y` / `Alt+arrows` chords switch between regions cleanly without
+trapping.
 
 ## Hollywood above the studios
 
@@ -918,7 +918,7 @@ stage can raise:
 
 | Reason | Meaning | What to do |
 |---|---|---|
-| `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
+| `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's starts as `stuck` for the director and escalates to you (`needs you`) at once if the director is rate-limited, stalled, or not live, or after ten minutes (`default_stall_limit_s`) unanswered; anything on a fixed role or reaching for secrets/outside the work area is yours at once. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
 | `outward action` | An outward-action guard layer stopped a role from running a blocked outward command, or queued a cardable push/PR action. | Informational (`needs_user: false`): the role was told to `backlot ask` if it still needs the command, so nothing waits on you and it never counts as "needs you". For a carded push or `gh pr create` (or a request sent with `backlot ask --run [--why <r>] -- <cmd>`) apply (`a`/`y`), cancel (`x`/`d`), or inspect (`s`/Enter `card show`) the open card in the Call Sheet or Studio Dock (works with or without `[hollywood]`). A hard-refused command cannot run via a card — run it outside backlot yourself if wanted. Either way an open `outward action` attention clears (`role moved on`) as soon as the role writes anything else to the ledger after it, or the stage delivers it new work (`outward` completion notices report push/PR results back to the role). |
 | `question` | A role's screen has sat on a non-permission question or unrecognised dialog picker for two seconds (`agy` `kind: "question"`, a recognised question picker, or D2's generic picker rule). | An actor's notices its task reviewer; `director` and `writer` notice `producer`; `producer` and Hollywood wait for you (`needs you`). The saved screen is under `attention/<seq>.txt`; it clears `dialog closed` after two seconds out of the dialog. |
 | `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a producer's stall also tells a live director, and `backlot status` leads with a `producer alert:` line. A changed screen or a newer signal clears the attention. |
@@ -943,7 +943,7 @@ stage can raise:
 | `agy prep failed` | An agy role's per-session setup failed — its workdir `.agy-settings.json` or `.agents/hooks.json` could not be written. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
 | `devin prep failed` | A devin role's per-session setup failed — its workdir `.devin/config.local.json` or `info/exclude` could not be written. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
 | `hooks unavailable` | The repo already tracks the runner's hook config file (`.agents/hooks.json`, `.commandcode/settings.json`, or `.devin/config.local.json`), so the stage left it untouched instead of dirtying git. | Informational only — the role still runs on its remaining evidence (terminal state, session logs, and shims/fallback deny rules). |
-| `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen, including a reporting core reading `done`, `idle` or `waiting` — counted separately from `stalled` and rework. A `working` screen is never matched. | Usually nothing: the stage waits the parsed reset out and sends `continue`, up to three auto-retries. A successful resume resolves `resumed`; an episode that outlives the budget re-raises `needs the user` — answer it by hand. A **weekly or monthly** limit is different: it raises `needs the user` at once (no `continue` can shorten it), and the same banner never re-raises while it holds. |
+| `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen, including a reporting core reading `done`, `idle` or `waiting` — counted separately from `stalled` and rework. A `working` screen is never matched. | Usually nothing: one open attention covers the current `reset_at_ms` window (repeat hits update and raise nothing until a later reset arrives or the role works again, clearing `resumed`), while the stage waits for the reset or falls back to bounded auto-retries when the reset is unknown. An episode that outlives the budget escalates `needs the user` — answer it by hand. A **weekly or monthly** limit raises `needs the user` at once. |
 | `connection error` | A non-working screen — or an `error` status's message — shows `Connection error`, as Devin does when it stops until someone writes to it. A rate limit on the same sample takes precedence. | Usually nothing: the stage sends `continue` after 15 seconds, up to three times, then re-raises `needs the user`. The banner disappearing clears it `resumed`. |
 | `agent error` | The role's terminal reports `error` with no limit text in its message or the screen's fresh tail and no connection-error line — a plain agent error, not a limit. | The stage sends nothing: an actor's is the director's to retry, reword or recast; anyone else's is yours. It clears `status recovered` when the status leaves `error`, `rate limit text observed` if a limit banner shows, or `connection error observed` if the connection-error pass claimed it. |
 

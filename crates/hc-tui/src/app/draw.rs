@@ -106,6 +106,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     });
     if let Some(view) = cast.as_mut() {
         view.studio_focused = studio_focused;
+        view.region_focused = app.focus.workspace == crate::focus::WorkspaceRegion::Cast
+            && app.focus.modals.is_empty();
+        view.cursor_target = app.cast_focus.clone();
+        view.remembered_target = app.cast_remembered.clone();
+        view.active_chip = app.cast_chip;
         // W1b: with no studio current and no stage running, the cast
         // says `stage stopped — s to start` rather than drawing blank.
         // The `select a studio` hint (studios exist, none current) keeps
@@ -126,12 +131,34 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // `shell_state`/`studio` mutable borrows below.
     let studio_tree = app.studio.active.then(|| app.studio_sidebar_tree());
     let current_studio = app.studio.current.clone();
+    let pane_focus_active = app.focus.workspace == crate::focus::WorkspaceRegion::Terminal
+        && app.focus.modals.is_empty();
+    let single_has_border = app
+        .projection
+        .snapshot
+        .focused_tab_id
+        .as_ref()
+        .and_then(|id| app.projection.layouts.get(id))
+        .and_then(|t| t.root.as_ref())
+        .is_some_and(|r| {
+            app.shell
+                .pane_borders
+                .shows_borders(r.terminals().len() > 1)
+        });
     let lot = (app.studio.lot.pill || app.studio.lot.header.is_some()).then_some(
         crate::chrome::lot::LotFrame {
             counts: app.studio.lot.counts,
             agent: app.has_hollywood_cfg,
             pill: app.studio.lot.pill,
             header: app.studio.lot.header.as_ref(),
+            unfocused_cue: !app.plain
+                && app.studio.active
+                && !pane_focus_active
+                && app.focus.modals.is_empty()
+                && !app.panel_fullscreen_at(area.width)
+                && !single_has_border
+                && !layout.pane_surface.is_empty()
+                && layout.pane_surface.width >= 40,
             cols: app.area.0,
             spin: app.panel.spin,
         },
@@ -202,6 +229,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_studio_row: &mut app.shell_state.reveal_studio_row,
         reveal_tree_row: &mut app.shell_state.reveal_tree_row,
         tree_cursor: app.tree_focus.as_ref(),
+        tree_focused: app.focus.workspace == crate::focus::WorkspaceRegion::Tree
+            && app.focus.modals.is_empty(),
+        tree_remembered: app.tree_remembered.as_ref(),
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,
@@ -215,16 +245,39 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // Resolved before the cache borrow: the border/title lookups read
     // `app` while `border_cache` mutably borrows `shell_state`.
     let pane_splits = split_borders(app, layout.pane_surface);
-    let border_titles = pane_infos
+    let mut border_titles = pane_infos
         .iter()
         .map(|info| super::pane_geometry::border_label(app, &info.id))
         .collect::<Vec<_>>();
+    let border_pane_infos: Vec<crate::chrome::panes::PaneInfo> = pane_infos
+        .iter()
+        .enumerate()
+        .map(|(i, info)| {
+            let mut copy = crate::chrome::panes::PaneInfo {
+                id: info.id.clone(),
+                rect: info.rect,
+                borders: info.borders,
+                is_focused: info.is_focused,
+            };
+            if !pane_focus_active && app.studio.active && copy.is_focused {
+                copy.is_focused = false;
+                let base = border_titles[i].take().unwrap_or_else(|| copy.id.clone());
+                let suffix = if copy.rect.width >= 48 {
+                    " [unfocused · Esc returns]"
+                } else {
+                    " [unfocused]"
+                };
+                border_titles[i] = Some(format!("{base}{suffix}"));
+            }
+            copy
+        })
+        .collect();
     crate::chrome::panes_draw::render_pane_borders_cached(
         &mut app.shell_state.border_cache,
         buf,
         app.shell.pane_borders,
         app.shell.pane_gaps,
-        &pane_infos,
+        &border_pane_infos,
         &pane_splits,
         &|id| {
             pane_infos

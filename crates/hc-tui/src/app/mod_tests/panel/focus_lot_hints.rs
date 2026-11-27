@@ -54,7 +54,10 @@ async fn alt_l_hint_shows_in_lot_header_help_and_launcher() {
     assert!(!app.help);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
 
     // 3. Classic help (`backlot_help_groups`) lists alt+l beside alt+y / ctrl+b i.
     let classic = crate::keybind_help::backlot_help_groups(

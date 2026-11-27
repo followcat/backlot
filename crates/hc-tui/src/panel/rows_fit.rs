@@ -285,8 +285,16 @@ pub(super) fn talk_budgets(
     }) else {
         return budgets;
     };
+    let desired = target.studio.exchange.len()
+        + usize::from(
+            target
+                .studio
+                .exchange
+                .last()
+                .is_some_and(|l| l.who == "user"),
+        );
     if body_height == 0 {
-        budgets.insert(sel_key, target.studio.exchange.len());
+        budgets.insert(sel_key, desired);
         return budgets;
     }
     let used = header_rows
@@ -323,7 +331,7 @@ pub(super) fn talk_budgets(
     }
     let slack = avail - used;
     if slack > 0 {
-        budgets.insert(sel_key, slack.min(target.studio.exchange.len()));
+        budgets.insert(sel_key, slack.min(desired));
     }
     budgets
 }

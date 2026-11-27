@@ -442,7 +442,7 @@ impl App {
             },
             HelpRow {
                 label: format!(
-                    "Focus lot (last row){}",
+                    "Focus / enter lot{}",
                     crate::keybind_help::studio_key_shadow(
                         &self.live.keybinds,
                         self.panel_config.keys.focus_lot,

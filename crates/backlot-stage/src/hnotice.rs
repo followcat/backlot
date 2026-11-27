@@ -85,6 +85,28 @@ fn told(h: &HollywoodState, n: &HNotice) -> bool {
 /// for a screen snapshot, when the screen was taken with the stale
 /// warning (P5, H1) — so Hollywood never reads a launch-time snapshot
 /// as the role's current state. `now_ms` ages the raise.
+/// Threshold before a `Stuck` attention reaches Hollywood — reuses
+/// `default_stall_limit_s` (10 minutes).
+pub(crate) fn stuck_threshold_ms() -> u64 {
+    u64::from(backlot_model::event::default_stall_limit_s()) * 1000
+}
+
+fn director_blocked_why(s: &StudioState) -> &'static str {
+    let open = |reason: &str| {
+        s.open_attention()
+            .any(|a| a.role == "director" && a.reason == reason)
+    };
+    if open(crate::ratelimit::RATE_LIMITED) {
+        "director rate limited"
+    } else if open(STALLED) {
+        "director stalled"
+    } else if !s.roles.get("director").is_some_and(|r| r.live) {
+        "director not live"
+    } else {
+        "director not answering"
+    }
+}
+
 fn attention_notice(
     studio: &str,
     s: &StudioState,
@@ -118,6 +140,14 @@ fn attention_notice(
     } else {
         ("attention", format!("# {studio}: attention opened"))
     };
+    let waited_note =
+        if a.reason == PERMISSION_PROMPT && actor_task(&a.role).is_some() && !a.needs_user {
+            let waited = backlot_model::event::age_short(now_ms.saturating_sub(a.ts_ms));
+            let why = director_blocked_why(s);
+            format!(" (waited {waited}; {why})")
+        } else {
+            String::new()
+        };
     let fact = crate::render::attention_fact(a, now_ms);
     HNotice {
         label,
@@ -126,7 +156,7 @@ fn attention_notice(
         source_seq: Some(a.seq),
         token: None,
         body: format!(
-            "{head}\n\n`{}` — {}: {}\n\nfact: {fact}\n",
+            "{head}\n\n`{}` — {}: {}{waited_note}\n\nfact: {fact}\n",
             a.role, a.reason, a.detail
         ),
     }
@@ -198,11 +228,27 @@ pub(crate) fn owed(
             });
             continue;
         }
+        let threshold = stuck_threshold_ms();
         for a in &s.attention {
-            if !a.open || AttentionClass::of(&a.reason, a.needs_user) == AttentionClass::Info {
+            if !a.open {
                 continue;
             }
-            out.push(attention_notice(name, s, a, now_ms));
+            let class = AttentionClass::of(&a.reason, a.needs_user);
+            if class == AttentionClass::Info {
+                continue;
+            }
+            let notice = attention_notice(name, s, a, now_ms);
+            let labelled = matches!(
+                notice.label,
+                "finished" | "failed" | "card" | "prompt" | "recovered"
+            );
+            if class == AttentionClass::Stuck
+                && !labelled
+                && now_ms.saturating_sub(a.ts_ms) < threshold
+            {
+                continue;
+            }
+            out.push(notice);
         }
         if let Some(e) = errors.get(name) {
             out.push(HNotice {
