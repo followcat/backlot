@@ -181,20 +181,25 @@ fn focus_dock_size_and_focus_matrix_on_six_studios() {
                     text.contains("✦ HOLLYWOOD"),
                     "{label} {focus_name} narrow mark:\n{text}"
                 );
+            } else if width < 120 {
+                assert!(
+                    text.contains("✦ H O L L Y W O O D"),
+                    "{label} {focus_name} medium mark:\n{text}"
+                );
             } else {
                 assert!(
-                    text.contains("✦  H O L L Y W O O D"),
+                    text.contains("‹✦› H O L L Y W O O D ‹✦›"),
                     "{label} {focus_name} wide mark:\n{text}"
                 );
             }
 
-            // Unfocused zones never expand.
+            // Unfocused zones never expand (`HOLLYWOOD` unfocused rule appears only from spare).
             match focus_name {
                 "WAITING" => {
                     assert!(hits.strip, "{label}: STUDIOS stays 1-row strip");
                     assert!(
-                        !text.contains("── HOLLYWOOD"),
-                        "{label}: HOLLYWOOD unfocused"
+                        !text.contains("╠══╡") && !text.contains("╠═╡"),
+                        "{label}: HOLLYWOOD must stay unfocused"
                     );
                     assert!(
                         text.contains("why: producer hit quota limit"),
@@ -213,19 +218,20 @@ fn focus_dock_size_and_focus_matrix_on_six_studios() {
                     assert!(hits.strip, "{label}: STUDIOS stays 1-row strip");
                     assert!(!text.contains("why:"), "{label}: WAITING unfocused");
                     assert!(
-                        !text.contains("apply a"),
+                        !text.contains("a apply"),
                         "{label}: WAITING chips hidden when unfocused"
                     );
                     assert!(
-                        text.contains("── HOLLYWOOD"),
+                        text.contains("╠")
+                            && (text.contains("H O L L Y W O O D") || text.contains("HOLLYWOOD")),
                         "{label}: HOLLYWOOD focused rule:\n{text}"
                     );
                 }
                 "STUDIOS" => {
                     assert!(!text.contains("why:"), "{label}: WAITING unfocused");
                     assert!(
-                        !text.contains("── HOLLYWOOD"),
-                        "{label}: HOLLYWOOD unfocused"
+                        !text.contains("╠══╡") && !text.contains("╠═╡✦"),
+                        "{label}: HOLLYWOOD must stay unfocused"
                     );
                     if let Some(exp_h) = expect_studio_h {
                         if exp_h >= 3 {
@@ -420,4 +426,74 @@ fn three_row_micro_frame_renders_when_only_four_rows_remain_for_studios() {
     let text = lines(&buf, Rect::new(0, 0, 120, hits.area.height)).join("\n");
     assert!(text.contains("✓ ready"), "{text}");
     assert!(text.contains("r2 · 12/13"), "{text}");
+}
+
+#[test]
+fn fit_base_sheds_in_babylon_order() {
+    use crate::hollywood::Section;
+    use crate::hollywood::plan::{Plan, fit_base};
+
+    let base = || Plan {
+        title: true,
+        shown: 5,
+        details: vec![false; 5],
+        detail_extra: vec![0; 5],
+        hollywood_rule: true,
+        headline: false,
+        talk: 1,
+        talk_wraps: vec![0],
+        live: false,
+        tail_rows: 1,
+        studios_perf: false,
+        frames_h: 1,
+        hints: true,
+        bottom_edge: true,
+    };
+
+    // Total base = 12 (`hollywood_rule` + `title` + `5` + `talk` + `tail` + `strip` + `hints` + `sill`).
+    // 1. Shed unfocused hollywood_rule (cap 11).
+    let mut p = base();
+    fit_base(&mut p, 11, Some(Section::Waiting), 5);
+    assert!(!p.hollywood_rule && p.hints && p.talk == 1 && p.shown == 5 && p.bottom_edge);
+
+    // 2. Shed hints (cap 10).
+    let mut p = base();
+    fit_base(&mut p, 10, Some(Section::Waiting), 5);
+    assert!(!p.hints && p.talk == 1 && p.shown == 5 && p.bottom_edge);
+
+    // 3. Shed unfocused talk (cap 9).
+    let mut p = base();
+    fit_base(&mut p, 9, Some(Section::Waiting), 5);
+    assert!(p.talk == 0 && p.shown == 5 && p.frames_h == 1 && p.title && p.bottom_edge);
+
+    // 4. Scroll WAITING down to min(3, 5) = 3 (cap 7).
+    let mut p = base();
+    fit_base(&mut p, 7, Some(Section::Waiting), 5);
+    assert_eq!(p.shown, 3);
+    assert_eq!(p.frames_h, 1);
+    assert!(p.title && p.bottom_edge);
+
+    // 5. Shed unfocused strip (cap 6).
+    let mut p = base();
+    fit_base(&mut p, 6, Some(Section::Waiting), 5);
+    assert_eq!(p.shown, 3);
+    assert_eq!(p.frames_h, 0);
+    assert!(p.title && p.bottom_edge);
+
+    // 6. Shed title (cap 5).
+    let mut p = base();
+    fit_base(&mut p, 5, Some(Section::Waiting), 5);
+    assert!(!p.title && p.shown == 3 && p.bottom_edge);
+
+    // 7. Scroll WAITING down to 1 while keeping marquee sill down to cap = 3.
+    let mut p = base();
+    fit_base(&mut p, 3, Some(Section::Waiting), 5);
+    assert_eq!(p.shown, 1);
+    assert_eq!(p.tail_rows, 1);
+    assert!(p.bottom_edge, "marquee sill survives down to cap = 3");
+
+    // 8. Sill sheds only when cap < 3.
+    let mut p = base();
+    fit_base(&mut p, 2, Some(Section::Waiting), 5);
+    assert!(!p.bottom_edge && p.shown == 1 && p.tail_rows == 1);
 }

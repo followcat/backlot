@@ -338,7 +338,10 @@ async fn expanded_call_sheet_meets_beside_lot_dock_without_external_shadow() {
     let bottom = (app.hollywood_hits.area.x..app.hollywood_hits.area.right())
         .map(|x| drawn.buffer()[(x, app.hollywood_hits.area.bottom() - 1)].symbol())
         .collect::<String>();
-    assert!(bottom.contains("▀▀"), "bottom edge ends sheet: {bottom}");
+    assert!(
+        bottom.starts_with('╚') && bottom.contains('▪') && bottom.ends_with('╝'),
+        "marquee sill ends sheet: {bottom}"
+    );
 
     app.shell.popup_shadow = false;
     draw_to(&mut app, 160, 44);

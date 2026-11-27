@@ -15,7 +15,7 @@ use super::frames_draw::draw_studio;
 use super::new_frame::draw_new;
 use super::rows::{self, Frame};
 use super::sheet::Status;
-use super::{Hollywood, LayerOpts, Target, chips, plan};
+use super::{Hollywood, LayerOpts, MARGIN, Target, chips, plan};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::panel::data::{MachineSummary, spans_machines, studio_label};
@@ -28,8 +28,6 @@ pub(crate) const FRAME_H_MID: u16 = 5;
 pub(crate) const FRAME_H_MIN: u16 = 3;
 /// The air between two frames.
 pub(crate) const GAP: u16 = 2;
-/// The band's left and right margins.
-pub(crate) const MARGIN: u16 = 2;
 /// Frame width bounds.
 const FRAME_W_MIN: u16 = 24;
 const FRAME_W_MAX: u16 = 36;
@@ -141,16 +139,34 @@ pub(crate) fn render(
         }
     }
     out.height = rows_fit * frame_h;
+    let elev = palette.elevation();
+    let rail = elev.gilt_style(elev.surface);
+    for dy in 0..out.height {
+        let ry = area.y + dy;
+        if !view.suppress_highlights {
+            put_text(
+                buf,
+                area.x,
+                ry,
+                1,
+                "▌",
+                Style::default().fg(palette.accent).bg(elev.surface),
+            );
+        } else {
+            put_text(buf, area.x, ry, 1, "║", rail);
+        }
+        if area.width >= 2 {
+            put_text(buf, area.x + area.width - 1, ry, 1, "║", rail);
+        }
+    }
     out.more_left = start > 0;
     out.more_right = start + out.drawn < frames.len();
-    let caret = Style::default()
-        .fg(palette.accent)
-        .bg(palette.elevation().surface);
-    if out.more_left && area.width > 0 {
-        put_text(buf, area.x, area.y, 1, "‹", caret);
+    let caret = Style::default().fg(palette.accent).bg(elev.surface);
+    if out.more_left && area.width >= 4 {
+        put_text(buf, area.x + 1, area.y, 1, "‹", caret);
     }
-    if out.more_right && area.width > 1 {
-        put_text(buf, area.x + area.width - 1, area.y, 1, "›", caret);
+    if out.more_right && area.width >= 4 {
+        put_text(buf, area.x + area.width - 2, area.y, 1, "›", caret);
     }
     out
 }

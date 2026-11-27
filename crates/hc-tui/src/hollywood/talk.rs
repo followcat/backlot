@@ -8,9 +8,8 @@ use ratatui::style::{Modifier, Style};
 
 use backlot_model::summary::Exchange;
 
-use super::Target;
-use super::band::MARGIN;
 use super::draw::HollywoodRender;
+use super::{MARGIN, Target};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
@@ -39,8 +38,10 @@ pub(crate) fn draw_talk(
     rect: Rect,
     line: &Exchange,
     selected: bool,
+    zone_focused: bool,
     now_ms: u64,
     earlier: usize,
+    hide_age: bool,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -52,12 +53,20 @@ pub(crate) fn draw_talk(
     };
     let base = Style::default().bg(bg);
     buf.set_style(rect, base);
-    if selected {
-        put_text(buf, rect.x, rect.y, 1, "▌", base.fg(palette.accent));
-        put_text(buf, rect.x + 1, rect.y, 1, "▸", base.fg(palette.accent));
-        if rect.height > 1 {
-            put_text(buf, rect.x, rect.y + 1, 1, "▌", base.fg(palette.accent));
+    let rail = elev.gilt_style(elev.surface);
+    for dy in 0..rect.height {
+        let ry = rect.y + dy;
+        if zone_focused || selected {
+            put_text(buf, rect.x, ry, 1, "▌", base.fg(palette.accent));
+        } else {
+            put_text(buf, rect.x, ry, 1, "║", rail);
         }
+        if rect.width >= 2 {
+            put_text(buf, rect.x + rect.width - 1, ry, 1, "║", rail);
+        }
+    }
+    if selected {
+        put_text(buf, rect.x + 1, rect.y, 1, "▸", base.fg(palette.accent));
     }
 
     let wide = rect.width >= 90;
@@ -93,8 +102,14 @@ pub(crate) fn draw_talk(
         } else {
             right_edge
         }
+    } else if hide_age && earlier == 0 {
+        right_edge
     } else {
-        let age = super::reader_meta::age_label(line.ts_ms, now_ms);
+        let age = if hide_age {
+            None
+        } else {
+            super::reader_meta::age_label(line.ts_ms, now_ms)
+        };
         let right_label = match (age, earlier) {
             (Some(a), 0) => Some(a),
             (Some(a), n) => Some(format!("{a} · {n} earlier")),

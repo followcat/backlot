@@ -2,17 +2,22 @@
 //!
 //! 1. **Lay out every zone in its unfocused form first** (title, 1-line
 //!    waiting items, 1 newest talk line + compose, 1-row studio chip
-//!    strip, hints, bottom edge — no top perforation, no external shadow).
-//!    If that exceeds `cap`, shed in order: hints -> bottom edge ->
-//!    unfocused talk (never when HOLLYWOOD is focused) -> title -> studio
-//!    strip (never when STUDIOS is focused) -> scroll waiting list
-//!    keeping selection. Compose and the selected waiting row never drop.
+//!    strip, hints, marquee sill — no top perforation, no external shadow).
+//!    If that exceeds `cap`, shed in order: unfocused `HOLLYWOOD` rule ->
+//!    hints -> unfocused talk (never when HOLLYWOOD is focused) -> scroll
+//!    waiting window down to `min(3, waits)` -> unfocused studio strip
+//!    (never when STUDIOS is focused) -> title -> scroll waiting window
+//!    to `1` -> marquee sill (only when `cap < 3`). Compose and the
+//!    selected waiting row never drop while `cap >= 2`.
 //! 2. **Expand only the focused zone into the remaining rows** (`cap - base`):
 //!    - WAITING: selected item's detail (`why:`, `Q1..Q3`, `finish?`).
-//!    - HOLLYWOOD: `── HOLLYWOOD ──` rule + newest talk lines with wraps
-//!      (up to 8); if no room for rule, keep talk with `N earlier` inline.
-//!    - STUDIOS: perforation + 7-row frames -> 5 rows -> 3 rows ->
+//!    - HOLLYWOOD: `╠══╡ … HOLLYWOOD … ╞══╣` rule + newest talk lines with
+//!      wraps (up to 8); if no room for rule, keep talk with `N earlier`.
+//!    - STUDIOS: sprocket header + 7-row frames -> 5 rows -> 3 rows ->
 //!      focused 1-row strip.
+//!
+//!    Any leftover spare rows after focused expansion may fund the
+//!    unfocused `╟── HOLLYWOOD ──╢` crossbar when `waits > 0`.
 //!
 //! Expansion never pushes another zone's unfocused line out.
 
@@ -160,7 +165,7 @@ pub(crate) struct Plan {
     pub details: Vec<bool>,
     /// Additional detail lines beyond the first (used by multi-question design decisions).
     pub detail_extra: Vec<u16>,
-    /// Focused HOLLYWOOD zone header `── HOLLYWOOD ──`.
+    /// Crossbar above the HOLLYWOOD zone (`╟── HOLLYWOOD ──╢` or `╠══╡ … ╞══╣`).
     pub hollywood_rule: bool,
     /// Hollywood's headline row when shown inside the HOLLYWOOD zone.
     pub headline: bool,
@@ -177,7 +182,7 @@ pub(crate) struct Plan {
     /// `7`/`5`/`3` draws frames, `1` draws the 1-row chip strip, `0` none.
     pub frames_h: u16,
     pub hints: bool,
-    /// Single bottom `▀▀ ▀▀ …` perforation edge (no external shadow row).
+    /// Bottom marquee sill `╚══▪══…╡ ✦ ╞…╝` (no external shadow row).
     pub bottom_edge: bool,
 }
 
@@ -244,22 +249,26 @@ impl Plan {
 }
 
 /// Phase 1: shed base unfocused rows into `cap`. Compose (`tail_rows`)
-/// and the selected waiting row (`shown >= 1`) never drop while `cap >= 2`.
+/// and the selected waiting row (`shown >= 1`) never drop while `cap >= 2`,
+/// and the bottom marquee sill (`bottom_edge`) sheds only when `cap < 3`.
 pub(crate) fn fit_base(plan: &mut Plan, cap: u16, focus: Option<Section>, total_waits: usize) {
+    let min_three = total_waits.min(3);
     let min_shown = usize::from(total_waits > 0);
     while plan.height() > cap {
-        if plan.hints {
+        if focus != Some(Section::Hollywood) && plan.hollywood_rule {
+            plan.hollywood_rule = false;
+        } else if plan.hints {
             plan.hints = false;
-        } else if plan.bottom_edge {
-            plan.bottom_edge = false;
         } else if focus != Some(Section::Hollywood) && plan.headline {
             plan.headline = false;
         } else if focus != Some(Section::Hollywood) && plan.talk > 0 {
             plan.talk = 0;
-        } else if plan.title {
-            plan.title = false;
+        } else if plan.shown > min_three {
+            plan.shown -= 1;
         } else if focus != Some(Section::Studios) && plan.frames_h > 0 {
             plan.frames_h = 0;
+        } else if plan.title {
+            plan.title = false;
         } else if plan.shown > min_shown {
             plan.shown -= 1;
         } else if plan.headline {
@@ -268,8 +277,12 @@ pub(crate) fn fit_base(plan: &mut Plan, cap: u16, focus: Option<Section>, total_
             plan.talk = 0;
         } else if plan.frames_h > 0 {
             plan.frames_h = 0;
+        } else if plan.bottom_edge && cap < 3 {
+            plan.bottom_edge = false;
         } else if plan.shown > 0 && cap < 2 {
             plan.shown = 0;
+        } else if plan.bottom_edge {
+            plan.bottom_edge = false;
         } else if plan.tail_rows > 0 && cap == 0 {
             plan.tail_rows = 0;
         } else {
@@ -370,5 +383,17 @@ fn expand_focused(
             }
         }
         _ => {}
+    }
+
+    // Unfocused `╟── HOLLYWOOD ──╢` rule appears only from leftover spare
+    // rows when at least one waiting item sits above it.
+    if focus != Some(Section::Hollywood)
+        && agent
+        && !waits.is_empty()
+        && !plan.hollywood_rule
+        && (plan.headline || plan.talk > 0 || plan.tail_rows > 0)
+        && cap.saturating_sub(plan.height()) > 0
+    {
+        plan.hollywood_rule = true;
     }
 }

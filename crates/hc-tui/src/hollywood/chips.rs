@@ -7,11 +7,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
-use super::Target;
-use super::band::MARGIN;
 use super::items::WaitBucket;
 use super::rows::{Frame, wait_studio_key};
 use super::sheet::{Conn, Status, Wait};
+use super::{MARGIN, Target};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::display_width;
@@ -109,11 +108,12 @@ fn strip_widths(
     view: StripView<'_>,
     palette: &Palette,
 ) -> (Vec<u16>, u16, u16) {
-    let margin = if width >= 20 { MARGIN } else { 1 };
+    let wide = width >= 20;
     let label = format!("STUDIOS {studios_n}");
     let label_w = display_width(&label) as u16;
-    let chips_start = margin + label_w + 2;
-    let new_x = width.saturating_sub(margin + NEW_CHIP_W);
+    let label_start = if wide { MARGIN + 1 } else { 1 };
+    let chips_start = label_start + label_w + if wide { 3 } else { 2 };
+    let new_x = width.saturating_sub(if wide { MARGIN + 1 } else { 1 } + NEW_CHIP_W);
     let widths = frames
         .iter()
         .filter_map(|f| match f {
@@ -223,7 +223,9 @@ pub(crate) fn render(
     }
     let elev = palette.elevation();
     let base = Style::default().bg(elev.surface);
-    let margin = if rect.width >= 20 { MARGIN } else { 1 };
+    let gilt = elev.gilt_style(elev.surface);
+    let wide = rect.width >= 20;
+    let label_offset = if wide { MARGIN + 1 } else { 1 };
     let studios: Vec<(StudioRef<'_>, Target)> = frames
         .iter()
         .filter_map(|f| match f {
@@ -235,17 +237,27 @@ pub(crate) fn render(
 
     if focused && !suppress_highlights {
         put_text(buf, rect.x, rect.y, 1, "▌", base.fg(palette.accent));
+    } else if wide {
+        put_text(buf, rect.x, rect.y, 1, "╟", gilt);
+    }
+    if wide {
+        put_text(buf, rect.x + 1, rect.y, 1, "─", gilt);
+        put_text(buf, rect.x + rect.width - 2, rect.y, 1, "─", gilt);
+        put_text(buf, rect.x + rect.width - 1, rect.y, 1, "╢", gilt);
     }
     let label = format!("STUDIOS {studios_n}");
     let label_w = display_width(&label) as u16;
-    let label_x = rect.x + margin;
+    let label_x = rect.x + label_offset;
     let label_style = if focused && !suppress_highlights {
         base.fg(palette.accent).add_modifier(Modifier::BOLD)
     } else {
-        base.fg(elev.muted_surface)
+        base.fg(palette.subtext0)
     };
     put_text(buf, label_x, rect.y, label_w, &label, label_style);
-    out.label_rect = Rect::new(rect.x, rect.y, margin + label_w, 1);
+    if wide {
+        put_text(buf, label_x + label_w + 1, rect.y, 1, "─", gilt);
+    }
+    out.label_rect = Rect::new(rect.x, rect.y, label_offset + label_w, 1);
 
     let view = StripView {
         active_studio,
@@ -261,7 +273,7 @@ pub(crate) fn render(
     // Pinned `[+ new]` on the right.
     let new_selected = !suppress_highlights && selected == Some(&Target::NewStudio);
     let new_bg = chip_bg(new_selected, palette);
-    if new_x > rect.x + margin + label_w {
+    if new_x > label_x + label_w {
         let mut cx = new_x;
         let parts = [
             ("[", elev.muted_surface),
@@ -329,6 +341,15 @@ pub(crate) fn render(
     }
     if out.more_right && new_x >= rect.x + 2 {
         put_text(buf, new_x - 2, rect.y, 1, "›", base.fg(palette.accent));
+    }
+    let leader_end = if out.more_right {
+        new_x.saturating_sub(3)
+    } else {
+        new_x.saturating_sub(1)
+    };
+    if leader_end > x {
+        let fill = leader_end - x;
+        put_text(buf, x, rect.y, fill, &"─".repeat(fill as usize), gilt);
     }
     // Keep unused constant referenced only via width check.
     debug_assert_eq!(NEW_CHIP_TEXT.len(), NEW_CHIP_W as usize);

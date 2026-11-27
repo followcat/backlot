@@ -1,17 +1,20 @@
-//! Middle HOLLYWOOD zone (`── HOLLYWOOD ──`, headline, talk rows,
-//! live progress, compose/setup) and footer (`hints`, bottom `▀▀` edge).
+//! Middle HOLLYWOOD zone (`╟── HOLLYWOOD ──╢` / `╠══╡ … ╞══╣`, headline,
+//! talk rows, live progress, compose/setup) and footer (`hints`, marquee sill).
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 
+use super::MARGIN;
 use super::band::RowExtras;
-use super::draw::{HollywoodRender, MARGIN};
+use super::draw::HollywoodRender;
 use super::draw_sections::BandCtx;
 use super::rows::{self, Row, Target};
-use super::{band, hints, title};
+use super::{architrave, band, hints};
+use crate::chrome::render::put_text;
 use crate::chrome::scroll::list_scroll_metrics;
 
-/// Middle zone: optional focused `── HOLLYWOOD ──` rule (with embedded
+/// Middle zone: focused or spare-only HOLLYWOOD crossbar (with embedded
 /// fold badge), headline, talk lines, live progress, and compose/setup.
 pub(super) fn draw_lower(
     buf: &mut Buffer,
@@ -50,13 +53,28 @@ pub(super) fn draw_lower(
         None
     };
 
+    let unfocused_right = if !ctx.hollywood_focused && ctx.plan.hollywood_rule {
+        let age = talk_entries
+            .last()
+            .and_then(|e| super::reader_meta::age_label(e.ts_ms, ctx.now_ms));
+        match (age, total_earlier) {
+            (Some(a), 0) => Some(a),
+            (Some(a), n) => Some(format!("{a} · {n} earlier")),
+            (None, 0) => None,
+            (None, n) => Some(format!("{n} earlier")),
+        }
+    } else {
+        None
+    };
+
     if ctx.opts.agent && ctx.plan.hollywood_rule {
         super::zone::draw_hollywood_rule(
             buf,
             ctx.area,
             y,
             ctx.hollywood_focused,
-            fold_badge,
+            ctx.hollywood_focused.then_some(fold_badge).flatten(),
+            unfocused_right.as_deref(),
             ctx.palette,
             hits,
         );
@@ -80,7 +98,10 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
-                    RowExtras::default(),
+                    RowExtras {
+                        hollywood_focused: ctx.hollywood_focused,
+                        ..RowExtras::default()
+                    },
                     ctx.palette,
                     hits,
                 );
@@ -112,7 +133,9 @@ pub(super) fn draw_lower(
                     ctx.activity,
                     ctx.now_ms,
                     RowExtras {
+                        hollywood_focused: ctx.hollywood_focused,
                         talk_earlier,
+                        hide_talk_age: !ctx.hollywood_focused && ctx.plan.hollywood_rule,
                         ..RowExtras::default()
                     },
                     ctx.palette,
@@ -134,7 +157,10 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
-                    RowExtras::default(),
+                    RowExtras {
+                        hollywood_focused: ctx.hollywood_focused,
+                        ..RowExtras::default()
+                    },
                     ctx.palette,
                     hits,
                 );
@@ -154,7 +180,10 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
-                    RowExtras::default(),
+                    RowExtras {
+                        hollywood_focused: ctx.hollywood_focused,
+                        ..RowExtras::default()
+                    },
                     ctx.palette,
                     hits,
                 );
@@ -166,7 +195,7 @@ pub(super) fn draw_lower(
     y
 }
 
-/// Scroll metrics, hint bar, and bottom `▀▀` perforation edge (no external shadow).
+/// Scroll metrics, hint apron on `stage_well`, and marquee sill (no external shadow).
 pub(super) fn draw_footer(
     buf: &mut Buffer,
     mut y: u16,
@@ -180,6 +209,15 @@ pub(super) fn draw_footer(
         ctx.scroll,
     ));
     if ctx.plan.hints {
+        let elev = ctx.palette.elevation();
+        let well = elev.stage_well;
+        let row_rect = Rect::new(ctx.area.x, y, ctx.area.width, 1);
+        buf.set_style(row_rect, Style::default().bg(well));
+        let rail = elev.gilt_style(well);
+        if ctx.area.width >= 2 {
+            put_text(buf, ctx.area.x, y, 1, "║", rail);
+            put_text(buf, ctx.area.x + ctx.area.width - 1, y, 1, "║", rail);
+        }
         let live_prompt = rows::hollywood_asking(ctx.machines);
         let usable = (ctx.area.width as usize).saturating_sub((MARGIN * 2) as usize);
         let tier = if ctx.hollywood.confirm.is_some() {
@@ -194,17 +232,18 @@ pub(super) fn draw_footer(
                 usable,
             )
         };
-        crate::chrome::render::put_hint_bar(
+        crate::chrome::render::put_hint_bar_on(
             buf,
             ctx.area.x + MARGIN,
             y,
             usable as u16,
             &tier,
+            well,
             ctx.palette,
         );
         y += 1;
     }
     if ctx.plan.bottom_edge {
-        title::draw_sprocket(buf, ctx.area, y, '▀', ctx.palette);
+        architrave::draw_marquee_sill(buf, ctx.area, y, ctx.palette);
     }
 }

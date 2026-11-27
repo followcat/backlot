@@ -10,6 +10,7 @@ pub(crate) mod copy_feedback;
 pub mod detect;
 pub(crate) mod dialogs;
 pub(crate) mod elevation;
+mod elevation_deco;
 #[cfg(test)]
 mod elevation_tests;
 pub mod endpoint_agents;

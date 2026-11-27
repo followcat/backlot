@@ -15,23 +15,22 @@ fn on(fg: ratatui::style::Color, bg: ratatui::style::Color) -> Style {
     Style::default().fg(fg).bg(bg)
 }
 
-/// Draw the dashed frame: `overlay0` (or `accent` when selected).
+/// Draw the dashed frame: `gilt` on `stage_well` (or `accent` on `raised_row` when selected).
 pub(crate) fn draw_new(buf: &mut Buffer, rect: Rect, selected: bool, palette: &Palette) {
     if rect.width < 4 || rect.height < 3 {
         return;
     }
     let elev = palette.elevation();
-    let border = if selected {
-        palette.accent
+    let (border, edge) = if selected {
+        (palette.accent, on(palette.accent, elev.surface))
     } else {
-        elev.border_muted
+        (elev.gilt, elev.gilt_style(elev.surface))
     };
     let bg = if selected {
         elev.raised_row
     } else {
-        palette.panel_bg
+        elev.stage_well
     };
-    let edge = on(border, elev.surface);
     // The dashed outline: corners solid, the arithmetic `┄`.
     put_text(buf, rect.x, rect.y, 1, "╭", edge);
     put_text(

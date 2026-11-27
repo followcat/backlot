@@ -37,11 +37,11 @@ pub(crate) fn paint_wait_chips(
     let hit_h = row_height.max(1);
     let elev = palette.elevation();
     for (idx, chip) in chips.iter().enumerate() {
-        let text = items::chip_text(chip, compact);
-        let w = display_width(&text) as u16;
         let is_focused = selected && focused_chip == Some(idx);
-        let style = if is_focused {
-            if elev.is_terminal_16 {
+        let text = items::chip_text(chip, compact, is_focused);
+        let w = display_width(&text) as u16;
+        if is_focused {
+            let style = if elev.is_terminal_16 {
                 Style::default()
                     .fg(palette.text)
                     .add_modifier(Modifier::REVERSED | Modifier::BOLD)
@@ -50,16 +50,35 @@ pub(crate) fn paint_wait_chips(
                     .fg(crate::studio::glyphs::contrast_fg(palette))
                     .bg(palette.accent)
                     .add_modifier(Modifier::BOLD)
-            }
+            };
+            put_text(buf, x, y, w, &text, style);
         } else {
             let chip_bg = if elev.is_dark {
                 palette.surface0
             } else {
                 elev.surface
             };
-            Style::default().fg(palette.subtext0).bg(chip_bg)
-        };
-        put_text(buf, x, y, w, &text, style);
+            let key_fg = if elev.is_terminal_16 {
+                palette.subtext0
+            } else {
+                palette.accent
+            };
+            let key_style = Style::default().fg(key_fg).bg(chip_bg);
+            let label_style = Style::default().fg(palette.subtext0).bg(chip_bg);
+            if compact {
+                put_text(buf, x, y, w, chip.key, key_style);
+            } else {
+                let mut cx = x;
+                put_text(buf, cx, y, 1, " ", label_style);
+                cx += 1;
+                let kw = display_width(chip.key) as u16;
+                put_text(buf, cx, y, kw, chip.key, key_style);
+                cx += kw;
+                let tail = format!(" {} ", chip.label);
+                let tw = display_width(&tail) as u16;
+                put_text(buf, cx, y, tw, &tail, label_style);
+            }
+        }
         let key = if chip.key == "↵" {
             '\r'
         } else {

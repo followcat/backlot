@@ -19,18 +19,13 @@ use crate::panel::data::{MachineSummary, spans_machines};
 
 pub(crate) use super::draw_chips::{CHIP_GAP, paint_wait_chips};
 
-/// The title row's wide mark.
-pub(crate) const MARK: &str = "✦  H O L L Y W O O D";
-/// The band's left margin.
-pub(super) const MARGIN: u16 = 2;
-
 /// What the mouse needs: the bar's whole rect, the title row, the
 /// `STUDIOS N` focus label, the frames/chips and band rows with their
 /// targets, the input line, the waiting list's scroll metrics and the
 /// open view's map.
 #[derive(Default)]
 pub(crate) struct HollywoodRender {
-    /// The band's rect — the click boundary (ends right below `▀▀`).
+    /// The band's rect — the click boundary (ends right below the marquee sill).
     pub area: Rect,
     /// The title row (expanded).
     pub title: Rect,
@@ -104,7 +99,7 @@ pub(crate) fn render(
 }
 
 /// The expanded band in top-to-bottom zone order: Title -> WAITING ->
-/// HOLLYWOOD -> STUDIOS -> Hints -> Bottom edge (`▀▀`).
+/// HOLLYWOOD -> STUDIOS -> Hints -> Marquee Sill.
 #[allow(clippy::too_many_arguments)]
 fn render_band(
     buf: &mut Buffer,

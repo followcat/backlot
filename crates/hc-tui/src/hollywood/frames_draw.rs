@@ -34,15 +34,11 @@ pub(super) fn draw_studio(
         return;
     }
     let elev = palette.elevation();
-    let border = if selected {
-        palette.accent
-    } else {
-        elev.border_muted
-    };
+    let border = if selected { palette.accent } else { elev.gilt };
     let bg = if selected {
         elev.raised_row
     } else {
-        palette.panel_bg
+        elev.stage_well
     };
     for y in rect.y + 1..rect.y + rect.height - 1 {
         for x in rect.x + 1..rect.x + rect.width - 1 {
@@ -50,7 +46,7 @@ pub(super) fn draw_studio(
             buf[(x, y)].set_style(on(border, bg));
         }
     }
-    draw_chrome(buf, rect, label, selected, active, border, palette);
+    draw_chrome(buf, rect, label, selected, active, palette);
 
     let inner = rect.width.saturating_sub(4);
     draw_state_row(buf, rect, inner, studio, status, bg, palette);
@@ -83,13 +79,25 @@ fn draw_chrome(
     label: &StudioLabel,
     selected: bool,
     active: bool,
-    border: Color,
     palette: &Palette,
 ) {
     let elev = palette.elevation();
-    let edge = on(border, elev.surface);
-    put_text(buf, rect.x, rect.y, 2, "╭─", edge);
-    let prefix = if !selected && active { "▸ " } else { "" };
+    let (tl, h, tr, v, bl, br, edge) = if selected {
+        (
+            "╔",
+            "═",
+            "╗",
+            "║",
+            "╚",
+            "╝",
+            on(palette.accent, elev.surface),
+        )
+    } else {
+        ("╭", "─", "╮", "│", "╰", "╯", elev.gilt_style(elev.surface))
+    };
+    put_text(buf, rect.x, rect.y, 1, tl, edge);
+    put_text(buf, rect.x + 1, rect.y, 1, h, edge);
+    let prefix = if active { "▸ " } else { "" };
     let budget = rect.width.saturating_sub(6 + prefix.chars().count() as u16) as usize;
     let id = label.fit(budget);
     let title = format!(" {prefix}{id} ");
@@ -105,6 +113,16 @@ fn draw_chrome(
     let title_w = title.chars().count() as u16;
     let used = 2 + title_w;
     put_text(buf, rect.x + 2, rect.y, title_w, &title, title_style);
+    if active && used >= 5 {
+        put_text(
+            buf,
+            rect.x + 3,
+            rect.y,
+            1,
+            "▸",
+            on(palette.accent, elev.surface).add_modifier(Modifier::BOLD),
+        );
+    }
     if used + 1 < rect.width {
         let fill = rect.width - 1 - used;
         put_text(
@@ -112,26 +130,26 @@ fn draw_chrome(
             rect.x + used,
             rect.y,
             fill,
-            &"─".repeat(fill as usize),
+            &h.repeat(fill as usize),
             edge,
         );
     }
-    put_text(buf, rect.x + rect.width - 1, rect.y, 1, "╮", edge);
+    put_text(buf, rect.x + rect.width - 1, rect.y, 1, tr, edge);
     for y in rect.y + 1..rect.y + rect.height - 1 {
-        put_text(buf, rect.x, y, 1, "│", edge);
-        put_text(buf, rect.x + rect.width - 1, y, 1, "│", edge);
+        put_text(buf, rect.x, y, 1, v, edge);
+        put_text(buf, rect.x + rect.width - 1, y, 1, v, edge);
     }
     let bottom = rect.y + rect.height - 1;
-    put_text(buf, rect.x, bottom, 1, "╰", edge);
+    put_text(buf, rect.x, bottom, 1, bl, edge);
     put_text(
         buf,
         rect.x + 1,
         bottom,
         rect.width - 2,
-        &"─".repeat((rect.width - 2) as usize),
+        &h.repeat((rect.width - 2) as usize),
         edge,
     );
-    put_text(buf, rect.x + rect.width - 1, bottom, 1, "╯", edge);
+    put_text(buf, rect.x + rect.width - 1, bottom, 1, br, edge);
 }
 
 fn draw_state_row(

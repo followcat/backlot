@@ -113,6 +113,7 @@ pub(super) fn draw_waiting(
                     wait_focused: ctx.wait_focused,
                     wait_scroll_badge,
                     talk_earlier: 0,
+                    ..RowExtras::default()
                 },
                 ctx.palette,
                 hits,

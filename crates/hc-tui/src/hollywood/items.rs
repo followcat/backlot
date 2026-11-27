@@ -43,7 +43,7 @@ impl WaitBucket {
     }
 }
 
-/// One action chip's label and its key — `allow y` draws ` allow y `.
+/// One action chip's label and its key — resting ` a apply `, focused `‹ a apply ›`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Chip {
     pub label: &'static str,
@@ -52,16 +52,18 @@ pub(crate) struct Chip {
     pub primary: bool,
 }
 
-/// A chip's text at full and compact widths: ` allow y ` or `[y]`.
-pub(crate) fn chip_text(chip: &Chip, compact: bool) -> String {
-    if compact {
-        format!("[{}]", chip.key)
-    } else {
-        format!(" {} {} ", chip.label, chip.key)
+/// A chip's text at full/compact widths and focused/resting states:
+/// focused `‹ y allow ›` (`‹y›` compact), resting ` y allow ` (`y` compact).
+pub(crate) fn chip_text(chip: &Chip, compact: bool, focused: bool) -> String {
+    match (compact, focused) {
+        (true, true) => format!("‹{}›", chip.key),
+        (true, false) => chip.key.to_string(),
+        (false, true) => format!("‹ {} {} ›", chip.key, chip.label),
+        (false, false) => format!(" {} {} ", chip.key, chip.label),
     }
 }
 
-/// The waiting row's chips: full ` label key ` or compact `[k]`.
+/// The waiting row's chips: focused `‹ k label ›` / `‹k›`, resting ` k label ` / `k`.
 pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
     match wait {
         // A prompt row only promises the keys that work: a runner with

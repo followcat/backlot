@@ -13,6 +13,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Changed
 
 - **backlot's own theme now follows the film *Babylon*: black lacquer, rose velvet and brass, with a matching light theme (`backlot-day`).** The old midnight blue look stays selectable as `backlot-midnight`, `babylon` and `babylon-day` resolve as aliases, and `auto_switch = true` pairs `backlot` with `backlot-day`.
+- **The Hollywood dock has a gilded frame in the style of the film *Babylon*: each zone has its own dividing line, the block has a clear edge against the terminal and the Lot, and a row of marquee bulbs closes it at the bottom.** It costs no extra rows on a short terminal. On items waiting for you, action chips put keys first and wrap the action that Enter runs in `‹ ›` (`‹ y allow ›`, `d deny`).
 
 ## 0.4.25 — 2026-11-27
 

@@ -2,7 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ratatui::{buffer::Buffer, layout::Rect, style::Style};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Style},
+};
 
 use super::navigate::WorkspaceNavigationTarget;
 use super::palette::Palette;
@@ -342,11 +346,31 @@ pub(crate) fn put_hint_bar(
     pairs: &[(&str, &str)],
     palette: &Palette,
 ) {
+    put_hint_bar_on(
+        buf,
+        x,
+        y,
+        max_w,
+        pairs,
+        palette.elevation().surface,
+        palette,
+    );
+}
+
+/// Draw a unified two-tone footer hint bar over an explicit background `bg`.
+pub(crate) fn put_hint_bar_on(
+    buf: &mut Buffer,
+    x: u16,
+    y: u16,
+    max_w: u16,
+    pairs: &[(&str, &str)],
+    bg: Color,
+    palette: &Palette,
+) {
     if max_w == 0 || pairs.is_empty() {
         return;
     }
     let elev = palette.elevation();
-    let bg = elev.surface;
     let key_style = Style::default().fg(palette.subtext0).bg(bg);
     let label_style = Style::default().fg(elev.muted_surface).bg(bg);
     let gap_style = Style::default().bg(bg);

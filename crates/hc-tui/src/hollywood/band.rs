@@ -6,24 +6,23 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::Hollywood;
 use super::draw::HollywoodRender;
 use super::rows::{HollywoodActivity, Row};
 use super::sheet::Wait;
+use super::{Hollywood, MARGIN};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
 
-/// The space the band keeps at each side.
-pub(crate) const MARGIN: u16 = 2;
-
-/// Extra display context for row dispatch (`WAITING` gutter, fallback
-/// scroll counter, inline folded-turn count on unfocused talk rows).
+/// Extra display context for row dispatch (`WAITING`/`HOLLYWOOD` gutters,
+/// fallback scroll counter, inline folded-turn count on unfocused talk rows).
 #[derive(Clone, Copy, Default)]
 pub(super) struct RowExtras {
     pub wait_focused: bool,
+    pub hollywood_focused: bool,
     pub wait_scroll_badge: Option<(usize, usize, usize)>,
     pub talk_earlier: usize,
+    pub hide_talk_age: bool,
 }
 
 /// Draw one band row across `rect` and record its hit rect.
@@ -50,6 +49,21 @@ pub(super) fn draw_row(
     match row {
         Row::Headline(headline) => {
             let base = Style::default().bg(elev.surface);
+            if extras.hollywood_focused && !suppress_highlights {
+                put_text(buf, rect.x, rect.y, 1, "▌", base.fg(palette.accent));
+            } else {
+                put_text(buf, rect.x, rect.y, 1, "║", elev.gilt_style(elev.surface));
+            }
+            if rect.width >= 2 {
+                put_text(
+                    buf,
+                    rect.x + rect.width - 1,
+                    rect.y,
+                    1,
+                    "║",
+                    elev.gilt_style(elev.surface),
+                );
+            }
             put_text(
                 buf,
                 rect.x + MARGIN,
@@ -105,13 +119,22 @@ pub(super) fn draw_row(
                 rect,
                 line,
                 selected,
+                extras.hollywood_focused && !suppress_highlights,
                 now_ms,
                 extras.talk_earlier,
+                extras.hide_talk_age,
                 palette,
                 hits,
             );
         }
-        Row::Live(live) => super::band_lower::draw_live(buf, rect, live, selected, palette),
+        Row::Live(live) => super::band_lower::draw_live(
+            buf,
+            rect,
+            live,
+            selected,
+            extras.hollywood_focused && !suppress_highlights,
+            palette,
+        ),
         Row::Input => {
             let handoff_active = waits.iter().any(|w| match w {
                 Wait::Hollywood(hw) => super::handoff_ui::is_handoff_active(hw),
@@ -129,7 +152,12 @@ pub(super) fn draw_row(
                 hits,
             );
         }
-        Row::Setup => super::band_lower::draw_setup(buf, rect, palette),
+        Row::Setup => super::band_lower::draw_setup(
+            buf,
+            rect,
+            selected || (extras.hollywood_focused && !suppress_highlights),
+            palette,
+        ),
     }
     hits.rows.push((rect, target));
 }

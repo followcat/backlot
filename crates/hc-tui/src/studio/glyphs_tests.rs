@@ -56,6 +56,32 @@ fn every_glyph_is_single_width() {
         assert_eq!(UnicodeWidthStr::width(flag.glyph()), 1);
         let _ = flag.color(&palette);
     }
+    // Box Drawing (`U+2500..257F`) and Block Elements (`U+2580..259F`) share
+    // hc-tui's single-width grid assumption (`width == Some(1)`).
+    for ch in [
+        '═', '║', '╟', '╢', '╠', '╣', '╞', '╡', '╤', '╧', '╔', '╗', '╚', '╝', '╭', '╮', '╰', '╯',
+        '─', '│', '└', '├', '┤', '┌', '┄', '┆', '▀', '▄', '▌', '▎',
+    ] {
+        assert_eq!(
+            UnicodeWidthChar::width(ch),
+            Some(1),
+            "box/block glyph {ch:?}"
+        );
+    }
+    // Every ornament glyph outside Box/Block elements must be strictly narrow
+    // (`width == Some(1)` and `East_Asian_Width == N` via `width_cjk == Some(1)`).
+    for ch in ['✦', '‹', '›', '▪', '◉', '▸', '▾', '◌', '✓', '⏎', '↵'] {
+        assert_eq!(
+            UnicodeWidthChar::width(ch),
+            Some(1),
+            "narrow width for {ch:?}"
+        );
+        assert_eq!(
+            UnicodeWidthChar::width_cjk(ch),
+            Some(1),
+            "East_Asian_Width must stay Neutral (not Ambiguous) for {ch:?}"
+        );
+    }
 }
 
 /// Only `working` animates — every other state is fixed across all
