@@ -121,26 +121,48 @@ pub(crate) fn group_alive(pgid: i32) -> bool {
     pgid > 0 && unsafe { libc::kill(-pgid, 0) == 0 }
 }
 
+/// How long the probe keeps retrying a binary that `exec` refuses with
+/// `ETXTBSY`, and how often: a binary just written can still be held
+/// open for writing by a child forked from another thread until that
+/// child execs and drops the descriptor.
+const PROBE_BUSY_TRIES: u32 = 10;
+const PROBE_BUSY_GAP: Duration = Duration::from_millis(20);
+
 /// Runs `<bin> --version` with a three-second bound and returns its
 /// trimmed stdout, or `None` if it cannot run, exits badly or times out.
+/// A spawn refused `ETXTBSY` is retried within that bound.
 pub(crate) async fn probe_version(bin: PathBuf) -> Option<String> {
-    let output = tokio::time::timeout(
-        PROBE_TIMEOUT,
-        tokio::process::Command::new(&bin)
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
+    let run = async {
+        for attempt in 1..=PROBE_BUSY_TRIES {
+            match version_output(&bin).await {
+                Err(e) if text_busy(&e) && attempt < PROBE_BUSY_TRIES => {
+                    tokio::time::sleep(PROBE_BUSY_GAP).await;
+                }
+                other => return other.ok(),
+            }
+        }
+        None
+    };
+    let output = tokio::time::timeout(PROBE_TIMEOUT, run).await.ok()??;
     if !output.status.success() {
         return None;
     }
     Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+async fn version_output(bin: &Path) -> std::io::Result<std::process::Output> {
+    tokio::process::Command::new(bin)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
+}
+
+fn text_busy(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(libc::ETXTBSY)
 }
 
 /// After cancelling, waits `grace` and kills the group if it is still

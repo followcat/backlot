@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
+
 ### Changed
 
 - Test fixtures and docs use neutral names only.
