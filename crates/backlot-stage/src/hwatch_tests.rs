@@ -92,7 +92,7 @@ fn hsignal_work_combines_signals_jsonl_structured_state_and_screen() {
     // No signals yet -> structured_state ("working") overrides idle screen.
     term.status = Some(serde_json::from_value(json!({ "state": "working" })).unwrap());
     assert_eq!(
-        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> "),
+        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> ", 1_000),
         Work::Working
     );
 
@@ -108,7 +108,7 @@ fn hsignal_work_combines_signals_jsonl_structured_state_and_screen() {
     )
     .unwrap();
     assert_eq!(
-        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> "),
+        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> ", 1_000),
         Work::Waiting
     );
 
@@ -120,14 +120,14 @@ fn hsignal_work_combines_signals_jsonl_structured_state_and_screen() {
     .unwrap();
     term.status = None;
     assert_eq!(
-        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> "),
+        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> ", 1_000),
         Work::Working
     );
 
     // `Blocked` on any channel wins.
     term.waiting_for_person = true;
     assert_eq!(
-        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> "),
+        hsignal_work(&hdir, Some("sid-1"), &term, "claude", "> ", 1_000),
         Work::Blocked
     );
 }
