@@ -77,6 +77,7 @@ fn summary(studio: &str, roles: Vec<RoleSummary>) -> Summary {
             needs_upgrade: false,
             unknown_kinds: Vec::new(),
             design: None,
+            halted: None,
         }],
         hollywood: None,
         backlot_version: None,

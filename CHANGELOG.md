@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **You or any role can stop a studio from starting new work with `backlot halt --reason <text>`.** Work already running carries on: deliveries, reviews, tells and questions still go through, and nothing is killed. Only you, the producer or the director can lift it with `backlot resume`. A halted studio shows a red `! HALTED` row on the Call Sheet, and Enter shows who stopped it and why. `backlot status`, the `backlot/1` summary and `backlot metrics` show it too. Two quiet alerts reach the director or producer, never you:
+
 ### Changed
 
 - **Actors on the `worktree` profile ask their director less often (`cmd`, `cursor`, `claude`).** Checking disk space or the CPU count (`which`, `nproc`, `df`, `free`, `test`, `ps`, `tail`), changing into their own worktree by its full path, `git -C <own worktree>` reads and, on `cmd`, reading its own scratch files no longer need an approval. Each part of a compound command is checked on its own, so `cd <worktree> && curl …` still asks. Network access, installs, paid compute and other directories still ask. `standard` and `readonly` are unchanged. `devin`, `agy`, `cline`, `codex` and `opencode` treat `worktree` the same as `standard`, and `backlot studio new --dry-run` now says so.

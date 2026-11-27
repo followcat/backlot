@@ -48,6 +48,7 @@ fn live_role(
             actor: Some(actor),
             session_id: Some(format!("sess-{role}")),
             reason: None,
+            prompt_hash: None,
         },
     )
 }

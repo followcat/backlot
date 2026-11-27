@@ -11,6 +11,8 @@ fn every_model_reason_has_its_class() {
         (crate::event::PERMISSION_PROMPT, AttentionClass::Stuck),
         (crate::event::QUESTION, AttentionClass::Stuck),
         (crate::event::STALLED, AttentionClass::Stuck),
+        (crate::event::LOOPING, AttentionClass::Stuck),
+        (crate::event::NO_PROGRESS, AttentionClass::Info),
         (crate::event::CANNOT_RESUME, AttentionClass::NeedsYou),
         (crate::event::FOLDER_TRUST, AttentionClass::NeedsYou),
     ];

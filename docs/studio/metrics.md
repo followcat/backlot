@@ -56,6 +56,12 @@ All ratios return `null` in JSON (and `-` in tables) when their denominator or s
   - `review_latency_p50_ms` / `p90_ms`: linear-interpolated percentiles over `reviewed.ts_ms - delivered.ts_ms`.
   - `task_wall_clock_p50_ms`: `closed_ts_ms - first_cast.ts_ms` on `accepted` tasks.
   - `pause_clusters` / `paused_tasks_in_clusters`: maximal runs of `>= 2` consecutive `task.state=paused` events (ignoring `unknown` events).
+- **Halts**
+  - `halts`: `studio.halted` events in `[since_ms, ..]`.
+  - `resumes`: `studio.resumed` events in `[since_ms, ..]`.
+  - `false_positives`: `studio.resumed` events in window with `false_positive = true`.
+  - `false_positive_share`: `false_positives / resumes` (`null` in JSON and `-` in tables when `resumes = 0`).
+  - `halted_ms`: total halted duration across `[since_ms, ..]`, bounding open halts at `min(now_ms, finished_ts_ms)` if finished, or `now_ms`.
 
 ## Digest and coverage matrix
 

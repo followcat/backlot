@@ -280,6 +280,7 @@ fn live_and_status_text_and_json_include_progress_and_doing() {
                     actor: Some(actor("prod")),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),
@@ -296,6 +297,7 @@ fn live_and_status_text_and_json_include_progress_and_doing() {
                     actor: Some(actor("a")),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),
@@ -446,6 +448,7 @@ fn frozen_v030_live_role_reads_new_live_json_with_doing_string() {
             actor: Some(actor("prod")),
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&events);

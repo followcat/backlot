@@ -45,6 +45,7 @@ fn prompts_sort_before_stage_cards_and_ready() {
             Wait::Role(_) => "role",
             Wait::Hollywood(_) => "hollywood",
             Wait::Upgrade(_) => "upgrade",
+            Wait::Halted(_) => "halted",
             Wait::Decision(_) => "decision",
             Wait::NoRequirement(_) => "new",
             Wait::Stage(_) => "stage",

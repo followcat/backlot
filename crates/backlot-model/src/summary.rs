@@ -154,6 +154,17 @@ pub struct StudioSummary {
     /// Active or finalized opening design projection for the current requirement version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design: Option<DesignSummary>,
+    /// Active explicit line stop (`studio.halted`), absent when not halted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub halted: Option<HaltedSummary>,
+}
+
+/// Active explicit halt summary for `backlot/1` (`StudioSummary.halted`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HaltedSummary {
+    pub by: String,
+    pub reason: String,
+    pub since: u64,
 }
 
 /// Opening design projection for `backlot/1` (`StudioSummary.design`, §4.1).
@@ -658,6 +669,7 @@ pub fn summary_with_running(
                     needs_upgrade: false,
                     unknown_kinds: Vec::new(),
                     design: None,
+                    halted: None,
                 });
             }
             continue;
@@ -798,6 +810,11 @@ pub fn summary_with_running(
             needs_upgrade: !state.unknown_kinds.is_empty(),
             unknown_kinds: state.unknown_kinds.iter().cloned().collect(),
             design: design_summary(state, &studio_snippets),
+            halted: state.halted.as_ref().map(|h| HaltedSummary {
+                by: h.by.clone(),
+                reason: h.reason.clone(),
+                since: h.since_ms,
+            }),
         };
         if done {
             finished_studios.push(entry);

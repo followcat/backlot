@@ -101,6 +101,8 @@ mod digest_tests;
 #[cfg(test)]
 mod expect_checks_tests;
 #[cfg(test)]
+mod halt_validate_tests;
+#[cfg(test)]
 mod hollywood_card_tests;
 #[cfg(test)]
 mod hollywood_setup_tests;

@@ -257,7 +257,7 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         hooks: None,
         prep: None,
     };
-    match start_event(&held, &launch, "t7", None) {
+    match start_event(&held, &launch, "t7", None, None) {
         backlot_model::EventKind::RoleResumed {
             role,
             terminal,
@@ -282,18 +282,22 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         hooks: None,
         prep: None,
     };
-    match start_event(&fresh, &launch, "t7", None) {
+    match start_event(&fresh, &launch, "t7", None, Some("deadbeef".into())) {
         backlot_model::EventKind::RoleStarted {
-            session_id, reason, ..
+            session_id,
+            reason,
+            prompt_hash,
+            ..
         } => {
             assert_eq!(session_id.as_deref(), Some("chosen-1"));
             assert_eq!(reason, None);
+            assert_eq!(prompt_hash.as_deref(), Some("deadbeef"));
         }
         other => panic!("a fresh start must record role.started, got {other:?}"),
     }
 
     // A fresh restart's start carries its own word.
-    match start_event(&fresh, &launch, "t7", Some("restarted")) {
+    match start_event(&fresh, &launch, "t7", Some("restarted"), None) {
         backlot_model::EventKind::RoleStarted { reason, .. } => {
             assert_eq!(reason.as_deref(), Some("restarted"));
         }

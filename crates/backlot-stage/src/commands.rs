@@ -865,6 +865,26 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
+        Cmd::Halt { reason } => Ok(Box::new(move |_, _| {
+            Ok(pending(
+                EventKind::StudioHalted { reason },
+                by,
+                Vec::new(),
+            ))
+        })),
+        Cmd::Resume {
+            note,
+            false_positive,
+        } => Ok(Box::new(move |_, _| {
+            Ok(pending(
+                EventKind::StudioResumed {
+                    note,
+                    false_positive,
+                },
+                by,
+                Vec::new(),
+            ))
+        })),
         Cmd::Deliver {
             commits,
             report,

@@ -9,8 +9,8 @@ use crate::hollywood::HollywoodState;
 use crate::metrics::in_window;
 use crate::metrics::ratio;
 use crate::metrics::types::{
-    ApprovalMetrics, AttentionMetrics, HollywoodMetrics, RateLimitedMetrics, RefusedMetrics,
-    RefusedRuleCounts,
+    ApprovalMetrics, AttentionMetrics, HaltMetrics, HollywoodMetrics, RateLimitedMetrics,
+    RefusedMetrics, RefusedRuleCounts,
 };
 use crate::state::{Attention, StudioState};
 
@@ -189,7 +189,7 @@ pub(crate) fn compute_approvals(state: &StudioState, since_ms: Option<u64>) -> A
 }
 
 /// Commands dropped as benign read-only git discovery noise by PR #209.
-pub(crate) fn is_209_probe(command: &str, argv: &[String]) -> bool {
+pub fn is_209_probe(command: &str, argv: &[String]) -> bool {
     let trimmed = command.trim();
     if trimmed == "git rev-parse --show-toplevel" || trimmed == "git --version" {
         return true;
@@ -283,5 +283,46 @@ pub(crate) fn merge_rule_counts(
         let entry = dst.entry(rule.clone()).or_default();
         entry.total += counts.total;
         entry.without_probes += counts.without_probes;
+    }
+}
+
+/// Fold explicit `studio.halted` / `studio.resumed` episodes in the window.
+/// Still-open halts bound duration at `min(finished_ts, now_ms)`.
+pub(crate) fn compute_halts(
+    state: &StudioState,
+    since_ms: Option<u64>,
+    now_ms: u64,
+) -> HaltMetrics {
+    let win_start = since_ms.unwrap_or(0);
+    let end_cap = state
+        .finished
+        .as_ref()
+        .map_or(now_ms, |f| now_ms.min(f.ts_ms));
+    let mut halts = 0usize;
+    let mut resumes = 0usize;
+    let mut false_positives = 0usize;
+    let mut halted_ms = 0u64;
+    for ep in &state.halts {
+        if in_window(ep.since_ms, since_ms) {
+            halts += 1;
+        }
+        if let Some(res_ms) = ep.resumed_ms
+            && in_window(res_ms, since_ms)
+        {
+            resumes += 1;
+            if ep.false_positive {
+                false_positives += 1;
+            }
+        }
+        let start = ep.since_ms.max(win_start);
+        let end = ep.resumed_ms.unwrap_or(end_cap).min(end_cap);
+        halted_ms += end.saturating_sub(start);
+    }
+    HaltMetrics {
+        halts,
+        resumes,
+        false_positives,
+        false_positive_share: ratio(false_positives, resumes),
+        halted_ms,
     }
 }

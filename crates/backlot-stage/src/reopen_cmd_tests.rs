@@ -29,6 +29,7 @@ fn close_actor(env: &Env) {
             actor: Some(actor.clone()),
             session_id: Some("sess-1".into()),
             reason: None,
+            prompt_hash: None,
         },
         backlot_model::EventKind::RoleClosed {
             role: "actor-t1-c1".into(),
@@ -41,6 +42,7 @@ fn close_actor(env: &Env) {
             actor: Some(actor),
             session_id: Some("sess-w".into()),
             reason: None,
+            prompt_hash: None,
         },
     ] {
         store::append(&dir, move |_, _| {

@@ -43,6 +43,7 @@ fn started(seq: u64, role: &str, term: &str, sess: &str) -> Event {
             actor: Some(actor("a")),
             session_id: Some(sess.into()),
             reason: None,
+            prompt_hash: None,
         },
     )
 }
@@ -152,6 +153,7 @@ fn a_held_role_without_an_actor_is_skipped() {
             actor: None,
             session_id: Some("sess-9".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     events.push(closed(5, "actor-t9-c1"));

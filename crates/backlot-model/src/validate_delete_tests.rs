@@ -17,6 +17,7 @@ fn studio_deleted_requires_finished_and_closes_all_roles() {
             actor: None,
             session_id: Some("s1".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     events.push(ev(

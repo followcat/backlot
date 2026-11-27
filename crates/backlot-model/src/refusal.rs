@@ -249,6 +249,17 @@ pub enum Refusal {
     InvalidDecision(String),
     /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
     NewerRecords(Vec<String>),
+    /// `backlot halt` on a studio that is already halted.
+    AlreadyHalted,
+    /// `backlot resume` on a studio that is not currently halted.
+    NotHalted,
+    /// `backlot halt` with an empty or whitespace-only reason.
+    EmptyHaltReason,
+    /// Dispatch (`task.cast`) refused while the studio is halted.
+    StudioHalted {
+        by: String,
+        reason: String,
+    },
 }
 
 /// Format the upgrade error shown whenever a ledger contains unknown kinds.
@@ -537,6 +548,12 @@ impl fmt::Display for Refusal {
             }
             Refusal::NewerRecords(kinds) => {
                 f.write_str(&upgrade_required_message(kinds.iter().map(String::as_str)))
+            }
+            Refusal::AlreadyHalted => write!(f, "studio is already halted"),
+            Refusal::NotHalted => write!(f, "studio is not halted"),
+            Refusal::EmptyHaltReason => write!(f, "halt reason must not be empty"),
+            Refusal::StudioHalted { by, reason } => {
+                write!(f, "studio is halted by {by}: {reason}")
             }
         }
     }

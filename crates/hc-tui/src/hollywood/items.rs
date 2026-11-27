@@ -21,7 +21,7 @@ pub(crate) enum WaitBucket {
 impl WaitBucket {
     pub(crate) fn of(wait: &Wait<'_>) -> Self {
         match wait {
-            Wait::Prompt(_) | Wait::Stage(_) | Wait::Upgrade(_) => Self::Blocking,
+            Wait::Prompt(_) | Wait::Stage(_) | Wait::Upgrade(_) | Wait::Halted(_) => Self::Blocking,
             Wait::Role(item) => {
                 if item.asks {
                     Self::Asks
@@ -238,6 +238,11 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             key: "↵",
             primary: true,
         }],
+        Wait::Halted(_) => vec![Chip {
+            label: "show",
+            key: "↵",
+            primary: true,
+        }],
         Wait::Decision(item) => super::decision::chips(
             item.design.suggest_skip,
             !item.design.proposed_checks.is_empty(),
@@ -405,6 +410,7 @@ pub(crate) fn glyph_colour(
         }
         Wait::Hollywood(_) => palette.peach,
         Wait::Upgrade(_) => palette.peach,
+        Wait::Halted(_) => palette.red,
         Wait::Decision(_) => palette.peach,
         Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
@@ -534,6 +540,26 @@ pub(crate) fn wait_parts(wait: &Wait<'_>, local: &str, multi: bool) -> WaitParts
                 gap: " ",
                 studio: studio.id.clone(),
                 rest: format!("{machine} · {reason}"),
+            }
+        }
+        Wait::Halted(StudioItem { machine, studio }) => {
+            let machine = machine_label(*machine, local, multi);
+            let machine = if machine.is_empty() {
+                String::new()
+            } else {
+                format!(" · {machine}")
+            };
+            let (who, why) = studio
+                .halted
+                .as_ref()
+                .map(|h| (h.by.as_str(), h.reason.as_str()))
+                .unwrap_or(("", ""));
+            WaitParts {
+                glyph: "!",
+                verb: "HALTED".into(),
+                gap: " ",
+                studio: studio.id.clone(),
+                rest: format!("{machine} · {who} — {why}"),
             }
         }
         Wait::Decision(item) => super::decision::wait_parts(item, local, multi),
@@ -695,7 +721,7 @@ pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
         Wait::Prompt(item) => &item.role.role,
         Wait::Role(item) => &item.role.role,
         Wait::Hollywood(_) => "hollywood",
-        Wait::NoRequirement(item) | Wait::Upgrade(item) => &item.studio.id,
+        Wait::NoRequirement(item) | Wait::Upgrade(item) | Wait::Halted(item) => &item.studio.id,
         Wait::Decision(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
@@ -716,7 +742,9 @@ pub(crate) fn ultra_head(wait: &Wait<'_>, _local: &str, _multi: bool) -> String 
         Wait::Role(item) if item.asks => item.role.name.clone(),
         Wait::Role(item) => format!("needs {}", item.role.name),
         Wait::Hollywood(_) => "hollywood".into(),
-        Wait::NoRequirement(item) | Wait::Upgrade(item) => item.studio.id.clone(),
+        Wait::NoRequirement(item) | Wait::Upgrade(item) | Wait::Halted(item) => {
+            item.studio.id.clone()
+        }
         Wait::Decision(item) => {
             format!(
                 "{} {}",

@@ -160,6 +160,7 @@ fn setup_studio(dir: &std::path::Path, limit_s: u32) {
             session_id: Some("s1".into()),
             actor: None,
             reason: None,
+            prompt_hash: None,
         },
     ] {
         store::append(dir, |_, _| {

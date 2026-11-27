@@ -298,6 +298,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `owed` | needs you | `needs you · <what>` — the escalated stall |
 | `<runner> prep failed` | needs you | `needs you · <what>` |
 | `stalled` | stuck | `stuck · <plain reason>` |
+| `looping` | stuck | `stuck · <plain reason>` (same role hit `>= 5` identical non-probe guard refusals in 10m; reviewer notified once per window, never sets `needs_user`) |
 | `question` | stuck | `stuck · question` (or `needs you` when `needs_user` is set, e.g. on producer) |
 | `rate limited` | stuck | `stuck · <plain reason>` |
 | `connection error` | stuck | `stuck · <plain reason>` |
@@ -305,6 +306,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `inherited XDG_CONFIG_HOME` | info | the role's details only, dimmed |
 | `cursor dir was open` | info | the role's details only, dimmed |
 | `hooks unavailable` | info | the role's details only, dimmed |
+| `no progress` | info | low-noise note (`2 × stall_limit_s` active coding time without work-area changes; routed to director, never counts toward needs-you or stops the studio) |
 
 A `stuck` episode that escalates — a director-handled `permission prompt` when the director is
 blocked, not live, or unanswered past ten minutes (`default_stall_limit_s`), `rate limited` or
@@ -358,6 +360,7 @@ drawer and the sheet's studio overview), dimmed.
 ## The needs-you list
 
 One function builds the list from every machine's document, in this order: user-owned prompts;
+upgraded-ledger / explicitly halted studio rows (`! HALTED`, red single-row blocking entry whose `Enter` opens a read-only `CardView` showing who halted and the reason);
 roles with a `needs you` attention or an unanswered question; Hollywood with a user-owned prompt
 (`HOLLYWOOD asks: <attention_detail>`, taking the same `y` allow once / `d` deny / `p` peek /
 Enter actions as its live row) or a blocked screen with no prompt (`HOLLYWOOD blocked`); studios

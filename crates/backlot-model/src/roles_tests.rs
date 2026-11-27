@@ -150,6 +150,7 @@ fn an_actor_records_only_its_own_delivery_block_and_messages() {
                 actor: None,
                 session_id: None,
                 reason: None,
+                prompt_hash: None,
             },
             "the stage",
         ),

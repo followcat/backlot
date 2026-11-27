@@ -71,6 +71,7 @@ fn started(seq: u64, role: &str) -> Event {
             }),
             session_id: Some(format!("s-{role}")),
             reason: None,
+            prompt_hash: None,
         },
     )
 }

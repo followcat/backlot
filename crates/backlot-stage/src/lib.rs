@@ -102,6 +102,9 @@ mod live;
 mod liveness;
 mod liveness_diff;
 mod liveness_probe;
+mod liveness_progress;
+#[cfg(test)]
+mod liveness_progress_tests;
 mod liveness_work;
 mod metrics_cli;
 mod metrics_digest_render;
@@ -440,6 +443,8 @@ mod tell_guard_tests;
 #[cfg(test)]
 mod trust_tests;
 
+#[cfg(test)]
+mod halt_cli_tests;
 #[cfg(test)]
 mod handoff_extra_tests;
 #[cfg(test)]

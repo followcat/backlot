@@ -79,6 +79,7 @@ fn role_started(role: &str, terminal: &str) -> EventKind {
         actor: Some(actor("x")),
         session_id: None,
         reason: None,
+        prompt_hash: None,
     }
 }
 

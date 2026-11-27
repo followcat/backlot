@@ -15,6 +15,7 @@ fn started(role: &str, terminal: &str, tag: &str) -> EventKind {
         actor: Some(actor(tag)),
         session_id: Some(format!("sess-{role}")),
         reason: None,
+        prompt_hash: None,
     }
 }
 
@@ -443,6 +444,7 @@ fn can_answer_prompt_follows_the_runner_caps() {
                     }),
                     session_id: Some("s1".into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             )],
         )
@@ -728,6 +730,7 @@ fn resumable_is_a_closed_person_with_a_session_and_no_hold() {
                     actor: Some(actor("dir")),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             ("stage", closed("director")),

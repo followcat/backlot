@@ -43,6 +43,7 @@ fn started(seq: u64, role: &str, sess: Option<&str>) -> Event {
             actor: Some(actor("a")),
             session_id: sess.map(String::from),
             reason: None,
+            prompt_hash: None,
         },
     )
 }

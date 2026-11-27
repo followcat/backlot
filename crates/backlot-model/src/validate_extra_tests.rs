@@ -326,6 +326,7 @@ fn role_session_needs_a_recorded_role() {
             actor: None,
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&base);

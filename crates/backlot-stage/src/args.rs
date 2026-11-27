@@ -213,6 +213,15 @@ pub enum Cmd {
     StudioReopen {
         reason: String,
     },
+    /// `halt --reason <text>`: freeze new `task.cast` dispatches without killing or pausing running tasks.
+    Halt {
+        reason: String,
+    },
+    /// `resume [--note <text>] [--false-positive]`: clear an explicit halt (`director`, `producer`, or `user`).
+    Resume {
+        note: Option<String>,
+        false_positive: bool,
+    },
     /// `studio prune`: remove a finished studio's worktrees and
     /// `backlot/<studio>/*` branches — never its ledger.
     StudioPrune {
@@ -543,6 +552,8 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 )),
             }
         }
+        "halt" => args_studio::halt(&mut common, &mut it),
+        "resume" => args_studio::resume(&mut common, &mut it),
         "req" => {
             let Some(sub) = it.next() else {
                 return Err(usage("missing req subcommand", U_REQ));
