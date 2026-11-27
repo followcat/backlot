@@ -12,6 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- The Call Sheet compose line always shows whether Enter tells Hollywood or replies to a studio role, and a reply target no longer sticks after you leave Compose, close the sheet, or the question is answered elsewhere; sent replies appear in the sheet's history.
 - **Closed roles fold into one line in the Cast; click it to pick one to reopen.** Clicking a closed role no longer shows a disconnected-terminal error.
 
 ## 0.4.28 — 2026-11-28
@@ -20,7 +21,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 - **The New Studio dialog can create a studio on this machine again: since 0.4.25 its check failed with a TOML parse error.** A failed check now shows its reason.
 - **The studio you are in stands out in the Lot with a marquee of bulbs, and the machine it runs on is marked in the sidebar.** Its resting frame glows warmer with accent bulbs along the top and bottom borders while keeping the heavier frames for selected and entered focus, and the sidebar highlights its hosting machine with a star; `--plain` and `[theme] source = "herdr"` stay unchanged ([docs/studio/panel.md](docs/studio/panel.md), [docs/studio/guide.md](docs/studio/guide.md)).
-- The Call Sheet compose line always shows whether Enter tells Hollywood or replies to a studio role, and a reply target no longer sticks after you leave Compose, close the sheet, or the question is answered elsewhere; sent replies appear in the sheet's history.
 
 ## 0.4.27 — 2026-11-27
 
