@@ -245,8 +245,8 @@ pub(crate) fn discovery_floor_ms(
     role_since_ms: u64,
     terminal_created_ms: u64,
 ) -> u64 {
-    if runner == "cursor" {
-        terminal_created_ms
+    if runner == "cursor" && terminal_created_ms > 0 {
+        terminal_created_ms.min(role_since_ms)
     } else {
         role_since_ms
     }

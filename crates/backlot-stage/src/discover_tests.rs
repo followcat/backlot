@@ -386,14 +386,16 @@ fn cursor_chat_written_before_role_started_uses_the_terminal_floor() {
     let home = tmp("cursor-race-home");
     let role_dir = tmp("cursor-race-rd");
     let uuid = "11111111-2222-4333-8333-555555555555";
+    let old = "00000000-1111-4111-8111-111111111111";
+    cursor_chat(&role_dir, "hash-old", old, 50, CWD);
     cursor_chat(&role_dir, "hash-a", uuid, 200, CWD);
-    let find = |started: u64| {
+    let find = |started: u64, taken: &BTreeSet<String>| {
         find_session(
             "cursor",
             &[],
             CWD,
             started,
-            &BTreeSet::new(),
+            taken,
             &Look {
                 home: &home,
                 role_dir: &role_dir,
@@ -402,11 +404,11 @@ fn cursor_chat_written_before_role_started_uses_the_terminal_floor() {
             &no_exec,
         )
     };
-    assert_eq!(find(300), None);
-    assert_eq!(
-        find(discovery_floor_ms("cursor", 300, 100)).as_deref(),
-        Some(uuid)
-    );
+    let floor = discovery_floor_ms("cursor", 300, 100);
+    assert_eq!(find(300, &BTreeSet::new()), None);
+    assert_eq!(find(floor, &BTreeSet::new()).as_deref(), Some(uuid));
+    assert_eq!(find(floor, &BTreeSet::from([uuid.to_string()])), None);
+    assert_eq!(discovery_floor_ms("cursor", 300, 0), 300);
     assert_eq!(discovery_floor_ms("codex", 300, 100), 300);
 }
 
