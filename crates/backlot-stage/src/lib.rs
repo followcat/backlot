@@ -4,6 +4,7 @@
 
 mod accounts;
 mod accounts_store;
+mod accounts_summary;
 mod act;
 pub mod args;
 mod args_card;
@@ -79,6 +80,7 @@ mod hnotice;
 mod hnotice_stale;
 pub mod hook;
 mod hrender;
+mod hrender_accounts;
 mod hsetup;
 mod hstage;
 mod hswitch_verbs;

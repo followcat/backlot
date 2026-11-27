@@ -132,8 +132,29 @@ pub(crate) fn disambiguate_accounts(accounts: &mut [DerivedAccount]) {
     }
 }
 
+/// Resolve non-secret runner environments for each runner in `runners` from
+/// `<state_dir>/config.toml` + user config, tolerating absent/malformed configs cleanly.
+pub(crate) fn runner_envs_for_state_dir(
+    state_dir: &Path,
+    host_env: &BTreeMap<String, String>,
+    runners: &BTreeSet<String>,
+) -> BTreeMap<String, BTreeMap<String, String>> {
+    let eff_host = effective_host_env(host_env);
+    let home = Path::new(non_empty(eff_host.get("HOME")).unwrap_or("/"));
+    let core_text = std::fs::read_to_string(state_dir.join("config.toml")).unwrap_or_default();
+    let user_text = std::fs::read_to_string(config::config_path(&eff_host)).unwrap_or_default();
+    let mut envs = BTreeMap::new();
+    for runner in runners {
+        let env = config::runner_env_layered_home(state_dir, &core_text, &user_text, runner, home)
+            .unwrap_or_default();
+        envs.insert(runner.clone(), env);
+    }
+    envs
+}
+
 /// Read `<state_dir>/config.toml` and `$XDG_CONFIG_HOME/backlot/config.toml` to resolve
 /// one role's implicit account, falling back cleanly if a config file is absent/malformed.
+#[cfg(test)]
 pub(crate) fn derive_for_state_dir(
     state_dir: &Path,
     host_env: &BTreeMap<String, String>,
@@ -141,12 +162,9 @@ pub(crate) fn derive_for_state_dir(
     model: &str,
 ) -> DerivedAccount {
     let eff_host = effective_host_env(host_env);
-    let home = Path::new(non_empty(eff_host.get("HOME")).unwrap_or("/"));
-    let core_text = std::fs::read_to_string(state_dir.join("config.toml")).unwrap_or_default();
-    let user_text = std::fs::read_to_string(config::config_path(&eff_host)).unwrap_or_default();
-    let runner_env =
-        config::runner_env_layered_home(state_dir, &core_text, &user_text, runner, home)
-            .unwrap_or_default();
+    let envs =
+        runner_envs_for_state_dir(state_dir, &eff_host, &BTreeSet::from([runner.to_string()]));
+    let runner_env = envs.get(runner).cloned().unwrap_or_default();
     derive_account(runner, model, &runner_env, &eff_host)
 }
 
