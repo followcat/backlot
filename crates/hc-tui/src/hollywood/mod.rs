@@ -28,6 +28,7 @@ mod items;
 mod keys;
 mod new_frame;
 mod plan;
+mod reader_banner;
 mod reader_chips;
 mod reader_chrome;
 mod reader_compose;

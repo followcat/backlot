@@ -140,6 +140,7 @@ pub(super) fn draw_reader(
             compose: compose_opts,
             now_ms: crate::update_state::now_ms(),
             shadow: app.shell.popup_shadow,
+            plain: !app.shell.studio_chrome,
         },
     );
     if let Some(cursor) = ren.cursor.as_ref() {

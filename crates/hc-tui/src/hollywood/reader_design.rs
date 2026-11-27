@@ -22,17 +22,44 @@ pub(crate) fn design_awaiting_user(m: &ReaderMeta) -> bool {
         )
 }
 
-/// Row 1 title (`■ DESIGN v<N> · R<r> · <studio>`).
-pub(super) fn row1_left(m: &ReaderMeta) -> String {
+fn design_ver_round(m: &ReaderMeta) -> (Option<u32>, Option<u32>) {
     let ver = m
         .design_version
         .or_else(|| m.file.as_deref().and_then(version_from_file));
+    let round = m.design_round.filter(|r| *r > 0);
+    (ver, round)
+}
+
+fn compact_title(m: &ReaderMeta, mark: &str) -> String {
+    let (ver, round) = design_ver_round(m);
     let head = match ver {
-        Some(v) => format!("■ DESIGN v{v}"),
-        None => "■ DESIGN".to_string(),
+        Some(v) => format!("{mark} DESIGN v{v}"),
+        None => format!("{mark} DESIGN"),
     };
-    let round = m.design_round.filter(|r| *r > 0).map(|r| format!("R{r}"));
-    join_non_empty([Some(head), round, m.studio.clone()])
+    let round_s = round.map(|r| format!("R{r}"));
+    join_non_empty([Some(head), round_s, m.studio.clone()])
+}
+
+/// Row 1 title (`■ DESIGN v<N> · R<r> · <studio>`).
+pub(super) fn row1_left(m: &ReaderMeta) -> String {
+    compact_title(m, "■")
+}
+
+/// Row 1 title in Babylon mode (`✦ DESIGN v<N> · R<r> · <studio>` compact
+/// fallback + `✦  D E S I G N   v N  ·  R r  ·  <studio>` wide form).
+pub(super) fn row1_left_babylon(m: &ReaderMeta) -> (String, String) {
+    let (ver, round) = design_ver_round(m);
+    let wide_head = match ver {
+        Some(v) => format!("✦  D E S I G N   v {v}"),
+        None => "✦  D E S I G N".to_string(),
+    };
+    let wide_round = round.map(|r| format!("R {r}"));
+    let wide = [Some(wide_head), wide_round, m.studio.clone()]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("  ·  ");
+    (compact_title(m, "✦"), wide)
 }
 
 /// Row 1 section indicator (`◀ <section> · i/N ▶` or `◀ i/N ▶`).

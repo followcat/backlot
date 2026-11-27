@@ -8,7 +8,8 @@ use ratatui::style::Style;
 
 use super::reader_chips::draw_action_strip;
 use super::reader_chrome::{
-    draw_bottom_border, draw_context_row, draw_divider, draw_top_border, put_styled_line,
+    draw_bottom_border, draw_context_row, draw_frame_divider, draw_top_border, draw_vertical_rails,
+    put_styled_line,
 };
 use super::reader_compose::{
     InlineTellState, ReaderComposeOpts, draw_compose_band, draw_composing_hints,
@@ -52,11 +53,13 @@ pub(crate) struct ViewRender {
     pub active_section: usize,
 }
 
-/// Optional compose state, timestamp, and shadow toggle for `render_view_with_opts`.
+/// Optional compose state, timestamp, shadow, and plain-mode toggle for `render_view_with_opts`.
+#[derive(Default)]
 pub(crate) struct ReaderRenderOpts<'a> {
     pub compose: Option<ReaderComposeOpts<'a>>,
     pub now_ms: u64,
     pub shadow: bool,
+    pub plain: bool,
 }
 
 /// Draw the adaptive content-sized Reader centered inside `surface` using wall-clock time.
@@ -98,6 +101,7 @@ pub(crate) fn render_view_at(
             compose: None,
             now_ms,
             shadow: true,
+            plain: false,
         },
     )
 }
@@ -123,6 +127,7 @@ pub(crate) fn render_view_with_compose(
             compose,
             now_ms,
             shadow: true,
+            plain: false,
         },
     )
 }
@@ -140,6 +145,7 @@ pub(crate) fn render_view_with_opts(
         compose,
         now_ms,
         shadow,
+        plain,
     } = opts;
     let mut hits = ViewRender::default();
     if surface.is_empty() {
@@ -161,6 +167,7 @@ pub(crate) fn render_view_with_opts(
         &meta_for_header,
         now_ms,
         palette,
+        plain,
     );
     let path_hint = view.meta.file.as_deref().unwrap_or(&view.title);
     let mode = body_mode_for_title(path_hint);
@@ -210,7 +217,7 @@ pub(crate) fn render_view_with_opts(
 
     let initial_inner_w = base_w.saturating_sub(h_chrome).max(1) as usize;
     let (mut wrapped, mut sections) =
-        render_body_with_sections(&view.lines, mode, initial_inner_w, palette);
+        render_body_with_sections(&view.lines, mode, initial_inner_w, palette, plain);
     let needs_bar = wrapped.len() > body_cap as usize;
     let width = if needs_bar {
         body_nat_w
@@ -222,7 +229,8 @@ pub(crate) fn render_view_with_opts(
     };
     if needs_bar {
         let bar_inner_w = width.saturating_sub(h_chrome + 1).max(1) as usize;
-        (wrapped, sections) = render_body_with_sections(&view.lines, mode, bar_inner_w, palette);
+        (wrapped, sections) =
+            render_body_with_sections(&view.lines, mode, bar_inner_w, palette, plain);
     }
 
     let total_lines = wrapped.len();
@@ -283,6 +291,7 @@ pub(crate) fn render_view_with_opts(
             &meta_for_header,
             now_ms,
             palette,
+            plain,
         );
         hits.active_section = active;
         hits.sections = sections;
@@ -290,23 +299,25 @@ pub(crate) fn render_view_with_opts(
 
     let bg = crate::chrome::popup_frame::overlay_bg(palette);
     let edge = Style::default().fg(palette.accent).bg(bg);
-    let (prev_hit, next_hit) = draw_top_border(buf, area, &header, edge, palette);
+    draw_vertical_rails(buf, area, palette, plain);
+    let (prev_hit, next_hit) =
+        draw_top_border(buf, area, &header, edge, palette, plain, show_row2_actual);
     hits.prev_hit = prev_hit;
     hits.next_hit = next_hit;
 
     if area.height < 4 {
-        draw_bottom_border(buf, area, bottom, None, edge, palette);
+        draw_bottom_border(buf, area, bottom, None, edge, palette, plain);
         return hits;
     }
 
     let show_row2 = show_row2_actual;
     if show_row2 {
-        draw_context_row(buf, area, area.y + 1, &header, palette);
-        draw_divider(buf, area, area.y + 2, edge, palette);
+        draw_context_row(buf, area, area.y + 1, &header, palette, plain);
+        draw_frame_divider(buf, area, area.y + 2, edge, palette, plain, true);
     }
 
     let action_y = bottom - 1;
-    draw_divider(buf, area, div_y, edge, palette);
+    draw_frame_divider(buf, area, div_y, edge, palette, plain, false);
     if view.tell.is_composing() {
         draw_composing_hints(
             buf,
@@ -314,6 +325,7 @@ pub(crate) fn render_view_with_opts(
             action_y,
             compose.is_none_or(|c| c.studio),
             palette,
+            plain,
         );
     } else {
         draw_action_strip(
@@ -322,15 +334,21 @@ pub(crate) fn render_view_with_opts(
             view,
             meta_for_header.nav_total.unwrap_or(0),
             pending,
-            palette,
+            (palette, plain),
             &mut hits.chips,
         );
     }
 
     let body_end = if has_compose && div_y >= area.y + 3 {
         let compose_div_y = div_y - 2;
-        let (crect, cursor) =
-            draw_compose_band(buf, area, compose_div_y, &view.tell, compose, edge, palette);
+        let (crect, cursor) = draw_compose_band(
+            buf,
+            area,
+            compose_div_y,
+            &view.tell,
+            compose,
+            (edge, palette, plain),
+        );
         hits.compose_rect = crect;
         hits.cursor = cursor;
         compose_div_y
@@ -341,7 +359,7 @@ pub(crate) fn render_view_with_opts(
     let raw_body_y = area.y + if show_row2 { 3 } else { 1 };
     let raw_body_h = body_end.saturating_sub(raw_body_y);
     if raw_body_h == 0 || area.width <= 4 {
-        draw_bottom_border(buf, area, bottom, None, edge, palette);
+        draw_bottom_border(buf, area, bottom, None, edge, palette, plain);
         return hits;
     }
 
@@ -387,6 +405,6 @@ pub(crate) fn render_view_with_opts(
         let b = (start + body.height as usize).min(total_lines);
         (a, b, total_lines)
     });
-    draw_bottom_border(buf, area, bottom, scroll_range, edge, palette);
+    draw_bottom_border(buf, area, bottom, scroll_range, edge, palette, plain);
     hits
 }

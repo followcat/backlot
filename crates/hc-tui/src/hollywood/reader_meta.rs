@@ -263,6 +263,7 @@ fn display_actor(raw: &str) -> &str {
 /// Resolved header strings for Row 1 (top border) and Row 2 (context line).
 pub(crate) struct HeaderLayout {
     pub left: String,
+    pub left_wide: Option<String>,
     pub right: String,
     pub nav_token: Option<String>,
     pub row2_left: String,
@@ -278,10 +279,12 @@ impl HeaderLayout {
         m: &ReaderMeta,
         now_ms: u64,
         palette: &Palette,
+        plain: bool,
     ) -> Self {
         if m.kind == ReaderKind::None {
             return Self {
                 left: title.to_string(),
+                left_wide: None,
                 right: String::new(),
                 nav_token: None,
                 row2_left: String::new(),
@@ -291,10 +294,13 @@ impl HeaderLayout {
             };
         }
 
-        let left = if let Some(loading) = m.loading_label.as_deref() {
-            format!("■ loading {loading}…")
+        let (left, left_wide) = if let Some(loading) = m.loading_label.as_deref() {
+            (format!("■ loading {loading}…"), None)
+        } else if !plain && m.kind == ReaderKind::Design {
+            let (compact, wide) = super::reader_design::row1_left_babylon(m);
+            (compact, Some(wide))
         } else {
-            format_row1_left(title, card, m)
+            (format_row1_left(title, card, m), None)
         };
 
         let nav_token = if m.kind == ReaderKind::Design {
@@ -321,6 +327,7 @@ impl HeaderLayout {
 
         Self {
             left,
+            left_wide,
             right,
             nav_token,
             row2_left,

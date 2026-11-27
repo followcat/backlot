@@ -165,7 +165,7 @@ fn cjk_text_straddling_hollywood_reader_and_shadow_edges_is_handled_whole() {
             if y > ren.area.y && y + 1 < ren.area.bottom() {
                 let lb = &buf[(gutter_x + 1, y)];
                 assert!(
-                    matches!(lb.symbol(), "╭" | "│" | "├" | "╰"),
+                    matches!(lb.symbol(), "╔" | "║" | "╟" | "╚"),
                     "host_x={host_x} y={y} left={:?}",
                     lb.symbol()
                 );

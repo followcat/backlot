@@ -174,8 +174,8 @@ async fn closed_author_hides_peek_shows_reopen_for_resumable_or_fixed_and_ignore
     drain(&mut app).await;
     let screen20 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(screen20.contains("□ closed"), "{screen20}");
-    assert!(screen20.contains("[o] reopen"), "{screen20}");
-    assert!(!screen20.contains("[p]"), "{screen20}");
+    assert!(screen20.contains(" o reopen "), "{screen20}");
+    assert!(!screen20.contains(" peek"), "{screen20}");
     key(&mut app, hc_vt::Key::Char('p'));
     assert!(app.peek.is_none());
     key(&mut app, hc_vt::Key::Char('o'));
@@ -197,8 +197,8 @@ async fn closed_author_hides_peek_shows_reopen_for_resumable_or_fixed_and_ignore
     drain(&mut app).await;
     let screen21 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(screen21.contains("□ closed"), "{screen21}");
-    assert!(screen21.contains("[o] reopen"), "{screen21}");
-    assert!(!screen21.contains("[p]"), "{screen21}");
+    assert!(screen21.contains(" o reopen "), "{screen21}");
+    assert!(!screen21.contains(" peek"), "{screen21}");
     key(&mut app, hc_vt::Key::Char('o'));
     assert!(
         calls.lock().unwrap()[before21..]
@@ -215,8 +215,11 @@ async fn closed_author_hides_peek_shows_reopen_for_resumable_or_fixed_and_ignore
     drain(&mut app).await;
     let screen22 = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(screen22.contains("□ closed"), "{screen22}");
-    assert!(!screen22.contains("[o]"), "{screen22}");
-    assert!(!screen22.contains("[p]"), "{screen22}");
+    assert!(
+        !screen22.contains(" o reopen ") && !screen22.contains(" o focus "),
+        "{screen22}"
+    );
+    assert!(!screen22.contains(" peek"), "{screen22}");
     let before_o = calls.lock().unwrap().len();
     key(&mut app, hc_vt::Key::Char('o'));
     key(&mut app, hc_vt::Key::Char('p'));

@@ -689,7 +689,7 @@ async fn show_view_and_reader_wrap_150_char_run_at_80_columns() {
             .filter_map(|l| {
                 let (_, after_gutter) = l.split_once('▏')?;
                 let inner = after_gutter
-                    .rsplit_once('│')
+                    .rsplit_once(['│', '║'])
                     .map_or(after_gutter, |(s, _)| s);
                 Some(inner.trim())
             })

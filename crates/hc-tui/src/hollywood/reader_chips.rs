@@ -6,6 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
+use super::reader_chrome::babylon_rail_style;
 use super::reader_meta::{ReaderKind, ReaderOAction};
 use super::view::CardView;
 use crate::chrome::palette::Palette;
@@ -15,16 +16,14 @@ use crate::chrome::text::{display_width, truncate_end};
 #[derive(Clone, Copy)]
 struct ChipSpec {
     key: char,
-    full: &'static str,
-    short: &'static str,
+    label: &'static str,
     primary: bool,
 }
 
-fn chip(key: char, full: &'static str, short: &'static str, primary: bool) -> ChipSpec {
+fn chip(key: char, label: &'static str, primary: bool) -> ChipSpec {
     ChipSpec {
         key,
-        full,
-        short,
+        label,
         primary,
     }
 }
@@ -33,49 +32,82 @@ fn available_chips(view: &CardView) -> Vec<ChipSpec> {
     if view.meta.kind == ReaderKind::Design {
         let mut chips = Vec::with_capacity(4);
         if !view.meta.design_finalized() {
-            chips.push(chip('r', "[r] reply", "[r]", true));
+            chips.push(chip('r', "reply", true));
         }
         if view.meta.design_awaiting_user() {
-            chips.push(chip('a', "[a] sign off", "[a]", true));
+            chips.push(chip('a', "sign off", true));
         }
         if view.meta.sheet_studio_key().is_some() {
-            chips.push(chip('v', "[v] sheet", "[v]", false));
+            chips.push(chip('v', "sheet", false));
         }
-        chips.push(chip('y', "[y] copy", "[y]", true));
+        chips.push(chip('y', "copy", true));
         return chips;
     }
 
     if view.card.is_some() {
-        let mut chips = vec![
-            chip('a', "[a] apply", "[a]", true),
-            chip('x', "[x] cancel", "[x]", true),
-        ];
+        let mut chips = vec![chip('a', "apply", true), chip('x', "cancel", true)];
         if view.meta.sheet_studio_key().is_some() {
-            chips.push(chip('v', "[v] sheet", "[v]", false));
+            chips.push(chip('v', "sheet", false));
         }
-        chips.push(chip('y', "[y] copy", "[y]", true));
+        chips.push(chip('y', "copy", true));
         return chips;
     }
 
     let mut chips = Vec::with_capacity(5);
     if view.meta.can_tell() {
-        chips.push(chip('t', "[t] tell", "[t]", true));
+        chips.push(chip('t', "tell", true));
     }
     if let Some(o_act) = view.meta.o_action() {
-        let full = match o_act {
-            ReaderOAction::Focus => "[o] focus",
-            ReaderOAction::Reopen => "[o] reopen",
+        let label = match o_act {
+            ReaderOAction::Focus => "focus",
+            ReaderOAction::Reopen => "reopen",
         };
-        chips.push(chip('o', full, "[o]", true));
+        chips.push(chip('o', label, true));
     }
     if view.meta.can_peek() {
-        chips.push(chip('p', "[p] peek", "[p]", false));
+        chips.push(chip('p', "peek", false));
     }
     if view.meta.sheet_studio_key().is_some() {
-        chips.push(chip('v', "[v] sheet", "[v]", false));
+        chips.push(chip('v', "sheet", false));
     }
-    chips.push(chip('y', "[y] copy", "[y]", true));
+    chips.push(chip('y', "copy", true));
     chips
+}
+
+#[derive(Clone, Copy)]
+struct ChipStyle {
+    key: Style,
+    label: Style,
+    short: bool,
+    plain: bool,
+}
+
+fn chip_text(c: ChipSpec, short: bool, plain: bool) -> String {
+    match (plain, short) {
+        (true, true) => format!("[{}]", c.key),
+        (true, false) => format!("[{}] {}", c.key, c.label),
+        (false, true) => c.key.to_string(),
+        (false, false) => format!(" {} {} ", c.key, c.label),
+    }
+}
+
+fn put_chip(buf: &mut Buffer, x: u16, y: u16, max_w: usize, c: ChipSpec, st: ChipStyle) -> u16 {
+    let full = chip_text(c, st.short, st.plain);
+    let fw = display_width(&full);
+    if st.plain || st.short || fw > max_w {
+        let fitted = truncate_end(&full, max_w);
+        let cw = display_width(&fitted) as u16;
+        if cw > 0 {
+            put_text(buf, x, y, cw, &fitted, st.key);
+        }
+        return cw;
+    }
+    put_text(buf, x, y, 1, " ", st.label);
+    put_text(buf, x + 1, y, 1, &c.key.to_string(), st.key);
+    let tail = format!(" {} ", c.label);
+    let tw = display_width(&tail) as u16;
+    put_text(buf, x + 2, y, tw, &tail, st.label);
+    2 + tw
 }
 
 pub(super) fn draw_action_strip(
@@ -84,32 +116,50 @@ pub(super) fn draw_action_strip(
     view: &CardView,
     nav_total: usize,
     pending: Option<&str>,
-    palette: &Palette,
+    theme: (&Palette, bool),
     chips_out: &mut Vec<(Rect, char)>,
 ) {
+    let (palette, plain) = theme;
     let area = row;
     let y = row.y;
+    let stepped = !plain && area.width >= 64;
     if area.width <= 2 {
         return;
     }
-    let strip = Rect::new(area.x + 1, y, area.width - 2, 1);
+    let strip = if stepped {
+        let rail = babylon_rail_style(palette);
+        put_text(buf, area.x, y, 4, "║  │", rail);
+        put_text(buf, area.right() - 4, y, 4, "│  ║", rail);
+        Rect::new(area.x + 4, y, area.width - 8, 1)
+    } else {
+        Rect::new(area.x + 1, y, area.width - 2, 1)
+    };
     let bg = Style::default().bg(palette.surface0);
     buf.set_style(strip, bg);
-    let avail = usize::from(area.width.saturating_sub(4));
+    let inset: u16 = if stepped { 5 } else { 2 };
+    let avail = usize::from(area.width.saturating_sub(2 * inset));
     if avail == 0 {
         return;
     }
 
-    let base_x = area.x + 2;
+    let base_x = area.x + inset;
     let hint_fg = bg.fg(palette.subtext0);
-    let key_fg = bg.fg(palette.text);
+    let key_fg = if plain {
+        bg.fg(palette.text)
+    } else if palette.elevation().is_terminal_16 {
+        bg.fg(palette.subtext0)
+    } else {
+        bg.fg(palette.accent)
+    };
 
     if view.card.is_some()
         && let Some(lbl) = pending
     {
-        let right = "  [y] copy · esc";
-        let right_copy = "[y] copy";
-        let copy_w = display_width(right_copy) as u16;
+        let right = if plain {
+            "  [y] copy · esc"
+        } else {
+            "   y copy  · esc"
+        };
         let lock_text = format!("■ {lbl}… (a/x locked)");
         let right_w = display_width(right);
         if avail >= right_w + 6 {
@@ -117,11 +167,23 @@ pub(super) fn draw_action_strip(
             let lw = display_width(&lock_fitted) as u16;
             put_text(buf, base_x, y, lw, &lock_fitted, bg.fg(palette.yellow));
             let copy_x = base_x + lw + 2;
-            put_text(buf, copy_x, y, copy_w, right_copy, key_fg);
-            chips_out.push((Rect::new(copy_x, y, copy_w, 1), 'y'));
+            let cw = put_chip(
+                buf,
+                copy_x,
+                y,
+                avail.saturating_sub(usize::from(lw) + 2),
+                chip('y', "copy", true),
+                ChipStyle {
+                    key: key_fg,
+                    label: hint_fg,
+                    short: false,
+                    plain,
+                },
+            );
+            chips_out.push((Rect::new(copy_x, y, cw, 1), 'y'));
             put_text(
                 buf,
-                copy_x + copy_w,
+                copy_x + cw,
                 y,
                 display_width(" · esc") as u16,
                 " · esc",
@@ -169,7 +231,7 @@ pub(super) fn draw_action_strip(
         }
         let chips_w: usize = list
             .iter()
-            .map(|c| display_width(if short { c.short } else { c.full }))
+            .map(|c| display_width(&chip_text(*c, short, plain)))
             .sum::<usize>()
             + gap * list.len().saturating_sub(1);
         chips_w + tail_gap + display_width(t)
@@ -186,25 +248,29 @@ pub(super) fn draw_action_strip(
 
     let mut cx = base_x;
     let right_limit = base_x + avail as u16;
-    for (idx, chip) in chosen.iter().enumerate() {
+    for (idx, c) in chosen.iter().enumerate() {
         if idx > 0 {
             cx = cx.saturating_add(gap as u16);
         }
-        let label = if short { chip.short } else { chip.full };
-        let w = display_width(label) as u16;
+        let chip_st = ChipStyle {
+            key: key_fg,
+            label: hint_fg,
+            short,
+            plain,
+        };
+        let label = chip_text(*c, short, plain);
+        let w = display_width(&label) as u16;
         if cx + w > right_limit {
             let rem = usize::from(right_limit.saturating_sub(cx));
-            let clipped = truncate_end(label, rem);
-            let cw = display_width(&clipped) as u16;
+            let cw = put_chip(buf, cx, y, rem, *c, chip_st);
             if cw > 0 {
-                put_text(buf, cx, y, cw, &clipped, key_fg);
-                chips_out.push((Rect::new(cx, y, cw, 1), chip.key));
+                chips_out.push((Rect::new(cx, y, cw, 1), c.key));
             }
             return;
         }
-        put_text(buf, cx, y, w, label, key_fg);
-        chips_out.push((Rect::new(cx, y, w, 1), chip.key));
-        cx = cx.saturating_add(w);
+        let cw = put_chip(buf, cx, y, usize::from(w), *c, chip_st);
+        chips_out.push((Rect::new(cx, y, cw, 1), c.key));
+        cx = cx.saturating_add(cw);
     }
 
     cx = cx.saturating_add(tail_gap as u16);

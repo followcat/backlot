@@ -4,9 +4,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::reader_md::{
-    MdBlock, MdInline, design_section_for_heading, inline_width, normalize_line, parse_markdown,
-};
+use super::reader_banner::render_markdown;
+use super::reader_md::{MdBlock, MdInline, inline_width, normalize_line, parse_markdown};
 use crate::chrome::palette::Palette;
 
 /// Body rendering mode chosen by entry kind.
@@ -32,10 +31,10 @@ pub(crate) fn body_mode_for_title(title: &str) -> BodyMode {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Cell {
-    ch: char,
-    w: usize,
-    style: Style,
+pub(super) struct Cell {
+    pub ch: char,
+    pub w: usize,
+    pub style: Style,
 }
 
 /// Unwrapped natural display width of the body for adaptive sizing.
@@ -50,9 +49,9 @@ pub(crate) fn natural_body_width(lines: &[String], mode: BodyMode) -> usize {
             .into_iter()
             .map(|block| match block {
                 MdBlock::Blank => 0,
-                MdBlock::Heading(h) => UnicodeWidthStr::width(h.as_str()),
-                MdBlock::Bullet(spans) => 2 + inline_width(&spans),
-                MdBlock::Paragraph(spans) => inline_width(&spans),
+                MdBlock::Heading(_, h) => UnicodeWidthStr::width(h.as_str()),
+                MdBlock::Bullet(spans) | MdBlock::Quote(spans) => 2 + inline_width(&spans),
+                MdBlock::Paragraph { spans, .. } => inline_width(&spans),
                 MdBlock::Code(c) => 2 + UnicodeWidthStr::width(c.as_str()),
             })
             .max()
@@ -66,7 +65,7 @@ pub(crate) fn render_body_lines_with_sections(
     content_w: usize,
 ) -> Vec<(String, usize)> {
     let palette = Palette::catppuccin();
-    render_body_with_sections(lines, BodyMode::Markdown, content_w, &palette).1
+    render_body_with_sections(lines, BodyMode::Markdown, content_w, &palette, false).1
 }
 
 pub(super) fn render_body_with_sections(
@@ -74,11 +73,12 @@ pub(super) fn render_body_with_sections(
     mode: BodyMode,
     content_w: usize,
     palette: &Palette,
+    plain: bool,
 ) -> (Vec<Line<'static>>, Vec<(String, usize)>) {
     let content_w = content_w.max(1);
     match mode {
         BodyMode::PlainLog => (render_plain_log(lines, content_w, palette), Vec::new()),
-        BodyMode::Markdown => render_markdown(lines, content_w, palette),
+        BodyMode::Markdown => render_markdown(lines, content_w, palette, plain),
     }
 }
 
@@ -106,81 +106,24 @@ fn render_plain_log(lines: &[String], content_w: usize, palette: &Palette) -> Ve
         };
         let style = Style::default().fg(fg);
         let cells: Vec<Cell> = norm.chars().map(|ch| cell_of(ch, style)).collect();
-        for row in wrap_cells(&cells, content_w, 0, &cont) {
-            out.push(to_line(&row));
-        }
+        emit_wrapped(&mut out, &cells, content_w, 0, &cont);
     }
     out
 }
 
-fn render_markdown(
-    lines: &[String],
-    content_w: usize,
-    palette: &Palette,
-) -> (Vec<Line<'static>>, Vec<(String, usize)>) {
-    let blocks = parse_markdown(lines);
-    let mut out = Vec::new();
-    let mut sections = Vec::new();
-    let indent_2 = [
-        cell_of(' ', Style::default()),
-        cell_of(' ', Style::default()),
-    ];
-    for block in blocks {
-        match block {
-            MdBlock::Blank => out.push(Line::raw("")),
-            MdBlock::Heading(h) => {
-                if let Some((_anchor, label)) = design_section_for_heading(&h) {
-                    sections.push((label, out.len()));
-                }
-                let style = Style::default()
-                    .fg(palette.accent)
-                    .add_modifier(Modifier::BOLD);
-                let cells: Vec<Cell> = h.chars().map(|c| cell_of(c, style)).collect();
-                for row in wrap_cells(&cells, content_w, 0, &[]) {
-                    out.push(to_line(&row));
-                }
-            }
-            MdBlock::Bullet(spans) => {
-                let bullet_style = Style::default().fg(palette.accent);
-                let mut cells = vec![cell_of('▪', bullet_style), cell_of(' ', bullet_style)];
-                push_inline_cells(&spans, palette, &mut cells);
-                for row in wrap_cells(&cells, content_w, 2, &indent_2) {
-                    out.push(to_line(&row));
-                }
-            }
-            MdBlock::Paragraph(spans) => {
-                let mut cells = Vec::new();
-                push_inline_cells(&spans, palette, &mut cells);
-                for row in wrap_cells(&cells, content_w, 0, &[]) {
-                    out.push(to_line(&row));
-                }
-            }
-            MdBlock::Code(code) => {
-                let box_bg = Style::default().fg(palette.text).bg(palette.surface1);
-                let gutter = Style::default().fg(palette.accent).bg(palette.surface1);
-                let code_w = content_w.saturating_sub(2).max(1);
-                let cells: Vec<Cell> = code.chars().map(|c| cell_of(c, box_bg)).collect();
-                for row in wrap_cells(&cells, code_w, 0, &[]) {
-                    let mut full = Vec::with_capacity(row.len() + 2);
-                    if content_w >= 2 {
-                        full.push(cell_of('▏', gutter));
-                        full.push(cell_of(' ', gutter));
-                    }
-                    let used: usize = full.iter().map(|c| c.w).sum::<usize>()
-                        + row.iter().map(|c| c.w).sum::<usize>();
-                    full.extend(row);
-                    for _ in used..content_w {
-                        full.push(cell_of(' ', box_bg));
-                    }
-                    out.push(to_line(&full));
-                }
-            }
-        }
+pub(super) fn emit_wrapped(
+    out: &mut Vec<Line<'static>>,
+    cells: &[Cell],
+    width: usize,
+    indent: usize,
+    cont: &[Cell],
+) {
+    for row in wrap_cells(cells, width, indent, cont) {
+        out.push(to_line(&row));
     }
-    (out, sections)
 }
 
-fn push_inline_cells(spans: &[MdInline], palette: &Palette, out: &mut Vec<Cell>) {
+pub(super) fn push_inline_cells(spans: &[MdInline], palette: &Palette, out: &mut Vec<Cell>) {
     for span in spans {
         let (text, style) = match span {
             MdInline::Text(t) => (t.as_str(), Style::default().fg(palette.text)),
@@ -200,7 +143,7 @@ fn push_inline_cells(spans: &[MdInline], palette: &Palette, out: &mut Vec<Cell>)
     }
 }
 
-fn cell_of(ch: char, style: Style) -> Cell {
+pub(super) fn cell_of(ch: char, style: Style) -> Cell {
     Cell {
         ch,
         w: UnicodeWidthChar::width(ch).unwrap_or(0),
@@ -278,7 +221,7 @@ fn take_prefix_width_str(text: &str, max_width: usize) -> String {
     out
 }
 
-fn wrap_cells(
+pub(super) fn wrap_cells(
     cells: &[Cell],
     content_w: usize,
     prefix_len: usize,
@@ -419,7 +362,7 @@ fn find_break(
     (split_at, false)
 }
 
-fn to_line(cells: &[Cell]) -> Line<'static> {
+pub(super) fn to_line(cells: &[Cell]) -> Line<'static> {
     let mut spans: Vec<Span<'static>> = Vec::new();
     let mut run = String::new();
     let mut current: Option<Style> = None;
