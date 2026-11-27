@@ -442,7 +442,11 @@ pub(crate) fn classify_git(
     }
 }
 
-fn audit_integration_refusal(sub: &str, sub_args: &[String], ctx: &GitContext<'_>) -> Option<String> {
+fn audit_integration_refusal(
+    sub: &str,
+    sub_args: &[String],
+    ctx: &GitContext<'_>,
+) -> Option<String> {
     if !matches!(sub, "merge" | "rebase" | "cherry-pick") {
         return None;
     }
@@ -460,7 +464,10 @@ fn audit_integration_refusal(sub: &str, sub_args: &[String], ctx: &GitContext<'_
             let norm = part.trim_start_matches('.');
             let stripped = norm
                 .strip_prefix("refs/heads/")
-                .or_else(|| norm.strip_prefix("refs/remotes/").and_then(|s| s.split_once('/').map(|(_, r)| r)))
+                .or_else(|| {
+                    norm.strip_prefix("refs/remotes/")
+                        .and_then(|s| s.split_once('/').map(|(_, r)| r))
+                })
                 .unwrap_or(norm);
             let branch = stripped.strip_prefix("origin/").unwrap_or(stripped);
             if let Some(task) = branch.strip_prefix(&prefix)

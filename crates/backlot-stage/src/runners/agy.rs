@@ -84,6 +84,8 @@ pub struct AgyPrep {
     /// Work-area path to add to `trustedWorkspaces`, or `None` when
     /// `[stage] answer_trust` is off.
     pub trusted_workspace: Option<PathBuf>,
+    /// When true, deny git write commands in `.agy-settings.json`.
+    pub readonly: bool,
 }
 
 /// Command prefixes denied by agy's session `.agy-settings.json`
@@ -137,19 +139,49 @@ pub(crate) const DENY_PREFIXES: &[&str] = &[
     "cargo publish",
 ];
 
-fn deny_rules() -> Vec<String> {
+const READONLY_DENY_PREFIXES: &[&str] = &[
+    "git add",
+    "git commit",
+    "git checkout",
+    "git switch",
+    "git restore",
+    "git reset",
+    "git clean",
+    "git rm",
+    "git mv",
+    "git merge",
+    "git rebase",
+    "git cherry-pick",
+    "git revert",
+    "git tag",
+    "git branch -d",
+    "git branch -D",
+    "git branch -m",
+    "git branch -M",
+    "git push",
+    "git pull",
+    "git stash",
+];
+
+fn deny_rules(readonly: bool) -> Vec<String> {
+    let extra = if readonly {
+        READONLY_DENY_PREFIXES
+    } else {
+        &[]
+    };
     DENY_PREFIXES
         .iter()
+        .chain(extra.iter())
         .map(|p| format!("command({p})"))
         .collect()
 }
 
-fn permissions_json(existing: &str) -> String {
+fn permissions_json(existing: &str, readonly: bool) -> String {
     let mut map = serde_json::from_str::<serde_json::Value>(existing)
         .ok()
         .and_then(|v| v.get("permissions").and_then(|p| p.as_object()).cloned())
         .unwrap_or_default();
-    map.insert("deny".into(), serde_json::json!(deny_rules()));
+    map.insert("deny".into(), serde_json::json!(deny_rules(readonly)));
     serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_default()
 }
 
@@ -173,16 +205,25 @@ fn trusted_workspaces_json(existing: &str, cwd: &str) -> String {
 /// `trustedWorkspaces` written fresh or spliced byte-exact into an
 /// existing object — every other member keeps its whitespace and order.
 /// Pure: `trusted_workspace` is written verbatim with no filesystem calls.
+#[cfg(test)]
 pub(crate) fn settings_content(
     existing: Option<&[u8]>,
     trusted_workspace: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    settings_content_for(existing, trusted_workspace, false)
+}
+
+fn settings_content_for(
+    existing: Option<&[u8]>,
+    trusted_workspace: Option<&str>,
+    readonly: bool,
 ) -> Result<Vec<u8>, String> {
     let fresh = || {
         let mut obj = serde_json::Map::new();
         obj.insert("toolPermission".into(), serde_json::json!("always-proceed"));
         obj.insert(
             "permissions".into(),
-            serde_json::json!({ "deny": deny_rules() }),
+            serde_json::json!({ "deny": deny_rules(readonly) }),
         );
         if let Some(cwd) = trusted_workspace {
             obj.insert("trustedWorkspaces".into(), serde_json::json!([cwd]));
@@ -201,7 +242,7 @@ pub(crate) fn settings_content(
         // A file that is not a JSON object is healed, not preserved.
         return fresh();
     };
-    let perms = permissions_json(trimmed);
+    let perms = permissions_json(trimmed, readonly);
     let Some(with_perms) = splice_permissions(&with_tp, &perms) else {
         return fresh();
     };
@@ -242,7 +283,7 @@ pub fn prepare(p: &AgyPrep) -> Result<Option<super::PrepNote>, String> {
             .to_string_lossy()
             .into_owned()
     });
-    let bytes = settings_content(existing.as_deref(), trusted.as_deref())?;
+    let bytes = settings_content_for(existing.as_deref(), trusted.as_deref(), p.readonly)?;
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
 
     const REL: &str = ".agents/hooks.json";
@@ -376,20 +417,20 @@ pub fn session_at(
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        // Both profiles take the measured posture — accept edits,
-        // everything else still asks.
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let settings = Path::new(ctx.cwd).join(".agy-settings.json");
     let mut argv = vec!["agy".to_string()];
     if let Some(id) = ctx.resume {
         argv.extend(["--conversation".into(), id.to_string()]);
     }
+    let mode = if readonly { "plan" } else { "accept-edits" };
     argv.extend([
         "--mode".into(),
-        "accept-edits".into(),
+        mode.into(),
         "--effort".into(),
         identity.effort.clone().unwrap_or_default(),
         "--model".into(),
@@ -417,6 +458,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
                 .join(ctx.role)
                 .join("signals.jsonl"),
             trusted_workspace: ctx.answer_trust.then(|| PathBuf::from(ctx.cwd)),
+            readonly,
         })),
     })
 }

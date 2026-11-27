@@ -49,11 +49,11 @@ pub const MODELS: &[&str] = &[
 ];
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        // Neither profile adds flags; only an unknown one refuses.
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let session = ctx
         .resume
         .map(str::to_string)
@@ -68,10 +68,12 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         argv.extend(["--prompt".into(), p.to_string()]);
     }
     let mut env = BTreeMap::new();
-    env.insert(
-        "OPENCODE_CONFIG_CONTENT".into(),
-        serde_json::json!({"model": identity.model}).to_string(),
-    );
+    let cfg = if readonly {
+        serde_json::json!({"model": identity.model, "permission": {"edit": "deny"}})
+    } else {
+        serde_json::json!({"model": identity.model})
+    };
+    env.insert("OPENCODE_CONFIG_CONTENT".into(), cfg.to_string());
     Ok(Launch {
         argv,
         env,

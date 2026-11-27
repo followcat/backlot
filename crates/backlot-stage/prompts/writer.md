@@ -54,6 +54,10 @@ in the plan or acceptance list — cite its ledger entry as
 `Binding: #<seq> (<one-line what>)` instead of retelling it; readers open
 `#<seq>` with `backlot msg show <seq>`.
 
+When planning high-risk or security-sensitive deliverables (not routine
+tasks), flag candidates for a separate read-only audit (`--kind audit`
+with `--readonly`), which stays unmerged into integration.
+
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use
 `backlot tell user --text <question> --ask`. Reports are never

@@ -123,7 +123,12 @@ pub fn slug(path: &str) -> String {
 /// `,` `*?[]{}:` or `\` is not expressible — `,` splits rules, the
 /// rest are glob or syntax characters — and is simply never
 /// pre-allowed.
+#[cfg(test)]
 pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
+    allow_rules_for(role, checks, false)
+}
+
+pub(crate) fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
         // the prompt, which is the user's to answer.
@@ -150,7 +155,7 @@ pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
         rules.push(format!("Shell({cmd})"));
     }
     let is_actor = actor_task(role).is_some();
-    if is_actor {
+    if is_actor && !readonly {
         for cmd in ["git add", "git commit"] {
             rules.push(format!("Shell({cmd})"));
         }
@@ -190,6 +195,8 @@ pub struct CursorPrep {
     pub allow: Vec<String>,
     /// The global `~/.cursor/mcp.json` — read for server names only.
     pub global_mcp: PathBuf,
+    /// When true, add `Write(*)` and `Write(**)` to `permissions.deny`.
+    pub readonly: bool,
 }
 
 /// The env the terminal gets — the three isolated roots. Never
@@ -204,10 +211,11 @@ fn env(root: &Path) -> BTreeMap<String, String> {
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     // An empty value is the XDG convention for unset — auth stays at
     // the default `~/.config`; only a real redirect moves it.
     if ctx
@@ -227,6 +235,9 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     if let Some(id) = ctx.resume {
         argv.extend(["--resume".into(), id.to_string()]);
     }
+    if readonly {
+        argv.extend(["--mode".into(), "plan".into()]);
+    }
     argv.extend(["--trust".into(), "--model".into(), identity.model.clone()]);
     if let Some(p) = ctx.prompt {
         argv.push(p.into());
@@ -245,8 +256,9 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         prep: Some(Prep::Cursor(CursorPrep {
             project: slug(ctx.cwd),
             root,
-            allow: allow_rules(ctx.role, ctx.checks),
+            allow: allow_rules_for(ctx.role, ctx.checks, readonly),
             global_mcp,
+            readonly,
         })),
     })
 }
@@ -303,35 +315,43 @@ pub(crate) fn dir_open_event(role: &str) -> EventKind {
     }
 }
 
+const READONLY_DENY: &[&str] = &["Write(*)", "Write(**)"];
+
 /// The `permissions` value the file carries — the role's `allow`
-/// rules and the mandatory empty `deny` (the schema requires both).
-fn permissions_value(allow: &[String]) -> serde_json::Value {
-    serde_json::json!({"allow": allow, "deny": []})
+/// rules and `deny` entries (empty unless `readonly` adds `Write(*)`/`Write(**)`).
+fn permissions_value(allow: &[String], deny: &[&str]) -> serde_json::Value {
+    serde_json::json!({"allow": allow, "deny": deny})
 }
 
 /// The file's content when none exists yet (or one exists that is
 /// not a JSON object — a corrupt file is healed, not preserved):
 /// the three required keys, matching what cursor writes itself.
-fn minimal_config(allow: &[String]) -> String {
+fn minimal_config(allow: &[String], deny: &[&str]) -> String {
     serde_json::to_string_pretty(&serde_json::json!({
         "version": 1,
         "editor": {"vimMode": false},
-        "permissions": permissions_value(allow),
+        "permissions": permissions_value(allow, deny),
     }))
     .unwrap_or_default()
         + "\n"
 }
 
 /// The JSON content `config/cli-config.json` holds after prepare.
+#[cfg(test)]
 pub(crate) fn config_content(existing: Option<&[u8]>, allow: &[String]) -> Vec<u8> {
-    let value = serde_json::to_string(&permissions_value(allow)).unwrap_or_default();
+    config_content_for(existing, allow, false)
+}
+
+fn config_content_for(existing: Option<&[u8]>, allow: &[String], readonly: bool) -> Vec<u8> {
+    let deny: &[&str] = if readonly { READONLY_DENY } else { &[] };
+    let value = serde_json::to_string(&permissions_value(allow, deny)).unwrap_or_default();
     if let Some(text) = existing.and_then(|b| std::str::from_utf8(b).ok()) {
         let text = text.trim();
         if let Some(spliced) = splice_permissions(text, &value) {
             return format!("{spliced}\n").into_bytes();
         }
     }
-    minimal_config(allow).into_bytes()
+    minimal_config(allow, deny).into_bytes()
 }
 
 /// The server names the global `mcp.json` declares — keys of
@@ -377,7 +397,7 @@ pub(crate) fn prepare(prep: &CursorPrep) -> Result<bool, String> {
     let existing = std::fs::read(&cli_config).ok();
     write600(
         &cli_config,
-        &config_content(existing.as_deref(), &prep.allow),
+        &config_content_for(existing.as_deref(), &prep.allow, prep.readonly),
     )
     .map_err(io("cli-config.json"))?;
     if prep.global_mcp.as_os_str().is_empty() {

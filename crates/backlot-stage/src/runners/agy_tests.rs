@@ -329,6 +329,7 @@ fn prepare_writes_the_session_settings() {
         hooks: dir.join("work/.agents/hooks.json"),
         signals: dir.join("signals.jsonl"),
         trusted_workspace: Some(dir.join("work")),
+        readonly: false,
     };
     assert_eq!(prepare(&p).unwrap(), None);
     let text = fs::read_to_string(&settings).unwrap();
@@ -380,6 +381,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         hooks: hooks.clone(),
         signals: sig.clone(),
         trusted_workspace: Some(wt.clone()),
+        readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     // Exclude lands in the main repo's info/exclude (via commondir) so git status stays clean.
@@ -439,6 +441,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         hooks: tracked_hooks.clone(),
         signals: sig,
         trusted_workspace: Some(tracked_repo.clone()),
+        readonly: false,
     };
     assert_eq!(
         prepare(&tprep).unwrap(),

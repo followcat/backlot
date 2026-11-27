@@ -28,6 +28,8 @@ pub struct DevinPrep {
     /// stays the gate; these only spare the role a prompt for the
     /// forensics every role runs.
     pub allow: Vec<String>,
+    /// When true, add `Write(*)` to `permissions.deny`.
+    pub readonly: bool,
 }
 
 pub(crate) const HOOK_EVENTS: &[&str] = &[
@@ -56,28 +58,36 @@ pub(crate) fn allow_rules() -> Vec<String> {
 }
 
 /// Build or byte-preservingly splice `<cwd>/.devin/config.local.json`:
-/// `hooks` and — when `allow` is non-empty — `permissions.allow`.
-/// Every other key (and any other `permissions` member) keeps its
-/// bytes.
+/// `hooks` and — when `allow` is non-empty or `readonly` sets
+/// `permissions.deny` — `permissions`. Every other key keeps its bytes.
+#[cfg(test)]
 pub(crate) fn config_content(existing: Option<&[u8]>, signals: &Path, allow: &[String]) -> Vec<u8> {
+    config_content_for(existing, signals, allow, false)
+}
+
+fn config_content_for(
+    existing: Option<&[u8]>,
+    signals: &Path,
+    allow: &[String],
+    readonly: bool,
+) -> Vec<u8> {
     let text = existing.and_then(|b| std::str::from_utf8(b).ok());
     let hooks_json = hooks_member_json(text, HOOK_EVENTS, true, "devin", signals);
     let fresh = || format!("{{\"hooks\":{hooks_json}}}\n").into_bytes();
     let Some(raw) = text else {
-        return with_allow(fresh(), allow);
+        return with_permissions(fresh(), allow, readonly);
     };
     match splice_member(raw.trim(), "hooks", &hooks_json) {
-        Some(spliced) => with_allow(format!("{spliced}\n").into_bytes(), allow),
-        None => with_allow(fresh(), allow),
+        Some(spliced) => with_permissions(format!("{spliced}\n").into_bytes(), allow, readonly),
+        None => with_permissions(fresh(), allow, readonly),
     }
 }
 
-/// Splice `permissions.allow` into `bytes` when `allow` is non-empty:
-/// the `permissions` object keeps every other member (`deny` and the
-/// rest), only `allow` is replaced. A file that no longer parses is
-/// left as the caller wrote it.
-fn with_allow(bytes: Vec<u8>, allow: &[String]) -> Vec<u8> {
-    if allow.is_empty() {
+/// Splice `permissions.allow` (when non-empty) and `Write(*)` into
+/// `permissions.deny` (when `readonly`) while preserving any other
+/// `permissions` entries. A file that no longer parses stays unchanged.
+fn with_permissions(bytes: Vec<u8>, allow: &[String], readonly: bool) -> Vec<u8> {
+    if allow.is_empty() && !readonly {
         return bytes;
     }
     let Ok(text) = std::str::from_utf8(&bytes) else {
@@ -88,7 +98,20 @@ fn with_allow(bytes: Vec<u8>, allow: &[String]) -> Vec<u8> {
             .ok()
             .and_then(|v| v.get("permissions").and_then(|p| p.as_object()).cloned())
             .unwrap_or_default();
-    permissions.insert("allow".into(), serde_json::json!(allow));
+    if !allow.is_empty() {
+        permissions.insert("allow".into(), serde_json::json!(allow));
+    }
+    if readonly {
+        let mut deny = permissions
+            .get("deny")
+            .and_then(|d| d.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if !deny.iter().any(|v| v.as_str() == Some("Write(*)")) {
+            deny.push(serde_json::json!("Write(*)"));
+        }
+        permissions.insert("deny".into(), serde_json::Value::Array(deny));
+    }
     let value = serde_json::to_string(&serde_json::Value::Object(permissions)).unwrap_or_default();
     match splice_member(text.trim(), "permissions", &value) {
         Some(spliced) => format!("{spliced}\n").into_bytes(),
@@ -108,7 +131,7 @@ pub fn prepare(p: &DevinPrep) -> Result<Option<PrepNote>, String> {
     let dir = p.config.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let existing = std::fs::read(&p.config).ok();
-    let bytes = config_content(existing.as_deref(), &p.signals, &p.allow);
+    let bytes = config_content_for(existing.as_deref(), &p.signals, &p.allow, p.readonly);
     write600(&p.config, &bytes).map_err(|e| format!("{}: {e}", p.config.display()))?;
     maybe_exclude_new(cwd, was_new, REL)?;
     Ok(None)
@@ -163,19 +186,21 @@ pub const MODELS: &[&str] = &[
 ];
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let mut argv = vec!["devin".to_string()];
     if let Some(id) = ctx.resume {
         argv.extend(["-r".into(), id.to_string()]);
     }
+    let perm_mode = if readonly { "auto" } else { "smart" };
     argv.extend([
         "--model".into(),
         identity.model.clone(),
         "--permission-mode".into(),
-        "smart".into(),
+        perm_mode.into(),
         "--respect-workspace-trust".into(),
         "false".into(),
     ]);
@@ -203,6 +228,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
             } else {
                 allow_rules()
             },
+            readonly,
         })),
     })
 }

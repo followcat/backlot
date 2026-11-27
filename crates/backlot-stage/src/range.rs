@@ -213,7 +213,11 @@ pub fn check_readonly_clean_with(
         let head = rev_parse(&mut **git, &cwd, "HEAD")?;
         let reflog = git(&["reflog", "show", "--format=%H", "HEAD"], &cwd);
         if reflog.code == 0
-            && let Some(initial) = reflog.stdout.lines().map(str::trim).rfind(|l| !l.is_empty())
+            && let Some(initial) = reflog
+                .stdout
+                .lines()
+                .map(str::trim)
+                .rfind(|l| !l.is_empty())
             && initial != head
         {
             return Err(Fail::refused(format!(

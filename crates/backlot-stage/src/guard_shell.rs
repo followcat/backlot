@@ -2,8 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 use backlot_model::event::PushPolicy;
 
+#[cfg(test)]
 use crate::cli::Env;
 use crate::guard_git::{GitContext, classify_git};
 use crate::guard_rules::{GuardMatch, GuardVerdict, cap_command, classify_with_context};

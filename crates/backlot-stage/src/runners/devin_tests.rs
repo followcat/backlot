@@ -152,6 +152,7 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
         config: repo.join(".devin/config.local.json"),
         signals: sig.clone(),
         allow: Vec::new(),
+        readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
@@ -174,6 +175,7 @@ fn devin_config_splices_byte_exact_excludes_new_and_skips_tracked() {
         config: cfg.clone(),
         signals: sig,
         allow: Vec::new(),
+        readonly: false,
     };
     assert_eq!(
         prepare(&tprep).unwrap(),

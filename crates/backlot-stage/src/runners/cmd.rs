@@ -67,6 +67,8 @@ pub struct CmdPrep {
     pub global_mcp: PathBuf,
     /// `<studio>/roles/<role>/signals.jsonl` — the hook command's `--file`.
     pub signals: PathBuf,
+    /// When true, deny file-editing tools (`Edit`, `Write`) natively.
+    pub readonly: bool,
 }
 
 /// Command Code's project slug for a workdir: lowercase, camel
@@ -111,7 +113,12 @@ pub fn slug(cwd: &str) -> String {
 /// adds `git add`/`git commit`, the director `git merge`, and both
 /// every declared check's `run`. Only `git branch`'s two listing
 /// forms are allowed, never the bare family.
+#[cfg(test)]
 pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
+    allow_rules_for(role, checks, false)
+}
+
+fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
         // the prompt, which is the user's to answer.
@@ -125,7 +132,7 @@ pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
         rules.push(format!("Shell({cmd}:*)"));
     }
     let is_actor = actor_task(role).is_some();
-    if is_actor {
+    if is_actor && !readonly {
         for cmd in ["git add", "git commit"] {
             rules.push(format!("Shell({cmd}:*)"));
         }
@@ -226,7 +233,12 @@ pub fn prepare(p: &CmdPrep) -> Result<Option<super::PrepNote>, String> {
     if p.global_mcp.as_os_str().is_empty() {
         return Err("no HOME in the stage's environment — the global mcp.json is unknown".into());
     }
-    let deny = mcp_denies(&p.global_mcp)?;
+    let mut deny = mcp_denies(&p.global_mcp)?;
+    if p.readonly {
+        for tool in ["Edit", "Write"] {
+            deny.push(tool.into());
+        }
+    }
     let existing = std::fs::read(&p.settings).ok();
     let perm_bytes = settings_content(existing.as_deref(), &p.allow, &deny, &p.additional_dirs)?;
     let perm_text =
@@ -314,10 +326,11 @@ pub fn session_at(
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let mut argv = vec!["cmd".to_string()];
     match ctx.resume {
         // `-r` takes the recorded id or the `-n` name; the
@@ -369,13 +382,14 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         hooks: None,
         prep: Some(Prep::Cmd(CmdPrep {
             settings: Path::new(ctx.cwd).join(".commandcode/settings.json"),
-            allow: allow_rules(ctx.role, ctx.checks),
+            allow: allow_rules_for(ctx.role, ctx.checks, readonly),
             additional_dirs: vec![add_dir],
             global_mcp,
             signals: Path::new(ctx.studio_dir)
                 .join("roles")
                 .join(ctx.role)
                 .join("signals.jsonl"),
+            readonly,
         })),
     })
 }

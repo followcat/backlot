@@ -111,6 +111,28 @@ the work area, goes to the user.
   `backlot ask --run --why <reason> -- <command>` and wait for the
   `outward` notice. Push the branch before asking to open a PR.
 
+## Read-only audit tasks
+
+For high-risk deliveries (integration boundaries, security/money/data
+research, or repeated send-backs — not every routine task), create a
+dedicated audit task (`--kind audit`) and cast it read-only:
+`backlot task new --title <title> --kind audit --acceptance-file <file>`
+then `backlot cast --task <task> --actor <name> --readonly --reason <reason>`.
+Prefer a different runner or model than the builder when candidates allow.
+
+Keep the audit task's context clean so the auditor verifies independently:
+put **only** the commit range or diff to audit, the path to the original
+acceptance criteria, relevant signed design sections, `Binding: #<seq>`
+references for binding decisions, and the requested report format
+(severity, `file:line`, repro/evidence, verdict). Never include the
+builder's delivery report, discussion history, or your review notes.
+
+Audit deliveries pass `--report <file>` with no commits (`--commits` is
+refused). Never merge an audit branch (`backlot/{studio}/<task>`) into
+`{branch}` or depend build tasks on an audit task. Record confirmed
+defects from the audit report onto the audited build task with
+`backlot finding --task <task> --delivery <n> --findings <file>`.
+
 ## The requirement
 
 Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the

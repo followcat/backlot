@@ -220,7 +220,12 @@ pub struct ClinePrep {
 /// forms are allowed, never the bare family. A rule a single-quoted
 /// shell string cannot hold — one with a quote or a newline — is
 /// dropped rather than mangled.
+#[cfg(test)]
 pub fn allow_commands(role: &str, checks: &[CheckDecl]) -> Vec<String> {
+    allow_commands_for(role, checks, false)
+}
+
+pub(crate) fn allow_commands_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let add = |out: &mut Vec<String>, c: &str| {
         if !c.is_empty() && !c.contains(['\'', '\n']) {
@@ -252,7 +257,7 @@ pub fn allow_commands(role: &str, checks: &[CheckDecl]) -> Vec<String> {
         add(&mut out, cmd);
     }
     let is_actor = actor_task(role).is_some();
-    if is_actor {
+    if is_actor && !readonly {
         for cmd in ["git add", "git commit"] {
             add(&mut out, cmd);
         }
@@ -308,10 +313,11 @@ fn write755(path: &Path, content: &[u8]) -> std::io::Result<()> {
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        "standard" | "worktree" => {}
+    let readonly = match identity.permission_profile.as_str() {
+        "standard" | "worktree" => false,
+        "readonly" => true,
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let provider = provider(&identity.model).ok_or_else(|| PlanError {
         reason: MODEL_NOT_SUPPORTED,
         detail: format!(
@@ -320,8 +326,9 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         ),
     })?;
     let thinking = thinking(identity.effort.as_deref())?;
-    let mut argv: Vec<String> = vec!["cline".into(), "-i".into(), "--yolo".into()];
-    // The measured resume shape names the id right after `--yolo`
+    let mode_flag = if readonly { "--plan" } else { "--yolo" };
+    let mut argv: Vec<String> = vec!["cline".into(), "-i".into(), mode_flag.into()];
+    // The measured resume shape names the id right after the mode flag
     // (S14a section 3).
     if let Some(id) = ctx.resume {
         argv.extend(["--id".into(), id.to_string()]);
@@ -349,12 +356,18 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     let signals = role_dir.join("cline-signals.jsonl");
     let mcp = role_dir.join("cline-mcp.json");
     let hook = cline_hook::hook_path(Path::new(ctx.cwd));
-    let hook_content = cline_hook::script(&Spec {
+    let allowed = allow_commands_for(ctx.role, ctx.checks, readonly);
+    let spec = Spec {
         worktree: ctx.cwd,
         signals: &signals,
-        allowed: &allow_commands(ctx.role, ctx.checks),
+        allowed: &allowed,
         role: ctx.role,
-    });
+    };
+    let hook_content = if readonly {
+        cline_hook::script_readonly(&spec)
+    } else {
+        cline_hook::script(&spec)
+    };
     Ok(Launch {
         argv,
         env: std::collections::BTreeMap::from([(

@@ -193,6 +193,7 @@ fn prepare_writes_the_isolated_tree() {
         project: slug("/home/user/acme-shop"),
         allow: allow_rules("director", &[]),
         global_mcp: home.join(".cursor/mcp.json"),
+        readonly: false,
     };
     assert!(!prepare(&prep).unwrap(), "a fresh root is not open");
     for d in [
@@ -249,6 +250,7 @@ fn prepare_heals_modes_and_handles_no_mcp() {
         project: "home-user-acme-shop".into(),
         allow: vec!["Shell(backlot)".into()],
         global_mcp: dir.join("home/.cursor/mcp.json"),
+        readonly: false,
     };
     assert!(prepare(&prep).unwrap(), "the open root is reported");
     for d in [&root, &config] {
@@ -319,6 +321,7 @@ fn a_loose_umask_leaves_nothing_below_the_root_reachable() {
         project: "home-user-acme-shop".into(),
         allow: vec!["Shell(backlot)".into()],
         global_mcp: home.join(".cursor/mcp.json"),
+        readonly: false,
     };
     assert!(!prepare(&prep).unwrap());
     // What the agent does under umask 002: a group-writable chats
@@ -425,6 +428,7 @@ fn prepare_errors_never_carry_config_content() {
         project: "x".into(),
         allow: vec!["Shell(backlot)".into()],
         global_mcp: mcp.clone(),
+        readonly: false,
     };
     let err = prepare(&prep).unwrap_err();
     assert!(err.contains("mcp.json"), "{err}");

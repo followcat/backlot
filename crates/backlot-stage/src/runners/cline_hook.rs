@@ -47,7 +47,19 @@ pub const MCP_MASK: &str = "{\"mcpServers\":{}}\n";
 
 /// The script's bytes, ready for the hook file.
 pub fn script(spec: &Spec<'_>) -> String {
+    script_for(spec, true)
+}
+
+/// The script's bytes for a `readonly` role: `editor` stays omitted so
+/// file writes cancel before reaching disk.
+pub fn script_readonly(spec: &Spec<'_>) -> String {
+    script_for(spec, false)
+}
+
+fn script_for(spec: &Spec<'_>, allow_editor: bool) -> String {
     let allowed = spec.allowed.join("\n");
+    let editor_tool = if allow_editor { "editor|" } else { "" };
+    let editor_branch = if allow_editor { EDITOR_BRANCH } else { "" };
     SCRIPT
         .replace("@@WORKTREE@@", &sh_quote(spec.worktree))
         .replace("@@SIGNALS@@", &sh_quote(&spec.signals.to_string_lossy()))
@@ -57,7 +69,25 @@ pub fn script(spec: &Spec<'_>) -> String {
         .replace("@@SEGMENTS@@", cline_hook_awk::SEGMENTS)
         .replace("@@MESSAGE@@", &sh_quote(MESSAGE))
         .replace("@@CAP@@", &TARGET_CAP.to_string())
+        .replace("@@EDITOR_TOOL@@", editor_tool)
+        .replace("@@EDITOR_BRANCH@@", editor_branch)
 }
+
+const EDITOR_BRANCH: &str = r#"if [ "$name" = editor ]; then
+    path=$(pick '(^|\.)input\.path$' | head -n 1)
+    [ -n "$path" ] || path=$(pick '(^|\.)path$' | head -n 1)
+    [ -n "$path" ] || deny "$name" tool ""
+    case "$path" in
+        *..*) deny "$name" path "$path" ;;
+        /*) case "$path" in "$worktree"/*) ;; *) deny "$name" path "$path" ;; esac ;;
+    esac
+    case "$path" in
+        */.git|*/.git/*|*/.cline|*/.cline/*) deny "$name" path "$path" ;;
+    esac
+    allow "$name" path "$path"
+fi
+
+"#;
 
 /// The hook file's path: `<cwd>/.cline/hooks/PreToolUse.sh` — where
 /// cline discovers a workspace hook.
@@ -311,7 +341,7 @@ esac
 case "$name" in
     web_search|fetch_web_content|composio_*) deny "$name" tool "" ;;
     *__*) deny "$name" tool "" ;;
-    run_commands|read_files|editor|search_codebase) ;;
+    run_commands|read_files|@@EDITOR_TOOL@@search_codebase) ;;
     *) deny "$name" tool "" ;;
 esac
 
@@ -392,19 +422,5 @@ if [ "$name" = read_files ]; then
     allow "$name" path "$first"
 fi
 
-if [ "$name" = editor ]; then
-    path=$(pick '(^|\.)input\.path$' | head -n 1)
-    [ -n "$path" ] || path=$(pick '(^|\.)path$' | head -n 1)
-    [ -n "$path" ] || deny "$name" tool ""
-    case "$path" in
-        *..*) deny "$name" path "$path" ;;
-        /*) case "$path" in "$worktree"/*) ;; *) deny "$name" path "$path" ;; esac ;;
-    esac
-    case "$path" in
-        */.git|*/.git/*|*/.cline|*/.cline/*) deny "$name" path "$path" ;;
-    esac
-    allow "$name" path "$path"
-fi
-
-deny "$name" tool ""
+@@EDITOR_BRANCH@@deny "$name" tool ""
 "#;
