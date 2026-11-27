@@ -94,7 +94,7 @@ fn wizard_72_cols_step2_renders_deco_greenlight_and_plaque_step_row() {
         "{dump}"
     );
     assert!(dump.contains("esc step back ══╗"), "{dump}");
-    assert!(dump.contains("1 ✓ Machine & Repo"), "{dump}");
+    assert!(dump.contains("✓ 1 Machine & Repo"), "{dump}");
     assert!(dump.contains("╡ 2 ID & Title ╞"), "{dump}");
     assert!(dump.contains("3 Cast"), "{dump}");
     assert!(dump.contains("4 Check & Start"), "{dump}");
@@ -108,6 +108,18 @@ fn wizard_72_cols_step2_renders_deco_greenlight_and_plaque_step_row() {
                 .contains("╡ 2 ID & Title ╞")
         })
         .expect("step row");
+    let divider_row: String = (0..band.width)
+        .map(|x| buf[(x, step_y + 1)].symbol())
+        .collect();
+    assert!(
+        divider_row.contains("╟───") && divider_row.contains("───╢"),
+        "expected step divider under step strip:\n{dump}"
+    );
+    let div_x = (0..band.width)
+        .find(|&x| buf[(x, step_y + 1)].symbol() == "╟")
+        .expect("left divider cap");
+    assert_eq!(buf[(div_x, step_y + 1)].fg, elev.gilt);
+    assert_eq!(buf[(div_x + 1, step_y + 1)].fg, elev.border_muted);
     let check_x = (0..band.width)
         .find(|&x| buf[(x, step_y)].symbol() == "✓")
         .expect("check glyph");

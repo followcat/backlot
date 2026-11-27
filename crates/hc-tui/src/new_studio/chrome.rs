@@ -1,5 +1,5 @@
 //! Frame, greenlight sheet border (`╔══╡ ✦ NEW STUDIO · [n/4] <STEP> ╞══ esc … ══╗`),
-//! step strip (`1 ✓ … ▸ ╡ 2 … ╞`), and footer hints for the New Studio wizard.
+//! step strip (`✓ 1 … ▸ ╡ 2 … ╞`), and footer hints for the New Studio wizard.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -70,6 +70,7 @@ pub(super) fn draw_chrome(
     if style.deco {
         draw_deco_border_header(b, geom.border, d, esc, p);
         draw_deco_step_strip(b, inner, inner.y, d.step, p, hints, bg);
+        draw_deco_divider(b, geom.border, inner.y + 1, p, bg);
     } else {
         let title_w = inner.width.saturating_sub(display_width(esc) as u16 + 1);
         let title = format!(" New studio · [{}/4] {} ", d.step.index(), d.step.label());
@@ -199,6 +200,29 @@ fn draw_deco_border_header(b: &mut Buffer, border: Rect, d: &NewStudio, esc: &st
     }
 }
 
+fn draw_deco_divider(b: &mut Buffer, border: Rect, y: u16, p: &Palette, bg: ratatui::style::Color) {
+    if border.width < 3 || y <= border.y || y >= border.bottom().saturating_sub(1) {
+        return;
+    }
+    let elev = p.elevation();
+    let edge = elev.gilt_style(bg).remove_modifier(Modifier::DIM);
+    let rule = Style::default()
+        .fg(elev.border_muted)
+        .bg(bg)
+        .remove_modifier(Modifier::DIM);
+    put_text(b, border.x, y, 1, "╟", edge);
+    let inner_w = border.width - 2;
+    put_text(
+        b,
+        border.x + 1,
+        y,
+        inner_w,
+        &"─".repeat(inner_w as usize),
+        rule,
+    );
+    put_text(b, border.right() - 1, y, 1, "╢", edge);
+}
+
 fn draw_deco_step_strip(
     b: &mut Buffer,
     inner: Rect,
@@ -217,11 +241,11 @@ fn draw_deco_step_strip(
     let item_width = |step: Step| -> u16 {
         let idx = step.index();
         if step == current {
-            display_width(&format!("╡ {idx} {} ╞", step.label())) as u16
+            display_width(&format!("╡ {idx} {} ╞", step.label()))
         } else if idx < current.index() {
-            display_width(&format!("{idx} ✓ {}", step.label())) as u16
+            display_width(&format!("✓ {idx} {}", step.label()))
         } else {
-            display_width(&format!("{idx} {}", step.label())) as u16
+            display_width(&format!("{idx} {}", step.label()))
         }
     };
     let items_sum: u16 = steps.iter().map(|&s| item_width(s)).sum();
@@ -277,15 +301,10 @@ fn draw_deco_step_strip(
             let text = format!("╡ {n} {} ╞", step.label());
             put_text(b, x, y, avail, &text, active_style);
         } else if n < current.index() {
-            let head = format!("{n} ");
-            let tail = format!(" {}", step.label());
-            let hw = display_width(&head) as u16;
-            put_text(b, x, y, hw.min(avail), &head, done_style);
-            if avail > hw {
-                put_text(b, x + hw, y, (avail - hw).min(1), "✓", check_style);
-            }
-            if avail > hw + 1 {
-                put_text(b, x + hw + 1, y, avail - hw - 1, &tail, done_style);
+            put_text(b, x, y, avail.min(1), "✓", check_style);
+            if avail > 1 {
+                let tail = format!(" {n} {}", step.label());
+                put_text(b, x + 1, y, avail - 1, &tail, done_style);
             }
             hints.push(Rect::new(x, y, avail, 1), NsHit::StepTab(step));
         } else {
