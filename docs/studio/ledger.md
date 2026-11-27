@@ -250,7 +250,14 @@ without removing the exchange turn. Only the user may record it, and only while 
 
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
 200 chars, `cwd`, and optional `decision` / `argv` when cardable or guarded) refused by `backlot guard`,
-hooks, or the per-role `pre-push` hook. The refusal also raises one `outward action` attention
+hooks, or the per-role `pre-push` hook. Harmless read-only `git`/`gh` probes (`git --version`,
+`git --help`, layout-only `git rev-parse`, studio-wide read-only `git`, `gh pr`/`repo`/`issue`/`release`/`gist`
+reads, `gh --help`) are allowed directly; read-only `git` probe refusals from config-override
+rules (`alias.*`, `core.fsmonitor`, `core.hooksPath`, `submodule.recurse`) or `git path outside work area` on a
+non-work `cwd` with no explicit outside-reach options are still refused by the guard but suppress
+`role.refused` and `outward action`, incrementing `<studio>/suppressed-probes` (summarized as a
+counter in `stage.log`). (`git hooksPath tampered` and `unknown git global option` are never suppressed
+and still record `role.refused`.) For recorded refusals, the event also raises one `outward action` attention
 (`needs_user: false`) once per open attention episode for that role and command. The refusal is
 informational: it stays on the studio's attention list and the role's record, but it is `info`, so it
 never counts toward the person's needs-you list, the lot pill or notifications. The role sees the
