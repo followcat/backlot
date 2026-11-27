@@ -193,6 +193,17 @@ impl HollywoodState {
         })
     }
 
+    /// True if any card (open or closed) already bridged a studio `repo_note` message `(studio, source_seq)`.
+    pub fn has_repo_note_card(&self, studio: &str, source_seq: u64) -> bool {
+        self.cards.values().any(|c| {
+            matches!(
+                &c.action,
+                CardAction::RepoNote { studio: st, source_seq: Some(s), .. }
+                if st == studio && *s == source_seq
+            )
+        })
+    }
+
     /// The newest headline, if any.
     pub fn last_headline(&self) -> Option<&str> {
         self.reports.last().map(|r| r.headline.as_str())

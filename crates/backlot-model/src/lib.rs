@@ -21,6 +21,7 @@ mod cast_diff;
 mod cast_file;
 pub mod casting;
 pub mod correct;
+pub mod decisions;
 pub mod design;
 mod design_reduce;
 pub mod design_steps;
@@ -34,12 +35,14 @@ mod hollywood_summary;
 pub mod hollywood_switch;
 mod hollywood_validate;
 pub mod limits;
+pub mod metrics;
 pub mod progress;
 pub mod push_policy;
 pub mod recast;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
+pub mod repo_notes;
 pub mod req_catalog;
 pub mod req_results;
 pub mod req_wire;
@@ -82,6 +85,8 @@ mod casting_tests;
 #[cfg(test)]
 mod checks_tests;
 #[cfg(test)]
+mod decision_tests;
+#[cfg(test)]
 mod design_gate_steps_tests;
 #[cfg(test)]
 mod design_gate_validate_tests;
@@ -91,6 +96,8 @@ mod design_summary_tests;
 mod design_tests;
 #[cfg(test)]
 mod design_validate_tests;
+#[cfg(test)]
+mod digest_tests;
 #[cfg(test)]
 mod hollywood_card_tests;
 #[cfg(test)]
@@ -107,6 +114,10 @@ mod hollywood_validate_tests;
 mod limits_tests;
 #[cfg(test)]
 mod loop_tests;
+#[cfg(test)]
+mod metrics_test_fx;
+#[cfg(test)]
+mod metrics_tests;
 #[cfg(test)]
 mod migrate_tests;
 #[cfg(test)]

@@ -12,6 +12,8 @@ pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>
        backlot ask acknowledged --person <role> --target <seq>\n       backlot ask --run [--why <text>] (-- <prog> <args...> | \"<cmd>\")";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin) [--ask | --note]\n       backlot tell hollywood \"<text>\" [--text <msg>]";
+pub(crate) const U_DECIDE: &str = "usage: backlot decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]";
+pub(crate) const U_REPO_NOTE: &str = "usage: backlot repo-note propose --id <slug> --text <text> --why <reason>\n       backlot repo-note show [--repo <path>]\n       backlot repo-note remove --id <slug> [--repo <path>]";
 pub(crate) const U_MSG: &str = "usage: backlot msg show <seq> [--json]";
 pub(crate) const U_PROGRESS: &str =
     "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";
@@ -37,6 +39,10 @@ pub(crate) const U_CORRECT: &str =
 pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--all] [--json]";
 pub(crate) const U_RECORDS: &str =
     "usage: backlot records [--studio <name>] [--all] [--kind <task_kind>] [--json]";
+pub(crate) const U_METRICS: &str =
+    "usage: backlot metrics [--studio <id> | --all] [--since <dur>] [--json]";
+pub(crate) const U_DIGEST: &str =
+    "usage: backlot digest [--studio <id> | --all] [--since <dur>] [--format md|json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
 pub(crate) const U_SERVER: &str = "usage: backlot server run [--session <s>]\n       backlot server start|stop [--session <s>] [--remote <t>]\n       backlot server adopt [--dry-run] [--stop-stages] [--core <id>]\n       backlot server service [--print | --write] [--session <s>]";
 pub(crate) const U_GUIDE: &str = "usage: backlot guide [<topic>] [--grep <word>] — backlot's own docs, compiled into the binary (no studio, no disk search)";

@@ -2581,3 +2581,60 @@ fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
     assert!(ttext.contains("CARD c7"), "{ttext}");
     assert!(ttext.contains("tell hollywood"), "{ttext}");
 }
+
+#[test]
+fn repo_note_card_renders_like_other_cards_on_call_sheet() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([
+        {
+            "id": "c5",
+            "studio": "acme-shop",
+            "action": "repo-note build-cmd",
+            "why": "share fast inner-loop test command across studios"
+        }
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 120, 24);
+
+    // Unfocused: one-row card entry.
+    let (ubuf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let utext = lines(&ubuf, area).join("\n");
+    assert!(
+        utext.contains("CARD c5  acme-shop · repo-note build-cmd"),
+        "{utext}"
+    );
+
+    // Focused on card c5: shows why line and a / x / ↵ chips.
+    let (sbuf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, Target::Card("c5".into())),
+        false,
+        &palette,
+    );
+    let rendered = lines(&sbuf, Rect::new(0, 0, 120, hits.area.height)).join("\n");
+    assert!(
+        rendered.contains("CARD c5  acme-shop · repo-note build-cmd"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("why: share fast inner-loop test command"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("apply a")
+            && rendered.contains("cancel x")
+            && rendered.contains("show ↵"),
+        "{rendered}"
+    );
+    println!("CALL_SHEET_REPO_NOTE_BEGIN\n{rendered}\nCALL_SHEET_REPO_NOTE_END");
+}

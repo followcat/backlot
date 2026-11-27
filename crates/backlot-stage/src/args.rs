@@ -11,7 +11,7 @@ use backlot_model::event::{
 };
 
 use crate::cli::Fail;
-use crate::{args_design, args_hwood, args_studio, args_task};
+use crate::{args_decide, args_design, args_hwood, args_studio, args_task};
 
 #[derive(Default, Clone)]
 pub struct Common {
@@ -27,6 +27,12 @@ pub struct Common {
 }
 
 pub use crate::args_source::TextSource;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigestFormat {
+    Md,
+    Json,
+}
 
 pub(crate) use crate::args_source::Source;
 pub(crate) use crate::args_usage::*;
@@ -113,6 +119,15 @@ pub enum Cmd {
         /// `--note`: explicitly send a `tell user` with `?` as plain information.
         note: bool,
     },
+    /// `decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]`
+    Decide {
+        id: String,
+        file: PathBuf,
+        supersedes: Option<String>,
+        notify: Option<String>,
+    },
+    /// `repo-note propose|show|remove`: machine-local, repo-scoped operator notes.
+    RepoNote(RepoNoteCmd),
     /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
     Progress {
         source: TextSource,
@@ -257,6 +272,16 @@ pub enum Cmd {
         /// `--kind <task_kind>`: only records of that task kind.
         kind: Option<String>,
     },
+    Metrics {
+        json: bool,
+        all: bool,
+        since: Option<String>,
+    },
+    Digest {
+        all: bool,
+        since: Option<String>,
+        format: DigestFormat,
+    },
     StageStart,
     StageStop,
     StageRun,
@@ -350,6 +375,23 @@ pub enum ServerCmd {
 
 pub use crate::args_design::{DesignCmd, QuestionInput};
 pub use crate::args_hwood::{CardCmd, HollywoodCmd};
+
+/// Subcommands under `backlot repo-note`.
+#[derive(Debug)]
+pub enum RepoNoteCmd {
+    Propose {
+        id: String,
+        text: String,
+        why: String,
+    },
+    Show {
+        repo: Option<String>,
+    },
+    Remove {
+        id: String,
+        repo: Option<String>,
+    },
+}
 
 /// Tail line of every command's usage text.
 pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t> --server <host>[/<session>]";
@@ -552,6 +594,8 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "report" => args_studio::report(&mut common, &mut it),
         "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
+        "decide" => args_decide::decide(&mut common, &mut it),
+        "repo-note" => args_decide::repo_note(&mut common, &mut it),
         "msg" => args_studio::msg(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
@@ -587,6 +631,8 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             Cmd::Status { json, all }
         }),
         "records" => args_task::records(&mut common, &mut it),
+        "metrics" => args_task::metrics(&mut common, &mut it),
+        "digest" => args_task::digest(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
         "design" => args_design::design(&mut common, &mut it),

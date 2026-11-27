@@ -665,6 +665,8 @@ fn every_command_word_is_registered() {
         "report",
         "ask",
         "tell",
+        "decide",
+        "repo-note",
         "msg",
         "task",
         "cast",
@@ -680,6 +682,8 @@ fn every_command_word_is_registered() {
         "correct",
         "status",
         "records",
+        "metrics",
+        "digest",
         "stage",
         "guide",
     ] {

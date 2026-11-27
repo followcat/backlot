@@ -159,6 +159,29 @@ fn base_fits(action: &CardAction, base: &CardBase) -> Result<(), HRefusal> {
                 Ok(())
             }
         }
+        (
+            CardAction::RepoNote {
+                repo,
+                entry_id,
+                text,
+                ..
+            },
+            CardBase::RepoNoteEntry {
+                repo: base_repo,
+                entry_id: base_id,
+                ..
+            },
+        ) => {
+            if repo.trim().is_empty() || repo != base_repo || entry_id != base_id {
+                return Err(HRefusal::BadCard("invalid repo-note card base".into()));
+            }
+            if !crate::repo_notes::valid_entry_id(entry_id) {
+                return Err(HRefusal::BadCard(format!(
+                    "invalid repo-note id '{entry_id}' (expected [a-z0-9_-]{{1,40}})"
+                )));
+            }
+            crate::repo_notes::check_text_safe(text).map_err(HRefusal::BadCard)
+        }
         _ => Err(bad()),
     }
 }
@@ -176,6 +199,7 @@ fn base_kind(base: &CardBase) -> &'static str {
         CardBase::StudioFinished => "studio_finished",
         CardBase::HollywoodIdentity { .. } => "hollywood_identity",
         CardBase::GitHead { .. } => "git_head",
+        CardBase::RepoNoteEntry { .. } => "repo_note_entry",
     }
 }
 
@@ -194,6 +218,7 @@ fn action_kind(action: &CardAction) -> &'static str {
         CardAction::ReopenStudio { .. } => "reopen_studio",
         CardAction::Setup { .. } => "setup",
         CardAction::Outward { .. } => "outward",
+        CardAction::RepoNote { .. } => "repo_note",
     }
 }
 
@@ -204,7 +229,10 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
     let role = new.by.role.as_str();
     match &new.kind {
         HollywoodKind::CardProposed { action, why, base } => {
-            let allowed = if matches!(action, CardAction::Outward { .. }) {
+            let allowed = if matches!(
+                action,
+                CardAction::Outward { .. } | CardAction::RepoNote { .. }
+            ) {
                 role == HOLLYWOOD || role == "stage"
             } else {
                 role == HOLLYWOOD
@@ -212,7 +240,10 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             if !allowed {
                 return Err(role_bound(
                     role,
-                    if matches!(action, CardAction::Outward { .. }) {
+                    if matches!(
+                        action,
+                        CardAction::Outward { .. } | CardAction::RepoNote { .. }
+                    ) {
                         "hollywood or the stage"
                     } else {
                         "hollywood"
