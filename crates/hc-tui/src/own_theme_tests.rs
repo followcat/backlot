@@ -290,7 +290,7 @@ fn babylon_night_and_day_match_the_design_table() {
         red: Color::Rgb(0xee, 0x52, 0x66),
     };
     let day = Palette {
-        accent: Color::Rgb(0x8f, 0x55, 0x0a),
+        accent: Color::Rgb(0x8c, 0x53, 0x0a),
         panel_bg: Color::Rgb(0xf6, 0xec, 0xd9),
         sidebar_bg: Color::Rgb(0xea, 0xdc, 0xc3),
         active_row_bg: Color::Rgb(0xdf, 0xd0, 0xb4),
@@ -407,6 +407,7 @@ fn babylon_night_day_and_midnight_pass_surface_contrast_checks() {
         let text_cr = contrast_ratio(rgb(palette.text), surface);
         assert!(text_cr >= 12.0, "{name}: text CR={text_cr:.2}");
         for (tok, color) in [
+            ("accent", palette.accent),
             ("subtext0", palette.subtext0),
             ("overlay1", palette.overlay1),
             ("mauve", palette.mauve),
@@ -420,17 +421,15 @@ fn babylon_night_day_and_midnight_pass_surface_contrast_checks() {
             let cr = contrast_ratio(rgb(color), surface);
             assert!(cr >= 4.5, "{name}.{tok} CR={cr:.2} < 4.5");
         }
-        let accent_cr = contrast_ratio(rgb(palette.accent), surface);
-        if name == "backlot-day" {
-            // The approved Day table lists #8f550a, which measures 4.46:1
-            // against derived `elev.surface` (#e9dcc4) and 5.16:1 against `panel_bg`.
-            assert!(accent_cr >= 4.46, "{name}.accent CR={accent_cr:.2}");
-            assert!(
-                contrast_ratio(rgb(palette.accent), rgb(palette.panel_bg)) >= 5.15,
-                "{name}.accent on panel_bg"
-            );
-        } else {
-            assert!(accent_cr >= 4.5, "{name}.accent CR={accent_cr:.2} < 4.5");
-        }
     }
+    let day = Palette::backlot_day();
+    let day_surface = rgb(day.elevation().surface);
+    assert!(
+        contrast_ratio(rgb(day.accent), day_surface) >= 4.5,
+        "backlot-day.accent must meet AA against elev.surface"
+    );
+    assert!(
+        contrast_ratio(rgb(day.accent), rgb(day.panel_bg)) >= 5.3,
+        "backlot-day.accent must remain high contrast on panel_bg"
+    );
 }

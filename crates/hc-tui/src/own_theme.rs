@@ -68,7 +68,7 @@ impl Palette {
     /// of `backlot` for `auto_switch = true`.
     pub fn backlot_day() -> Self {
         Self {
-            accent: Color::Rgb(143, 85, 10),
+            accent: Color::Rgb(140, 83, 10),
             panel_bg: Color::Rgb(246, 236, 217),
             sidebar_bg: Color::Rgb(234, 220, 195),
             active_row_bg: Color::Rgb(223, 208, 180),

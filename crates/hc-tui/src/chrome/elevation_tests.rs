@@ -58,10 +58,21 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
 
         let min_surf = if elev.is_dark { 6.45 } else { 5.45 };
         let min_rais = if elev.is_dark { 7.95 } else { 4.75 };
-        // `backlot` Night's `#120f16`/`#0c0a0f` lacquer starts near L* = 4.8,
-        // leaving ~12.5 L* between `dim_bg` and `overlay` and ~10.0 L* between
-        // `surface` and `shadow`.
-        let min_dim = if elev.is_dark { 12.45 } else { 9.45 };
+        // Dark themes with `panel_bg` below `NEAR_BLACK_LSTAR` (e.g. `backlot`
+        // Night's `#120f16` at L* ≈ 4.77) place `surface` (L* ≈ 11.4) and
+        // `overlay` (L* ≈ 14.6) too close to black for non-zero `dim_bg`
+        // (0.70×) / `shadow` (0.45×) to reach the 12.95 / 13.95 / 10.45 L* steps.
+        const NEAR_BLACK_LSTAR: f64 = 6.0;
+        let near_black = elev.is_dark && lstar(panel_bg) < NEAR_BLACK_LSTAR;
+        let min_dim = if !elev.is_dark {
+            9.45
+        } else if near_black {
+            12.45
+        } else {
+            12.95
+        };
+        let min_ovly_shdw = if near_black { 13.10 } else { 13.95 };
+        let min_surf_shdw = if near_black { 9.95 } else { 10.45 };
         assert!(
             dl_base_surf >= min_surf,
             "{name}: |ΔL*(base, surface)| = {dl_base_surf:.2} < {min_surf}"
@@ -79,12 +90,12 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
             "{name}: |ΔL*(dim_bg, overlay)| = {dl_dim_ovly:.2} < {min_dim}"
         );
         assert!(
-            dl_ovly_shdw >= 13.10,
-            "{name}: |ΔL*(overlay, shadow)| = {dl_ovly_shdw:.2} < 13.10"
+            dl_ovly_shdw >= min_ovly_shdw,
+            "{name}: |ΔL*(overlay, shadow)| = {dl_ovly_shdw:.2} < {min_ovly_shdw}"
         );
         assert!(
-            dl_surf_shdw >= 9.95,
-            "{name}: |ΔL*(surface, shadow)| = {dl_surf_shdw:.2} < 9.95"
+            dl_surf_shdw >= min_surf_shdw,
+            "{name}: |ΔL*(surface, shadow)| = {dl_surf_shdw:.2} < {min_surf_shdw}"
         );
         assert!(
             (lstar(raised_field) - lstar(surface)).abs() >= 4.95,
