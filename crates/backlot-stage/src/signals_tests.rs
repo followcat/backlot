@@ -1488,6 +1488,7 @@ async fn sample_pass_interrupted_claude_turn_becomes_waiting_and_stops_working_d
             running_cmds: crate::live::running_map(&live_before),
             idle: crate::live::idle_map(&live_before),
             running: true,
+            accounts: Vec::new(),
         },
     );
     assert!(status_before.contains("working 31h"), "{status_before}");
@@ -1539,6 +1540,7 @@ async fn sample_pass_interrupted_claude_turn_becomes_waiting_and_stops_working_d
             running_cmds: crate::live::running_map(&live_after),
             idle: crate::live::idle_map(&live_after),
             running: true,
+            accounts: Vec::new(),
         },
     );
     assert!(!status_after.contains("working"), "{status_after}");
@@ -1578,6 +1580,7 @@ async fn sample_pass_interrupted_claude_turn_becomes_waiting_and_stops_working_d
             running_cmds: crate::live::running_map(&live_later),
             idle: crate::live::idle_map(&live_later),
             running: true,
+            accounts: Vec::new(),
         },
     );
     assert!(!status_later.contains("working"), "{status_later}");
