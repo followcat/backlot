@@ -110,6 +110,7 @@ pub(crate) enum Wait<'a> {
     /// blocked screen with no prompt.
     Hollywood(&'a backlot_model::summary::HollywoodSummary),
     Upgrade(StudioItem<'a>),
+    Halted(StudioItem<'a>),
     Decision(super::decision::DecisionItem<'a>),
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
@@ -160,6 +161,10 @@ impl Wait<'_> {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
             }),
+            Wait::Halted(item) => super::Target::Halted(StudioKey {
+                machine: item.machine.map(str::to_string),
+                id: item.studio.id.clone(),
+            }),
             Wait::Decision(item) => super::Target::Decision(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -200,7 +205,7 @@ impl Wait<'_> {
             | Wait::NoRequirement(_) => true,
             Wait::Decision(item) => !super::decision::detail_lines(item).is_empty(),
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
-            Wait::Stage(_) | Wait::Upgrade(_) => false,
+            Wait::Stage(_) | Wait::Upgrade(_) | Wait::Halted(_) => false,
         }
     }
 }
@@ -233,6 +238,12 @@ pub(crate) fn waiting_items<'a>(
         for studio in &m.summary.studios {
             if studio.needs_upgrade {
                 out.push(Wait::Upgrade(StudioItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                }));
+            }
+            if studio.halted.is_some() {
+                out.push(Wait::Halted(StudioItem {
                     machine: m.machine.as_deref(),
                     studio,
                 }));

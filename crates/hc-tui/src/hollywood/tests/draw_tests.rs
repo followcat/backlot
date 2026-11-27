@@ -2340,6 +2340,61 @@ fn a_studio_needing_upgrade_draws_single_line_in_call_sheet() {
 }
 
 #[test]
+fn a_halted_studio_draws_red_mark_single_line_in_call_sheet() {
+    let mut value = summary_json();
+    value["studios"][0]["halted"] = serde_json::json!({
+        "by": "producer",
+        "reason": "wrong base commit",
+        "since": 1_000,
+    });
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 120, 45);
+    let (buf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("3 studios · !1"), "{text}");
+    assert!(text.contains("! HALTED"), "{text}");
+    assert!(text.contains("wrong base commit"), "{text}");
+    let row_y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, crate::hollywood::Target::Halted(_)))
+        .expect("halted hit row")
+        .0
+        .y;
+    assert_eq!(buf[(2, row_y)].symbol(), "▎");
+    assert_eq!(buf[(2, row_y)].fg, palette.red);
+
+    // Selecting the HALTED row keeps the one-row layout (no detail row added).
+    let target = crate::hollywood::Target::Halted(crate::studio::StudioKey::local("acme-shop"));
+    let (sbuf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, target),
+        false,
+        &palette,
+    );
+    let sel_text = lines(&sbuf, area).join("\n");
+    assert_eq!(
+        sel_text.matches("! HALTED").count(),
+        1,
+        "HALTED keeps a single row: {sel_text}"
+    );
+    assert_eq!(sbuf[(0, row_y)].symbol(), "▌");
+    assert_eq!(sbuf[(1, row_y)].symbol(), "▸");
+    assert_eq!(sbuf[(2, row_y)].fg, palette.red);
+}
+
+#[test]
 fn six_studios_ready_recast_200x17_and_100x17_show_every_card_and_match_header_count() {
     let summary = six_studios_ready_recast_summary();
     let palette = palettes()[0].clone();

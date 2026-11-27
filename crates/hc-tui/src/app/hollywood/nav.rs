@@ -252,6 +252,7 @@ impl App {
                             | Target::Hollywood
                             | Target::Tell(_)
                             | Target::Upgrade(_)
+                            | Target::Halted(_)
                             | Target::Decision(_)
                             | Target::Stage(..)
                             | Target::Card(_)
@@ -269,6 +270,7 @@ impl App {
                     | Target::Hollywood
                     | Target::Tell(_)
                     | Target::Upgrade(_)
+                    | Target::Halted(_)
                     | Target::Decision(_)
                     | Target::Stage(..)
                     | Target::Card(_)
