@@ -1072,3 +1072,64 @@ pub(crate) fn ask(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fai
         },
     ))
 }
+
+/// `decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]`
+pub(crate) fn decide(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut id = None;
+    let mut file = None;
+    let mut supersedes = None;
+    let mut notify = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_DECIDE)));
+        }
+        if common_flag(it, common, &arg, U_DECIDE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--id" => id = Some(it.value("--id", U_DECIDE)?),
+            _ if eq(&arg, "--id").is_some() => id = eq(&arg, "--id").map(String::from),
+            "--file" => file = Some(PathBuf::from(it.value("--file", U_DECIDE)?)),
+            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
+            "--supersedes" => supersedes = Some(it.value("--supersedes", U_DECIDE)?),
+            _ if eq(&arg, "--supersedes").is_some() => {
+                supersedes = eq(&arg, "--supersedes").map(String::from)
+            }
+            "--notify" => notify = Some(it.value("--notify", U_DECIDE)?),
+            _ if eq(&arg, "--notify").is_some() => notify = eq(&arg, "--notify").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_DECIDE)),
+        }
+    }
+    let id = id.ok_or_else(|| usage("missing --id", U_DECIDE))?;
+    if backlot_model::decisions::parse_decision_id(&id).is_none() {
+        return Err(usage(
+            format!("invalid --id '{id}': expected AD-<n>"),
+            U_DECIDE,
+        ));
+    }
+    if let Some(ref sup) = supersedes {
+        if backlot_model::decisions::parse_decision_id(sup).is_none() {
+            return Err(usage(
+                format!("invalid --supersedes '{sup}': expected AD-<m>"),
+                U_DECIDE,
+            ));
+        }
+        if sup == &id {
+            return Err(usage(format!("{id} cannot supersede itself"), U_DECIDE));
+        }
+    }
+    if let Some(ref raw) = notify
+        && (raw.trim().is_empty() || raw.split(',').any(|p| p.trim().is_empty()))
+    {
+        return Err(usage("--notify must list non-empty roles", U_DECIDE));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Decide {
+            id,
+            file: file.ok_or_else(|| usage("missing --file", U_DECIDE))?,
+            supersedes,
+            notify,
+        },
+    ))
+}

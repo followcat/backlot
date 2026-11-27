@@ -113,6 +113,13 @@ pub enum Cmd {
         /// `--note`: explicitly send a `tell user` with `?` as plain information.
         note: bool,
     },
+    /// `decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]`
+    Decide {
+        id: String,
+        file: PathBuf,
+        supersedes: Option<String>,
+        notify: Option<String>,
+    },
     /// `progress "<line>"` / `progress --file <f>`: role's optional step update.
     Progress {
         source: TextSource,
@@ -552,6 +559,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "report" => args_studio::report(&mut common, &mut it),
         "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
+        "decide" => args_studio::decide(&mut common, &mut it),
         "msg" => args_studio::msg(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),

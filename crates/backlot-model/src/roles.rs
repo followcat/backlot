@@ -216,6 +216,12 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         EventKind::DesignSigned { .. } if role != "user" => {
             return Err(cannot(role, who_can(&new.kind)));
         }
+        EventKind::MessageQueued {
+            purpose: Some(purpose),
+            ..
+        } if purpose == "decision" && !matches!(role, "director" | "producer" | "user") => {
+            return Err(cannot(role, who_can(&new.kind)));
+        }
         _ => {}
     }
     Ok(())
@@ -267,6 +273,8 @@ fn who_can(kind: &EventKind) -> &'static str {
         EventKind::MessageQueued { purpose, .. } => {
             if purpose.is_none() {
                 "a person"
+            } else if purpose.as_deref() == Some("decision") {
+                "the user, the producer or the director"
             } else {
                 "the producer or the stage"
             }

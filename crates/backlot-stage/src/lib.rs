@@ -26,6 +26,7 @@ pub mod config;
 mod confirm;
 mod connerr;
 mod daemon;
+mod decision_doc;
 mod delete;
 mod delete_ops;
 mod delete_render;
@@ -156,6 +157,7 @@ mod transcript_ext;
 mod transcript_runners;
 mod verbs;
 mod verbs_card_show;
+mod verbs_decide;
 mod verbs_design;
 mod verbs_fmt;
 mod verbs_hwood;
@@ -209,6 +211,8 @@ mod cli_tests;
 mod closed_actor_mail_tests;
 #[cfg(test)]
 mod daemon_tests;
+#[cfg(test)]
+mod decide_tests;
 #[cfg(test)]
 mod delete_tests;
 #[cfg(test)]

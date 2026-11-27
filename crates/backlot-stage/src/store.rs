@@ -492,6 +492,7 @@ where
             write_log: write_events_file,
             post_copy: |state: &StudioState, stamped: &[Event]| {
                 crate::design_doc::sync_on_append(dir, state, stamped);
+                crate::decision_doc::sync_on_append(dir, state, stamped);
             },
             migrate: backlot_model::migrate::migrate_event_value,
         },

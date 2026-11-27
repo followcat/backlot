@@ -65,7 +65,7 @@ impl RawTurn<'_> {
 /// (`source_seq.is_some()`), and workflow envelopes (`purpose.is_some()`).
 fn is_user_facing_message(m: &Message) -> bool {
     m.source_seq.is_none()
-        && (m.purpose.is_none() || m.purpose.as_deref() == Some("ask"))
+        && (m.purpose.is_none() || matches!(m.purpose.as_deref(), Some("ask") | Some("decision")))
         && (m.from == "user" || m.to == "user" || m.from == "hollywood")
 }
 

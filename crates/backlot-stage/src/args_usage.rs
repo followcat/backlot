@@ -12,6 +12,7 @@ pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>
        backlot ask acknowledged --person <role> --target <seq>\n       backlot ask --run [--why <text>] (-- <prog> <args...> | \"<cmd>\")";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin) [--ask | --note]\n       backlot tell hollywood \"<text>\" [--text <msg>]";
+pub(crate) const U_DECIDE: &str = "usage: backlot decide --id AD-<n> --file <path> [--supersedes AD-<m>] [--notify <roles>|active-actors]";
 pub(crate) const U_MSG: &str = "usage: backlot msg show <seq> [--json]";
 pub(crate) const U_PROGRESS: &str =
     "usage: backlot progress (<line> | --file <f> | --text <msg> | --stdin)";

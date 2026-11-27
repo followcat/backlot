@@ -27,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "report",
     "ask",
     "tell",
+    "decide",
     "msg",
     "progress",
     "task",
@@ -611,6 +612,19 @@ pub(crate) fn exec_event(
             )?))
         }
         Cmd::Design(dcmd) => Some(crate::verbs_design::run(base, env, &caller, dcmd)?),
+        Cmd::Decide {
+            id,
+            file,
+            supersedes,
+            notify,
+        } => Some(crate::verbs_decide::decide(
+            base,
+            &caller,
+            &id,
+            &file,
+            supersedes.as_deref(),
+            notify.as_deref(),
+        )?),
         other => {
             let built = commands::build(&caller, other, env, base)?;
             let recast_note = std::cell::Cell::new(None);
