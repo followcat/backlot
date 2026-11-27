@@ -30,6 +30,9 @@ pub(crate) fn run_stdin_with_host(
     if matches!(cmd, Cmd::Design(crate::args::DesignCmd::Sign { .. })) {
         crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::DesignSign, &common, env)?;
     }
+    if matches!(cmd, Cmd::StudioCheck(_)) {
+        crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::StudioCheck, &common, env)?;
+    }
     if matches!(
         cmd,
         Cmd::RepoNote(

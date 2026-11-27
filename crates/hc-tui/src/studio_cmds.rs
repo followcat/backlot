@@ -707,21 +707,26 @@ pub(crate) fn delete_studio(key: &StudioKey, force: bool, token: Option<&str>) -
     a
 }
 
-/// `backlot design sign [--skip [--reason <r>]] [--note <t>] --studio <id> --as user`.
+/// `backlot design sign [--skip [--reason <r>]] [--no-checks] [--note <t>] --studio <id> --as user`.
 pub(crate) fn design_sign(
     key: &StudioKey,
     skip: bool,
     reason: Option<&str>,
     note: Option<&str>,
+    no_checks: bool,
 ) -> Action {
     let verb = if skip { "skipping" } else { "signing off" };
     let done = if skip {
         "skipped design"
+    } else if no_checks {
+        "signed off design (no checks)"
     } else {
         "signed off design"
     };
     let label = if skip {
         "design skip"
+    } else if no_checks {
+        "design sign off (--no-checks)"
     } else {
         "design sign off"
     };
@@ -739,6 +744,8 @@ pub(crate) fn design_sign(
             cmd.push("--reason".into());
             cmd.push(r.into());
         }
+    } else if no_checks {
+        cmd.push("--no-checks".into());
     }
     if let Some(n) = note {
         cmd.push("--note".into());

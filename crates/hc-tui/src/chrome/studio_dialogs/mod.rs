@@ -25,6 +25,8 @@ pub(crate) struct DialogHits {
     pub body: Rect,
     /// The revise summary line.
     pub summary: Rect,
+    /// Clickable option rows for choice dialogs (`DesignSign`).
+    pub choices: Vec<Rect>,
     pub cursor: Option<super::help::CursorState>,
 }
 
@@ -124,9 +126,11 @@ fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
 }
 
 mod archived;
+mod design_sign;
 mod kinds;
 mod lifecycle;
 use archived::render_restore;
+use design_sign::render_design_sign;
 use kinds::{render_confirm, render_reason, render_revise, render_tell};
 use lifecycle::{render_cast_edit, render_recast, render_restart};
 
@@ -152,6 +156,7 @@ pub(crate) fn render_with_shadow(
     match dialog {
         StudioDialog::Reason(d) => render_reason(b, band, d, palette, shadow),
         StudioDialog::Confirm(d) => render_confirm(b, band, d, palette, shadow),
+        StudioDialog::DesignSign(d) => render_design_sign(b, band, d, palette, shadow),
         StudioDialog::Tell(d) => render_tell(b, band, d, palette, shadow),
         StudioDialog::Revise(d) => render_revise(b, band, d, palette, shadow),
         StudioDialog::Restart(d) => render_restart(b, band, d, palette, shadow),

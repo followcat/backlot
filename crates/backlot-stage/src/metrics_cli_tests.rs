@@ -96,6 +96,7 @@ fn chk(seq: u64, ts: u64, task: &str, delivery: u32, exit: i32) -> Event {
         name: "test".into(),
         exit_code: Some(exit),
         timed_out: false,
+        expect_failed: None,
         output: format!("checks/{task}-d{delivery}.log"),
         duration_ms: 200,
     };
@@ -136,11 +137,7 @@ fn setup_two_studios(scratch: &Scratch, now: u64) {
     )
     .unwrap();
 
-    let decls = vec![CheckDecl {
-        name: "test".into(),
-        run: "cargo test".into(),
-        timeout_s: 60,
-    }];
+    let decls = vec![CheckDecl::new("test", "cargo test", 60)];
     let acme_events = vec![
         studio_ev(1, old, "acme-shop", "/home/user/acme-shop", decls),
         evt(

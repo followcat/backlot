@@ -10,6 +10,7 @@ use crate::studio_menu::StudioMenu;
 
 use super::App;
 
+mod design_sign;
 mod keys;
 mod lifecycle;
 mod restore;

@@ -156,15 +156,17 @@ fn fields(
         )
         .to_string()
     } else {
-        let mut block =
-            "- The stage runs the cast's declared checks on your delivery itself:\n".to_string();
+        let mut block = String::from(
+            "- The stage runs the cast's declared checks on your delivery itself\n\
+             \x20 and records `task.checked` as the evidence:\n",
+        );
         for c in declared {
             block.push_str(&format!("  - `{}`: `{}`\n", c.name, c.run));
         }
         block.push_str(concat!(
-            "- `backlot deliver --commits <A..B> --report <file> --check <name>=pass`\n",
-            "  (a check that failed is `--check <name>=fail`) — `<name>` is one of\n",
-            "  the checks above.\n"
+            "- `backlot deliver --commits <A..B> --report <file>`\n",
+            "  (`--check <name>=pass` or `--check <name>=fail` is optional, not\n",
+            "  required — `task.checked` is the stage's evidence).\n"
         ));
         block
     };

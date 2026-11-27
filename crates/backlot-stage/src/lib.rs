@@ -13,12 +13,14 @@ mod args_design;
 mod args_hwood;
 mod args_source;
 mod args_studio;
+mod args_studio_check;
 mod args_task;
 mod args_usage;
 mod ask_answer;
 pub(crate) mod catalog_doc;
 mod checkrun;
 mod checks;
+mod checks_preflight;
 mod checkwork;
 pub mod cli;
 mod cli_run;
@@ -155,6 +157,7 @@ mod stale;
 mod stall;
 pub mod store;
 mod studio_cast;
+mod studio_check;
 mod studio_fmt;
 mod studio_list;
 mod supervise;
@@ -278,6 +281,8 @@ mod draft_tests;
 mod driver_record_tests;
 #[cfg(test)]
 mod exchange_read_tests;
+#[cfg(test)]
+mod expect_checks_tests;
 #[cfg(test)]
 mod facts_tests;
 #[cfg(test)]

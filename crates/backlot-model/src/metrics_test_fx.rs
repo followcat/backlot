@@ -90,6 +90,7 @@ fn chk_ev(seq: u64, ts_ms: u64, id: &str, n: u32, name: &str, exit: i32) -> Even
         name: name.into(),
         exit_code: Some(exit),
         timed_out: false,
+        expect_failed: None,
         output: format!("checks/{id}-d{n}.log"),
         duration_ms: 350,
     };
@@ -156,16 +157,8 @@ fn studio_event(title: &str, repo_path: &str, decls: Vec<CheckDecl>) -> Event {
 
 pub(crate) fn acme_events() -> Vec<Event> {
     let decls = vec![
-        CheckDecl {
-            name: "test".into(),
-            run: "cargo test".into(),
-            timeout_s: 60,
-        },
-        CheckDecl {
-            name: "lint".into(),
-            run: "cargo clippy".into(),
-            timeout_s: 60,
-        },
+        CheckDecl::new("test", "cargo test", 60),
+        CheckDecl::new("lint", "cargo clippy", 60),
     ];
     let findings = vec![
         Finding {

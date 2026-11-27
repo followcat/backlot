@@ -63,6 +63,7 @@ fn entry(
             source,
             refs,
             questions: Vec::<DesignQuestion>::new(),
+            checks: Vec::new(),
         },
     )
 }

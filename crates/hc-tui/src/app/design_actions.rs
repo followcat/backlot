@@ -55,6 +55,38 @@ impl App {
         self.run_action(studio_cmds::design_show(key, &file));
     }
 
+    /// `↵` on a Call Sheet `Wait::Decision` with proposed checks: open a read-only
+    /// Decision show view starting with `Signing off also activates N checks:` and
+    /// every proposed check's name, command, timeout, and expect verbatim.
+    pub(in crate::app) fn design_decision_show(&mut self, key: &StudioKey) {
+        let Some(design) = self.waiting_design(key) else {
+            return;
+        };
+        let file = if design.doc_file.starts_with("design/") {
+            design.doc_file.clone()
+        } else {
+            format!("design/v{}.md", design.version)
+        };
+        let body = crate::hollywood::decision::show_body(&design);
+        let lines: Vec<String> = body.lines().map(str::to_string).collect();
+        if lines.is_empty() {
+            self.design_read(key);
+            return;
+        }
+        let machines = self.panel_summaries();
+        let meta =
+            crate::app::hollywood::reader_meta_from::design_meta(&machines, key.clone(), &file);
+        self.hollywood.view = Some(crate::hollywood::CardView {
+            card: None,
+            title: "Design".to_owned(),
+            lines,
+            raw_body: body,
+            scroll: 0,
+            meta,
+            ..crate::hollywood::CardView::default()
+        });
+    }
+
     /// `a` on an opening-design row: open the shared sign-off/skip confirmation modal
     /// before running `backlot design sign [--skip]`.
     pub(in crate::app) fn design_sign_confirm(&mut self, key: &StudioKey) {
@@ -65,12 +97,13 @@ impl App {
         let file = if design.doc_file.is_empty() {
             format!("design/v{}.md", design.version)
         } else {
-            design.doc_file
+            design.doc_file.clone()
         };
         self.studio_dialog = Some(crate::studio_dialog::StudioDialog::design_sign(
             key,
             skip,
             Some(&file),
+            &design.proposed_checks,
         ));
     }
 

@@ -100,7 +100,7 @@ The stage publishes the live studio summary under document `backlot` (`schema: "
 - **`design` (`DesignSummary?`, omitted when `null`):** present when `design_gate == "required"` and the current `requirement_version` has opened or signed design state (`phase != "idle"`). Fields:
   - `version` (`u32`), `round` (`u32`), `phase` (`"idle" | "suggest_skip" | "waiting_proposal" | "waiting_buildability" | "waiting_summary" | "waiting_user" | "signed"`)
   - `waiting_user` (`bool`, `true` in `"waiting_user"` or `"suggest_skip"` — routes Call Sheet `DECISION` items to the warm `?N` asks bucket rather than blocking `!B`)
-  - `suggest_skip` (`bool`), `skip_reason` (`string?`), `doc_file` (`"design/v<N>.md"`), `summary` (`string?`), `questions` (up to `3` `{ id, prompt, recommendation, section_ref? }`), `waiting_since_ms` (`u64?`, set only while `waiting_user == true`)
+  - `suggest_skip` (`bool`), `skip_reason` (`string?`), `doc_file` (`"design/v<N>.md"`), `summary` (`string?`), `questions` (up to `3` `{ id, prompt, recommendation, section_ref? }`), `proposed_checks` (`CheckDecl[]`, omitted when empty; kept untruncated unless truncated cleanly under slim limits), `waiting_since_ms` (`u64?`, set only while `waiting_user == true`)
   - `summary`, `skip_reason`, `doc_file`, and question strings are capped at 96 characters (`CAP = 96`); the complete Markdown lives in `doc_file` (`design/v<N>.md`, or `design/v<N>-final.md` after `approved` sign-off). Once `phase == "signed"` and all tasks for `version` have a cast, `design` shrinks to header fields (`summary: null`, `questions: []`).
 
 ---
@@ -127,7 +127,7 @@ The stage publishes the live studio summary under document `backlot` (`schema: "
 | `hollywood-switch` | `runner`, `model`, `effort?`, `timeout_s?`, `force?` | `action` (`queued`), `handoff?` (`HandoffSummary`) |
 | `hollywood-switch-cancel` | — | `action` (`cancel-requested`), `handoff?` (`HandoffSummary`) |
 | `hollywood-switch-status` | — | `active` (`bool`), `handoff?` (`HandoffSummary`) |
-| `design-sign` | `studio`, `skip?`, `reason?`, `note?` | `studio`, `version`, `round`, `mode` (`approved` \| `skipped`), `doc_file`, `seq` |
+| `design-sign` | `studio`, `skip?`, `reason?`, `note?`, `no_checks?` | `studio`, `version`, `round`, `mode` (`approved` \| `skipped`), `doc_file`, `seq`, `activated_checks` (`string[]`, omitted when empty) |
 | `design-start-round` | `studio` | `studio`, `version`, `round`, `doc_file`, `seq` |
 
 During `waiting_user`, a `tell` targeting `producer` also appends a `design.entry` (`slot: "user_input"`, `source: "tell"`) and updates `design/v<N>.md`. `design-sign` and `design-start-round` execute with `by: { role: "user", via: "doc" }`, satisfying the user-only sign-off gate.

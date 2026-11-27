@@ -491,6 +491,7 @@ fn a_review_step_waits_on_the_last_check() {
                 name: name.into(),
                 exit_code: Some(0),
                 timed_out: false,
+                expect_failed: None,
                 output: format!("checks/5-{name}.log"),
                 duration_ms: 10,
             },

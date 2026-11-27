@@ -120,18 +120,21 @@ empty range or a tip that is not on the task's `backlot/<studio>/<task>` branch,
 `sha..sha` (S9b).
 
 **The checks on a delivery are the stage's, not the actor's** (S9b part 2). The cast declares
-`[[checks]]` — a name, a `run` command and `timeout_s` — and may pass stage environment names
-through `check_env`; dangerous names (`BACKLOT_*`, `HC_*`, proxies, credentials) are refused at
-`studio new`. Each declared check runs once per delivery on the stage itself: `sh -c` in a
-detached worktree at the delivery's end sha, under an environment stripped to a passthrough list
-plus `check_env`, one run per studio polled across ticks, the timeout escalated TERM then KILL
-five seconds later, the log capped and written under `checks/` before the result is recorded
-`task.checked` by `stage`. A stage stopped mid-check owes it again — the ledger either holds its
-record or it reruns. What the actor reports with `deliver --check` stays its own claim, kept
-apart from the stage's records in the reviewer's notice (which waits for them), `status` and
-`records`. An accepting or partially accepting review is refused while a declared check has no
-record — the user alone may accept over pending ones — and unless its conclusion names every
-failing check; a `correction` producing such a review is gated the same way.
+`[[checks]]` — a name, a `run` command, `timeout_s`, optional `expect` regex and `min_matches`
+(default `1` when `expect` is set), and provenance `origin` (`cast`, `design`, or `user`) — and
+may pass stage environment names through `check_env`; dangerous names (`BACKLOT_*`, `HC_*`,
+proxies, credentials) are refused at `studio new` / `cast set`. Each declared check runs once per
+delivery on the stage itself: `sh -c` in a detached worktree at the delivery's end sha, under an
+environment stripped to a passthrough list plus `check_env`, one run per studio polled across ticks,
+the timeout escalated TERM then KILL five seconds later, the log capped and written under `checks/`
+before the event is recorded `task.checked` by `stage`. When `expect` fails to find `min_matches`
+occurrences, `task.checked` preserves real `exit_code` and sets `expect_failed`, blocking false-green
+acceptances. A stage stopped mid-check owes it again — the ledger either holds its record or it
+reruns. What the actor optionally reports with `deliver --check` stays its own claim, kept apart
+from the stage's records in the reviewer's notice (which waits for them), `status` and `records`.
+An accepting or partially accepting review is refused while a declared check has no record — the
+user alone may accept over pending ones — and unless its conclusion names every failing or
+expect-failed check; a `correction` producing such a review is gated the same way.
 
 If an actor goes quiet without delivering, the stage reminds it once and then raises attention to the director.
 
@@ -230,10 +233,10 @@ When `design_gate` is `"required"` (the default for newly created studios; set `
   1. `idle`: a `req.version` was recorded, no round is open yet.
   2. `suggest_skip`: `design.opened` with `suggest_skip = true` (optional `reason`, allowed only for tiny fixes or an already-finalized external plan). The person either accepts skipping (`design.signed` with `mode = "skipped"`) or rejects skipping (`backlot design open` / remote `design-start-round`), moving to Round 1 (`waiting_proposal`).
   3. `waiting_proposal`: Round `r` opened; the `writer` posts `design.entry` (`slot = "proposal"`).
-  4. `waiting_buildability`: the `director` posts `design.entry` (`slot = "buildability"`).
+  4. `waiting_buildability`: the `director` posts `design.entry` (`slot = "buildability"`), optionally attaching `--checks-file <toml>` with `[[checks]]` declarations. When `--checks-file` is passed, `backlot design write` validates the TOML statically (same rules as `cast.toml`, including `expect`/`min_matches` regex and non-zero count, and single-repo restriction), runs Gate 2 preflight once per check in the director's worktree under a stripped check environment (`checks::env_for`) plus the director outward-action guard (`<studio>/roles/director/bin` + `core.hooksPath`, capped at 120 s), refuses any non-zero/timed-out/missed-expect check with its output tail, and records `design.entry.checks` (`origin = "design"`).
   5. `waiting_summary`: the `producer` posts `design.entry` (`slot = "summary"`) with 0–3 structured `DesignQuestion`s (`id`, `prompt`, `recommendation`, optional `section_ref`).
   6. `waiting_user`: the studio waits on the person. The person may sign off (`design.signed`), reply via `backlot tell producer` / producer terminal (appending `design.entry` `slot = "user_input"` with `source = "tell" | "hook" | "producer_note"`), or address `writer` / `director` for an in-round `design.entry` (`slot = "supplement"`, requiring `--refs <seq>` pointing at existing message or design entry `seq`s). Once `user_input` follows the round's `summary`, `producer` or `user` may advance with `backlot design next` (`design.opened`, `round = r + 1`, `waiting_proposal`).
-  7. `signed`: `design.signed` (`user` only, refused in `roles` and `proc_guard`/`BACKLOT_*` when called by any agent role) closes the active requirement version with `mode = "approved"` or `"skipped"`.
+  7. `signed`: `design.signed` (`user` only, refused in `roles` and `proc_guard`/`BACKLOT_*` when called by any agent role) closes the active requirement version with `mode = "approved"` or `"skipped"`. When `mode = "approved"` and `--no-checks` is not passed while proposed checks exist, `design sign` atomically appends `design.signed` + `studio.cast` replacing only `origin == "design"` checks while preserving `cast` and `user` checks; `--no-checks` and `--skip` activate nothing. Live studios also offer user-only `backlot studio check add|remove` (`origin = "user"`), and `studio cast show` → `cast set` preserves `design`/`user` origins when check specs match.
 
 - **Hard gate & reset:** While `design_gate == required` and `design_phase != signed`, `validate` refuses `plan.published`, `dispatch`, `task.created`, and `task.cast` (`Refusal::DesignNotSigned`). Recording a new `req.version` resets any unsigned active `DesignState` back to `idle` while preserving signed versions in `design_history`.
 - **Steps, wanted roles, and nudges:** `steps::next_steps` emits an owed step for each active phase (`open design`, `design proposal`, `design buildability`, `design summary`, `sign off or open next round`, `reject skip`, plus post-sign `derive plan from design` and `dispatch`). `wanted_roles` keeps `writer` alive through active rounds and post-sign plan derivation; `nudge` times role-owned slots and never nudges user-owned `suggest_skip` or `waiting_user`.
@@ -603,8 +606,8 @@ member checkout it was made in. `deliver --commits` takes one or more comma-sepa
 to the one member whose `backlot/<studio>/<task>` branch holds the tip, `member:a..b` pins a member explicitly, and
 the ledger stores every range as `member:sha..sha`. A range that resolves in no member, or in several, refuses and
 says why. The `cast` dependency check runs per member against that member's `backlot/<studio>/integration`. Declared
-`[[checks]]` are refused on a workspace or no-git studio in this version — the director still runs the project's
-checks in each member's integration worktree.
+`[[checks]]` (whether from `cast.toml`, `--checks-file`, or `studio check add`) are refused on a workspace or
+no-git studio in this version — the director still runs the project's checks in each member's integration worktree.
 
 A no-git studio shares the bound path between all roles: no worktree isolation, no integration branch, `deliver
 --commits` recorded verbatim, and the `depends-on` merge check skipped.

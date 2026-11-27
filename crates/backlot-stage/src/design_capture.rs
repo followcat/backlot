@@ -325,6 +325,7 @@ fn append_hook_user_input(dir: &Path, prompt: &str) -> Result<(), Fail> {
                     source: Some(EntrySource::Hook),
                     refs: Vec::new(),
                     questions: Vec::new(),
+                    checks: Vec::new(),
                 },
             ),
             files: vec![PendingFile {

@@ -559,6 +559,11 @@ pub(crate) fn design_summary(
     } else {
         Vec::new()
     };
+    let proposed_checks = if slim {
+        Vec::new()
+    } else {
+        d.proposed_checks.clone()
+    };
     Some(DesignSummary {
         version: d.version,
         round: d.round,
@@ -569,6 +574,7 @@ pub(crate) fn design_summary(
         doc_file: cap(&d.doc_file),
         summary,
         questions,
+        proposed_checks,
         waiting_since_ms: d
             .phase
             .is_waiting_user()

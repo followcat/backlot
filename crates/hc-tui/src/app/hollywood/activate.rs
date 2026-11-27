@@ -70,9 +70,20 @@ impl App {
                 self.hollywood_prompt_open(&studio, &role);
             }
             Some(Target::Hollywood | Target::HollywoodLive) => self.hollywood_focus_terminal(),
-            Some(Target::Tell(key) | Target::Upgrade(key) | Target::Decision(key)) => {
+            Some(Target::Tell(key) | Target::Upgrade(key)) => {
                 self.focus_studio(&key);
                 self.hollywood_leave();
+            }
+            Some(Target::Decision(key)) => {
+                if self
+                    .waiting_design(&key)
+                    .is_some_and(|d| !d.proposed_checks.is_empty())
+                {
+                    self.design_decision_show(&key);
+                } else {
+                    self.focus_studio(&key);
+                    self.hollywood_leave();
+                }
             }
             Some(Target::Stage(machine, offline)) => {
                 if offline {

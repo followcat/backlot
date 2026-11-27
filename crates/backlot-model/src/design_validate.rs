@@ -167,6 +167,7 @@ pub(crate) fn validate_design(state: &StudioState, new: &NewEvent) -> Result<(),
             source,
             refs,
             questions,
+            checks,
         } => {
             check_version(state, *version)?;
             let d = state
@@ -199,6 +200,19 @@ pub(crate) fn validate_design(state: &StudioState, new: &NewEvent) -> Result<(),
                     action: "record design entry",
                     phase: d.phase,
                 });
+            }
+            if !checks.is_empty() && *slot != DesignSlot::Buildability {
+                return Err(Refusal::InvalidDesign(
+                    "only buildability entries may propose checks".into(),
+                ));
+            }
+            if *slot == DesignSlot::Buildability && !checks.is_empty() {
+                let existing = state
+                    .studio
+                    .as_ref()
+                    .map(|s| s.checks.as_slice())
+                    .unwrap_or(&[]);
+                crate::cast::validate_proposed_checks(existing, checks)?;
             }
             if *slot == DesignSlot::UserInput {
                 if !questions.is_empty() {

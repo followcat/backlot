@@ -14,7 +14,7 @@ mod band_detail;
 mod band_lower;
 mod band_wait;
 mod chips;
-mod decision;
+pub(crate) mod decision;
 mod draw;
 mod draw_chips;
 mod draw_lower;

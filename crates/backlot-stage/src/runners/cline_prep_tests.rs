@@ -14,11 +14,7 @@ use super::{Prep, plan};
 use crate::test_support::TestDir;
 
 fn check(name: &str, run: &str) -> CheckDecl {
-    CheckDecl {
-        name: name.into(),
-        run: run.into(),
-        timeout_s: 600,
-    }
+    CheckDecl::new(name, run, 600)
 }
 
 /// The commands per role: `backlot` for everyone plus the shared

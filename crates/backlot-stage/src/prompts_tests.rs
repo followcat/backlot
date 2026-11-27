@@ -243,16 +243,8 @@ fn the_actor_prompt_names_the_declared_checks() {
     let st = start(RoleKind::Actor, "actor-t1-c1", Some("t1"));
 
     state.studio = Some(studio_config(vec![
-        CheckDecl {
-            name: "units".into(),
-            run: "cargo test --lib".into(),
-            timeout_s: 30,
-        },
-        CheckDecl {
-            name: "lint".into(),
-            run: "cargo clippy".into(),
-            timeout_s: 60,
-        },
+        CheckDecl::new("units", "cargo test --lib", 30),
+        CheckDecl::new("lint", "cargo clippy", 60),
     ]));
     let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
     let text = fs::read_to_string(&file).unwrap();
@@ -261,7 +253,8 @@ fn the_actor_prompt_names_the_declared_checks() {
         "`lint`: `cargo clippy`",
         "--check <name>=pass",
         "--check <name>=fail",
-        "`<name>` is one of",
+        "task.checked",
+        "optional, not",
     ] {
         assert!(text.contains(want), "actor prompt misses {want}:\n{text}");
     }
@@ -1209,7 +1202,7 @@ fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState
 #[test]
 fn actor_template_and_render_stay_byte_identical_across_design_gates() {
     let raw = template(RoleKind::Actor);
-    assert_eq!(raw.len(), 3129, "actor.md size must stay byte-identical");
+    assert_eq!(raw.len(), 3272, "actor.md size must stay byte-identical");
     assert!(raw.ends_with("asking to open a PR.\n"));
     assert!(!raw.contains("design_gate"));
     assert!(!raw.contains("backlot design"));
@@ -1290,6 +1283,8 @@ fn design_gate_required_renders_placeholders_sections_and_commands() {
                 for want in [
                     "## Opening buildability review",
                     "`backlot design write --slot buildability --file <file>`",
+                    "`--checks-file <toml>`",
+                    "`expect = \"<regex>\"`",
                     "`backlot design supplement --file <file> --refs <seq>`",
                 ] {
                     assert!(text.contains(want), "director misses `{want}`:\n{text}");

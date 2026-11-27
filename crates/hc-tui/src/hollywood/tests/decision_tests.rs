@@ -265,3 +265,51 @@ fn callsheet_zero_design_invariance() {
     let b_list = machines(Some(&baseline));
     assert!(waiting_items(&b_list, &stage_up).is_empty());
 }
+
+#[test]
+fn callsheet_decision_renders_proposed_checks_count_badge() {
+    let mut v = design_waiting_json(false);
+    v["studios"][0]["design"]["proposed_checks"] = serde_json::json!([
+        {
+            "name": "scan",
+            "run": "sh scripts/scan.sh --strict",
+            "timeout_s": 45,
+            "expect": "files_scanned=[1-9]"
+        },
+        {
+            "name": "lint",
+            "run": "cargo clippy --all-targets -- -D warnings",
+            "timeout_s": 120
+        }
+    ]);
+    let summary: Summary = serde_json::from_value(v).unwrap();
+    let list = machines(Some(&summary));
+    let palette = Palette::backlot();
+    let mut hw = layer(LayerMode::Expanded);
+    let waits = waiting_items(&list, &stage_up);
+    assert_eq!(waits.len(), 1);
+    hw.selected = Some(waits[0].target());
+    hw.now_ms = Some(1_000_000);
+
+    let area = Rect::new(0, 0, 200, 44);
+    let mut buf = Buffer::empty(area);
+    render(
+        &mut buf,
+        area,
+        &list,
+        Some("local"),
+        &stage_up,
+        &hw,
+        LayerOpts::default(),
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("+2 checks"),
+        "DECISION row must gain `+2 checks` mark:\n{text}"
+    );
+    assert!(
+        text.contains("show ↵"),
+        "DECISION row with proposed checks must show `show ↵` chip:\n{text}"
+    );
+}

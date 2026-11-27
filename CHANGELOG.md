@@ -10,6 +10,11 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **A check can require its output, so "scanned 0 files" is not a pass.** `expect = "<regex>"` (and `min_matches`) on a check makes a run that exits 0 without the expected output fail, and a failing check blocks accepting the delivery. `backlot studio check add` and `remove` let you manage checks on a running studio.
+- **Checks are proposed at the opening and switched on when you sign.** In the buildability step the director proposes the repo's real test or lint commands (`design write --slot buildability --checks-file <toml>`). Each one first runs once in the director's own worktree, under its guard and without credentials or proxies; a failing one is refused. On the Call Sheet the design shows `+N checks`, and signing (`a`) shows every command in full and lets you sign with the checks, sign without them, or cancel.
+
 ## 0.4.23 — 2026-11-27
 
 ### Added

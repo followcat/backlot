@@ -197,6 +197,9 @@ pub enum Cmd {
     /// prints the effective cast as a cast file; `set --file <toml>
     /// [--dry-run] [--json]` records it.
     StudioCast(CastCmd),
+    /// `studio check add|remove`: user-only addition or removal of a
+    /// single stage check on `studio.cast`.
+    StudioCheck(crate::args_studio_check::CheckCmd),
     StudioFinish {
         reason: String,
         /// `--force`: finish a studio with no requirement and no
@@ -524,6 +527,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             match sub.as_str() {
                 "new" => args_studio::studio_new(&mut common, &mut it),
                 "cast" => args_studio::studio_cast(&mut common, &mut it),
+                "check" => crate::args_studio_check::studio_check(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
                 "reopen" => args_studio::studio_reopen(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),

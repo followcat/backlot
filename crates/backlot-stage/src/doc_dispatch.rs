@@ -204,11 +204,12 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
             skip,
             reason,
             note,
+            no_checks,
         } => {
             let studio = cli::check_studio_name(&studio)?;
             let caller = Caller::doc_user(studio);
             to_json(verbs_design::design_sign(
-                base, &caller, skip, reason, note,
+                base, &caller, skip, reason, note, no_checks,
             )?)
         }
         ReqAction::DesignStartRound { studio } => {

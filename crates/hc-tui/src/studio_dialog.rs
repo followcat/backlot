@@ -13,6 +13,9 @@ pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog, RestoreDialo
 mod cast_edit;
 pub(crate) use cast_edit::{CastEditDialog, CastEditStep};
 
+mod design_sign;
+pub(crate) use design_sign::{DesignSignChoice, DesignSignDialog};
+
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
 #[derive(Debug, Clone)]
@@ -149,6 +152,7 @@ pub(crate) struct ConfirmDialog {
 pub(crate) enum StudioDialog {
     Reason(ReasonDialog),
     Confirm(ConfirmDialog),
+    DesignSign(DesignSignDialog),
     Tell(TellDialog),
     Revise(ReviseDialog),
     Restart(RestartDialog),
@@ -187,9 +191,19 @@ impl StudioDialog {
         format!("{} · {}", key.id, key.machine.as_deref().unwrap_or("Local"))
     }
 
-    /// Confirm opening-design sign-off (`backlot design sign [--skip]`),
-    /// shared by Call Sheet, Lot Dock, and Design Reader.
-    pub(crate) fn design_sign(key: &StudioKey, skip: bool, file: Option<&str>) -> StudioDialog {
+    /// Opening-design sign-off modal (`backlot design sign [--skip | --no-checks]`),
+    /// shared by Call Sheet, Lot Dock, and Design Reader. When proposed checks
+    /// exist (and `!skip`), opens the 3-choice modal displaying every check
+    /// verbatim ahead of activation.
+    pub(crate) fn design_sign(
+        key: &StudioKey,
+        skip: bool,
+        file: Option<&str>,
+        proposed_checks: &[backlot_model::event::CheckDecl],
+    ) -> StudioDialog {
+        if !skip && !proposed_checks.is_empty() {
+            return StudioDialog::DesignSign(DesignSignDialog::new(key, file, proposed_checks));
+        }
         let title = if skip {
             format!("Skip opening design? · {}", Self::place(key))
         } else {
