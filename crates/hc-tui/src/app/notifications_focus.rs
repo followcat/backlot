@@ -151,7 +151,7 @@ impl App {
         if self.hollywood.expanded() {
             self.hollywood.mode = crate::hollywood::LayerMode::Collapsed;
             self.hollywood.editing = false;
-            self.hollywood.reply_to = None;
+            self.hollywood.clear_reply();
             self.hollywood.view = None;
         }
     }

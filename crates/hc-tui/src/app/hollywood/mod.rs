@@ -132,7 +132,7 @@ impl App {
             self.hollywood_key = None;
             self.hollywood.mode = LayerMode::Hidden;
             self.hollywood.editing = false;
-            self.hollywood.reply_to = None;
+            self.hollywood.clear_reply();
             self.hollywood.view = None;
         } else if self.hollywood_key.is_none() {
             self.hollywood_key = Some(CallSheetKeys {

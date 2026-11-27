@@ -22,7 +22,7 @@ impl App {
     /// reset `chip_index` when switching rows, and clamp `editing`.
     pub(crate) fn hollywood_select(&mut self, target: Target) {
         if self.hollywood.selected.as_ref() == Some(&Target::Input) && target != Target::Input {
-            self.hollywood.reply_to = None;
+            self.hollywood.clear_reply();
         }
         if self.hollywood.selected.as_ref() != Some(&target) {
             self.hollywood.chip_index = None;
@@ -313,7 +313,7 @@ impl App {
     pub(crate) fn hollywood_leave(&mut self) {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
-        self.hollywood.reply_to = None;
+        self.hollywood.clear_reply();
         self.hollywood.history.reset_nav();
         self.hollywood.view = None;
         self.call_sheet_return = None;
