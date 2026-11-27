@@ -41,7 +41,11 @@ impl App {
                 _ => Some(StudioDialog::Restore(d)),
             },
             RestoreStep::Name => match code {
-                KeyCode::Esc => None,
+                KeyCode::Esc => {
+                    d.step = RestoreStep::List;
+                    d.error = None;
+                    Some(StudioDialog::Restore(d))
+                }
                 KeyCode::Enter => self.restore_dry_run(d),
                 _ => {
                     d.name.handle_key(key);
@@ -50,19 +54,18 @@ impl App {
                 }
             },
             RestoreStep::Confirm => match code {
-                KeyCode::Esc => None,
+                KeyCode::Esc | KeyCode::Left => {
+                    d.step = RestoreStep::Name;
+                    d.body.clear();
+                    d.confirm_token = None;
+                    Some(StudioDialog::Restore(d))
+                }
                 KeyCode::Enter if d.error.is_none() => {
                     self.restore_apply(&d);
                     None
                 }
                 // A stale server plan: Enter or `r` reviews it again.
                 KeyCode::Enter | KeyCode::Char('r') if d.error.is_some() => self.restore_dry_run(d),
-                KeyCode::Left => {
-                    d.step = RestoreStep::Name;
-                    d.body.clear();
-                    d.confirm_token = None;
-                    Some(StudioDialog::Restore(d))
-                }
                 _ => Some(StudioDialog::Restore(d)),
             },
         }

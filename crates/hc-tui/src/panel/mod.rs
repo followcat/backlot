@@ -7,6 +7,7 @@
 //! timer is armed.
 
 mod config;
+pub(crate) mod chips;
 pub(crate) mod data;
 mod draw;
 mod draw_blocks;
@@ -125,6 +126,13 @@ pub(crate) struct Panel {
     /// One-line start command when `backlot-cat` is present while the server
     /// terminal is gone.
     pub(crate) server_stopped_cmd: Option<String>,
+    /// Studio currently entered via `FocusState` (`InsideStudio` / `RowActions` / `Compose`).
+    pub entered_studio: Option<crate::studio::StudioKey>,
+    /// Highlighted inline action chip index when `LotLevel::RowActions` is active.
+    pub active_chip: Option<usize>,
+    /// True while navigating across studios at `LotLevel::Studios` so cursoring
+    /// onto another studio's rows does not eagerly promote into `InsideStudio`.
+    pub lot_studios_browse: bool,
 }
 
 #[cfg(test)]
@@ -160,6 +168,9 @@ impl Panel {
             update: None,
             stopped: None,
             server_stopped_cmd: None,
+            entered_studio: None,
+            active_chip: None,
+            lot_studios_browse: false,
         }
     }
 

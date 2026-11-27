@@ -48,6 +48,22 @@ pub(super) fn render_overlays_and_cursor(
     {
         None
     } else {
+        let focus_detail = match &app.panel.selected {
+            Some(crate::panel::Target::Person(_, r)) => Some(r.as_str()),
+            Some(crate::panel::Target::Task(_, id)) => Some(id.as_str()),
+            Some(crate::panel::Target::Talk(..)) => Some("talk"),
+            Some(crate::panel::Target::Design(_)) => Some("design"),
+            Some(crate::panel::Target::OutwardCard(_, id)) => Some(id.as_str()),
+            _ => None,
+        };
+        let focus_crumb = (!app.plain)
+            .then(|| {
+                app.focus.breadcrumb(
+                    app.studio.current.as_ref().map(|k| k.id.as_str()),
+                    focus_detail,
+                )
+            })
+            .flatten();
         crate::chrome::modebar::render_mode_bar(
             buf,
             mode_bar_area,
@@ -66,6 +82,7 @@ pub(super) fn render_overlays_and_cursor(
             app.update_ready_version().is_some(),
             app.restart_ready.is_some(),
             !app.plain && app.stage_terminal_focused(),
+            focus_crumb.as_deref(),
             &app.live,
             &app.shell.palette,
         )
@@ -75,6 +92,39 @@ pub(super) fn render_overlays_and_cursor(
         app.hit_map.new_tab = Rect::default();
         app.hit_map.tab_scroll_left = Rect::default();
         app.hit_map.tab_scroll_right = Rect::default();
+    }
+    let pane_unfocused_single = !app.plain
+        && app.studio.active
+        && app.focus.workspace != crate::focus::WorkspaceRegion::Terminal
+        && app.focus.modals.is_empty()
+        && !app.panel_fullscreen_at(area.width)
+        && !layout.pane_surface.is_empty()
+        && layout.pane_surface.width >= 40;
+    if pane_unfocused_single {
+        let single_has_border = app
+            .projection
+            .snapshot
+            .focused_tab_id
+            .as_ref()
+            .and_then(|id| app.projection.layouts.get(id))
+            .and_then(|t| t.root.as_ref())
+            .is_some_and(|r| app.shell.pane_borders.shows_borders(r.terminals().len() > 1));
+        if !single_has_border {
+            let tag = "[unfocused · Esc returns]";
+            let w = crate::chrome::text::display_width(tag) as u16;
+            if w + 2 <= layout.pane_surface.width {
+                let x = layout.pane_surface.right().saturating_sub(w + 1);
+                let y = layout.pane_surface.y;
+                crate::chrome::render::put_text(
+                    buf,
+                    x,
+                    y,
+                    w,
+                    tag,
+                    Style::default().fg(app.shell.palette.overlay0),
+                );
+            }
+        }
     }
     // The studio panel: beside the panes when it fits, else over the
     // whole frame — always under the popup/notice/overlay stack so
@@ -132,7 +182,26 @@ pub(super) fn render_overlays_and_cursor(
         } else {
             // An overlay dock lives inside the pane surface: the
             // sidebar stays visible and, on mobile, the header row.
-            app.panel_overlay_rect(layout.pane_surface, area.width)
+            // Reserve the bottom row when a focus breadcrumb is visible.
+            let mut r = app.panel_overlay_rect(layout.pane_surface, area.width);
+            if mode_bar.is_some() {
+                r.height = r.height.saturating_sub(1);
+            }
+            r
+        };
+        app.panel.entered_studio = match &app.focus.workspace {
+            crate::focus::WorkspaceRegion::Lot(
+                crate::focus::LotLevel::InsideStudio(k)
+                | crate::focus::LotLevel::RowActions { studio: k, .. }
+                | crate::focus::LotLevel::Compose { studio: k, .. },
+            ) => Some(k.clone()),
+            _ => None,
+        };
+        app.panel.active_chip = match &app.focus.workspace {
+            crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                chip, ..
+            }) => Some(*chip),
+            _ => None,
         };
         let machines = app.panel_summaries();
         // wide-01: `↑↓ role` only has somewhere to go while the
@@ -480,6 +549,23 @@ pub(super) fn render_overlays_and_cursor(
             app.shell.popup_shadow,
         );
         if let (Some(modal), Some(rendered)) = (app.update_modal.as_mut(), rendered) {
+            if let Some(idx) = modal.focused_button
+                && let Some((btn_rect, _)) = rendered.buttons.get(idx)
+            {
+                let bg = app.shell.palette.accent;
+                let fg = if app.shell.palette.panel_bg == ratatui::style::Color::Reset {
+                    app.shell.palette.surface_dim
+                } else {
+                    app.shell.palette.panel_bg
+                };
+                buf.set_style(
+                    *btn_rect,
+                    Style::default()
+                        .fg(fg)
+                        .bg(bg)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                );
+            }
             modal.render = rendered;
         }
     }

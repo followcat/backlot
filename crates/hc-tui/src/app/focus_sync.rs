@@ -131,7 +131,12 @@ impl App {
                 .unwrap_or(WorkspaceRegion::Terminal);
         }
         if self.panel.focused && !matches!(self.focus.workspace, WorkspaceRegion::Lot(_)) {
-            self.focus.workspace = WorkspaceRegion::Lot(self.derived_lot_level());
+            let level = if self.panel.lot_studios_browse {
+                LotLevel::Studios
+            } else {
+                self.derived_lot_level()
+            };
+            self.focus.workspace = WorkspaceRegion::Lot(level);
             return;
         }
         if !self.panel.focused && matches!(self.focus.workspace, WorkspaceRegion::Lot(_)) {
@@ -156,12 +161,26 @@ impl App {
                     studio,
                     target: TellTarget::default(),
                 });
-            } else if !self.panel.editing {
+            } else if !self.panel.editing && !self.panel.lot_studios_browse {
                 self.focus.workspace = WorkspaceRegion::Lot(self.derived_lot_level());
             }
         }
         if matches!(self.focus.workspace, WorkspaceRegion::CallSheet(_)) {
             self.focus.workspace = WorkspaceRegion::CallSheet(self.derived_call_sheet_zone());
+        }
+    }
+
+    /// Pre-key focus sync: reconciles external surface/modal/editing latches without
+    /// promoting an active `LotLevel::Studios` session into `InsideStudio` before a key runs.
+    pub(crate) fn sync_focus_before_key(&mut self) {
+        let was_studios = matches!(self.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
+        self.sync_focus();
+        if was_studios
+            && self.panel.focused
+            && !self.panel.editing
+            && matches!(self.focus.workspace, WorkspaceRegion::Lot(_))
+        {
+            self.focus.workspace = WorkspaceRegion::Lot(LotLevel::Studios);
         }
     }
 
@@ -178,6 +197,9 @@ impl App {
             && let Some(cur) = self.cast_focus.take()
         {
             self.cast_remembered = Some(cur);
+        }
+        if !matches!(next, WorkspaceRegion::Lot(LotLevel::Studios)) {
+            self.panel.lot_studios_browse = false;
         }
         if !matches!(next, WorkspaceRegion::Lot(_)) {
             self.panel.focused = false;

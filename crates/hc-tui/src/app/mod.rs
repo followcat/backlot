@@ -460,6 +460,8 @@ pub struct App {
     pub(crate) tree_remembered: Option<crate::chrome::studio_tree::SidebarRow>,
     /// Selected row inside the left Cast section when `Cast` is focused.
     pub(crate) cast_focus: Option<crate::focus::CastTarget>,
+    /// Active inline action chip index inside the focused Cast row.
+    pub(crate) cast_chip: Option<usize>,
     /// Remembered Cast selection for faint `·` rendering when unfocused.
     pub(crate) cast_remembered: Option<crate::focus::CastTarget>,
     /// Workspace region to restore when `Esc` collapses the Call Sheet.

@@ -142,36 +142,119 @@ impl App {
         }
         if matches!(
             code,
-            crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j')
-        ) && plain
+            crossterm::event::KeyCode::Tab | crossterm::event::KeyCode::BackTab
+        ) && (plain || modifiers == crossterm::event::KeyModifiers::SHIFT)
         {
-            self.panel_move(1);
+            let forward = code == crossterm::event::KeyCode::Tab;
+            match self.focus.workspace.clone() {
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Studios) => {
+                    self.panel_studios_tab(forward);
+                }
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(
+                    studio,
+                )) => {
+                    self.panel_section_tab(&studio, forward);
+                }
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                    studio,
+                    ..
+                }) => {
+                    self.panel_row_chip_move(&studio, if forward { 1 } else { -1 });
+                }
+                _ => {}
+            }
             return;
         }
         if matches!(
             code,
+            crossterm::event::KeyCode::Left
+                | crossterm::event::KeyCode::Right
+                | crossterm::event::KeyCode::Char('h')
+                | crossterm::event::KeyCode::Char('l')
+        ) && plain
+        {
+            let right = matches!(
+                code,
+                crossterm::event::KeyCode::Right | crossterm::event::KeyCode::Char('l')
+            );
+            let delta = if right { 1 } else { -1 };
+            match self.focus.workspace.clone() {
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(
+                    studio,
+                ))
+                | crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                    studio,
+                    ..
+                }) => {
+                    self.panel_row_chip_move(&studio, delta);
+                }
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Studios) => {
+                    let targets = self.panel_targets();
+                    let idx = self.panel_selected_index(&targets);
+                    let cur = targets.get(idx).cloned();
+                    if right {
+                        match cur {
+                            Some(Target::Studio(k) | Target::Block(k) | Target::Strip(k)) => {
+                                self.enter_studio_in_lot(&k);
+                            }
+                            Some(_) => self.panel_activate(),
+                            None => {}
+                        }
+                    } else if let Some(Target::Studio(k)) = cur {
+                        self.panel.expanded_blocks.remove(&k);
+                        self.panel.collapsed_blocks.insert(k.clone());
+                        self.panel.selected = Some(Target::Block(k));
+                        self.panel_reveal_selected();
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+        let move_delta = if matches!(
+            code,
+            crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j')
+        ) && plain
+        {
+            Some(1)
+        } else if matches!(
+            code,
             crossterm::event::KeyCode::Up | crossterm::event::KeyCode::Char('k')
         ) && plain
         {
-            self.panel_move(-1);
-            return;
-        }
-        let page = self.panel_hits.viewport_rows.max(1) as isize;
-        if code == crossterm::event::KeyCode::PageDown && plain {
-            self.panel_move(page);
-            return;
-        }
-        if code == crossterm::event::KeyCode::PageUp && plain {
-            self.panel_move(-page);
-            return;
-        }
-        // `Resting` Home/End: the body's first/last actionable row.
-        if code == crossterm::event::KeyCode::Home && plain {
-            self.panel_move(isize::MIN);
-            return;
-        }
-        if code == crossterm::event::KeyCode::End && plain {
-            self.panel_move(isize::MAX);
+            Some(-1)
+        } else {
+            let page = self.panel_hits.viewport_rows.max(1) as isize;
+            if code == crossterm::event::KeyCode::PageDown && plain {
+                Some(page)
+            } else if code == crossterm::event::KeyCode::PageUp && plain {
+                Some(-page)
+            } else if code == crossterm::event::KeyCode::Home && plain {
+                Some(isize::MIN)
+            } else if code == crossterm::event::KeyCode::End && plain {
+                Some(isize::MAX)
+            } else {
+                None
+            }
+        };
+        if let Some(delta) = move_delta {
+            match self.focus.workspace.clone() {
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(
+                    studio,
+                )) => {
+                    self.panel_move_bounded(&studio, delta);
+                }
+                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                    studio,
+                    ..
+                }) => {
+                    self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                        crate::focus::LotLevel::InsideStudio(studio.clone()),
+                    ));
+                    self.panel_move_bounded(&studio, delta);
+                }
+                _ => self.panel_move(delta),
+            }
             return;
         }
         if key.input.action != hc_vt::Action::Press {
@@ -218,7 +301,17 @@ impl App {
             KeyCode::Char('q') if plain => self.panel_close(),
             KeyCode::Char('c') if plain => self.panel_flip_mode(),
             KeyCode::Char(' ') if plain => self.panel_collapse_selected(),
-            KeyCode::Enter => self.panel_activate(),
+            KeyCode::Enter => {
+                if let crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                    studio,
+                    chip,
+                }) = self.focus.workspace.clone()
+                {
+                    self.panel_execute_chip(&studio, chip);
+                } else {
+                    self.panel_activate();
+                }
+            }
             KeyCode::Char('v') if plain => self.panel_sheet_open(),
             KeyCode::Char('o') if plain => self.panel_reopen_selected(),
             KeyCode::Char('p') if plain => self.panel_peek_selected(),
@@ -227,13 +320,45 @@ impl App {
                 self.help_state = crate::chrome::help::HelpState::default();
             }
             KeyCode::Char('s') if plain => self.panel_stage_start(),
-            KeyCode::Char('r') if plain => self.panel_reply_selected(),
+            KeyCode::Char('r') if plain => {
+                let targets = self.panel_targets();
+                let idx = self.panel_selected_index(&targets);
+                if let Some(Target::Person(k, role)) = targets.get(idx).cloned() {
+                    let machines = self.panel_summaries();
+                    let has_ask = crate::panel::data::studio(&machines, &k)
+                        .and_then(|s| s.studio.roles.iter().find(|r| r.role == role))
+                        .is_some_and(|r| r.asks.as_ref().is_some_and(|a| !a.is_empty()));
+                    if has_ask {
+                        self.enter_lot_compose(&k, crate::focus::TellTarget::Role(role));
+                        return;
+                    }
+                }
+                self.panel_reply_selected();
+            }
             KeyCode::Char('a') if plain => self.panel_card_apply(),
-            KeyCode::Char('x') if plain => self.panel_card_cancel(),
+            KeyCode::Char('x') if plain => {
+                let targets = self.panel_targets();
+                let idx = self.panel_selected_index(&targets);
+                if matches!(targets.get(idx), Some(Target::Person(..))) {
+                    self.panel_ack_selected();
+                } else {
+                    self.panel_card_cancel();
+                }
+            }
+            KeyCode::Char('w') if plain => self.panel_switch_role_selected(),
             KeyCode::Char('f') if plain => self.panel_finish_selected(),
             KeyCode::Char(c @ ('y' | 'd')) if plain => self.panel_decide(c == 'y'),
             KeyCode::Char('n') if plain => {
-                self.panel.finish_confirm = None;
+                if self.panel.finish_confirm.is_some() {
+                    self.panel.finish_confirm = None;
+                } else {
+                    let machine = self
+                        .studio
+                        .current
+                        .as_ref()
+                        .and_then(|k| k.machine.clone());
+                    self.new_studio_open(machine);
+                }
             }
             KeyCode::Char('i') if plain => self.panel_input_focus(false),
             KeyCode::Char('t') if plain => self.panel_input_focus(false),

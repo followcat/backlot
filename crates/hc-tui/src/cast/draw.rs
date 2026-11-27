@@ -36,8 +36,12 @@ pub(crate) fn render_cast(
         area.x,
         area.y,
         area.width,
-        &"─".repeat(area.width as usize),
-        Style::default().fg(palette.elevation().border_muted),
+        &(if view.region_focused { "━" } else { "─" }).repeat(area.width as usize),
+        Style::default().fg(if view.region_focused {
+            palette.accent
+        } else {
+            palette.elevation().border_muted
+        }),
     );
     if area.height < 2 {
         return;
@@ -56,17 +60,20 @@ pub(crate) fn render_cast(
                 .as_ref()
                 .map(|label| label.fit(id_width as usize))
                 .unwrap_or_else(|| studio.studio.id.clone());
-            let header_fg = if view.studio_focused {
+            let header_fg = if view.region_focused {
+                palette.accent
+            } else if view.studio_focused {
                 palette.text
             } else {
                 palette.overlay0
             };
+            let title_prefix = if view.region_focused { " ▸ " } else { " " };
             put_text(
                 buffer,
                 header.x,
                 header.y,
                 header.width,
-                &format!(" {label}"),
+                &format!("{title_prefix}{label}"),
                 Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
             );
             put_right_text(
@@ -151,6 +158,34 @@ pub(crate) fn render_cast(
                     hits.agents.push((rect, terminal.clone()));
                 }
                 draw_person(buffer, rect, role, *focused, view, palette);
+                let is_cursor = view.region_focused
+                    && matches!(
+                        &view.cursor_target,
+                        Some(crate::focus::CastTarget::Role { role: r, .. }) if *r == role.role
+                    );
+                let is_remembered = !view.region_focused
+                    && !*focused
+                    && matches!(
+                        &view.remembered_target,
+                        Some(crate::focus::CastTarget::Role { role: r, .. }) if *r == role.role
+                    );
+                if is_cursor {
+                    buffer.set_style(rect, Style::default().bg(palette.selection_bg));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "▌",
+                        Style::default().fg(palette.accent).bg(palette.selection_bg),
+                    );
+                    if let Some(chip_idx) = view.active_chip {
+                        let chips = crate::panel::chips::row_chips_for_person(role);
+                        crate::panel::chips::draw_row_chips(buffer, rect, &chips, chip_idx, palette);
+                    }
+                } else if is_remembered {
+                    put_text(buffer, rect.x, rect.y, 1, "·", Style::default().fg(palette.overlay0));
+                }
             }
             CastRow::ClosedDivider { count } => {
                 super::simple::draw_closed_divider(buffer, rect, *count, palette);
@@ -159,6 +194,22 @@ pub(crate) fn render_cast(
             CastRow::Shell { shell, focused } => {
                 hits.agents.push((rect, shell.terminal.clone()));
                 draw_shell(buffer, rect, shell, *focused, view, palette);
+                let is_cursor = view.region_focused
+                    && matches!(
+                        &view.cursor_target,
+                        Some(crate::focus::CastTarget::Shell { terminal: t, .. }) if *t == shell.terminal
+                    );
+                if is_cursor {
+                    buffer.set_style(rect, Style::default().bg(palette.selection_bg));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "▌",
+                        Style::default().fg(palette.accent).bg(palette.selection_bg),
+                    );
+                }
             }
             CastRow::Others { count, expanded } => {
                 hits.cast_others = rect;

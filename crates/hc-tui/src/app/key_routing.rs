@@ -158,7 +158,7 @@ impl App {
     }
 
     fn route_key_press(&mut self, key: &TerminalKey, width: u16) -> Option<u64> {
-        self.sync_focus();
+        self.sync_focus_before_key();
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);

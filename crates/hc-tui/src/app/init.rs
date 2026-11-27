@@ -221,6 +221,7 @@ impl App {
             focus: crate::focus::FocusState::default(),
             tree_remembered: None,
             cast_focus: None,
+            cast_chip: None,
             cast_remembered: None,
             call_sheet_return: None,
             agent_panel_sort_manual,

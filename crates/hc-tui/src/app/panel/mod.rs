@@ -6,6 +6,7 @@
 
 mod actions;
 mod enter;
+mod grammar;
 mod input;
 mod keys;
 mod layout;

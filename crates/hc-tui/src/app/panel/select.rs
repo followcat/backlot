@@ -90,6 +90,12 @@ impl App {
     /// keep it visible. Crossing into a folded studio unfolds it (and
     /// folds the studio left) while keeping the same target visible.
     pub(super) fn panel_move(&mut self, delta: isize) {
+        if matches!(
+            self.focus.workspace,
+            crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Studios)
+        ) {
+            self.panel.lot_studios_browse = true;
+        }
         let machines = self.panel_summaries();
         let body_h = self.panel_hits.body.height;
         let mut rows = self.panel_rows_at(&machines, body_h);

@@ -334,6 +334,45 @@ impl Row<'_> {
     pub fn height(&self) -> u16 {
         1
     }
+
+    /// Studio owning this rendered row (including chrome/divider/owed lines
+    /// whose [`Target`] is [`Target::None`]).
+    pub(crate) fn owning_studio(&self) -> Option<StudioKey> {
+        match self {
+            Row::BlockTop { studio, .. }
+            | Row::Owed { studio, .. }
+            | Row::Usage { studio }
+            | Row::BlockBottom(studio)
+            | Row::Person { studio, .. }
+            | Row::CalmSummary { studio, .. }
+            | Row::Divider { studio }
+            | Row::CompactStudio { studio, .. }
+            | Row::Task { studio, .. }
+            | Row::OutwardCard { studio, .. }
+            | Row::DesignHeader { studio, .. }
+            | Row::DesignPreview { studio, .. }
+            | Row::DesignActions { studio, .. }
+            | Row::AcceptedFold { studio, .. }
+            | Row::ClosedFold { studio, .. }
+            | Row::Drawer { studio, .. }
+            | Row::Talk { studio, .. }
+            | Row::InputDivider { studio }
+            | Row::Input { studio }
+            | Row::ReopenProducer { studio }
+            | Row::Stacked(studio)
+            | Row::Strip { studio, .. }
+            | Row::StripRole { studio, .. }
+            | Row::StripSummary { studio, .. } => Option::Some(studio.key()),
+            Row::Title
+            | Row::StageDown { .. }
+            | Row::ServerStopped { .. }
+            | Row::Empty
+            | Row::StoppedLedger { .. }
+            | Row::Offline { .. }
+            | Row::SetupHint
+            | Row::Update { .. } => Option::None,
+        }
+    }
 }
 
 /// One studio's expanded block: header, owed-step subheader, live

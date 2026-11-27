@@ -35,6 +35,11 @@ impl App {
         self.focus.workspace == WorkspaceRegion::Cast
     }
 
+    #[cfg(test)]
+    pub(crate) fn cast_chip(&self) -> Option<usize> {
+        self.cast_chip
+    }
+
     /// Resolved studio shown by Cast (`studio.current` or sole live studio).
     pub(crate) fn cast_studio_key(&self) -> Option<StudioKey> {
         let machines = self.panel_summaries();
@@ -167,6 +172,7 @@ impl App {
         let targets = self.cast_targets();
         let initial = self.initial_cast_cursor(&targets);
         self.cast_focus = initial.clone();
+        self.cast_chip = None;
         if initial.is_some() {
             self.cast_remembered = initial;
         }
@@ -177,6 +183,7 @@ impl App {
 
     /// Leave Cast focus back to `Terminal`, remembering the last row.
     pub(crate) fn cast_focus_leave(&mut self) {
+        self.cast_chip = None;
         if let Some(cur) = self.cast_focus.take() {
             self.cast_remembered = Some(cur);
         }
@@ -215,7 +222,15 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') if plain => self.cast_move(-1),
             KeyCode::Down | KeyCode::Char('j') if plain => self.cast_move(1),
-            KeyCode::Enter if press => self.cast_activate(),
+            KeyCode::Left | KeyCode::Char('h') if plain && press => self.cast_chip_move(-1),
+            KeyCode::Right | KeyCode::Char('l') if plain && press => self.cast_chip_move(1),
+            KeyCode::Enter if press => {
+                if let Some(chip_idx) = self.cast_chip {
+                    self.cast_execute_chip(chip_idx);
+                } else {
+                    self.cast_activate();
+                }
+            }
             KeyCode::Char('m') if plain && press => self.cast_open_menu(),
             KeyCode::Char('t') if plain && press => self.cast_tell(),
             KeyCode::Char('p') if plain && press => self.cast_peek(),
@@ -232,7 +247,80 @@ impl App {
         }
     }
 
+    fn cast_role_chips(&self) -> Vec<crate::panel::chips::RowChip> {
+        let Some(CastTarget::Role { studio, role }) = self.cast_focus.as_ref() else {
+            return Vec::new();
+        };
+        let machines = self.panel_summaries();
+        let Some(r) = crate::panel::data::studio(&machines, studio)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == *role))
+        else {
+            return Vec::new();
+        };
+        // Cast Left/Right cycles inline actions when the role needs you (prompt/ask/error).
+        if (r.attention_user && r.can_answer_prompt)
+            || r.asks.as_ref().is_some_and(|a| !a.is_empty())
+            || crate::panel::chips::is_role_quota_or_error(r)
+        {
+            crate::panel::chips::row_chips_for_person(r)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn cast_chip_move(&mut self, delta: isize) {
+        let chips = self.cast_role_chips();
+        if chips.is_empty() {
+            self.cast_chip = None;
+            return;
+        }
+        let next = match self.cast_chip {
+            Some(cur) => (cur as isize + delta).rem_euclid(chips.len() as isize) as usize,
+            None if delta >= 0 => 0,
+            None => chips.len().saturating_sub(1),
+        };
+        self.cast_chip = Some(next);
+        self.sched.mark_dirty(Instant::now());
+    }
+
+    fn cast_execute_chip(&mut self, chip_idx: usize) {
+        let chips = self.cast_role_chips();
+        let Some(chip) = chips.get(chip_idx).copied() else {
+            self.cast_activate();
+            return;
+        };
+        use crate::panel::chips::RowChipKind;
+        match chip.kind {
+            RowChipKind::Allow => self.cast_decide(true),
+            RowChipKind::Deny => self.cast_decide(false),
+            RowChipKind::Reply | RowChipKind::Tell => self.cast_tell(),
+            RowChipKind::Ack => self.cast_ack_ask(),
+            RowChipKind::Peek => self.cast_peek(),
+            RowChipKind::Menu => self.cast_open_menu(),
+            RowChipKind::Open => self.cast_activate(),
+            RowChipKind::Switch => {
+                if let Some(CastTarget::Role { studio, role }) = self.cast_focus.clone() {
+                    let machines = self.panel_summaries();
+                    if let Some(st) = crate::panel::data::studio(&machines, &studio)
+                        && let Some(r) = st.studio.roles.iter().find(|r| r.role == role)
+                    {
+                        self.recast_dialog_open(
+                            Some(&studio),
+                            &r.role,
+                            &r.name,
+                            r.runner.clone(),
+                            r.model.clone(),
+                            r.effort.clone(),
+                        );
+                    }
+                }
+            }
+            _ => self.cast_activate(),
+        }
+    }
+
     fn cast_move(&mut self, delta: isize) {
+        self.cast_chip = None;
         let targets = self.cast_targets();
         if targets.is_empty() {
             return;

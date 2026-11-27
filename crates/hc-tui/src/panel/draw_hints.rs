@@ -64,10 +64,13 @@ fn fit_pairs(
 }
 
 /// Focused Lot footer hint pairs (max 3 verbful `(key, verb)` pairs).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn focused_hint_pairs(
     selected: Option<&Target>,
     editing: bool,
     confirm: bool,
+    entered: bool,
+    row_actions: bool,
     machines: &[MachineSummary],
     overlay: bool,
     pane_refuses: bool,
@@ -83,6 +86,12 @@ pub(super) fn focused_hint_pairs(
     if confirm {
         return fit_pairs(
             &[("y", "finish"), ("d", "cancel"), ("esc", esc_verb)],
+            width,
+        );
+    }
+    if row_actions {
+        return fit_pairs(
+            &[("←→", "chip"), ("⏎", "run"), ("esc", if pane_refuses { "close" } else { "row" })],
             width,
         );
     }
@@ -126,8 +135,12 @@ pub(super) fn focused_hint_pairs(
                 [("o", "reopen"), ("i", "tell"), ("m", "menu")]
             } else if state == Some("standby") {
                 [("v", "sheet"), ("i", "tell"), ("m", "menu")]
+            } else if role.is_some_and(|r| r.asks.as_ref().is_some_and(|a| !a.is_empty())) {
+                [("r", "reply"), ("←→", "chip"), ("esc", esc_verb)]
             } else if role.is_some_and(|r| r.attention_seq.is_some() && r.can_answer_prompt) {
-                [("y/d", "decide"), ("p", "peek"), ("m", "menu")]
+                [("y/d", "decide"), ("←→", "chip"), ("esc", esc_verb)]
+            } else if entered && role.is_some_and(|r| r.terminal.is_some()) {
+                [("⏎", "open"), ("←→", "chip"), ("esc", esc_verb)]
             } else if role.is_some_and(|r| r.terminal.is_some()) {
                 [("⏎", "open"), ("p", "peek"), ("m", "menu")]
             } else {
@@ -152,7 +165,11 @@ pub(super) fn focused_hint_pairs(
                 _ => [("o", "read"), ("m", "menu"), ("esc", esc_verb)],
             }
         }
-        Some(Target::Studio(_)) => [("⏎", "focus"), ("m", "menu"), ("esc", esc_verb)],
+        Some(Target::Studio(_)) => [
+            ("⏎/→", if entered { "studio" } else { "enter" }),
+            ("Tab", "urgent"),
+            ("esc", esc_verb),
+        ],
         Some(Target::Block(_) | Target::Strip(_)) => {
             [("⏎", "expand"), ("m", "menu"), ("esc", esc_verb)]
         }

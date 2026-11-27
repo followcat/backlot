@@ -19,6 +19,8 @@ mod float_takeover;
 mod floats;
 mod floats_lifecycle;
 mod focus_entry;
+mod focus_grammar;
+mod focus_visuals;
 mod help;
 mod help_launcher;
 mod hollywood;

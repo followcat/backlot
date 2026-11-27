@@ -239,6 +239,10 @@ pub(crate) struct ShellRenderState<'a> {
     /// The left tree's keyboard cursor (`Ctrl+B t`) — the row drawn as
     /// selected, `None` while the tree does not own the keys.
     pub tree_cursor: Option<&'a crate::chrome::studio_tree::SidebarRow>,
+    /// True while `WorkspaceRegion::Tree` owns keyboard focus.
+    pub tree_focused: bool,
+    /// Remembered cursor rendered as faint `·` when Tree is unfocused.
+    pub tree_remembered: Option<&'a crate::chrome::studio_tree::SidebarRow>,
 }
 
 pub(crate) fn sidebar_surface_and_edge(

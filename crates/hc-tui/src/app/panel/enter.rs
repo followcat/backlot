@@ -11,6 +11,7 @@ impl App {
         self.panel.focused = true;
         self.panel.editing = false;
         self.panel.finish_confirm = None;
+        self.panel.lot_studios_browse = false;
         self.panel.reset_history_nav();
         if let Some(target) = self.default_studios_target() {
             self.panel.selected = Some(target);
@@ -46,6 +47,7 @@ impl App {
         self.panel.focused = true;
         self.panel.editing = false;
         self.panel.finish_confirm = None;
+        self.panel.lot_studios_browse = false;
         self.panel.reset_history_nav();
         self.panel.collapsed_blocks.remove(key);
         // Set `panel.selected` inside `key` first so `block_states::cursor_inside`

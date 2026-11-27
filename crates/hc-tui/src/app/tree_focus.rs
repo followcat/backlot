@@ -137,9 +137,99 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') if plain => self.tree_move(-1),
             KeyCode::Down | KeyCode::Char('j') if plain => self.tree_move(1),
+            KeyCode::Left | KeyCode::Char('h') if plain && press => self.tree_left(),
+            KeyCode::Right | KeyCode::Char('l') if plain && press => self.tree_right(),
+            KeyCode::Char(' ') if plain && press => self.tree_space(),
+            KeyCode::Char('n') if plain && press => {
+                let machine = match &self.tree_focus {
+                    Some(SidebarRow::Machine(ep))
+                    | Some(SidebarRow::Workspace { endpoint: ep, .. })
+                    | Some(SidebarRow::Studio { endpoint: ep, .. }) => machine_of(ep),
+                    None => None,
+                };
+                self.new_studio_open(machine);
+            }
             KeyCode::Enter if press => self.tree_activate(),
             KeyCode::Char('m') if plain && press => self.tree_menu(),
             _ => {}
+        }
+    }
+
+    fn tree_left(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => {
+                self.shell_state.collapsed_endpoints.insert(endpoint);
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { open: true, .. },
+            } => {
+                self.studio.finished_open.remove(&machine_of(&endpoint));
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Workspace { endpoint, .. } | SidebarRow::Studio { endpoint, .. } => {
+                self.tree_focus = Some(SidebarRow::Machine(endpoint));
+                self.shell_state.reveal_tree_row = true;
+                self.sched.mark_dirty(Instant::now());
+            }
+        }
+    }
+
+    fn tree_right(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => {
+                self.shell_state.collapsed_endpoints.remove(&endpoint);
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { open: false, .. },
+            } => {
+                self.studio.finished_open.insert(machine_of(&endpoint));
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::Studio { id, .. } | StudioRow::Finished { id },
+            } => {
+                let key = StudioKey {
+                    machine: machine_of(&endpoint),
+                    id,
+                };
+                self.panel.mode = crate::panel::PanelMode::Expanded;
+                self.enter_studio_in_lot(&key);
+            }
+            SidebarRow::Workspace {
+                endpoint,
+                workspace_id,
+            } => {
+                if let Some(key) = self.studio_for_workspace(&endpoint, &workspace_id) {
+                    self.panel.mode = crate::panel::PanelMode::Expanded;
+                    self.enter_studio_in_lot(&key);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn tree_space(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => self.tree_toggle_endpoint(&endpoint),
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { .. },
+            } => self.toggle_finished_group(machine_of(&endpoint)),
+            _ => self.tree_activate(),
         }
     }
 
