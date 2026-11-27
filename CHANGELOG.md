@@ -10,6 +10,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- Hollywood's allow lists (`claude`, `cmd`, `cursor`, `cline`), `hwcli` / `prompts/hollywood-cli.md`, and `prompts/hollywood.md` now pre-allow `backlot hollywood withdraw` and `backlot studio cast set --dry-run` and explain withdrawing stale cards (`docs/studio/{hollywood,ledger,limits,panel,guide}.md`).
+- A rate limit raises one notice per reset window (repeated hits within the same `reset_at_ms` window update nothing and raise nothing; a hit with a later reset supersedes and raises once as the next window; unknown resets fall back to bounded auto-retries, and working again clears `resumed`).
+- Permission prompts the director is handling no longer count as waiting on you or wake Hollywood, unless the director can't answer them (`AttentionClass::of("permission prompt", false)` and `AttentionClass::of("agent error", false)` are `stuck`; `StudioSummary.waiting` counts `needs you` only; `route_prompts` escalates via `attention.escalated` with the wait duration at once when the director is rate-limited, stalled, or not live, or after `default_stall_limit_s` / 10 minutes unanswered; `hnotice` holds `stuck` notices for 10 minutes and names how long an overdue actor prompt waited and why).
+
 ## 0.4.21 — 2026-11-27
 
 ### Added
@@ -26,9 +32,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
-- Hollywood's allow lists (`claude`, `cmd`, `cursor`, `cline`), `hwcli` / `prompts/hollywood-cli.md`, and `prompts/hollywood.md` now pre-allow `backlot hollywood withdraw` and `backlot studio cast set --dry-run` and explain withdrawing stale cards (`docs/studio/{hollywood,ledger,limits,panel,guide}.md`).
-- A rate limit raises one notice per reset window (repeated hits within the same `reset_at_ms` window update nothing and raise nothing; a hit with a later reset supersedes and raises once as the next window; unknown resets fall back to bounded auto-retries, and working again clears `resumed`).
-- Permission prompts the director is handling no longer count as waiting on you or wake Hollywood, unless the director can't answer them (`AttentionClass::of("permission prompt", false)` and `AttentionClass::of("agent error", false)` are `stuck`; `StudioSummary.waiting` counts `needs you` only; `route_prompts` escalates via `attention.escalated` with the wait duration at once when the director is rate-limited, stalled, or not live, or after `default_stall_limit_s` / 10 minutes unanswered; `hnotice` holds `stuck` notices for 10 minutes and names how long an overdue actor prompt waited and why).
 - Cards and other items that wait on you are always listed on their own Call Sheet rows instead of being folded behind a studio's `READY` row.
 - Retarget the main pane (and studio role cursor / remembered member) to a role's new live terminal when the role resumes, restarts, recasts, or reopens from a finished terminal, while preserving keyboard focus and leaving non-resumed finished terminals alone.
 - The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
