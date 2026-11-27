@@ -74,7 +74,6 @@ pub(crate) fn draw_row(
                 Rect::new(rect.x, rect.y, rect.width, 1),
                 rect.height,
                 &waits[*i],
-                waits,
                 hollywood,
                 local,
                 multi,

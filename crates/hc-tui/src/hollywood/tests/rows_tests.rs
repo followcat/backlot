@@ -562,10 +562,10 @@ fn hollywood_asking_tracks_the_user_owned_prompt() {
     assert!(crate::hollywood::hollywood_asking(&list));
 }
 
-/// One studio contributes one band row: its ask leads the card and
-/// the folded decision count remains in the underlying waits list.
+/// Every actionable item on a studio gets its own waiting row —
+/// asks and cards are never folded into `+N`.
 #[test]
-fn one_studio_rows_asks_fold_the_rest() {
+fn each_actionable_item_on_a_studio_gets_its_own_row() {
     let mut value = summary_json();
     value["studios"][0]["roles"][0]["asks"] =
         serde_json::json!("What should we build? Start small.");
@@ -576,7 +576,7 @@ fn one_studio_rows_asks_fold_the_rest() {
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    assert_eq!(waits.len(), 3, "ask plus both cards are decisions");
+    assert_eq!(waits.len(), 3, "ask plus both cards are listed");
     let wait_rows: Vec<_> = rows
         .iter()
         .filter_map(|r| match r {
@@ -591,39 +591,112 @@ fn one_studio_rows_asks_fold_the_rest() {
                 crate::studio::StudioKey::local("acme-shop"),
                 "producer".into()
             ),
+            Target::Card("c3".into()),
             Target::Card("c4".into())
         ]
     );
-    let acme = waits
-        .iter()
-        .find(|w| matches!(w, Wait::Role(r) if r.asks))
-        .unwrap();
-    assert_eq!(crate::hollywood::rows::group_extra(&waits, acme), 1);
 }
 
-/// READY leads its own studio even though asks sort earlier in the
-/// flat urgency list, absorbing that studio's question row.
+/// READY never absorbs a studio's asks, prompts, decisions, or cards:
+/// actionable items come before READY in urgency order.
 #[test]
-fn ready_absorbs_the_studios_asks() {
+fn ready_never_absorbs_actionable_items_and_sorts_after_them() {
     let mut value = summary_json();
     value["studios"][0]["ready_to_finish"] = serde_json::json!(true);
     value["studios"][0]["roles"][0]["asks"] = serde_json::json!("Ship it?");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    let acme_rows: Vec<_> = rows
+    let wait_rows: Vec<_> = rows
         .iter()
         .filter_map(|r| match r {
             Row::Wait(i) => Some(waits[*i].target()),
             _ => None,
         })
-        .filter(|t| matches!(t, Target::Ready(k) if k.id == "acme-shop"))
         .collect();
-    assert_eq!(acme_rows.len(), 1);
-    assert!(!rows.iter().any(|r| matches!(
-        r.target(&waits),
-        Target::Role(k, _) if k.id == "acme-shop"
-    )));
+    assert_eq!(
+        wait_rows,
+        vec![
+            Target::Role(
+                crate::studio::StudioKey::local("acme-shop"),
+                "producer".into()
+            ),
+            Target::Card("c3".into()),
+            Target::Card("c4".into()),
+            Target::Ready(crate::studio::StudioKey::local("acme-shop")),
+        ]
+    );
+}
+
+/// Six studios with two READY and three recast cards on one of them:
+/// all five items list in order (cards before READY), matching `waits.len()`.
+#[test]
+fn six_studios_ready_with_recast_cards_lists_every_card_and_ready_row() {
+    let summary = six_studios_ready_recast_summary();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert_eq!(waits.len(), 5);
+    let wait_rows: Vec<_> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Wait(i) => Some(waits[*i].target()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        wait_rows,
+        vec![
+            Target::Card("c1372".into()),
+            Target::Card("c1373".into()),
+            Target::Card("c1374".into()),
+            Target::Ready(crate::studio::StudioKey::local("acme-shop")),
+            Target::Ready(crate::studio::StudioKey::local("beta-api")),
+        ]
+    );
+}
+
+/// A Prompt and a Decision on a READY studio each keep their own row
+/// ahead of its READY row, preserving global urgency order.
+#[test]
+fn prompt_and_decision_on_ready_studio_keep_their_own_rows_before_ready() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    value["studios"][0]["roles"][1]["attention_user"] = serde_json::json!(true);
+    value["studios"][0]["roles"][1]["attention_seq"] = serde_json::json!(7);
+    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("permission prompt");
+    value["studios"][0]["roles"][1]["attention_detail"] = serde_json::json!("cargo test");
+    value["studios"][0]["design"] = serde_json::json!({
+        "version": 1,
+        "round": 1,
+        "phase": "waiting_user",
+        "waiting_user": true,
+        "suggest_skip": false,
+        "doc_file": "design/v1.md",
+        "summary": "Pick store backend",
+        "questions": []
+    });
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let wait_rows: Vec<_> = rows
+        .iter()
+        .filter_map(|r| match r {
+            Row::Wait(i) => Some(waits[*i].target()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        wait_rows,
+        vec![
+            Target::Prompt(
+                crate::studio::StudioKey::local("acme-shop"),
+                "actor-alice".into()
+            ),
+            Target::Decision(crate::studio::StudioKey::local("acme-shop")),
+            Target::Ready(crate::studio::StudioKey::local("acme-shop")),
+        ]
+    );
 }
 
 #[test]

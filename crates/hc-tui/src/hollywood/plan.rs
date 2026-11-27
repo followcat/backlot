@@ -196,6 +196,18 @@ impl Plan {
                 }
             })
             .sum();
+        // When the selected item scrolls past `0..self.shown`, `draw_waiting`
+        // slides the window to include it and drops an unselected item.
+        let kept_outside = if self.shown > 0 && !self.details.iter().take(self.shown).any(|d| *d) {
+            self.details
+                .iter()
+                .enumerate()
+                .skip(self.shown)
+                .find_map(|(i, d)| d.then(|| 1 + self.detail_extra.get(i).copied().unwrap_or(0)))
+                .unwrap_or(0)
+        } else {
+            0
+        };
         let talk = self.talk + self.wrap_rows();
         u16::from(self.top_sprocket)
             + u16::from(self.title)
@@ -206,6 +218,7 @@ impl Plan {
             + u16::from(self.waiting_rule)
             + u16::from(self.headline)
             + waits
+            + kept_outside
             + u16::from(self.hollywood_rule)
             + u16::from(self.setup_hairline)
             + talk

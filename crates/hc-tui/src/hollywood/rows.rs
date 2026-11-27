@@ -164,8 +164,8 @@ impl Row<'_> {
     }
 }
 
-/// The studio a waiting row belongs to, for the Call Sheet's
-/// one-row-per-studio projection. Hollywood cards are local rows.
+/// The studio a waiting row belongs to. Hollywood and stage rows have none.
+#[cfg(test)]
 pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &'a str)> {
     match wait {
         Wait::Prompt(item) => Some((item.machine, item.studio.id.as_str())),
@@ -180,48 +180,8 @@ pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &
     }
 }
 
-/// How many rows folded into this row's `+n`: the studio's other
-/// waiting decisions. Reports never enter this list at all.
-pub(crate) fn group_extra(waits: &[Wait<'_>], wait: &Wait<'_>) -> usize {
-    let Some(key) = wait_studio_key(wait) else {
-        return 0;
-    };
-    waits
-        .iter()
-        .filter(|w| wait_studio_key(w) == Some(key))
-        .count()
-        .saturating_sub(1)
-}
-
-/// One row index per studio: the first (most urgent) item leads, except
-/// that READY always leads its studio and absorbs that studio's asks.
-fn band_wait_indexes(waits: &[Wait<'_>]) -> Vec<usize> {
-    let mut indexes = Vec::new();
-    let mut slots = std::collections::BTreeMap::new();
-    for (i, wait) in waits.iter().enumerate() {
-        let Some((machine, studio)) = wait_studio_key(wait) else {
-            indexes.push(i);
-            continue;
-        };
-        let key = (machine.map(str::to_string), studio.to_string());
-        match slots.get(&key).copied() {
-            None => {
-                slots.insert(key, indexes.len());
-                indexes.push(i);
-            }
-            Some(slot) => {
-                let lead = &waits[indexes[slot]];
-                if matches!(wait, Wait::Ready(_)) && !matches!(lead, Wait::Ready(_)) {
-                    indexes[slot] = i;
-                }
-            }
-        }
-    }
-    indexes
-}
-
-/// The band's rows in draw order: the headline (with an agent), the
-/// waiting items — or the calm row — then the input line, or the
+/// The band's rows in draw order: the headline (with an agent), every
+/// waiting item — or the calm row — then the input line, or the
 /// setup line without an agent. The waits list is what `Row::Wait`
 /// indexes and what scroll/detail bookkeeping numbers.
 pub(crate) fn band_rows<'a>(
@@ -250,7 +210,7 @@ pub(crate) fn band_rows<'a>(
             studios: crate::panel::data::studio_count(machines),
         });
     } else {
-        out.extend(band_wait_indexes(&waits).into_iter().map(Row::Wait));
+        out.extend((0..waits.len()).map(Row::Wait));
     }
     // The dialog's visible half: the newest turn and the turn before
     // it, oldest first, right above the input they continue into.
