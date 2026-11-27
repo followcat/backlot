@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.30 — 2026-11-28
+
 ### Added
 
 - **A new question from a studio now raises a desktop notification.** In studio mode your terminal tells you when a role asks you something or a card is waiting for you — once per item, never for what was already open when you started, and never when you answer one. It is on by default and turns off with `[studio] notify_asks = false` ([docs/studio/panel.md](docs/studio/panel.md)).
