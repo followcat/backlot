@@ -224,7 +224,10 @@ fn accounts_propagate_through_live_json_and_trigger_due() {
     use backlot_model::summary::{AccountRoleSummary, AccountSummary, QuotaWindow};
 
     let tmp = TestDir::new("backlot-live-accounts");
-    let mut doc = summary("acme", vec![role_summary("producer", Some(Work::Working), None)]);
+    let mut doc = summary(
+        "acme",
+        vec![role_summary("producer", Some(Work::Working), None)],
+    );
     let acct = AccountSummary {
         id: "claude:default".into(),
         runner: "claude".into(),
@@ -254,7 +257,10 @@ fn accounts_propagate_through_live_json_and_trigger_due() {
     assert_eq!(live_with.accounts, vec![acct.clone()]);
 
     let live_without = from_summary(
-        &summary("acme", vec![role_summary("producer", Some(Work::Working), None)]),
+        &summary(
+            "acme",
+            vec![role_summary("producer", Some(Work::Working), None)],
+        ),
         2_000,
     );
     assert_eq!(due(&live_with, Some(&live_without), 2_500), Write::Now);
@@ -264,11 +270,7 @@ fn accounts_propagate_through_live_json_and_trigger_due() {
     assert_eq!(view.accounts, vec![acct]);
 
     // Legacy `live.json` without `accounts` field parses cleanly.
-    std::fs::write(
-        path(tmp.path()),
-        r#"{"updated_ms":3000,"roles":[]}"#,
-    )
-    .unwrap();
+    std::fs::write(path(tmp.path()), r#"{"updated_ms":3000,"roles":[]}"#).unwrap();
     let legacy = crate::live::LiveView::read(tmp.path(), 3_500);
     assert!(legacy.running);
     assert!(legacy.accounts.is_empty());

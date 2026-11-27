@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::event::{Event, EventKind};
 use crate::hollywood_summary::HollywoodSummary;
 use crate::state::{StudioState, apply};
-use crate::summary::{AccountRoleSummary, AccountSummary, QuotaWindow, Summary, SUMMARY_SCHEMA};
+use crate::summary::{AccountRoleSummary, AccountSummary, QuotaWindow, SUMMARY_SCHEMA, Summary};
 
 /// Simulated v0.4.20 reader ignoring additive Part 1 account fields.
 #[derive(Debug, Deserialize)]

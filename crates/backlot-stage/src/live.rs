@@ -137,8 +137,8 @@ pub enum Write {
 /// stale — never on every tick, which would make the age meaningless.
 /// `written` is the last file's `updated_ms`, or `None` before the first.
 pub fn due(facts: &Live, written: Option<&Live>, now_ms: u64) -> Write {
-    let changed = written
-        .is_none_or(|last| last.roles != facts.roles || last.accounts != facts.accounts);
+    let changed =
+        written.is_none_or(|last| last.roles != facts.roles || last.accounts != facts.accounts);
     let heartbeat =
         written.is_none_or(|last| now_ms.saturating_sub(last.updated_ms) >= HEARTBEAT_MS);
     if changed || heartbeat {

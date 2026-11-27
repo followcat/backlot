@@ -359,10 +359,10 @@ async fn summary_view_populates_shared_accounts_and_role_fields() {
         key: None,
         default_cast: None,
     });
-    stage
-        .work
-        .borrow_mut()
-        .insert(("acme-web".into(), "actor-t2-c1".into()), backlot_model::summary::Work::Working);
+    stage.work.borrow_mut().insert(
+        ("acme-web".into(), "actor-t2-c1".into()),
+        backlot_model::summary::Work::Working,
+    );
 
     let t0 = {
         let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
@@ -407,10 +407,17 @@ async fn summary_view_populates_shared_accounts_and_role_fields() {
 
     // Hollywood & studio roles carry `account: Some("claude:default")`.
     assert_eq!(
-        summary.hollywood.as_ref().and_then(|h| h.account.as_deref()),
+        summary
+            .hollywood
+            .as_ref()
+            .and_then(|h| h.account.as_deref()),
         Some("claude:default")
     );
-    let shop = summary.studios.iter().find(|s| s.id == "acme-shop").unwrap();
+    let shop = summary
+        .studios
+        .iter()
+        .find(|s| s.id == "acme-shop")
+        .unwrap();
     let shop_actor = shop.roles.iter().find(|r| r.role == "actor-t1-c1").unwrap();
     assert_eq!(shop_actor.account.as_deref(), Some("claude:default"));
 
@@ -424,7 +431,19 @@ async fn summary_view_populates_shared_accounts_and_role_fields() {
     assert_eq!(acct.reset_at_ms, Some(t0 + 5 * 3_600_000));
     assert_eq!(acct.active, 2); // actor-t1-c1 + actor-t2-c1 live
     assert_eq!(acct.working, 1); // acme-web/actor-t2-c1 working
-    assert!(acct.roles.iter().any(|r| r.studio == "hollywood" && r.role == "hollywood"));
-    assert!(acct.roles.iter().any(|r| r.studio == "acme-shop" && r.role == "actor-t1-c1" && r.stalled));
-    assert!(acct.roles.iter().any(|r| r.studio == "acme-web" && r.role == "actor-t2-c1" && r.working));
+    assert!(
+        acct.roles
+            .iter()
+            .any(|r| r.studio == "hollywood" && r.role == "hollywood")
+    );
+    assert!(
+        acct.roles
+            .iter()
+            .any(|r| r.studio == "acme-shop" && r.role == "actor-t1-c1" && r.stalled)
+    );
+    assert!(
+        acct.roles
+            .iter()
+            .any(|r| r.studio == "acme-web" && r.role == "actor-t2-c1" && r.working)
+    );
 }
