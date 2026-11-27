@@ -406,11 +406,12 @@ pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
                 && parts[1..].iter().all(|p| !p.starts_with('.'))
                 && name.strip_suffix(".md").is_some_and(|s| !s.is_empty())
         }
+        "decisions" => parts.as_slice() == ["decisions", "current.md"],
         _ => false,
     };
     if !ok {
         return Err(Fail::refused(format!(
-            "--file '{name}' is not under reports/, checks/, messages/, attention/, requirements/, design/ or plan/"
+            "--file '{name}' is not under reports/, checks/, messages/, attention/, requirements/, design/, plan/ or decisions/current.md"
         )));
     }
     let mut rel = std::path::PathBuf::from(root.as_str());

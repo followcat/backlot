@@ -12,10 +12,13 @@ $XDG_STATE_HOME/backlot/<core id>/
   config.toml
   live.json           fresh per-role work samples and aggregated accounts summary
   accounts.json       persistent quota-stall state (`backlot-accounts/1`) across restarts
+  repo-notes/<hash>.md  machine-local `0600` notes per canonical repository (from applied `repo_note` cards; never written inside the target repo)
   studios/<studio>/
     events.jsonl      append-only log, the source of truth
     events.lock       flock for appends
     req/v<N>.md       requirement versions
+    decisions/        derived `current.md` view of shared `AD-<n>` decisions, rewritten atomically under `events.lock`
+    repo-notes.md     `0400` snapshot of approved `repo-notes/<hash>.md`, rewritten on `director`/`writer` start or resume (editing changes nothing)
     plan/             writer's plans and acceptance lists
     reports/          deliveries and node reports
     messages/         role-to-role and stage notice bodies, and digest-<seq>.md merges
@@ -157,6 +160,22 @@ and URL query strings (`?key=`), the CLI requires either `--ask` (record a quest
 delivery until the role writes to the ledger again — so a tell to a role closed as `no longer
 desired` starts it again and delivers the message, the way a `plan` request does. A `tell` to an
 actor whose task is finished or abandoned is refused; the note names the task and its state.
+
+Two additional `message.queued` purposes carry structured coordination without adding new studio
+event kinds:
+
+- **`purpose = "decision"` (`backlot decide`):** written only by `director`, `producer`, or `user`
+  with a body file whose header records `Decision-ID: AD-<n>` (and optional `Supersedes: AD-<m>`).
+  Targets to a closed task actor are refused as `TellToClosedActor`; `wanted_roles` stays unchanged
+  (never waking `writer` or closed roles), while live recipients receive normal inbox delivery (or
+  `to: "producer"` when `--notify` is omitted). User-authored decisions appear in
+  `StudioSummary.exchange`, and every append atomically rewrites derived `decisions/current.md` under
+  `events.lock` (one deduped row per `AD-<n>` naming its earliest authoritative `#<seq>`, with
+  superseded decisions folded into `## History`).
+- **`purpose = "repo_note"` (`backlot repo-note propose`):** internal bridge queued (`to: "producer"`)
+  by `director`, `producer`, or `user`. Inbox delivery and `pending_tell` skip it; the stage consumes it
+  once (`source_seq`) to propose a `CardAction::RepoNote` on Hollywood's ledger so studio roles never
+  write `hollywood/events.jsonl`.
 
 `message.queued` may carry `source_seq`, the seq of the ledger event it was generated from. The
 stage's automatic notices — a delivery to whoever cast the task, a `changes_requested` review to
@@ -324,7 +343,7 @@ message to the producer (R26).
 | `role.state` | lifecycle motion (`started`/`lost`/`resumed`/`closed`), terminal, actor, session, reason — `stage` only; the studios' four role events folded into one (H3) |
 | `role.restart` | `fresh`, optional reason — `user` only; the stage closes (`restarted`) then relaunches `bl-hollywood`, resuming its session unless `fresh` |
 | `role.progress` | role, one-line `text` (<= 200 chars) — `hollywood` only |
-| `card.proposed` | the exact `action` (D18, including stage-proposed `Outward` cards), a one-line `why`, and the `base` (`GitHead` for outward) — `hollywood` or `stage` |
+| `card.proposed` | the exact `action` (D18, including stage-proposed `Outward` and `RepoNote` cards), a one-line `why`, and the `base` (`GitHead` for outward, `RepoNoteEntry` for repo-note) — `hollywood` or `stage` |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
 | `card.withdrawn` | card id, reason — `hollywood` only, on its own open card |
@@ -338,8 +357,10 @@ message to the producer (R26).
 
 A card's **base** is the fact it was proposed against — `studio_absent` for `studio-new`,
 `person_held`/`person_closed` for `close`/`reopen`, `task_priority { was }` for `priority`,
-`task_status { was }` for `pause`/`resume`/`abandon`, `cast_seq { was }` for `cast`, and
-`studio_finished` for `reopen-studio`. The reducer holds cards by seq; staleness is a
+`task_status { was }` for `pause`/`resume`/`abandon`, `cast_seq { was }` for `cast`,
+`studio_finished` for `reopen-studio`, and `repo_note_entry { repo, entry_id, prev_sha256 }` for
+`repo-note` (keyed per `(repo, entry_id)` so distinct notes applied together do not stale each
+other while same-entry updates supersede open cards). The reducer holds cards by seq; staleness is a
 pure read of the card against the studio's state, checked at apply time (a moved base records
 `card.stale` instead of `card.applied`) and again when the stage executes an applied card.
 `card.done`/`card.failed`/`card.stale`-by-stage are refused on a card that is not `applied`; an

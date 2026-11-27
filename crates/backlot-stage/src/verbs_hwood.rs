@@ -125,6 +125,10 @@ pub(crate) fn card_apply(
                 .map(|c| crate::hstage::identity(&c));
             hollywood::stale_hollywood(&card.base, current.as_ref())
         }
+        CardAction::RepoNote { repo, entry_id, .. } => {
+            let current = crate::repo_note::entry_digest(base, repo, entry_id);
+            hollywood::stale_repo_note(&card.action, &card.base, current.as_deref())
+        }
         _ => {
             let sstate = studio_state(base, card.action.studio())?;
             hollywood::stale(&card.action, &card.base, sstate.as_ref())

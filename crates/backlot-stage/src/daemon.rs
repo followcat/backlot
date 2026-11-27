@@ -1035,6 +1035,19 @@ impl Stage {
             }
             hw.handoff = handoff;
             s.hollywood = Some(hw);
+        } else {
+            let hs = self.hstate.borrow();
+            let has_non_outward_cards = hs.open_cards().any(|c| {
+                !matches!(
+                    c.action,
+                    backlot_model::hollywood::CardAction::Outward { .. }
+                )
+            });
+            if has_non_outward_cards {
+                s.hollywood = Some(backlot_model::summary::hollywood_section_with_activity(
+                    &hs, "down", None, None, None, None, None, None,
+                ));
+            }
         }
         self.attach_accounts_to_summary(&mut s, now_ms);
         s

@@ -30,6 +30,10 @@ pub(crate) fn card_show(base: &Path, env: &Env, id: u64) -> Result<CardShowResul
                 .map(|c| crate::hstage::identity(&c));
             hollywood::stale_hollywood(&card.base, current.as_ref())
         }
+        CardAction::RepoNote { repo, entry_id, .. } => {
+            let current = crate::repo_note::entry_digest(base, repo, entry_id);
+            hollywood::stale_repo_note(&card.action, &card.base, current.as_deref())
+        }
         _ => studio_state(base, card.action.studio()).ok().and_then(|s| {
             hollywood::stale(&card.action, &card.base, s.as_ref())
                 .or_else(|| {
@@ -291,6 +295,15 @@ pub(crate) fn format_card_show(res: &CardShowResult) -> String {
         ));
     }
     crate::hcard_outward::append_outward_preview(&mut out, &res.action);
+    if let CardAction::RepoNote {
+        repo,
+        entry_id,
+        text,
+        ..
+    } = &res.action
+    {
+        let _ = write!(out, "\nrepo: {repo}\nentry: {entry_id}\nnote:\n{text}");
+    }
     // A `cast` card shows the dry-run diff its file would make, the same
     // text `studio cast set --dry-run` prints.
     if let Some(diff) = &res.cast_diff {

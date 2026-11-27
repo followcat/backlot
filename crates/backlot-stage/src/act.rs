@@ -19,7 +19,7 @@ use crate::daemon::Stage;
 use crate::discover;
 use crate::prompts;
 use crate::reasons;
-use crate::reconcile::{Action, Start};
+use crate::reconcile::{Action, RoleKind, Start};
 use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
 use crate::workareas::{self, AreaFail};
@@ -637,6 +637,11 @@ impl Stage {
                         .unwrap_or(&[]),
                     answer_trust: self.stage_cfg.get().answer_trust,
                 };
+                if start.resume.is_some()
+                    && matches!(start.kind, RoleKind::Director | RoleKind::Writer)
+                {
+                    let _ = crate::repo_note::sync_studio_snapshot(dir, &start.repo);
+                }
                 match runners::decide_start(
                     runners::plan(&start.actor, &ctx),
                     &start.actor.runner,

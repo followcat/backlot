@@ -8,6 +8,7 @@ mod accounts_summary;
 mod act;
 pub mod args;
 mod args_card;
+mod args_decide;
 mod args_design;
 mod args_hwood;
 mod args_source;
@@ -26,6 +27,7 @@ pub mod config;
 mod confirm;
 mod connerr;
 mod daemon;
+mod decision_doc;
 mod delete;
 mod delete_ops;
 mod delete_render;
@@ -131,6 +133,7 @@ mod reasons;
 pub mod reconcile;
 mod relabel;
 pub mod render;
+mod repo_note;
 mod repos;
 mod restore;
 mod route;
@@ -160,6 +163,7 @@ mod transcript_ext;
 mod transcript_runners;
 mod verbs;
 mod verbs_card_show;
+mod verbs_decide;
 mod verbs_design;
 mod verbs_fmt;
 mod verbs_hwood;
@@ -213,6 +217,8 @@ mod cli_tests;
 mod closed_actor_mail_tests;
 #[cfg(test)]
 mod daemon_tests;
+#[cfg(test)]
+mod decide_tests;
 #[cfg(test)]
 mod delete_tests;
 #[cfg(test)]
@@ -378,6 +384,8 @@ mod refused_noise_tests;
 mod render_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
+#[cfg(test)]
+mod repo_note_tests;
 #[cfg(test)]
 mod repos_tests;
 #[cfg(test)]
