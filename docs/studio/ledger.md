@@ -18,6 +18,7 @@ $XDG_STATE_HOME/backlot/<core id>/
     events.lock       flock for appends
     req/v<N>.md       requirement versions
     decisions/        derived `current.md` view of shared `AD-<n>` decisions, rewritten atomically under `events.lock`
+    repo-notes.md     `0400` snapshot of approved `repo-notes/<hash>.md`, rewritten on `director`/`writer` start or resume (editing changes nothing)
     plan/             writer's plans and acceptance lists
     reports/          deliveries and node reports
     messages/         role-to-role and stage notice bodies, and digest-<seq>.md merges

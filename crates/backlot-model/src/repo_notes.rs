@@ -169,6 +169,17 @@ pub fn check_text_safe(text: &str) -> Result<(), String> {
     {
         return Err("repo-note text cannot contain control characters".into());
     }
+    if text.contains("<!--") {
+        return Err(
+            "repo-note text rejected: cannot contain HTML/card marker comments (`<!--`)".into(),
+        );
+    }
+    if text.lines().any(|line| line.trim_start().starts_with('#')) {
+        return Err(
+            "repo-note text rejected: lines cannot start with `#` (would forge markdown sections)"
+                .into(),
+        );
+    }
     let lower = text.to_ascii_lowercase();
     if contains_uri_credentials(text)
         || has_token_prefix(text)

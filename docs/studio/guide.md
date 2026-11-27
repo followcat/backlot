@@ -415,6 +415,11 @@ backlot repo-note show --studio acme-shop
 backlot repo-note remove --id build-cmd --studio acme-shop
 ```
 
+When approved repo notes exist for the studio's repository, each `director` or `writer` start/resume
+copies them into `<studio_dir>/repo-notes.md` (mode `0400`) and adds a prompt line pointing there.
+The studio file is a disposable snapshot — editing it changes nothing, and the next start rewrites
+it from `<state_dir>/repo-notes/<hash>.md`.
+
 `backlot status` shows the studio's recorded state at any time:
 
 ```sh
@@ -1201,6 +1206,7 @@ studios/acme-shop/
   req/v<N>.md                requirement versions
   design/                    opening design v<N>.md, frozen v<N>-final.md, and immutable v<N>/r*.md sections
   decisions/current.md       derived shared `AD-<n>` decisions and history, updated under `events.lock`
+  repo-notes.md              `0400` snapshot of approved repo notes, rewritten on `director`/`writer` start or resume (copy only)
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
   messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges

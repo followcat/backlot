@@ -11,7 +11,7 @@ use backlot_model::event::{
 };
 
 use crate::cli::Fail;
-use crate::{args_design, args_hwood, args_studio, args_task};
+use crate::{args_decide, args_design, args_hwood, args_studio, args_task};
 
 #[derive(Default, Clone)]
 pub struct Common {
@@ -578,8 +578,8 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "report" => args_studio::report(&mut common, &mut it),
         "ask" => args_studio::ask(&mut common, &mut it),
         "tell" => args_studio::tell(&mut common, &mut it),
-        "decide" => args_studio::decide(&mut common, &mut it),
-        "repo-note" => args_studio::repo_note(&mut common, &mut it),
+        "decide" => args_decide::decide(&mut common, &mut it),
+        "repo-note" => args_decide::repo_note(&mut common, &mut it),
         "msg" => args_studio::msg(&mut common, &mut it),
         "progress" => args_studio::progress(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),

@@ -313,11 +313,7 @@ pub fn session_at(
     best.map(|(_, id)| id)
 }
 
-pub(crate) fn plan(
-    identity: &ActorIdentity,
-    ctx: &LaunchCtx,
-    repo_notes_file: Option<&str>,
-) -> Result<Launch, PlanError> {
+pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}
         other => return Err(PlanError::profile(other)),
@@ -345,7 +341,7 @@ pub(crate) fn plan(
         PathBuf::from(ctx.studio_dir)
     };
     let add_dir = add_dir.to_string_lossy().into_owned();
-    let mut additional_dirs = vec![add_dir.clone()];
+    let additional_dirs = vec![add_dir.clone()];
     argv.extend([
         "-m".into(),
         identity.model.clone(),
@@ -355,15 +351,6 @@ pub(crate) fn plan(
         "--add-dir".into(),
         add_dir,
     ]);
-    if let Some(note_file) = repo_notes_file
-        && let Some(notes_dir) = Path::new(note_file).parent()
-    {
-        let extra = notes_dir.to_string_lossy().into_owned();
-        if !additional_dirs.contains(&extra) {
-            argv.extend(["--add-dir".into(), extra.clone()]);
-            additional_dirs.push(extra);
-        }
-    }
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt
     {

@@ -215,11 +215,7 @@ pub(crate) fn live_exe(
     if exists(&stripped) { stripped } else { path }
 }
 
-pub(crate) fn plan(
-    identity: &ActorIdentity,
-    ctx: &LaunchCtx,
-    repo_notes_file: Option<&str>,
-) -> Result<Launch, PlanError> {
+pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let mode = permission_mode(&identity.permission_profile)?;
     let mut argv: Vec<String> = Vec::new();
     let markers: Vec<&String> = ctx.stage_env.keys().filter(|k| is_marker(k)).collect();
@@ -242,11 +238,7 @@ pub(crate) fn plan(
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
     let hooks = hook_setup(ctx);
-    let mut tools = allowed_tools(ctx.studio_dir, ctx.role, ctx.checks);
-    if let Some(note_file) = repo_notes_file {
-        let stripped = note_file.strip_prefix('/').unwrap_or(note_file);
-        tools.push_str(&format!(",Read(//{stripped})"));
-    }
+    let tools = allowed_tools(ctx.studio_dir, ctx.role, ctx.checks);
     argv.extend([
         "--allowedTools".into(),
         tools,

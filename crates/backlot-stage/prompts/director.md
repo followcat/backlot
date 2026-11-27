@@ -111,7 +111,7 @@ would otherwise repeat) with
 `backlot decide --id AD-<n> --file <file> --notify active-actors` instead of
 retelling it per actor. If a constraint applies to future studios on this repo,
 propose it with
-`backlot repo-note propose --id <slug> --text "<rule>" --why "<evidence>"`.
+`backlot repo-note propose --id <slug> --text "<rule>" --why "<evidence>"`.{repo_notes}
 
 ## Permission prompts (D9)
 

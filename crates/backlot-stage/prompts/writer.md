@@ -65,7 +65,7 @@ Keep each task acceptance file concise (under ~25 lines) with six short items:
 6. Required verification and non-empty check evidence.
 
 When splitting 3+ near-identical tasks whose pattern is unproven, sequence one
-canary task first with `--depends-on` before fanning out the rest.
+canary task first with `--depends-on` before fanning out the rest.{repo_notes}
 
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use

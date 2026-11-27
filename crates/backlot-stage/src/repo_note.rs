@@ -66,16 +66,58 @@ pub(crate) fn state_dir_from_studio_dir(studio_dir: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
-/// Existing notes file for `repo`, if present on disk.
-pub(crate) fn existing_notes_path(base: &Path, repo: &str) -> Option<PathBuf> {
-    let p = notes_path(base, repo);
-    p.is_file().then_some(p)
+fn write_atomic_mode(path: &Path, bytes: &[u8], _mode: u32) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing parent"))?;
+    let tmp = parent.join(format!(
+        ".tmp-rnote-{}-{}",
+        std::process::id(),
+        NEXT_TMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    let res = (|| -> std::io::Result<()> {
+        let mut opts = OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        opts.mode(_mode);
+        let mut file = opts.open(&tmp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        #[cfg(unix)]
+        fs::set_permissions(&tmp, fs::Permissions::from_mode(_mode))?;
+        fs::rename(&tmp, path)?;
+        Ok(())
+    })();
+    if res.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    res
+}
+
+/// Sync `<studio_dir>/repo-notes.md` (mode `0400`) from approved machine-local notes
+/// (`<state_dir>/repo-notes/<hash>.md`) when present; removes stale snapshots when
+/// no approved notes exist for `repo`.
+pub(crate) fn sync_studio_snapshot(
+    studio_dir: &Path,
+    repo: &str,
+) -> std::io::Result<Option<PathBuf>> {
+    let snap = studio_dir.join("repo-notes.md");
+    let Some(src) = existing_notes_path_for_studio_dir(studio_dir, repo) else {
+        if snap.exists() {
+            let _ = fs::remove_file(&snap);
+        }
+        return Ok(None);
+    };
+    let bytes = fs::read(&src)?;
+    write_atomic_mode(&snap, &bytes, 0o400)?;
+    Ok(Some(snap))
 }
 
 /// Existing notes file looked up from `<state_dir>/studios/<studio>`.
 pub(crate) fn existing_notes_path_for_studio_dir(studio_dir: &Path, repo: &str) -> Option<PathBuf> {
     let base = state_dir_from_studio_dir(studio_dir)?;
-    existing_notes_path(&base, repo)
+    let p = notes_path(&base, repo);
+    p.is_file().then_some(p)
 }
 
 /// Canonical SHA-256 of `(canonical_repo, entry_id)` section on disk, if any.
@@ -101,28 +143,8 @@ fn write_atomic_0600(path: &Path, bytes: &[u8]) -> Result<(), Fail> {
         .parent()
         .ok_or_else(|| Fail::refused("invalid repo-notes path"))?;
     ensure_dir_0700(parent)?;
-    let tmp = parent.join(format!(
-        ".tmp-note-{}-{}",
-        std::process::id(),
-        NEXT_TMP.fetch_add(1, Ordering::Relaxed)
-    ));
-    let res = (|| -> std::io::Result<()> {
-        let mut opts = OpenOptions::new();
-        opts.write(true).create_new(true);
-        #[cfg(unix)]
-        opts.mode(0o600);
-        let mut file = opts.open(&tmp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        #[cfg(unix)]
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
-        fs::rename(&tmp, path)?;
-        Ok(())
-    })();
-    if res.is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
-    res.map_err(|e| Fail::refused(format!("cannot write {}: {e}", path.display())))
+    write_atomic_mode(path, bytes, 0o600)
+        .map_err(|e| Fail::refused(format!("cannot write {}: {e}", path.display())))
 }
 
 /// Apply one `CardAction::RepoNote` atomically with `0600` permissions.
@@ -134,6 +156,7 @@ pub(crate) fn apply_card(
     card_seq: u64,
     text: &str,
 ) -> Result<bool, Fail> {
+    check_text_safe(text).map_err(Fail::refused)?;
     let canon = canonical_repo(repo);
     let path = notes_path(base, &canon);
     let existing = match fs::read_to_string(&path) {
