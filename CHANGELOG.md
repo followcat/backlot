@@ -12,7 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **The Lot dock, top bar, modebar and left sidebar now match *Babylon*'s gilded house style:** resting studio blocks draw slim brass frames while focused studios step up to double brass (`╔═╗`) or heavy (`┏━┓`) rails, finished studios close cleanly as `✦ THE END`, the top pill gains clasps and switches `✦` to `◉` while something blocks, the modebar puts the focused view on a clasp plaque, and the Cast and Machines headers frame the sidebar on a recessed well. Plain (`--plain`) and `source = "herdr"` setups are unchanged.
+- **The Lot, the top bar, the modebar and the sidebar take on *Babylon*'s gilded style.** A studio's frame gets heavier as you select it and enter it, finished studios end on `THE END`, and the top pill turns red with a `◉` while something is blocking.
 
 ## 0.4.26 — 2026-11-27
 

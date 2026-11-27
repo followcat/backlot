@@ -8,7 +8,9 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
-use super::draw_deco_blocks::{BlockWeight, finished_top_tail, paint_finished_tail};
+use super::draw_deco_blocks::{
+    BlockWeight, draw_entered_tag, entered_width, finished_top_tail, paint_finished_tail,
+};
 use super::rows::Owed;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
@@ -63,7 +65,7 @@ pub(super) fn draw_top(
     let chip_pad = u16::from(has_pill);
     let side_pads = u16::from(edge_pad) * 2;
     let interior = rect.width.saturating_sub(4 + chip_pad + side_pads);
-    let entered_w = if entered { 15u16 } else { 0 };
+    let entered_w = entered_width(entered, plain_chrome);
     let (tail, finished_deco) = if let Some((fin_tail, deco_c)) = finished_top_tail(
         studio,
         rect.width,
@@ -200,18 +202,17 @@ pub(super) fn draw_top(
     }
     let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let mut fill_start = id_start + drawn + u16::from(drawn > 0);
-    if entered && fill_start + 15 <= id_end {
-        put_text(
+    if entered {
+        fill_start = draw_entered_tag(
             buf,
             fill_start,
             rect.y,
-            14,
-            "entered studio",
-            Style::default()
-                .fg(palette.accent)
-                .add_modifier(Modifier::BOLD),
+            id_end,
+            fill_glyph,
+            plain_chrome,
+            frame,
+            palette,
         );
-        fill_start += 15;
     }
     if badge && fill_start + 3 < id_end {
         put_text(

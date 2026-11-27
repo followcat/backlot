@@ -212,3 +212,40 @@ pub(super) fn paint_finished_tail(
         put_text(buf, x, y, display_width(tail) as u16, tail, gilt);
     }
 }
+
+pub(super) fn entered_width(entered: bool, plain_chrome: bool) -> u16 {
+    match (entered, plain_chrome) {
+        (false, _) => 0,
+        (true, true) => 15,
+        (true, false) => 11,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_entered_tag(
+    buf: &mut Buffer,
+    fill_start: u16,
+    y: u16,
+    id_end: u16,
+    fill_glyph: &str,
+    plain_chrome: bool,
+    frame: Style,
+    palette: &Palette,
+) -> u16 {
+    let tag_style = Style::default()
+        .fg(palette.accent)
+        .add_modifier(Modifier::BOLD);
+    if !plain_chrome && fill_start + 11 <= id_end {
+        put_text(buf, fill_start, y, 1, fill_glyph, frame);
+        put_text(buf, fill_start + 1, y, 9, " entered ", tag_style);
+        fill_start + 10
+    } else if !plain_chrome && fill_start + 9 <= id_end {
+        put_text(buf, fill_start, y, 9, " entered ", tag_style);
+        fill_start + 9
+    } else if plain_chrome && fill_start + 15 <= id_end {
+        put_text(buf, fill_start, y, 14, "entered studio", tag_style);
+        fill_start + 15
+    } else {
+        fill_start
+    }
+}

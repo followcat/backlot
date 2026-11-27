@@ -181,6 +181,12 @@ fn lot_header_and_three_frame_weights_at_38_cols() {
         "{}",
         elines[0]
     );
+    assert!(
+        elines[1].contains("━ entered ━") && elines[1].contains("● r1·0/0"),
+        "entered frame keeps status tail beside `━ entered ━`: {}",
+        elines[1]
+    );
+    assert_eq!(elines[1], "┃┏━ ▸ acme-shop ━ entered ━ ● r1·0/0━┓");
     assert_eq!(ebuf[(0, 0)].bg, elev.stage_well);
     assert_eq!(ebuf[(0, 1)].symbol(), "┃");
     assert_eq!(ebuf[(0, area.height - 1)].symbol(), "┗");

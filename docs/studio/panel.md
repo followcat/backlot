@@ -42,7 +42,7 @@ RowActions | Compose)`, or `CallSheet`):
   the right end of the top bar (never drawn over terminal content), the modebar shows a clasped
   plaque (`╡ FOCUS: LOT · <studio> ╞` on `accent`, `╡ LOCKED ╞` / `╡ ERROR ╞` on `red`, `╡ RESIZE ╞` on
   `mauve`, plain `--plain`/`source = "herdr"` setups keep plain text), and entered Lot studios draw heavy
-  accent rails (`┏`/`┃`/`┗` on outer seam, `┏━┓`/`┣─┫`/`┗━┛` on the studio) with `entered studio` in
+  accent rails (`┏`/`┃`/`┗` on outer seam, `┏━┓`/`┣─┫`/`┗━┛` on the studio) with `━ entered ━` in
   the header (`esc studios`). Remembered cursors in non-focused lists show a faint `·` without
   `selection_bg`.
 - **Keyboard in Cast (`Ctrl+B a`) & Tree (`Ctrl+B t`):** Focuses the left sidebar sections (`Tab`/`Shift+Tab`

@@ -140,7 +140,7 @@ async fn single_focus_ring_invariant_and_breadcrumb_200x44() {
 
     // 2. Enter Lot inside acme-shop via Alt+L:
     //    - pane border carries `[unfocused · Esc returns]` and drops accent highlight
-    //    - Lot draws heavy `┏` focus frame & `┃` accent left rail & `entered studio`
+    //    - Lot draws heavy `┏` focus frame & `┃` accent left rail & `━ entered ━`
     //    - bottom modebar shows `FOCUS: lot › acme-shop`
     alt_l(&mut app);
     assert_eq!(
@@ -222,7 +222,7 @@ async fn narrow_overlay_focus_visuals_100x40() {
         "narrow Lot overlay keeps heavy focus frame and left rail:\n{screen}"
     );
     assert!(
-        screen.contains("entered studio"),
+        screen.contains("━ entered ━"),
         "narrow Lot overlay displays entered-studio header cue:\n{screen}"
     );
 }
