@@ -63,8 +63,9 @@ impl App {
             && let Some(studio_ref) = crate::panel::data::studio(&machines, &key)
         {
             let ordered = studio::cast_order(studio_ref.studio);
+            let chrome = self.shell.studio_chrome;
             for role in &ordered {
-                if self.shell.studio_chrome && role.state == "closed" {
+                if chrome && role.state == "closed" {
                     continue;
                 }
                 out.push(CastTarget::Role {
@@ -72,7 +73,7 @@ impl App {
                     role: role.role.clone(),
                 });
             }
-            if self.shell.studio_chrome && ordered.iter().any(|r| r.state == "closed") {
+            if chrome && ordered.iter().any(|r| r.state == "closed") {
                 out.push(CastTarget::ClosedRoles {
                     studio: key.clone(),
                 });
