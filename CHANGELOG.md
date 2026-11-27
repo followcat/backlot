@@ -12,7 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-- `backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone
+- **`backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone.** `metrics` lists first-delivery pass rate, send-backs, what waited on you and for how long, rate-limit windows, approvals and refusals, Hollywood notices, and review and task times, per studio or for all (`--json` for scripts). `digest` is a daily report: what finished, was sent back, is blocked or waits on you, plus a table from each design section to its task, commits, checks and verdict. Neither command uses a model or writes anything (`docs/studio/metrics.md`).
 
 ### Changed
 
