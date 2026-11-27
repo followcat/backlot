@@ -33,6 +33,9 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
             assert_eq!(elev.base, Color::Reset);
             assert_eq!(elev.surface, Color::Reset);
             assert_eq!(elev.overlay, Color::Reset);
+            assert_eq!(elev.gilt, Color::Yellow);
+            assert_eq!(elev.stage_well, Color::Reset);
+            assert_eq!(elev.bulb_warm, Color::Yellow);
             assert_eq!(elev.dim_bg, None);
             assert_eq!(elev.shadow, None);
             continue;
@@ -49,6 +52,9 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
         let dim_bg = rgb(elev.dim_bg.expect("dim_bg"), "dim_bg", name);
         let shadow = rgb(elev.shadow.expect("shadow"), "shadow", name);
         let border_muted = rgb(elev.border_muted, "border_muted", name);
+        let gilt = rgb(elev.gilt, "gilt", name);
+        let stage_well = rgb(elev.stage_well, "stage_well", name);
+        let bulb_warm = rgb(elev.bulb_warm, "bulb_warm", name);
         let muted_surface = rgb(elev.muted_surface, "muted_surface", name);
         let muted_overlay = rgb(elev.muted_overlay, "muted_overlay", name);
         let muted_raised = rgb(elev.muted_raised, "muted_raised", name);
@@ -122,6 +128,16 @@ fn every_bundled_rgb_theme_achieves_distinct_elevation_and_legibility() {
             contrast_ratio(border_muted, surface) >= 1.38,
             "{name}: border_muted CR={:.2} < 1.4",
             contrast_ratio(border_muted, surface)
+        );
+        let cr_gilt = contrast_ratio(gilt, surface);
+        assert!(
+            (2.5..=3.3).contains(&cr_gilt),
+            "{name}: gilt CR={cr_gilt:.2} outside 2.5..=3.3"
+        );
+        let cr_bulb = contrast_ratio(bulb_warm, stage_well);
+        assert!(
+            cr_bulb >= 4.5,
+            "{name}: bulb_warm CR={cr_bulb:.2} < 4.5 against stage_well"
         );
     }
 }

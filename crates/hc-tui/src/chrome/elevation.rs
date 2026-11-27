@@ -20,6 +20,9 @@ pub(crate) struct Elevation {
     pub dim_bg: Option<Color>,
     pub shadow: Option<Color>,
     pub border_muted: Color,
+    pub gilt: Color,
+    pub stage_well: Color,
+    pub bulb_warm: Color,
     pub muted_surface: Color,
     pub muted_overlay: Color,
     pub muted_raised: Color,
@@ -40,6 +43,9 @@ impl Elevation {
                 dim_bg: None,
                 shadow: None,
                 border_muted: palette.overlay0,
+                gilt: Color::Yellow,
+                stage_well: Color::Reset,
+                bulb_warm: Color::Yellow,
                 muted_surface: palette.overlay0,
                 muted_overlay: palette.overlay0,
                 muted_raised: palette.overlay0,
@@ -52,6 +58,8 @@ impl Elevation {
         let surface1 = rgb_of(palette.surface1);
         let selection_bg = rgb_of(palette.selection_bg);
         let overlay0 = rgb_of(palette.overlay0).unwrap_or(text);
+        let accent = rgb_of(palette.accent).unwrap_or(text);
+        let yellow = rgb_of(palette.yellow).unwrap_or(text);
         let is_dark = luminance(panel_bg) < luminance(text);
 
         let (
@@ -112,6 +120,24 @@ impl Elevation {
             )
         };
 
+        let stage_well_rgb = if is_dark {
+            panel_bg
+        } else {
+            move_lstar(surface_rgb, surface0, text, 4.0, false)
+        };
+        let gilt_t = if is_dark { 0.40 } else { 0.50 };
+        let gilt_accent = guard_fg(mix(surface_rgb, accent, gilt_t), surface_rgb, accent, 2.65);
+        let gilt_guarded = guard_fg(gilt_accent, surface_rgb, text, 2.65);
+        let gilt_rgb = clamp_max_contrast(gilt_guarded, surface_rgb, 3.20);
+        let bulb_pole = if is_dark { (255, 255, 255) } else { (0, 0, 0) };
+        let bulb_yellow = guard_fg(
+            mix(stage_well_rgb, yellow, 0.62),
+            stage_well_rgb,
+            yellow,
+            4.5,
+        );
+        let bulb_warm_rgb = guard_fg(bulb_yellow, stage_well_rgb, bulb_pole, 4.5);
+
         let muted_surface = guard_fg(overlay0, surface_rgb, text, 3.0);
         let muted_overlay = guard_fg(overlay0, overlay_rgb, text, 3.0);
         let muted_raised = guard_fg(overlay0, raised_field_rgb, text, 3.0);
@@ -126,6 +152,9 @@ impl Elevation {
             dim_bg: Some(to_color(dim_bg_rgb)),
             shadow: Some(to_color(shadow_rgb)),
             border_muted: to_color(border_muted_rgb),
+            gilt: to_color(gilt_rgb),
+            stage_well: to_color(stage_well_rgb),
+            bulb_warm: to_color(bulb_warm_rgb),
             muted_surface: to_color(muted_surface),
             muted_overlay: to_color(muted_overlay),
             muted_raised: to_color(muted_raised),
