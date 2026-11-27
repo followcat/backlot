@@ -187,11 +187,13 @@ impl App {
             "Studio `{}` is halted.\n\n- halted by: `{}`\n- since: {age} ago\n- reason: {}\n\nRunning tasks continue. New dispatches (`backlot cast`) are refused until resumed with `backlot resume [--note <text>] [--false-positive]`.",
             found.studio.id, halted.by, halted.reason,
         );
-        let mut meta = hollywood::ReaderMeta::default();
-        meta.studio = Some(found.studio.id.clone());
-        meta.machine = key.machine.clone();
-        meta.from = Some(halted.by.clone());
-        meta.ts_ms = Some(halted.since);
+        let meta = hollywood::ReaderMeta {
+            studio: Some(found.studio.id.clone()),
+            machine: key.machine.clone(),
+            from: Some(halted.by.clone()),
+            ts_ms: Some(halted.since),
+            ..Default::default()
+        };
         self.hollywood.view = Some(hollywood::CardView {
             card: None,
             title: format!("{} · HALTED", found.studio.id),
