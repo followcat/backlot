@@ -79,6 +79,8 @@ impl Palette {
             "rose-pine-dawn" => Some(Self::rose_pine_dawn()),
             "vesper" => Some(Self::vesper()),
             "backlot" => Some(Self::backlot()),
+            "backlot-day" => Some(Self::backlot_day()),
+            "backlot-midnight" => Some(Self::backlot_midnight()),
             _ => None,
         }
     }
@@ -229,7 +231,7 @@ pub struct ThemeRuntimeConfig {
     pub legacy_accent: Option<String>,
 }
 
-fn sibling_theme_names(name: &str) -> (String, String) {
+pub(crate) fn sibling_theme_names(name: &str) -> (String, String) {
     match canonical_theme_name(name).unwrap_or(name) {
         "catppuccin" | "catppuccin-mocha" | "catppuccin-latte" | "latte" => {
             ("catppuccin".to_string(), "catppuccin-latte".to_string())
@@ -252,6 +254,7 @@ fn sibling_theme_names(name: &str) -> (String, String) {
         "rose-pine" | "rosepine" | "rose-pine-dawn" | "rosepine-dawn" | "dawn" => {
             ("rose-pine".to_string(), "rose-pine-dawn".to_string())
         }
+        "backlot" | "backlot-day" => ("backlot".to_string(), "backlot-day".to_string()),
         _ => (name.to_string(), name.to_string()),
     }
 }
@@ -362,7 +365,7 @@ pub fn resolve_effective_theme(
 
     (
         resolve_palette_for_theme_name(name, fallback, runtime, mode_custom),
-        name.clone(),
+        canonical_theme_name(name).unwrap_or(name).to_string(),
     )
 }
 

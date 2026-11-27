@@ -18,25 +18,84 @@ use crate::config::{LoadedConfig, THEME_NAMES, ThemeConfig};
 
 /// The built-in theme's name, and the default of backlot's `[theme] name`.
 pub(crate) const NAME: &str = "backlot";
+/// The built-in light sibling (`Babylon` Day) used by `auto_switch`.
+pub(crate) const DAY_NAME: &str = "backlot-day";
+/// Today's legacy midnight-blue palette kept selectable by name.
+pub(crate) const MIDNIGHT_NAME: &str = "backlot-midnight";
 
 /// The Settings list while backlot's own `[theme]` is in force:
-/// `backlot` first, then the reference's themes in their order.
+/// `backlot`, `backlot-day`, and `backlot-midnight` first, then the
+/// reference's themes in their order.
 static OWN_THEME_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
-    std::iter::once(NAME)
+    [NAME, DAY_NAME, MIDNIGHT_NAME]
+        .into_iter()
         .chain(THEME_NAMES.iter().copied())
         .collect()
 });
 
 impl Palette {
-    /// backlot — a premiere at night: marquee gold on midnight blue,
-    /// cream text. The default of the backlot client.
+    /// backlot — Babylon Night: black lacquer, rose velvet, brass,
+    /// and warm ivory text. The default of the backlot client.
     pub fn backlot() -> Self {
         Self {
-            accent: Color::Rgb(240, 178, 74),
-            panel_bg: Color::Rgb(17, 20, 29),
+            accent: Color::Rgb(242, 184, 75),
+            panel_bg: Color::Rgb(18, 15, 22),
             // Opaque and a step darker than the panes: in a
             // translucent terminal the sidebar must still be a surface
             // of its own, not a window onto what is behind it.
+            sidebar_bg: Color::Rgb(12, 10, 15),
+            active_row_bg: Color::Rgb(45, 36, 51),
+            selection_bg: Color::Rgb(62, 49, 70),
+            surface0: Color::Rgb(47, 38, 54),
+            surface1: Color::Rgb(78, 63, 86),
+            surface_dim: Color::Rgb(25, 20, 31),
+            overlay0: Color::Rgb(128, 115, 132),
+            overlay1: Color::Rgb(162, 147, 164),
+            text: Color::Rgb(242, 232, 213),
+            subtext0: Color::Rgb(201, 187, 166),
+            mauve: Color::Rgb(223, 146, 196),
+            green: Color::Rgb(124, 214, 144),
+            yellow: Color::Rgb(246, 217, 115),
+            red: Color::Rgb(238, 82, 102),
+            blue: Color::Rgb(130, 182, 245),
+            teal: Color::Rgb(98, 212, 193),
+            peach: Color::Rgb(242, 147, 87),
+        }
+    }
+
+    /// backlot-day — Babylon Day: bleached parchment stock, warm
+    /// stucco, antique brass, and deep espresso ink. Light sibling
+    /// of `backlot` for `auto_switch = true`.
+    pub fn backlot_day() -> Self {
+        Self {
+            accent: Color::Rgb(140, 83, 10),
+            panel_bg: Color::Rgb(246, 236, 217),
+            sidebar_bg: Color::Rgb(234, 220, 195),
+            active_row_bg: Color::Rgb(223, 208, 180),
+            selection_bg: Color::Rgb(212, 186, 144),
+            surface0: Color::Rgb(223, 208, 181),
+            surface1: Color::Rgb(191, 169, 137),
+            surface_dim: Color::Rgb(236, 224, 200),
+            overlay0: Color::Rgb(117, 101, 84),
+            overlay1: Color::Rgb(92, 77, 62),
+            text: Color::Rgb(38, 27, 20),
+            subtext0: Color::Rgb(78, 61, 48),
+            mauve: Color::Rgb(140, 45, 107),
+            green: Color::Rgb(36, 107, 59),
+            yellow: Color::Rgb(135, 85, 0),
+            red: Color::Rgb(184, 34, 53),
+            blue: Color::Rgb(31, 83, 153),
+            teal: Color::Rgb(20, 105, 96),
+            peach: Color::Rgb(163, 68, 13),
+        }
+    }
+
+    /// backlot-midnight — marquee gold on midnight blue, cream text.
+    /// Preserves backlot's original built-in palette verbatim.
+    pub fn backlot_midnight() -> Self {
+        Self {
+            accent: Color::Rgb(240, 178, 74),
+            panel_bg: Color::Rgb(17, 20, 29),
             sidebar_bg: Color::Rgb(12, 14, 21),
             active_row_bg: Color::Rgb(27, 32, 48),
             selection_bg: Color::Rgb(44, 53, 80),

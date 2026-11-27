@@ -60,19 +60,45 @@ async fn settings_lists_backlot_first_and_saves_the_pick_in_backlots_file() {
     let (_root, own) = files(&mut app, herdr, None);
     app.on_action(A::Settings, 120);
     let settings = app.settings.as_ref().expect("the overlay");
-    assert_eq!(settings.theme_names[0], "backlot");
+    assert_eq!(
+        &settings.theme_names[..3],
+        &["backlot", "backlot-day", "backlot-midnight"]
+    );
+    assert_eq!(&settings.theme_names[3..], crate::config::THEME_NAMES);
     assert_eq!(settings.selected, 0, "the theme in force is selected");
     let screen = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
     assert!(screen.contains("backlot ✓"), "{screen}");
 
-    // One row down is the first reference theme; Enter saves it.
+    // Moving down previews `backlot-day` and `backlot-midnight` live; Esc restores `backlot`.
     key(&mut app, Key::Char('j'));
-    assert_eq!(app.shell.theme_name, crate::config::THEME_NAMES[0]);
+    assert_eq!(app.shell.theme_name, "backlot-day");
+    assert_eq!(
+        app.shell.palette,
+        crate::chrome::palette::Palette::backlot_day()
+    );
+    key(&mut app, Key::Char('j'));
+    assert_eq!(app.shell.theme_name, "backlot-midnight");
+    assert_eq!(
+        app.shell.palette,
+        crate::chrome::palette::Palette::backlot_midnight()
+    );
+    key(&mut app, Key::Escape);
+    assert!(app.settings.is_none(), "Esc closes the overlay");
+    assert_eq!(app.shell.theme_name, "backlot");
+    assert_eq!(
+        app.shell.palette,
+        crate::chrome::palette::Palette::backlot()
+    );
+    assert!(!own.exists(), "Esc writes nothing");
+
+    // Reopen, pick `backlot-day`, and Enter saves it to backlot's own file.
+    app.on_action(A::Settings, 120);
+    key(&mut app, Key::Char('j'));
     key(&mut app, Key::Enter);
     assert!(app.settings.is_none(), "a theme apply closes the overlay");
     let written = std::fs::read_to_string(&own).unwrap();
     assert!(
-        written.contains("[theme]") && written.contains("name = \"catppuccin\""),
+        written.contains("[theme]") && written.contains("name = \"backlot-day\""),
         "{written}"
     );
     assert_eq!(
@@ -80,7 +106,90 @@ async fn settings_lists_backlot_first_and_saves_the_pick_in_backlots_file() {
         herdr,
         "herdr's file is not written"
     );
-    assert_eq!(app.shell.theme_name, "catppuccin");
+    assert_eq!(app.shell.theme_name, "backlot-day");
+    assert_eq!(
+        app.shell.palette,
+        crate::chrome::palette::Palette::backlot_day()
+    );
+}
+
+#[tokio::test]
+async fn reload_resolves_babylon_aliases_custom_overrides_and_auto_switch() {
+    use crate::chrome::palette::Palette;
+
+    let mut app = app();
+    let (_root, own) = files(&mut app, "[theme]\nname = \"nord\"\n", None);
+    std::fs::create_dir_all(own.parent().unwrap()).unwrap();
+
+    // `babylon` resolves to `backlot` Night, and Settings highlights `backlot ✓`.
+    std::fs::write(&own, "[theme]\nname = \"babylon\"\n").unwrap();
+    app.reload_config();
+    assert!(app.shell.startup_config_diagnostic.is_none());
+    assert_eq!(app.shell.theme_name, "backlot");
+    assert_eq!(app.shell.palette, Palette::backlot());
+    app.on_action(A::Settings, 120);
+    assert_eq!(app.settings.as_ref().unwrap().selected, 0);
+    let screen = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
+    assert!(screen.contains("backlot ✓"), "{screen}");
+    key(&mut app, Key::Escape);
+
+    // `babylon-day` resolves to `backlot-day` and highlights row 1 in Settings.
+    std::fs::write(&own, "[theme]\nname = \"babylon-day\"\n").unwrap();
+    app.reload_config();
+    assert!(app.shell.startup_config_diagnostic.is_none());
+    assert_eq!(app.shell.theme_name, "backlot-day");
+    assert_eq!(app.shell.palette, Palette::backlot_day());
+    app.on_action(A::Settings, 120);
+    assert_eq!(app.settings.as_ref().unwrap().selected, 1);
+    key(&mut app, Key::Escape);
+
+    // `[theme.custom]` overrides apply on top of `babylon` / `backlot`.
+    std::fs::write(
+        &own,
+        "[theme]\nname = \"babylon\"\n\n[theme.custom]\naccent = \"#010203\"\n",
+    )
+    .unwrap();
+    app.reload_config();
+    assert_eq!(app.shell.theme_name, "backlot");
+    assert_eq!(
+        app.shell.palette.accent,
+        ratatui::style::Color::Rgb(1, 2, 3)
+    );
+    assert_eq!(app.shell.palette.panel_bg, Palette::backlot().panel_bg);
+
+    // `auto_switch = true` on default `backlot` follows Light/Dark host replies.
+    std::fs::write(&own, "[theme]\nauto_switch = true\n").unwrap();
+    app.reload_config();
+    app.on_host_reply(crate::host::HostReply::Light);
+    assert_eq!(app.shell.theme_name, "backlot-day");
+    assert_eq!(app.shell.palette, Palette::backlot_day());
+    app.on_host_reply(crate::host::HostReply::Dark);
+    assert_eq!(app.shell.theme_name, "backlot");
+    assert_eq!(app.shell.palette, Palette::backlot());
+
+    // `backlot-midnight` has no light sibling, so `auto_switch` keeps it.
+    std::fs::write(
+        &own,
+        "[theme]\nname = \"backlot-midnight\"\nauto_switch = true\n",
+    )
+    .unwrap();
+    app.reload_config();
+    app.on_host_reply(crate::host::HostReply::Light);
+    assert_eq!(app.shell.theme_name, "backlot-midnight");
+    assert_eq!(app.shell.palette, Palette::backlot_midnight());
+
+    // Unknown names still fall back to `catppuccin` with the diagnostic notice.
+    std::fs::write(&own, "[theme]\nname = \"no-such-theme\"\n").unwrap();
+    app.reload_config();
+    assert_eq!(app.shell.palette, Palette::catppuccin());
+    assert!(
+        app.shell
+            .startup_config_diagnostic
+            .as_deref()
+            .is_some_and(|d| d.ends_with("; herdr config check")),
+        "{:?}",
+        app.shell.startup_config_diagnostic
+    );
 }
 
 #[tokio::test]

@@ -1,7 +1,9 @@
 # Theme
 
-backlot has a look of its own, so you can tell it from hc-tui and Herdr at a glance: the built-in `backlot` theme,
-marquee gold on midnight blue with cream text. It is the default.
+backlot has a look of its own, so you can tell it from hc-tui and Herdr at a glance: the built-in `backlot` theme
+(*Babylon* Night: black lacquer, rose velvet, and brass with warm ivory text), paired with a matching light theme
+(`backlot-day`). `backlot` is the default. The previous marquee gold on midnight blue look remains selectable as
+`backlot-midnight`.
 
 Every bundled RGB theme in studio mode (`!plain` and without `[theme] source = "herdr"`) is opaque across all four chrome frames: its left sidebar, top studio header, Lot dock, and Call Sheet share the same `elevation.surface` separated by one-column `border_muted` rules (unless `[theme.custom] sidebar_bg` overrides the sidebar, or the 16-color `terminal` theme falls back to terminal default), while the center terminal pane keeps `Color::Reset` and modal overlays fill default-background cells with `elevation.overlay`. A translucent terminal therefore never shows through the studio chrome, whereas `backlot --plain` and `[theme] source = "herdr"` keep Herdr's translucent sidebar (`Color::Reset`) and `panel_bg` top bar unchanged.
 
@@ -10,19 +12,23 @@ when that is set), not from your Herdr config. With no `[theme]` table there, or
 
 ```toml
 [theme]
-name = "backlot"          # or any built-in theme: catppuccin, nord, dracula, gruvbox, tokyo-night, …
+name = "backlot"          # or backlot-day, backlot-midnight, or any built-in theme: catppuccin, nord, dracula, …
 
 [theme.custom]            # optional: change single colours on top of the theme
-accent = "#f0b24a"
+accent = "#f2b84b"
 ```
 
 `[theme]` takes the same keys as Herdr's: `name`, `auto_switch` with `dark_name` and `light_name`, and `[theme.custom]`
-with its `dark` and `light` tables. `name` defaults to `backlot`.
+with its `dark` and `light` tables. `name` defaults to `backlot`, and `babylon` / `babylon-day` are accepted as aliases
+for `backlot` / `backlot-day`. When `auto_switch = true`, `backlot` switches between `backlot` (dark) and `backlot-day`
+(light); `backlot-midnight` has no light sibling, so `auto_switch` keeps `backlot-midnight` on both appearances unless
+you set `light_name` explicitly.
 
 ## Picking a theme
 
-`Ctrl+B s` opens Settings on the theme list, with `backlot` first. Moving through the list previews each theme; Enter
-saves the one you picked to backlot's config and `Esc` puts the old one back. Your Herdr config is not written.
+`Ctrl+B s` opens Settings on the theme list, with `backlot`, `backlot-day`, and `backlot-midnight` first. Moving
+through the list previews each theme; Enter saves the one you picked to backlot's config and `Esc` puts the old one
+back. Your Herdr config is not written.
 
 After editing the file by hand, `Ctrl+B Shift+R` reloads it.
 
