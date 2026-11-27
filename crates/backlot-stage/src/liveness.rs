@@ -104,8 +104,7 @@ impl Evidence {
             last_status_sample_ms: None,
             work_area: None,
             last_status_hash: None,
-            last_work_area_change_ms: (input.local_machine && !input.work_roots.is_empty())
-                .then_some(now_ms),
+            last_work_area_change_ms: None,
             last_obs_ms: now_ms,
             blocked_intervals: Vec::new(),
             eligible_since_ms: input.eligible.then_some(now_ms),
@@ -134,6 +133,9 @@ impl Evidence {
         if input.local_machine && !input.work_roots.is_empty() {
             ev.last_status_sample_ms = Some(now_ms);
             let snap = work_read(input.work_roots, true, git);
+            if has_work_area(&snap) {
+                ev.last_work_area_change_ms = Some(now_ms);
+            }
             ev.last_status_hash = snap.status_hash;
             ev.work_area = Some(snap);
         }
@@ -304,7 +306,7 @@ impl Evidence {
             self.last_status_sample_ms = Some(now_ms);
         }
         let snap = work_read(work_roots, run_status, git);
-        if self.last_work_area_change_ms.is_none() {
+        if has_work_area(&snap) && self.last_work_area_change_ms.is_none() {
             self.last_work_area_change_ms = Some(now_ms);
         }
         if let Some(reason) = diff_work_area(self.work_area.as_ref(), self.last_status_hash, &snap)
@@ -452,4 +454,8 @@ impl Evidence {
     pub(crate) fn last_moved_stamp(&self) -> Option<&SourceStamp> {
         self.last_moved.as_ref().map(|(_, s)| s)
     }
+}
+
+fn has_work_area(snap: &WorkAreaSnap) -> bool {
+    !snap.head_sig.is_empty() || snap.index_mtime_ns.is_some() || snap.status_hash.is_some()
 }

@@ -16,6 +16,7 @@ fn every_stage_reason_is_classified() {
         reasons::PERMISSION_PROMPT
         | crate::ratelimit::AGENT_ERROR
         | reasons::STALLED
+        | reasons::LOOPING
         | reasons::QUESTION
         | RATE_LIMITED
         | CONNECTION_ERROR => Stuck,
@@ -23,7 +24,8 @@ fn every_stage_reason_is_classified() {
         | reasons::CURSOR_DIR_OPEN
         | reasons::HOOKS_UNAVAILABLE
         | reasons::XDG_CONFIG_HOME_SET
-        | reasons::OUTWARD_ACTION => Info,
+        | reasons::OUTWARD_ACTION
+        | reasons::NO_PROGRESS => Info,
         _ => NeedsYou,
     };
     for reason in reasons::ALL {

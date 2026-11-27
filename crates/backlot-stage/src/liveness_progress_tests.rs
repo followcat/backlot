@@ -297,8 +297,6 @@ fn evidence_tracks_last_work_area_change_ms_and_resets_on_file_or_commit() {
         &mut git,
     );
     assert_eq!(ev.work_area_change_ms(), Some(1_000));
-
-    // Unchanged 60s sample keeps 1_000.
     ev.observe(
         &mk_input(65_000),
         &|_| Vec::new(),
@@ -310,8 +308,6 @@ fn evidence_tracks_last_work_area_change_ms_and_resets_on_file_or_commit() {
         &mut git,
     );
     assert_eq!(ev.work_area_change_ms(), Some(1_000));
-
-    // Commit / work-area change at 130_000 advances last_work_area_change_ms.
     ev.observe(
         &mk_input(130_000),
         &|_| Vec::new(),
@@ -323,6 +319,13 @@ fn evidence_tracks_last_work_area_change_ms_and_resets_on_file_or_commit() {
         &mut git,
     );
     assert_eq!(ev.work_area_change_ms(), Some(130_000));
+    let empty_ev = Evidence::new(
+        &mk_input(1_000),
+        &|_| Vec::new(),
+        &|_, _, _| WorkAreaSnap::default(),
+        &mut git,
+    );
+    assert_eq!(empty_ev.work_area_change_ms(), None);
 }
 
 #[test]
