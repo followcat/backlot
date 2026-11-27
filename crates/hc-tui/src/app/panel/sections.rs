@@ -93,7 +93,7 @@ impl App {
                     .find_map(|s| first_in_section(&entries, &cur_key, s))
             };
             if let Some(next) = candidate {
-                self.finish_tab_jump(&rows, next.index, next.target.clone());
+                self.finish_tab_jump(&rows, next.index, next.target.clone(), &next.studio);
                 return;
             }
             let pos = studios.iter().position(|(k, _)| k == &cur_key).unwrap_or(0);
@@ -137,7 +137,7 @@ impl App {
                 })
                 .unwrap_or(0);
             let target = rebuilt_targets.get(index).cloned().unwrap_or(header_target);
-            self.finish_tab_jump(&rows, index, target);
+            self.finish_tab_jump(&rows, index, target, &dest_key);
         } else {
             // Crossing backward to `dest_key`'s last non-empty section: if
             // `dest_key` is Folded (`Target::Studio`), selecting it unfolds its
@@ -154,7 +154,7 @@ impl App {
                 .copied()
                 .find_map(|s| first_in_section(&rebuilt_entries, &dest_key, s));
             if let Some(entry) = last_entry {
-                self.finish_tab_jump(&rows, entry.index, entry.target.clone());
+                self.finish_tab_jump(&rows, entry.index, entry.target.clone(), &entry.studio);
             }
         }
     }
@@ -164,6 +164,7 @@ impl App {
         rows: &[crate::panel::Row<'_>],
         mut index: usize,
         target: Target,
+        studio: &StudioKey,
     ) {
         let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
         while index > 0 && targets.get(index - 1) == targets.get(index) {
@@ -174,6 +175,9 @@ impl App {
         self.panel.finish_confirm = None;
         self.panel.editing = false;
         self.panel.reset_history_nav();
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+            crate::focus::LotLevel::InsideStudio(studio.clone()),
+        ));
         self.reveal_panel_line(rows, index);
     }
 }

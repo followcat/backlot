@@ -104,6 +104,7 @@ impl App {
     }
 
     pub(crate) fn on_mouse(&mut self, mouse: MouseInput) {
+        self.sync_focus();
         if self.popup_mouse(&mouse) {
             self.sched.mark_dirty(Instant::now());
             return;
@@ -229,7 +230,7 @@ impl App {
                 return;
             }
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) && self.panel.focused {
-                self.panel.focused = false;
+                self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
             }
         }
         if contains(self.take_control_hit, (mouse.col, mouse.row)) {

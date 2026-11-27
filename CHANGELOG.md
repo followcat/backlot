@@ -10,6 +10,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **One way to move focus around the client.** `Alt+L` enters the current studio in the Lot on the row that needs you (a prompt, an open ask, a card), and a second `Alt+L` starts a tell. `Esc` steps back out one level at a time. `Ctrl+B t` and `Ctrl+B a` focus the machines tree and the Cast (`[keys] focus_tree` / `focus_cast`). Switching studios or roles keeps the focus where it was. Only the focused area has the accent frame, and the bottom bar says where focus is (`FOCUS: lot › acme-shop › producer`). Dialogs use the same Tab, arrows and Esc. `Ctrl+G` works only in the terminal.
+- **Telling a role from the Lot.** `t`, `r` or `i` on a row starts a tell addressed to that role without typing `/tell`. Under what you sent, the Lot shows whether it is sending, queued and why (busy, out of quota, the stage is stopped), delivered, or being worked on.
+- A single click on a role in the Lot, while the terminal has focus, shows that role's terminal and leaves the Lot focused on the row.
+
 ### Fixed
 
 - **A role whose turn you interrupted shows as idle instead of working** (`backlot-stage`, `docs/studio/design.md`). Recognized Claude Code's captured interrupt screen line (`Interrupted · What should Claude do instead?`, tracked across turns so older scrollback markers never cancel a new turn), let `StatusSource::Native` / `ForkInference` `idle`/`done`/`waiting` core status + `Waiting` screen override `Working` hook signals older than `SIGNAL_STALE_MS` (5 s) while preserving `Working` during the grace window and keeping `Blocked` highest priority from any source.

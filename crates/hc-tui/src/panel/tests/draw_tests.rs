@@ -1316,6 +1316,8 @@ fn compact_studio_names_are_bold_text_and_focused_hints_prioritize_tab_when_room
         Some(&Target::Studio("acme-shop".into())),
         false,
         false,
+        false,
+        false,
         &ms,
         false,
         false,
@@ -1329,6 +1331,8 @@ fn compact_studio_names_are_bold_text_and_focused_hints_prioritize_tab_when_room
 
     let mid_pairs = crate::panel::draw_hints::focused_hint_pairs(
         Some(&Target::Studio("acme-shop".into())),
+        false,
+        false,
         false,
         false,
         &ms,
@@ -1350,13 +1354,15 @@ fn compact_studio_names_are_bold_text_and_focused_hints_prioritize_tab_when_room
         Some(&Target::Studio("acme-shop".into())),
         false,
         false,
+        false,
+        false,
         &ms,
         false,
         false,
         24,
     );
     assert!(
-        narrow_pairs.iter().any(|(k, _)| *k == "⏎"),
+        narrow_pairs.iter().any(|(k, _)| *k == "⏎/→"),
         "{narrow_pairs:?}"
     );
     assert!(usize::from(crate::chrome::render::hint_bar_width(&narrow_pairs)) <= 24);

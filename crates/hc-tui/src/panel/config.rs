@@ -88,11 +88,13 @@ const DEFAULT_NEXT_STUDIO: &str = "alt+pagedown";
 const DEFAULT_PREVIOUS_ROLE: &str = "alt+up";
 const DEFAULT_NEXT_ROLE: &str = "alt+down";
 const DEFAULT_FOCUS_LOT: &str = "alt+l";
+const DEFAULT_FOCUS_TREE: &str = "prefix+t";
+const DEFAULT_FOCUS_CAST: &str = "prefix+a";
 
 /// The direct studio keys: `alt+pageup/pagedown` move between studios,
 /// `alt+up/down` between the current studio's people, and `alt+l`
-/// focuses the lot on its last row. `None` is an unbound key
-/// (`""` in the file).
+/// focuses the lot. `focus_tree` / `focus_cast` default to `prefix+t` /
+/// `prefix+a`. `None` / `Unbound` disables a key (`""` in config).
 #[derive(Debug, Clone)]
 pub(crate) struct StudioKeys {
     pub previous_studio: Option<KeyCombo>,
@@ -100,16 +102,34 @@ pub(crate) struct StudioKeys {
     pub previous_role: Option<KeyCombo>,
     pub next_role: Option<KeyCombo>,
     pub focus_lot: Option<KeyCombo>,
+    pub focus_tree: crate::focus::FocusBinding,
+    pub focus_cast: crate::focus::FocusBinding,
 }
 
 impl Default for StudioKeys {
     fn default() -> StudioKeys {
+        let mut ignored = None;
+        let path = Path::new("config.toml");
         StudioKeys {
             previous_studio: crate::config::parse_key_combo(DEFAULT_PREVIOUS_STUDIO),
             next_studio: crate::config::parse_key_combo(DEFAULT_NEXT_STUDIO),
             previous_role: crate::config::parse_key_combo(DEFAULT_PREVIOUS_ROLE),
             next_role: crate::config::parse_key_combo(DEFAULT_NEXT_ROLE),
             focus_lot: crate::config::parse_key_combo(DEFAULT_FOCUS_LOT),
+            focus_tree: crate::focus::FocusBinding::parse(
+                None,
+                DEFAULT_FOCUS_TREE,
+                "focus_tree",
+                path,
+                &mut ignored,
+            ),
+            focus_cast: crate::focus::FocusBinding::parse(
+                None,
+                DEFAULT_FOCUS_CAST,
+                "focus_cast",
+                path,
+                &mut ignored,
+            ),
         }
     }
 }
@@ -322,6 +342,8 @@ struct KeysSection {
     prev_studio: Option<String>,
     prev_role: Option<String>,
     focus_lot: Option<String>,
+    focus_tree: Option<String>,
+    focus_cast: Option<String>,
     call_sheet: Option<String>,
     prefix_call_sheet: Option<String>,
     prefix_dock: Option<String>,
@@ -457,6 +479,20 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             keys.focus_lot,
             DEFAULT_FOCUS_LOT,
             "focus_lot",
+            path,
+            &mut notice,
+        );
+        config.keys.focus_tree = crate::focus::FocusBinding::parse(
+            keys.focus_tree,
+            DEFAULT_FOCUS_TREE,
+            "focus_tree",
+            path,
+            &mut notice,
+        );
+        config.keys.focus_cast = crate::focus::FocusBinding::parse(
+            keys.focus_cast,
+            DEFAULT_FOCUS_CAST,
+            "focus_cast",
             path,
             &mut notice,
         );

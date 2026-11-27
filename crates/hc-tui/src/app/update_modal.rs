@@ -43,6 +43,8 @@ pub(crate) struct UpdateModal {
     pub managed: Option<String>,
     /// The last frame's hit map and scroll bounds.
     pub render: ModalRender,
+    /// Keyboard-focused footer button index (cycled by `Tab`/`←`/`→`).
+    pub focused_button: Option<usize>,
 }
 
 /// The index of this binary's own notes in the cache, if cached.
@@ -187,6 +189,7 @@ impl App {
             chip,
             managed,
             render: ModalRender::default(),
+            focused_button: None,
         });
         if phase == Phase::Opened {
             self.kick_notes_fetch(true);
@@ -211,21 +214,59 @@ impl App {
         };
         let (phase, writable) = (modal.phase, modal.writable);
         let rows = i32::from(modal.render.rows.max(1));
+        let button_count = modal.render.buttons.len();
+        let focused_button = modal.focused_button;
         let plain = mods.is_empty();
+        let shift = mods == KeyModifiers::SHIFT;
         let ctrl = mods == KeyModifiers::CONTROL;
         let scrollable = matches!(phase, Phase::Opened | Phase::WhatsNew);
         match code {
             KeyCode::Esc => self.escape_update(phase),
             KeyCode::Char('q') if plain && phase != Phase::Updating => self.escape_update(phase),
             KeyCode::Char('s') if plain && phase == Phase::Opened => self.skip_update(),
-            KeyCode::Enter if plain && phase == Phase::WhatsNew => self.close_update(),
-            KeyCode::Enter | KeyCode::Char('r') if plain && phase == Phase::Done => {
+            KeyCode::Tab | KeyCode::Right if (plain || shift) && button_count > 0 => {
+                if let Some(m) = self.update_modal.as_mut() {
+                    let next = match m.focused_button {
+                        Some(i) => (i + 1) % button_count,
+                        None => 0,
+                    };
+                    m.focused_button = Some(next);
+                }
+            }
+            KeyCode::BackTab | KeyCode::Left if (plain || shift) && button_count > 0 => {
+                if let Some(m) = self.update_modal.as_mut() {
+                    let next = match m.focused_button {
+                        Some(i) => (i + button_count - 1) % button_count,
+                        None => button_count.saturating_sub(1),
+                    };
+                    m.focused_button = Some(next);
+                }
+            }
+            KeyCode::Enter if plain => {
+                if let Some(idx) = focused_button
+                    && let Some((_, button)) = self
+                        .update_modal
+                        .as_ref()
+                        .and_then(|m| m.render.buttons.get(idx).copied())
+                {
+                    self.press_update_button(button);
+                } else {
+                    match phase {
+                        Phase::WhatsNew => self.close_update(),
+                        Phase::Done => self.request_restart(),
+                        Phase::Opened if writable => self.start_install(),
+                        Phase::Failed => self.start_install(),
+                        _ => {}
+                    }
+                }
+            }
+            KeyCode::Char('r') if plain && phase == Phase::Done => {
                 self.request_restart();
             }
-            KeyCode::Enter | KeyCode::Char('u') if plain && phase == Phase::Opened && writable => {
+            KeyCode::Char('u') if plain && phase == Phase::Opened && writable => {
                 self.start_install();
             }
-            KeyCode::Enter | KeyCode::Char('r') if plain && phase == Phase::Failed => {
+            KeyCode::Char('r') if plain && phase == Phase::Failed => {
                 self.start_install();
             }
             KeyCode::Down | KeyCode::Char('j') if plain && scrollable => self.scroll_update(1),
@@ -234,9 +275,8 @@ impl App {
                 self.scroll_update(rows);
             }
             KeyCode::Char('d') if ctrl && scrollable => self.scroll_update(rows),
-            KeyCode::PageUp | KeyCode::Char('u') if ctrl && scrollable => {
-                self.scroll_update(-rows);
-            }
+            KeyCode::PageUp if (plain || ctrl) && scrollable => self.scroll_update(-rows),
+            KeyCode::Char('u') if ctrl && scrollable => self.scroll_update(-rows),
             KeyCode::Home | KeyCode::Char('g') if plain && scrollable => self.scroll_update_to(0),
             KeyCode::End | KeyCode::Char('G') if scrollable => self.scroll_update_to(i32::MAX),
             _ => {}

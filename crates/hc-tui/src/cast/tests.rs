@@ -102,6 +102,10 @@ fn cast_view<'a>(
         hint: false,
         stopped: false,
         server_stopped: false,
+        region_focused: false,
+        cursor_target: None,
+        remembered_target: None,
+        active_chip: None,
     }
 }
 

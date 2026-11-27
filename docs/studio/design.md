@@ -395,7 +395,11 @@ and commit summary) so both the Call Sheet and Studio Dock show them in agent an
 `design_gate = "required"` and the current requirement version's opening design is beyond `idle`, it also carries an
 optional `design` (`DesignSummary`: `version`, `round`, `phase`, `waiting_user`, `suggest_skip`, `skip_reason`,
 `doc_file`, capped `summary`, up to 3 capped `questions`, `waiting_since_ms`), slimming to header fields (`summary:
-null`, `questions: []`) once `signed` and all tasks for that version have been cast; and when a studio's ledger
+null`, `questions: []`) once `signed` and all tasks for that version have been cast; each `RoleSummary` also
+carries an additive `queue: Option<QueueStatus>` classifying queued tells (`Busy`, `Prompt`, `RateLimited`,
+`OutOfQuota`, `AuthError`, `Starting`, `WaitingQuiet`, `Handoff`, `Down`) so the Lot `TALK` row explains queue
+delays and gates delivery across quota/connection banners (`backlot-stage/src/deliver.rs`), while clients
+derive `Down` locally when the stage terminal is down; and when a studio's ledger
 contains unknown event kinds at `v <= LEDGER_VERSION`, the stage pauses read-only for that studio and marks its
 summary entry with `needs_upgrade: true` and `unknown_kinds` (omitted on normal studios) so clients display
 `"upgrade backlot"`.

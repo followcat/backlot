@@ -191,6 +191,7 @@ fn studio_header_draws_role_badge_color_and_degrades_runner_model_effort() {
         agent: true,
         pill: true,
         header: Some(&header),
+        unfocused_cue: false,
         cols: 120,
         spin: 0,
     };
@@ -280,6 +281,7 @@ fn studio_header_paints_raised_row_capsule_with_terminal_16_fallback_and_wide_cj
         agent: false,
         pill: true,
         header: Some(&header),
+        unfocused_cue: false,
         cols: 80,
         spin: 0,
     };

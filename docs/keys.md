@@ -31,9 +31,10 @@ The defaults you'll use most:
 | `Ctrl+B r` | Resize mode |
 | `Ctrl+B x` | Close the pane |
 | `Ctrl+B y` | Toggle the studio panel |
-| `Alt+L` | Focus the lot (`lot · N`) on its last selectable row — `i`/`/` composes, `↑` walks up, `Esc` leaves |
-| `Ctrl+B t` | Focus the left machines tree — `Esc` back, `↑/↓` move, `Enter` acts like a click, `m` opens the row's menu |
-| `Ctrl+G` | Lock the keyboard, so every key goes to the program. Press again to unlock. |
+| `Alt+L` | Enter the lot (`lot · N`) on the target studio's priority row (`InsideStudio`); a 2nd press enters inline `Compose`; `Esc` steps back one level |
+| `Ctrl+B t` | Focus the left machines tree — `Tab` switches to Cast, `↑/↓` move, `Enter` acts like a click, `m` opens the row's menu, `Esc` returns to Terminal |
+| `Ctrl+B a` | Focus the left Cast sidebar section (roles & shells of current studio) — `Tab` switches to Tree, `←/→` cycle inline action chips, `t`/`r` open targeted compose, `x` acks asks, `Esc` returns to Terminal |
+| `Ctrl+G` | Lock the keyboard in bare Terminal focus (inactive when a non-terminal region or modal holds focus). Press again to unlock. |
 
 `Ctrl+B Ctrl+B` sends a literal `Ctrl+B` to the program. Custom commands bound in your Herdr config work here too.
 
@@ -44,68 +45,88 @@ and the Hollywood overseer (Enter opens the setup dialog — a first setup while
 reconfigure with one) — which writes to backlot's own `config.toml`. [Runtime](runtime.md) covers the prefix,
 lock and navigation in more detail.
 
-## The left machines tree
+## The left sidebar (`Tree` and `Cast`)
 
-`Ctrl+B t` moves the keyboard into the left machines tree — it opens the sidebar first when it is
-collapsed, and highlights the row for the current place (the focused workspace's space, else the
-machine row). `Esc` gives the keys back to the terminal. `Ctrl+B t` is free in the default keymap;
-`Ctrl+B Tab` and `Ctrl+B h` would have collided with `cycle_pane_next` and `focus_pane_left`.
+Only one region owns keyboard focus at a time (`FocusState`): whenever focus leaves the terminal,
+the pane border mutes with `[unfocused · Esc returns]` and the bottom modebar displays
+`FOCUS: <region>`.
+
+`Ctrl+B t` (`[keys] focus_tree`) opens the sidebar if collapsed and focuses the **machines tree**
+on the current workspace or machine row. `Ctrl+B a` (`[keys] focus_cast`) focuses the **Cast**
+section below it (roles and studio shells of the current studio, with an indented
+`runner · model · effort` line under each in-use role). Once inside either section, `Tab` /
+`Shift+Tab` switches between `Tree` and `Cast`, global chords (`Alt+L`, `Alt+Y`, `Alt+PageUp/PageDown`,
+`Alt+Up/Down`, `Ctrl+B y/t/a`) stay live, and `Esc` returns focus to the terminal.
 
 While the tree owns the keys:
 
 | Keys | Action |
 |---|---|
 | `↑`/`↓`, `k`/`j` | Move the highlighted row; the section scrolls to it |
+| `Tab` / `Shift+Tab` | Switch focus to the Cast section |
+| `←` / `→` | Collapse or expand the selected machine group |
 | `Enter` | The same action a left-click runs: a workspace row focuses its terminal; a stage-down studio starts the machine's stage; a live studio with no space becomes current; the `finished (n)` fold toggles; a finished studio opens its finished-studio menu; a machine row folds its section |
 | `m` | The highlighted row's context menu — the machine menu on a machine row, the studio menu on a studio or a workspace's studio |
 | `Esc` | Leave the tree, keys back to the terminal |
 
-The highlighted row draws the accent `▌` the focused studio row uses. Every row the launcher's
-`machines` group names — `Stage log`, `Unfold finished studios (n)`, `Machine menu` — is the same
-action this tree's `Enter` and `m` run.
-
-## The studio panel
-
-`Ctrl+B y` — the prefix, then `y` — opens the studio panel. Pressing the chord again while it is
-focused closes it; while it is open but unfocused the chord focuses it. A Herdr binding on `y`
-still wins whenever the panel does not own the keys. The chord's tail is `panel.key` in
-`~/.config/backlot/config.toml`.
-
-`Alt+L` (`keys.focus_lot` in `~/.config/backlot/config.toml`) is the direct jump into the lot: if the
-dock is hidden or collapsed it opens expanded, moves keyboard focus to it, and selects the last
-selectable row (such as `› tell producer · / actions`), scrolled into view without starting compose
-(`i` or `/` composes, `↑` walks up to the newest entries, `Esc` leaves as before). Pressed while
-the lot already has focus (and is not composing or confirming), it jumps back to the last row and
-never closes the dock. Like `Alt+Y`, it falls through to the program under `--plain` and yields to
-shown floats, modals, overlays, and active compose. An empty string (`""`) unbinds it.
-
-The panel — the studio dock — has three modes: closed (zero width, no keys), a
-16-column collapsed strip, and an expanded column (38 columns at 160+, 36 at 100+, 28 under) of
-bordered studio blocks — the default. The column sits beside the panes while they keep at least 44
-columns past the sidebar; a window too narrow for that falls back to the strip — beside the panes
-from 60 columns, a 16-column overlay at the pane's right edge under that. The selection is a `▌`
-cursor that lands only on actionable rows —
-titles and spacers are skipped. While it is focused it owns these keys:
+While Cast owns the keys:
 
 | Keys | Action |
 |---|---|
-| `j`/`k`, arrows | Move the selection |
-| `Tab` / `Shift+Tab` | Jump to the next / previous section inside a studio block (header → people → tasks → exchange → `›`), wrapping across studios |
+| `↑`/`↓`, `k`/`j` | Walk live roles, studio shells, and the `others` group toggle |
+| `←`/`→`, `h`/`l` | Step inline action chips on a role needing attention (prompt, ask, quota/error) |
+| `Tab` / `Shift+Tab` | Switch focus to the machines tree |
+| `Enter` | Execute highlighted chip, or focus the role/shell terminal |
+| `t` / `r` | Jump into targeted Lot inline compose for the selected role |
+| `x` / `y` / `d` | Acknowledge an open ask (`x`) or answer a user prompt (`y`/`d`) |
+| `p` / `m` / `o` | Peek screen (`p`), open role/studio menu (`m`), or reopen closed role (`o`) |
+| `Esc` | Clear active chip first, or return focus to the terminal |
+
+The highlighted row draws the accent `▌` while active (muting to a faint `·` when unfocused). Every
+row the launcher's `machines` group names — `Stage log`, `Unfold finished studios (n)`,
+`Machine menu` — is the same action this tree's `Enter` and `m` run.
+
+## The studio panel
+
+`Ctrl+B y` — the prefix, then `y` — opens the studio panel (`Studios` level). Pressing the chord
+again while it is focused closes it; while it is open but unfocused the chord focuses it. A Herdr
+binding on `y` still wins whenever the panel does not own the keys. The chord's tail is
+`panel.key` in `~/.config/backlot/config.toml`.
+
+`Alt+L` (`[keys] focus_lot` in `~/.config/backlot/config.toml`) enters the active studio cleanly
+across four nested levels (`Studios → InsideStudio(S) → RowActions / Compose`):
+
+- From `Terminal`, `Tree`, `Cast`, or `CallSheet`: opens or expands the Lot if hidden/collapsed and
+  enters the target studio on its priority landing row (`user prompt` → `open ask` → `needs you /
+  design / card` → `active pane member` → `producer` → `›`), drawn with the heavy accent focus
+  border (`┏`/`┃`) and `entered studio` header badge.
+- From `Lot(Studios)`: enters the selected studio (or activates `+ new` / `setup`).
+- 2nd `Alt+L` inside a studio: jumps directly into `Compose` (`›`).
+- Like `Alt+Y`, it falls through under `--plain` and yields to modals and active drafts (`""` unbinds).
+
+While Lot owns the keys:
+
+| Keys | Action |
+|---|---|
+| `j`/`k`, `↑`/`↓` | Move selection across rows (bounded inside the entered studio; crosses studios at `Studios` level) |
 | `PageUp`/`PageDown` | Scroll |
-| `Enter` | Focus a live person's terminal / make a studio current / toggle a `✓ … done` or `□ … closed` fold row (`o` owns closed-seat reopening) |
-| `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold a studio block |
+| `Tab` / `Shift+Tab` | Jump to the next / previous non-empty section (`Header` → `People` → `Tasks` → `Exchange` → `›` Input), crossing studios (`InsideStudio` follows the target studio) and wrapping; in `RowActions`: step inline chips (`« chip »`); in empty `Compose`: cycle `producer → cursor role → hollywood` (`Tab` after `/` completes `/verb`) |
+| `←`/`→`, `h`/`l` | On a row with inline chips (`[reply r]`, `[ack x]`, `[switch w]`, `[allow y]`, etc.): step into/across `RowActions`; on a studio header at `Studios` level: `→`/`l` enters the studio, `←`/`h` folds |
+| `Enter` | Execute highlighted chip, enter selected studio, focus a live person's terminal, toggle a fold, or open a card/task |
+| `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold/unfold a studio block |
+| `t` / `r` / `i` | Targeted inline compose (pre-targets selected role or open ask without inserting `/tell <role> ` text into the input buffer); `/` seeds `/` for commands |
+| `x` / `w` | Acknowledge an open ask on selected person (`x`); open Recast dialog for a quota/error role (`w`) |
 | `o` | Reopen a closed resumable person |
 | `v` | Open the Task & Delivery Sheet |
 | `p` | Peek the terminal |
 | `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
 | `s`/`f` | Start the stage / finish the studio |
-| `i` / `/` | Edit the selected studio's `›` line (`Enter` sends and rests; `↑`/`↓` step that studio's `user` history and restore any unsent draft; `Esc` rests keeping the draft) |
 | `m` | The row's context menu — same list a right-click opens |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open this help |
-| `Esc` | While composing on `›`: rest keeping any draft. Otherwise beside the panes: unfocus the dock. As an overlay: close |
+| `Esc` | Unwind one level: `Compose` (resting keeping draft) → `RowActions` → `InsideStudio` → `Studios` (when ≥ 2 studios exist) → `Terminal` (or close in 1-studio / overlay mode) |
 
 Right-click on a dock row selects it and opens the same menu `m` opens on the selection. `Enter` on a studio `✦` / `›` exchange line opens the entry in the Lot Reader.
 While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second
@@ -153,13 +174,13 @@ never covers the studios: it opens the new-studio dialog directly instead.
 
 ## The Hollywood bar
 
-The key is `Alt+Y` (`call_sheet`) / `Ctrl+B i` (`prefix_call_sheet`); the lot header advertises both
-`alt+l` (focus the lot on its last row) and `alt+y / ctrl+b i`. `Alt+Y` — a direct key, no prefix —
-toggles the film-strip band dropped from the top. From Hidden
-or Collapsed, one `Alt+Y` expands straight into Compose (`›`) when `[hollywood]` is configured
-(waiting items remain visible above; unconfigured keeps wait/frame landing). From Expanded, one
-`Alt+Y` collapses back keeping any draft. Toast jumps (`Ctrl+B o` or click) still land on their
-named item in Resting. Collapsed, the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
+The key is `Alt+Y` (`call_sheet`) / `Ctrl+B i` (`prefix_call_sheet`); the lot header advertises `alt+l`,
+`alt+y`, and the active focus breadcrumb. `Alt+Y` — a direct key, no prefix — switches cleanly from
+any non-modal region (`Terminal`, `Tree`, `Cast`, `Lot`): from Hidden or Collapsed it expands and
+lands directly on the first blocking wait (`Resting`) whenever blocking items wait (`!B > 0`), or
+straight into Compose (`›`) inside `HOLLYWOOD` when `blocking == 0` and `[hollywood]` is configured
+(unconfigured keeps wait/frame landing). From Expanded, one `Alt+Y` collapses back keeping any
+draft. Toast jumps (`Ctrl+B o` or click) still land on their named item in Resting. Collapsed, the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
 the tab bar — or of the one-row studio header on a studio workspace — that counts the urgent
 items (`U`: your prompts, stopped stages, ledger errors), the open cards and studios ready to
 finish (`C`), and the studios (`✦`). In studio mode the bar exists even with no `[hollywood]`
@@ -173,9 +194,9 @@ role navigation cleanly from Compose):
 
 | Keys | Action |
 |---|---|
-| `Tab`/`Shift+Tab` | Cycle the 3-zone ring (`Compose ›` → `Waiting/Exchange` first wait or newest exchange → `Studios`), skipping empty zones; `Shift+Tab` reverses |
-| `←`/`→`, `h`/`l` | In the upper section: move between studio frames (including `+ new studio`); in the lower section: move the highlighted action chip across a waiting row |
-| `↓`/`↑`, `j`/`k` | In Compose: plain `↑`/`↓` recall prior `user` messages to Hollywood (consecutive repeats collapsed, live draft saved/restored past newest). In Resting: move within the active section |
+| `Tab`/`Shift+Tab` | Cycle the 3-zone ring in screen order (`WAITING` → `HOLLYWOOD` compose → `STUDIOS`), skipping empty zones; `Shift+Tab` reverses |
+| `←`/`→`, `h`/`l` | In `STUDIOS`: move between studio chips/frames (including `[+ new]`); in `WAITING` / `HOLLYWOOD`: move the highlighted action chip across the selected item |
+| `↓`/`↑`, `j`/`k` | In Compose: plain `↑`/`↓` recall prior `user` messages to Hollywood (consecutive repeats collapsed, live draft saved/restored past newest). In Resting: step across visible rows (`WAITING ↔ HOLLYWOOD ↔ STUDIOS`) with zone expansion following focus |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
 | `Enter` | In Compose: send `tell hollywood` and stay ready on `›` (empty rests). On a waiting row: run the highlighted action chip (`allow y` by default on a prompt, `show ↵` on a card, `open ↵` focuses the role terminal); on a studio frame, headline or talk row: open or read it |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine — only when the runner can answer (a runner with no approval key shows `answer in its terminal` and these keys do nothing there) |
@@ -270,13 +291,15 @@ next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"
+focus_tree = "prefix+t"         # default Ctrl+B t
+focus_cast = "prefix+a"         # default Ctrl+B a
 ```
 
 | Keys | Action |
 |---|---|
-| `Alt+PageUp`, `Alt+PageDown` | Previous or next studio in document order. Wraps around. Switches the main pane to that studio's last member — a role or a shell — else its producer, else its first live role, else its first live shell. Stepping from a terminal moves the keys to the landed member's terminal; stepping while the lot or the machines tree has the keyboard swaps the pane but leaves that surface focused, its selection on the studio it landed on. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one leaves the pane as it is, quietly (its explicit `Enter` still says `has no live terminal`). |
-| `Alt+Up`, `Alt+Down` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered member. |
-| `Alt+L` | Expand the right-hand lot dock if hidden or collapsed, move keyboard focus to it, and scroll the selection to its last selectable row (e.g. `› tell producer · / actions`) without starting compose (`i`/`/` composes, `↑` walks up, `Esc` leaves). Pressed while already focused (outside compose or confirm), jumps to the last row again without closing. Yields to floats, modals, the Call Sheet, and running compose. |
+| `Alt+PageUp`, `Alt+PageDown` | Previous or next studio in document order (respecting `studio-follow`). Switches the main pane to that studio's remembered member and **preserves** focus in `Lot`, `Tree`, or `Cast` when one of those regions holds keyboard focus. |
+| `Alt+Up`, `Alt+Down` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells (updating `Cast` selection too when focused there). Wraps around and skips people with no live terminal. |
+| `Alt+L` | Direct entry into the Lot on the active studio's priority row (`InsideStudio`, or 2nd press into `Compose`); enters the selected studio from `Lot(Studios)`, and switches cleanly from `Tree`, `Cast`, or `CallSheet`. |
 
 Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
 focus — no pane and no program is resized — and a focused dock, the Call Sheet or a card that was
