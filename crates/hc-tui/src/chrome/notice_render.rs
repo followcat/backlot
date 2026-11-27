@@ -225,7 +225,7 @@ pub(crate) enum ToastChip {
 
 impl ToastChip {
     /// The chip text as drawn.
-    fn text(self) -> &'static str {
+    pub(crate) fn text(self) -> &'static str {
         match self {
             ToastChip::CopyCmd => "[C] copy cmd",
             ToastChip::StartStage => "[s] start stage",
@@ -239,6 +239,7 @@ impl ToastChip {
 /// offer's `recorded on disk` line and `[s] start stage`, which
 /// keeps the success card's neutral border and green dot. Returns
 /// the card rect and the chip's hit rect.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_action_toast(
     buffer: &mut Buffer,
     area: Rect,
@@ -247,7 +248,13 @@ pub(crate) fn render_action_toast(
     chip: Option<ToastChip>,
     top_offset: u16,
     palette: &Palette,
+    deco: bool,
 ) -> (Rect, Rect) {
+    if deco {
+        return super::toast_deco::render_action_toast_deco(
+            buffer, area, title, body, chip, top_offset, palette,
+        );
+    }
     if area.is_empty() {
         return (Rect::default(), Rect::default());
     }
@@ -382,14 +389,15 @@ mod tests {
             Some(ToastChip::CopyCmd),
             0,
             &Palette::backlot(),
+            true,
         );
         assert_eq!(rect.right(), 100);
         for dy in 1..rect.height.saturating_sub(1) {
             let y = rect.y + dy;
-            assert_eq!(buffer[(rect.x, y)].symbol(), "│", "left border row {y}");
+            assert_eq!(buffer[(rect.x, y)].symbol(), "║", "left border row {y}");
             assert_eq!(
                 buffer[(rect.right() - 1, y)].symbol(),
-                "│",
+                "║",
                 "right border row {y}"
             );
             assert_eq!(

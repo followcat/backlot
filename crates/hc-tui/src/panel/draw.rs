@@ -315,7 +315,15 @@ pub(crate) fn render(
                 );
             }
             Row::Empty => {
-                put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
+                let tail_h: u16 = all
+                    .iter()
+                    .skip(1 + start)
+                    .skip_while(|r| !matches!(r, Row::Empty))
+                    .skip(1)
+                    .map(|r| r.height())
+                    .sum();
+                let avail_bottom = (body.y + body.height).saturating_sub(tail_h);
+                super::draw_empty::draw_empty(buf, body, rect, avail_bottom, palette);
             }
             Row::StoppedLedger { count, .. } => {
                 // W1b: the tree lists studios the lot could not see —

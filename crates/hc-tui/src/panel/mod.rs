@@ -16,6 +16,7 @@ mod draw_compact;
 mod draw_deco;
 mod draw_deco_blocks;
 mod draw_design;
+mod draw_empty;
 mod draw_hints;
 mod draw_tasks;
 mod pending;
