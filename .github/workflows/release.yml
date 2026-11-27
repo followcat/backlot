@@ -55,7 +55,7 @@ jobs:
         with:
           zig-target: ${{ matrix.ztarget }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --target ${{ matrix.target }} -p hc-tui
+      - run: cargo build --locked --release --target ${{ matrix.target }} -p hc-tui
       # Static proof for musl, a run where the runner executes the
       # build's own architecture. Cross targets get `file` only.
       - name: Check binary

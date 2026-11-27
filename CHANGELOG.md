@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **The 0.4.24 binaries report a `-dirty` build id.** `Cargo.lock` was missing a dependency that 0.4.24 added, so the release build updated it and marked the tree dirty. The binaries are otherwise correct. The lockfile is fixed, and CI and release builds now refuse an out-of-date lockfile.
+
 ## 0.4.24 — 2026-11-27
 
 ### Added

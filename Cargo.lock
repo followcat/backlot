@@ -49,6 +49,7 @@ dependencies = [
  "hc-proto",
  "libc",
  "ratatui",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
