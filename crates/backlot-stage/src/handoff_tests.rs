@@ -898,7 +898,7 @@ fn hollywood_auto_continue_waits_for_unclamped_reset_before_out_of_quota() {
     local.tm_isdst = -1;
     let t0 = (unsafe { libc::mktime(&mut local) } as u64) * 1000;
 
-    let (blk0, send0) = crate::handoff_term::sample_hollywood_error(
+    let out0 = crate::handoff_term::sample_hollywood_error(
         &term,
         screen,
         Work::Waiting,
@@ -906,11 +906,12 @@ fn hollywood_auto_continue_waits_for_unclamped_reset_before_out_of_quota() {
         &mut conn_pace,
         t0,
     );
-    assert!(matches!(blk0, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{blk0:?}");
-    assert_eq!(send0, None);
+    assert!(matches!(out0.blocked, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{out0:?}");
+    assert_eq!(out0.retry_send, None);
+    assert_eq!(out0.quota_hit.unwrap().reset_at_ms, Some(t0 + 5 * 3_600_000));
 
     // Past the 1 h retry clamp (10:15): still waiting (RateLimited), not OutOfQuota yet.
-    let (blk1, _) = crate::handoff_term::sample_hollywood_error(
+    let out1 = crate::handoff_term::sample_hollywood_error(
         &term,
         screen,
         Work::Waiting,
@@ -918,10 +919,10 @@ fn hollywood_auto_continue_waits_for_unclamped_reset_before_out_of_quota() {
         &mut conn_pace,
         t0 + 65 * 60_000,
     );
-    assert!(matches!(blk1, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{blk1:?}");
+    assert!(matches!(out1.blocked, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{out1:?}");
 
     // At 14:11 (past true 5h reset): escalates to OutOfQuota.
-    let (blk2, _) = crate::handoff_term::sample_hollywood_error(
+    let out2 = crate::handoff_term::sample_hollywood_error(
         &term,
         screen,
         Work::Waiting,
@@ -929,5 +930,5 @@ fn hollywood_auto_continue_waits_for_unclamped_reset_before_out_of_quota() {
         &mut conn_pace,
         t0 + 5 * 3_600_000 + 60_000,
     );
-    assert!(matches!(blk2, Some(crate::handoff::HBlockedKind::OutOfQuota { .. })), "{blk2:?}");
+    assert!(matches!(out2.blocked, Some(crate::handoff::HBlockedKind::OutOfQuota { .. })), "{out2:?}");
 }

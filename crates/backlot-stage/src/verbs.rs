@@ -215,12 +215,20 @@ pub(crate) fn attention_clear(
             files: Vec::new(),
         })
     })?;
+    let role_cleared = cleared_role.into_inner();
+    let reason_cleared = cleared_reason.into_inner();
+    if reason_cleared == crate::ratelimit::RATE_LIMITED {
+        crate::accounts_store::clear_role_in_file(
+            base,
+            &crate::accounts_store::role_ref(&caller.studio, &role_cleared),
+        );
+    }
     Ok(AttentionClearResult {
         studio: caller.studio.clone(),
         target,
         seq: event.seq,
-        cleared_role: cleared_role.into_inner(),
-        cleared_reason: cleared_reason.into_inner(),
+        cleared_role: role_cleared,
+        cleared_reason: reason_cleared,
     })
 }
 

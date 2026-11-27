@@ -397,9 +397,14 @@ impl Stage {
         let state_dir = Path::new(&self.state_dir);
         let core_path = state_dir.join("config.toml");
         let core_text = read_config(&core_path)?;
-        let user_path = config::config_path(&self.env_vars);
+        let host = self.effective_host_env();
+        let user_path = config::config_path(&host);
         let user_text = read_config(&user_path)?;
-        config::runner_env_layered(state_dir, &core_text, &user_text, runner)
+        let home = host
+            .get("HOME")
+            .map(Path::new)
+            .unwrap_or_else(|| Path::new("/"));
+        config::runner_env_layered_home(state_dir, &core_text, &user_text, runner, home)
     }
 
     /// `<program> --version`'s first line, asked once per launch

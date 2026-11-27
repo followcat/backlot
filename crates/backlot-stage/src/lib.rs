@@ -3,6 +3,7 @@
 //! commands and the stage process that schedules role terminals.
 
 mod accounts;
+mod accounts_store;
 mod act;
 pub mod args;
 mod args_card;
@@ -135,6 +136,7 @@ mod server_service;
 mod service;
 pub mod signals;
 mod stage;
+mod stage_accounts;
 mod stagelog;
 mod stale;
 mod stall;

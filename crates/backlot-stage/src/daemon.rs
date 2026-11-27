@@ -346,6 +346,9 @@ pub(crate) struct Stage {
     pub(crate) hprevious_until_ms: std::cell::Cell<Option<u64>>,
     /// Cached summary projection of the active or most recent handoff.
     pub(crate) hlast_handoff: std::cell::RefCell<Option<backlot_model::summary::HandoffSummary>>,
+    /// Persistent per-account quota state mirrored to `<state_dir>/accounts.json`.
+    pub(crate) accounts: std::cell::RefCell<crate::accounts_store::AccountsFile>,
+    pub(crate) accounts_loaded: std::cell::Cell<bool>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -599,6 +602,7 @@ impl Stage {
         // picks up.
         self.hollywood(&live.terms, &live.finished, &mut real_slot_free, now_ms)
             .await?;
+        self.sync_accounts_at(now_ms);
         Ok(())
     }
 
@@ -1061,6 +1065,8 @@ impl Stage {
             herror: std::cell::RefCell::new(None),
             hprevious_until_ms: std::cell::Cell::new(None),
             hlast_handoff: std::cell::RefCell::new(None),
+            accounts: std::cell::RefCell::new(Default::default()),
+            accounts_loaded: std::cell::Cell::new(false),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
@@ -1208,6 +1214,8 @@ async fn run_impl(
         herror: std::cell::RefCell::new(None),
         hprevious_until_ms: std::cell::Cell::new(None),
         hlast_handoff: std::cell::RefCell::new(None),
+        accounts: std::cell::RefCell::new(Default::default()),
+        accounts_loaded: std::cell::Cell::new(false),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

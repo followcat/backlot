@@ -119,8 +119,18 @@ fn matches_auth_phrase(lower: &str) -> bool {
                 || lower.contains("unauthorized")))
 }
 
+use backlot_model::summary::QuotaWindow;
+
+/// Result of inspecting Hollywood's terminal for rate-limit, auth, connection, or agent errors.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct HollywoodErrorOutcome {
+    pub blocked: Option<HBlockedKind>,
+    pub retry_send: Option<&'static str>,
+    pub quota_hit: Option<ratelimit::LimitHit>,
+}
+
 /// Sample rate-limit, quota, auth, connection, and agent errors for active Hollywood.
-/// Returns `(blocked_state, optional_retry_continue)` so caller decides whether to send `continue`.
+/// Returns `HollywoodErrorOutcome` so callers know both the blocked kind and quota reset details.
 pub(crate) fn sample_hollywood_error(
     term: &LiveTerminal,
     screen: &str,
@@ -128,13 +138,17 @@ pub(crate) fn sample_hollywood_error(
     rate_pace: &mut Option<RatePace>,
     conn_pace: &mut Option<ConnPace>,
     now_ms: u64,
-) -> (Option<HBlockedKind>, Option<&'static str>) {
+) -> HollywoodErrorOutcome {
     if let Some(hit) = ratelimit::limited(term, screen, work, now_ms) {
         *conn_pace = None;
         let detail = screen_error_line(term, screen).unwrap_or_else(|| "rate limited".into());
         if hit.escalate_now {
             *rate_pace = None;
-            return (Some(HBlockedKind::OutOfQuota { detail }), None);
+            return HollywoodErrorOutcome {
+                blocked: Some(HBlockedKind::OutOfQuota { detail }),
+                retry_send: None,
+                quota_hit: Some(hit),
+            };
         }
         let mut pace = rate_pace.take().unwrap_or(RatePace {
             retries: 0,
@@ -148,28 +162,45 @@ pub(crate) fn sample_hollywood_error(
             let deadline = pace.reset_at_ms.unwrap_or(pace.due_ms);
             if now_ms >= deadline {
                 *rate_pace = None;
-                return (Some(HBlockedKind::OutOfQuota { detail }), None);
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::OutOfQuota { detail }),
+                    retry_send: None,
+                    quota_hit: Some(hit),
+                };
             }
             *rate_pace = Some(pace);
-            return (Some(HBlockedKind::RateLimited { detail }), None);
+            return HollywoodErrorOutcome {
+                blocked: Some(HBlockedKind::RateLimited { detail }),
+                retry_send: None,
+                quota_hit: Some(hit),
+            };
         }
         match ratelimit::step(pace, pace.retries < ratelimit::MAX_RETRIES, now_ms) {
             ratelimit::Step::Wait => {
                 *rate_pace = Some(pace);
-                return (Some(HBlockedKind::RateLimited { detail }), None);
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::RateLimited { detail }),
+                    retry_send: None,
+                    quota_hit: Some(hit),
+                };
             }
             ratelimit::Step::Send => {
                 pace.retries += 1;
                 pace.due_ms =
                     now_ms.saturating_add(hit.retry_wait_ms.max(ratelimit::RETRY_MARGIN_MS));
                 *rate_pace = Some(pace);
-                return (
-                    Some(HBlockedKind::RateLimited { detail }),
-                    Some(ratelimit::CONTINUE),
-                );
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::RateLimited { detail }),
+                    retry_send: Some(ratelimit::CONTINUE),
+                    quota_hit: Some(hit),
+                };
             }
             ratelimit::Step::Escalate => {
-                return (Some(HBlockedKind::OutOfQuota { detail }), None);
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::OutOfQuota { detail }),
+                    retry_send: None,
+                    quota_hit: Some(hit),
+                };
             }
         }
     }
@@ -178,12 +209,26 @@ pub(crate) fn sample_hollywood_error(
         *conn_pace = None;
         let detail =
             screen_error_line(term, screen).unwrap_or_else(|| "weekly quota reached".into());
-        return (Some(HBlockedKind::OutOfQuota { detail }), None);
+        return HollywoodErrorOutcome {
+            blocked: Some(HBlockedKind::OutOfQuota { detail }),
+            retry_send: None,
+            quota_hit: Some(ratelimit::LimitHit {
+                retry_wait_ms: ratelimit::MAX_WAIT_MS,
+                reset_at_ms: None,
+                window: QuotaWindow::Long,
+                escalate_now: true,
+                auto_continue: false,
+            }),
+        };
     }
     *rate_pace = None;
     if let Some(auth) = auth_error_detail(term, screen, work) {
         *conn_pace = None;
-        return (Some(HBlockedKind::AuthError { detail: auth }), None);
+        return HollywoodErrorOutcome {
+            blocked: Some(HBlockedKind::AuthError { detail: auth }),
+            retry_send: None,
+            quota_hit: None,
+        };
     }
     if connerr::matches(term, screen, work) {
         let detail = screen_error_line(term, screen).unwrap_or_else(|| "connection error".into());
@@ -194,28 +239,45 @@ pub(crate) fn sample_hollywood_error(
         match connerr::step(pace, pace.retries < connerr::MAX_CONN_RETRIES, now_ms) {
             connerr::Step::Wait => {
                 *conn_pace = Some(pace);
-                return (Some(HBlockedKind::ConnectionError { detail }), None);
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::ConnectionError { detail }),
+                    retry_send: None,
+                    quota_hit: None,
+                };
             }
             connerr::Step::Send => {
                 pace.retries += 1;
                 pace.due_ms = now_ms.saturating_add(ratelimit::RETRY_MARGIN_MS);
                 *conn_pace = Some(pace);
-                return (
-                    Some(HBlockedKind::ConnectionError { detail }),
-                    Some(ratelimit::CONTINUE),
-                );
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::ConnectionError { detail }),
+                    retry_send: Some(ratelimit::CONTINUE),
+                    quota_hit: None,
+                };
             }
             connerr::Step::Escalate => {
-                return (Some(HBlockedKind::ConnectionError { detail }), None);
+                return HollywoodErrorOutcome {
+                    blocked: Some(HBlockedKind::ConnectionError { detail }),
+                    retry_send: None,
+                    quota_hit: None,
+                };
             }
         }
     }
     *conn_pace = None;
     if ratelimit::errored(term) {
         let detail = screen_error_line(term, screen).unwrap_or_else(|| "agent error".into());
-        return (Some(HBlockedKind::AgentError { detail }), None);
+        return HollywoodErrorOutcome {
+            blocked: Some(HBlockedKind::AgentError { detail }),
+            retry_send: None,
+            quota_hit: None,
+        };
     }
-    (None, None)
+    HollywoodErrorOutcome {
+        blocked: None,
+        retry_send: None,
+        quota_hit: None,
+    }
 }
 
 fn screen_error_line(term: &LiveTerminal, screen: &str) -> Option<String> {
