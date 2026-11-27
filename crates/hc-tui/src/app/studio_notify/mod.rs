@@ -41,7 +41,9 @@ impl super::App {
     /// seen set silently — what predates the client is not news — and a
     /// fresh subscription epoch reseeds, like the pane baselines.
     pub(super) fn synthesize_studio_events(&mut self, now: Instant) {
-        if self.plain || !self.shell.toast_studio {
+        let toast = !self.plain && self.shell.toast_studio;
+        let ping = !self.plain && self.shell.studio_notify_asks;
+        if !toast && !ping {
             return;
         }
         if self.studio_seen_generation != Some(self.view.generation) {
@@ -68,11 +70,37 @@ impl super::App {
             if !self.studio_seen.insert(event.key.clone()) {
                 continue;
             }
+            // One desktop ping per new item, independent of toast
+            // delivery and of whether the person is looking at it.
+            if ping && let Some(text) = event.ping.clone() {
+                self.ping_ask(&text);
+            }
+            if !toast {
+                continue;
+            }
             if target_is_focused(self, &event.target) {
                 // Looking right at it: the same rule pane alerts follow.
                 continue;
             }
             self.receive_notification(studio_notification(event), None, now);
+        }
+    }
+
+    /// The person asked to be told when a studio waits on them: one
+    /// desktop notification through the outer terminal, once per new
+    /// item (the caller only pings an unseen key). Independent of the
+    /// toast delivery — `[studio] notify_asks` is the switch — and
+    /// emitted before the focused-target suppression, so being on the
+    /// screen does not silence the ping.
+    fn ping_ask(&mut self, text: &str) {
+        let (title, body) = crate::terminal_notify::split_message(text);
+        if let Some(bytes) = crate::terminal_notify::notification_bytes(
+            self.notify_backend,
+            self.in_tmux,
+            title,
+            body.filter(|body| !body.is_empty()),
+        ) {
+            let _ = (self.host_control)(&bytes);
         }
     }
 }
