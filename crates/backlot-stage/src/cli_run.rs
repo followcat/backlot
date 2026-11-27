@@ -299,22 +299,45 @@ pub(crate) fn run_stdin_with_host(
     if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
         return out;
     }
-    // G2: a `--text`/`--stdin` body lands in a temp file the `--file`
-    // path then copies; `commands` only ever sees files.
+    // G2: `--text`/`--stdin`/`--report -` land in a temp file cleaned up after exec_event.
     let temp = materialize(&mut cmd, stdin)?;
     let out = exec_event(common, cmd, env, &base);
     if let Some(path) = temp {
-        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(&path);
+        if let Some(dir) = path.parent().filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("backlot-report-"))
+        }) {
+            let _ = std::fs::remove_dir(dir);
+        }
     }
     out
 }
 
-/// `--text`/`--stdin` materialization (G2): the body a `--file`
-/// command copies lands in a temp file the caller removes after the
-/// append. An empty body is refused before any file is written.
-/// `studio new --ask` rides the same seam — its text becomes an
-/// `--ask-file` the build copies into `messages/`.
+fn read_stdin_body(stdin: Option<&str>) -> Result<String, Fail> {
+    match stdin {
+        Some(text) => Ok(text.to_string()),
+        None => std::io::read_to_string(std::io::stdin())
+            .map_err(|e| Fail::refused(format!("cannot read stdin: {e}"))),
+    }
+}
+
+/// `--text`/`--stdin`/`--report -` materialization (G2): stage into a
+/// temp file removed after append; empty bodies refuse before writing.
 fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
+    if let Cmd::Deliver { report, .. } = cmd {
+        if report != std::path::Path::new("-") {
+            return Ok(None);
+        }
+        let body = read_stdin_body(stdin)?;
+        if body.trim().is_empty() {
+            return Err(Fail::refused("the report body is empty"));
+        }
+        let path = stage_body("report", &body, true)?;
+        *report = path.clone();
+        return Ok(Some(path));
+    }
     use crate::args::TextSource;
     let source = match cmd {
         Cmd::Tell { source, .. }
@@ -329,16 +352,12 @@ fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fa
     let body = match source {
         TextSource::File(_) => return Ok(None),
         TextSource::Text(text) => text.clone(),
-        TextSource::Stdin => match stdin {
-            Some(text) => text.to_string(),
-            None => std::io::read_to_string(std::io::stdin())
-                .map_err(|e| Fail::refused(format!("cannot read stdin: {e}")))?,
-        },
+        TextSource::Stdin => read_stdin_body(stdin)?,
     };
     if body.trim().is_empty() {
         return Err(Fail::refused("the message body is empty"));
     }
-    let path = body_file(&body)?;
+    let path = stage_body("message", &body, false)?;
     *source = TextSource::File(path.clone());
     Ok(Some(path))
 }
@@ -351,17 +370,24 @@ thread_local! {
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// The unique temp file a `--text`/`--stdin` body is staged in.
-fn body_file(body: &str) -> Result<PathBuf, Fail> {
+fn stage_body(label: &str, body: &str, nested_report: bool) -> Result<PathBuf, Fail> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "backlot-body-{}-{}.txt",
+    let id = format!(
+        "{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
+    );
+    let path = if nested_report {
+        let dir = std::env::temp_dir().join(format!("backlot-report-{id}"));
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
+        dir.join("report.md")
+    } else {
+        std::env::temp_dir().join(format!("backlot-body-{id}.txt"))
+    };
     std::fs::write(&path, body)
-        .map_err(|e| Fail::refused(format!("cannot stage the message body: {e}")))?;
+        .map_err(|e| Fail::refused(format!("cannot stage the {label} body: {e}")))?;
     #[cfg(test)]
     STAGED_BODIES.with(|s| s.borrow_mut().push(path.clone()));
     Ok(path)

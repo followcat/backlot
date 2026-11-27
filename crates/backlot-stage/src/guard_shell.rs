@@ -78,64 +78,37 @@ fn classify_line_depth(line: &str, depth: usize, cwd: &Path, ctx: &GitContext<'_
         }
     }
 
-    let mut heredoc: Option<String> = None;
     for seg in &parsed.segments {
         if seg.iter().any(|t| t.contains("BACKLOT_")) {
-            return GuardMatch {
-                verdict: GuardVerdict::Refuse {
-                    command: cap_command(&seg.join(" ")),
-                    rule: "touches BACKLOT_* environment".into(),
-                },
-                argv: seg.clone(),
-                cwd: eff_cwd,
-            };
-        }
-        if let Some(delimiter) = heredoc.as_deref() {
-            if seg.len() == 1 && seg[0] == delimiter {
-                heredoc = None;
-                continue;
-            }
-            if interpreter_code_names_server(&seg.join(" ")) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule: "server socket or queue write".into(),
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
-            }
-            continue;
+            return refuse_seg(seg, "touches BACKLOT_* environment", &eff_cwd);
         }
         if ctx.role_dir.is_some() || ctx.env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
             let role = ctx.env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
             if let Some(rule) = crate::proc_guard::check_segment_self_approval(seg, role) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule,
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
+                return refuse_seg(seg, &rule, &eff_cwd);
             }
         }
-        if let Some((delimiter, code)) = interpreter_code(seg) {
-            if interpreter_code_names_server(&code) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule: "server socket or queue write".into(),
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
-            }
-            heredoc = delimiter;
+        if let Some(code) = interpreter_code(seg)
+            && interpreter_code_names_server(&code)
+        {
+            return refuse_seg(seg, "server socket or queue write", &eff_cwd);
         }
         let m = eval_segment(seg, depth, &mut eff_cwd, ctx);
         if let Some(refused) = consider(m) {
             return refused;
+        }
+    }
+
+    for h in &parsed.heredocs {
+        for idx in h.seg_idx..parsed.segments.len() {
+            if parsed.pipe_ids[idx] != h.pipe_id {
+                break;
+            }
+            if let Some(m) = check_heredoc_target(&parsed.segments[idx], h, depth, &eff_cwd, ctx)
+                && let Some(refused) = consider(m)
+            {
+                return refused;
+            }
         }
     }
 
@@ -336,10 +309,45 @@ fn program_index(seg: &[String]) -> Option<usize> {
     None
 }
 
-/// The code an interpreter segment runs: `Some((heredoc delimiter, code))`
-/// for `-c`/`-e`/`--eval` inline code, a here-string, or a heredoc whose
-/// body follows in later segments.
-fn interpreter_code(seg: &[String]) -> Option<(Option<String>, String)> {
+fn refuse_seg(seg: &[String], rule: &str, cwd: &Path) -> GuardMatch {
+    GuardMatch {
+        verdict: GuardVerdict::Refuse {
+            command: cap_command(&seg.join(" ")),
+            rule: rule.into(),
+        },
+        argv: seg.to_vec(),
+        cwd: cwd.to_path_buf(),
+    }
+}
+
+fn check_heredoc_target(
+    seg: &[String],
+    heredoc: &crate::guard_shell_lex::Heredoc,
+    depth: usize,
+    eff_cwd: &Path,
+    ctx: &GitContext<'_>,
+) -> Option<GuardMatch> {
+    let idx = program_index(seg)?;
+    let base = seg[idx].rsplit('/').next().unwrap_or(&seg[idx]);
+    if INTERPRETERS.contains(&base) {
+        if heredoc.body.contains("BACKLOT_") {
+            return Some(refuse_seg(seg, "touches BACKLOT_* environment", eff_cwd));
+        }
+        if interpreter_code_names_server(&heredoc.body) {
+            return Some(refuse_seg(seg, "server socket or queue write", eff_cwd));
+        }
+    } else if matches!(base, "sh" | "bash" | "zsh" | "dash" | "ash" | "eval") && depth < 4 {
+        let m = classify_line_depth(&heredoc.body, depth + 1, eff_cwd, ctx);
+        if !matches!(m.verdict, GuardVerdict::Allow) {
+            return Some(m);
+        }
+    }
+    None
+}
+
+/// The code an interpreter segment runs inline (`-c`/`-e`/`--eval` or a here-string).
+/// Heredocs are scanned directly via `parsed.heredocs`.
+fn interpreter_code(seg: &[String]) -> Option<String> {
     let idx = program_index(seg)?;
     let base = seg[idx].rsplit('/').next().unwrap_or(&seg[idx]);
     if !INTERPRETERS.contains(&base) {
@@ -354,28 +362,17 @@ fn interpreter_code(seg: &[String]) -> Option<(Option<String>, String)> {
                 && !a.starts_with("--")
                 && (a[1..].contains('c') || a[1..].contains('e')))
         {
-            return Some((None, args[i + 1..].join(" ")));
+            return Some(args[i + 1..].join(" "));
         }
         if let Some(code) = a.strip_prefix("<<<") {
             return Some(if code.is_empty() {
-                (None, args[i + 1..].join(" "))
+                args[i + 1..].join(" ")
             } else {
-                (None, code.to_owned())
+                code.to_owned()
             });
         }
-        if let Some(rest) = a.strip_prefix("<<") {
-            let delimiter = if rest.is_empty() {
-                args.get(i + 1).map(String::as_str).unwrap_or("")
-            } else {
-                rest
-            };
-            return Some((
-                Some(delimiter.trim_start_matches('-').to_owned()),
-                String::new(),
-            ));
-        }
     }
-    Some((None, String::new()))
+    None
 }
 
 /// Interpreter code that writes the person's queue or reaches the core

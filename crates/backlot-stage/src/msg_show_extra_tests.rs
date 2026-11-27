@@ -84,6 +84,11 @@ fn msg_show_reads_report_and_finding() {
             &rep_deliver,
         ],
     );
+    let report_deliver_seq = last_seq(&scratch, "acme-shop");
+    let deliver_out = ok_args(&env, &["msg", "show", &report_deliver_seq.to_string()]);
+    assert!(deliver_out.contains("delivery report"), "{deliver_out}");
+    assert!(deliver_out.contains("done\n"), "{deliver_out}");
+
     let find_body = concat!(
         r#"[{"id":"F1","summary":"Missing timeout check","#,
         r#""severity":"high","cause":"delivery_defect"}]"#,

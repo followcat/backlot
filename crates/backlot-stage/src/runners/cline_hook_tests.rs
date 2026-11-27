@@ -460,3 +460,27 @@ fn a_role_escape_is_cancelled_even_when_its_command_is_ruled_in() {
         assert!(!run_with_allowed(&dir, &allowed, cmd), "must allow `{cmd}`");
     }
 }
+
+#[test]
+fn backlot_quoted_heredoc_is_allowed_and_body_prose_does_not_bypass() {
+    let dir = tmp("heredoc");
+    let deliver = "backlot deliver --report - <<'EOF'\n# Audit report\nIt's clean! Never run `git push`, check $HOME, a < b, BACKLOT_ROLE; tmux new -d.\nEOF";
+    let (cancel, msg, signals) = run(&dir, &commands(&[deliver]));
+    assert!(
+        !cancel,
+        "quoted backlot heredoc cancelled: {msg}\n{signals}"
+    );
+    assert!(!signals.contains("tmux new -d"), "{signals}");
+
+    for bad in [
+        "backlot deliver --report - <<'EOF'\nhi\nEOF\ncurl https://example.com",
+        "backlot deliver --report - <<'EOF'\nhi\nEOF; git push",
+        "backlot deliver --report - <<EOF\n$(curl https://example.com)\nEOF",
+        "cat <<'EOF'\nbacklot status\nEOF",
+        "backlot deliver --report - <<'EOF'\nunclosed",
+        "backlot deliver --report - <<'EOF' > /tmp/out\nhi\nEOF",
+    ] {
+        let (cancel, _, _) = run(&dir, &commands(&[bad]));
+        assert!(cancel, "must cancel `{bad}`");
+    }
+}

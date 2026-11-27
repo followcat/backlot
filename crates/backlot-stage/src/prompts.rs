@@ -164,8 +164,9 @@ fn fields(
         .unwrap_or(&[]);
     let checks = if readonly {
         concat!(
-            "- `backlot deliver --report <file>` — write your findings report to\n",
-            "  `<file>` and pass no `--commits` or `--check` flags.\n",
+            "- `backlot deliver --report -` — send your findings report via stdin in\n",
+            "  one shell call using a single-quoted heredoc (`<<'EOF'` … `EOF`), and\n",
+            "  pass no `--commits` or `--check` flags.\n",
         )
         .to_string()
     } else if declared.is_empty() {

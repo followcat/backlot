@@ -1,6 +1,6 @@
 //! `backlot msg show <seq> [--json]`: read-only lookup of one studio
 //! message, ask (with its answer if present), design note, supplement,
-//! sign-off, report, or finding from the caller's own studio ledger.
+//! sign-off, report, delivery report, or finding from the caller's own studio ledger.
 
 use std::path::Path;
 
@@ -246,6 +246,15 @@ fn build_view(
             view.kind = "finding".into();
             view.to = task.clone();
             view.body = format_findings(task, *delivery, findings);
+        }
+        EventKind::TaskDelivered { task, report, .. } => {
+            view.kind = "delivery report".into();
+            view.to = state
+                .tasks
+                .get(task)
+                .map_or_else(|| "director".to_string(), |t| t.reviewer().to_string());
+            view.file = Some(report.clone());
+            view.body = read_studio_file(dir, report)?;
         }
         other => {
             return Err(Fail::refused(format!(

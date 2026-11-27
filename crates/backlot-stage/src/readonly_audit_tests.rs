@@ -313,6 +313,34 @@ fn agy_hook_denies_file_writes_on_readonly_role() {
         v["decision"], "deny",
         "agy hook must deny write_to_file on readonly role"
     );
+
+    let mut out_cmd = Vec::new();
+    let cmd_payload = serde_json::json!({
+        "conversationId": "c1",
+        "hookEventName": "PreToolUse",
+        "toolCall": {
+            "name": "run_command",
+            "args": {
+                "CommandLine": "backlot deliver --report - <<'EOF'\n# Audit\nIt's clean! Never run `git push`, check $HOME, check BACKLOT_ROLE.\nEOF"
+            }
+        }
+    })
+    .to_string();
+    let code_cmd = run_io_env(
+        &args,
+        &env,
+        &s.files,
+        std::time::Duration::from_secs(2),
+        &mut Cursor::new(cmd_payload.as_bytes()),
+        &mut out_cmd,
+    );
+    assert_eq!(code_cmd, ExitCode::SUCCESS);
+    let v_cmd: serde_json::Value =
+        serde_json::from_str(String::from_utf8(out_cmd).unwrap().trim()).unwrap();
+    assert_eq!(
+        v_cmd["decision"], "allow",
+        "agy hook must allow backlot deliver heredoc on readonly role: {v_cmd}"
+    );
 }
 
 fn mk_task(id: &str, kind: &str, acc: &str, actor: ActorIdentity, report: Option<&str>) -> Task {
@@ -445,8 +473,8 @@ fn audit_start_prompt_clean_context_and_role_instructions() {
     let prompt_txt = fs::read_to_string(&file).unwrap();
     assert!(prompt_txt.contains("plan/t2-audit-acc.md"), "{prompt_txt}");
     assert!(
-        prompt_txt.contains("backlot deliver --report <file>"),
-        "readonly prompt must explain report-only deliver: {prompt_txt}"
+        prompt_txt.contains("backlot deliver --report -"),
+        "readonly prompt must explain stdin report-only deliver: {prompt_txt}"
     );
     for leak in [
         "BUILDER-SECRET-REPORT",
@@ -468,4 +496,109 @@ fn audit_start_prompt_clean_context_and_role_instructions() {
     );
     let wri_txt = prompts::template(RoleKind::Writer);
     assert!(wri_txt.contains("audit"), "{wri_txt}");
+}
+
+#[test]
+fn readonly_actor_delivers_report_from_heredoc_stdin_readable_everywhere() {
+    let _g = STAGE_LOCK.lock().unwrap();
+    let (scratch, env) = scratch();
+    let repo = shared_repo(&scratch);
+    let cast_file = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
+    ok(
+        &env,
+        &format!(
+            "studio new --title Shop --repo {} --cast {cast_file}",
+            repo.display()
+        ),
+    );
+    let req = fixture(&scratch, "req.md", "# req\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary s --as producer"),
+    );
+    let acc = fixture(&scratch, "acc.md", "# audit criteria\n");
+    ok(
+        &env,
+        &format!("task new --title audit-1 --kind audit --acceptance-file {acc} --as director"),
+    );
+    ok(
+        &env,
+        "cast --task t1 --actor actor-a --readonly --as director",
+    );
+    let work = shared_area(&scratch, "t1");
+    let head_before = git(&work, &["rev-parse", "HEAD"]);
+
+    let report_body =
+        "# Independent Audit\n\nIt's clean! Checked `git log`, `$HOME`, and verified no defects.\n";
+    let shell_cmd = format!("backlot deliver --report - <<'EOF'\n{report_body}EOF");
+    assert_eq!(crate::guard_shell::refused_command_line(&shell_cmd), None);
+
+    let deliver_argv: Vec<String> = [
+        "deliver",
+        "--report",
+        "-",
+        "--as",
+        "actor-t1-c1",
+        "--task",
+        "t1",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+    let out = crate::cli::run_stdin(&deliver_argv, &env, Some(report_body)).unwrap();
+    assert!(out.contains("task.delivered t1 d1"), "{out}");
+
+    // Worktree remains spotless and HEAD is unmoved (nothing written inside the repo).
+    assert_eq!(git(&work, &["status", "--porcelain"]), "");
+    assert_eq!(git(&work, &["rev-parse", "HEAD"]), head_before);
+
+    // Report landed under studio `reports/` outside the worktree and is readable by both `msg show` and Reader (`report show`).
+    let sdir = store::studio_dir(&scratch.dir, "acme-shop");
+    let (events, _) = store::load_events(&sdir).unwrap();
+    let deliv = events
+        .iter()
+        .rev()
+        .find(|e| matches!(e.kind, EventKind::TaskDelivered { .. }))
+        .unwrap();
+    let EventKind::TaskDelivered {
+        commits, report, ..
+    } = &deliv.kind
+    else {
+        unreachable!()
+    };
+    assert_eq!(commits, "");
+    assert!(report.starts_with("reports/"), "{report}");
+    assert_eq!(fs::read_to_string(sdir.join(report)).unwrap(), report_body);
+
+    let msg_out = ok(&env, &format!("msg show {}", deliv.seq));
+    assert!(msg_out.contains("delivery report"), "{msg_out}");
+    assert!(msg_out.contains(report), "{msg_out}");
+    assert!(msg_out.contains(report_body), "{msg_out}");
+
+    let msg_json: serde_json::Value =
+        serde_json::from_str(&ok(&env, &format!("msg show {} --json", deliv.seq))).unwrap();
+    assert_eq!(msg_json["kind"], "delivery report");
+    assert_eq!(msg_json["body"], report_body);
+    assert_eq!(msg_json["file"], report.as_str());
+
+    let mut reader_buf = Vec::new();
+    crate::hwood_read::report_show(
+        &crate::args::Common {
+            studio: Some("acme-shop".into()),
+            ..Default::default()
+        },
+        &env,
+        &scratch.dir,
+        Path::new(report),
+        &mut reader_buf,
+    )
+    .unwrap();
+    assert_eq!(String::from_utf8(reader_buf).unwrap(), report_body);
+
+    // Temp staging file & subdir are cleaned up.
+    assert!(crate::cli_run::STAGED_BODIES.with(|s| s.borrow().iter().all(|p| !p.exists())));
 }

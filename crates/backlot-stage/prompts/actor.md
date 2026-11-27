@@ -39,9 +39,10 @@ included; read code with your file-reading and search tools, not
 {#readonly}
 You are running as a **read-only auditor** in `{work}` on branch
 `{branch}`: do not edit files, stage changes, or create commits —
-`backlot deliver --report <file>` refuses any dirty worktree or moved `HEAD`. Read
-code with your file-reading and search tools, and run only read-only
-checks one command per shell call.
+deliver via stdin with `backlot deliver --report -` (`<<'EOF'` … `EOF`),
+never write report files into `{work}`, and remember it refuses any
+dirty worktree or moved `HEAD`. Read code with your file-reading and
+search tools, and run only read-only checks one command per shell call.
 {/readonly}
 
 The acceptance list for your task: `{acceptance}`

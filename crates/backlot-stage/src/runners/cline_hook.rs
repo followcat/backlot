@@ -380,7 +380,6 @@ if [ "$name" = run_commands ]; then
     IFS='
 '
     for one in $list; do
-        hole3_blocked "$one" && { bad=$one; continue; }
         segs=$(printf '%s' "$one" | awk '
 @@SEGMENTS@@
 ')
@@ -398,7 +397,7 @@ if [ "$name" = run_commands ]; then
     set +f
     IFS=$old
     [ -z "$bad" ] || deny "$name" command "$bad"
-    first=$(printf '%s' "$list" | head -n 1)
+    first=$(printf '%s' "$list" | tr '\037' '\n' | head -n 1)
     allow "$name" command "$first"
 fi
 

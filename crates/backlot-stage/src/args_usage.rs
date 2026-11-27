@@ -27,7 +27,7 @@ pub(crate) const U_RECAST: &str = "usage: backlot recast --person producer|direc
 pub(crate) const U_APPROVE: &str =
     "usage: backlot approve --person <role key> --decision allow|deny";
 pub(crate) const U_ATTENTION: &str = "usage: backlot attention clear <seq>";
-pub(crate) const U_DELIVER: &str = "usage: backlot deliver [--commits A..B] --report <f> [--check name=pass|fail...]\n       [--tokens-in <n>] [--tokens-out <n>] [--cache-read-tokens <n>] [--cost-usd <d>]";
+pub(crate) const U_DELIVER: &str = "usage: backlot deliver [--commits A..B] --report <f|-> [--check name=pass|fail...]\n       [--tokens-in <n>] [--tokens-out <n>] [--cache-read-tokens <n>] [--cost-usd <d>]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
 pub(crate) const U_REVIEW: &str = "usage: backlot review --task <id> --delivery <n> --verdict \
 accepted|partially-accepted|changes-requested|blocked --conclusion <text> \

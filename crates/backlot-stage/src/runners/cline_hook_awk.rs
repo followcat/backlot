@@ -89,7 +89,7 @@ function unescape(s,   out, ln, k, c, e) {
         if (e == "\"") out = out "\""
         else if (e == "\\") out = out "\\"
         else if (e == "/") out = out "/"
-        else if (e == "n" || e == "r") out = out ";"
+        else if (e == "n" || e == "r") out = out sprintf("%c", 31)
         else if (e == "t") out = out " "
         else { bad = 1; return out }
         k++
@@ -114,17 +114,20 @@ pub(crate) const SEGMENTS: &str = r#"{
 END {
     sq = sprintf("%c", 39)
     dq = "\""
+    nl = sprintf("%c", 31)
     n = length(buf)
     state = 0
     seg = ""
     for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
         if (state == 2) {
+            if (c == nl) { seg = seg ";"; continue }
             if (c == sq) { state = 0; seg = seg c; continue }
             seg = seg c
             continue
         }
         if (state == 1) {
+            if (c == nl) { seg = seg ";"; continue }
             if (c == dq) { state = 0; seg = seg c; continue }
             if (c == "$" || c == "`" || c == "\\") { print "@@REFUSE@@"; exit }
             seg = seg c
@@ -132,7 +135,47 @@ END {
         }
         if (c == sq) { state = 2; seg = seg c; continue }
         if (c == dq) { state = 1; seg = seg c; continue }
-        if (c == ";" || c == "&" || c == "|" || c == "\n") { print seg; seg = ""; continue }
+        if (c == "<" && substr(buf, i, 3) == "<<" sq) {
+            tseg = seg
+            sub(/^[ \t]+/, "", tseg)
+            if (tseg ~ /^(([^ \t]*\/)?backlot)[ \t]/ && tseg !~ /[<>;|&(){}$`\\]/) {
+                j = i + 3
+                delim = ""
+                while (j <= n) {
+                    dc = substr(buf, j, 1)
+                    if (dc ~ /^[A-Za-z0-9_]$/) { delim = delim dc; j++ }
+                    else break
+                }
+                if (delim != "" && substr(buf, j, 1) == sq) {
+                    j++
+                    while (j <= n && (substr(buf, j, 1) == " " || substr(buf, j, 1) == "\t")) j++
+                    if (j <= n && substr(buf, j, 1) == nl) {
+                        j++
+                        closed = 0
+                        line = ""
+                        while (j <= n) {
+                            bc = substr(buf, j, 1)
+                            if (bc == nl || bc == "\n") {
+                                if (line == delim) { closed = 1; break }
+                                line = ""
+                            } else {
+                                line = line bc
+                            }
+                            j++
+                        }
+                        if (!closed && line == delim) closed = 1
+                        if (!closed) { print "@@REFUSE@@"; exit }
+                        print seg
+                        seg = ""
+                        i = j
+                        continue
+                    }
+                }
+            }
+            print "@@REFUSE@@"
+            exit
+        }
+        if (c == ";" || c == "&" || c == "|" || c == nl) { print seg; seg = ""; continue }
         if (c == "(" || c == ")" || c == "{" || c == "}" || c == "<" || c == ">" || c == "$" || c == "`" || c == "\\") {
             print "@@REFUSE@@"
             exit
