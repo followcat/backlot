@@ -167,6 +167,87 @@ pub(crate) fn records(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     Ok((std::mem::take(common), Cmd::Records { json, all, kind }))
 }
 
+/// `metrics [--studio <id> | --all] [--since <dur>] [--json]`.
+pub(crate) fn metrics(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    let mut all = false;
+    let mut since = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_METRICS)));
+        }
+        if common_flag(it, common, &arg, U_METRICS)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--all" => all = true,
+            "--since" => since = Some(it.value("--since", U_METRICS)?),
+            _ if eq(&arg, "--since").is_some() => since = eq(&arg, "--since").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_METRICS)),
+        }
+    }
+    if all && common.studio.is_some() {
+        return Err(usage("--all and --studio do not mix", U_METRICS));
+    }
+    if let Some(ref raw) = since {
+        crate::metrics_cli::parse_duration_ms(raw).map_err(|msg| usage(msg, U_METRICS))?;
+    }
+    Ok((std::mem::take(common), Cmd::Metrics { json, all, since }))
+}
+
+/// `digest [--studio <id> | --all] [--since <dur>] [--format md|json]`.
+pub(crate) fn digest(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut all = false;
+    let mut since = None;
+    let mut format = crate::args::DigestFormat::Md;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_DIGEST)));
+        }
+        if common_flag(it, common, &arg, U_DIGEST)? {
+            continue;
+        }
+        if arg == "--since" {
+            since = Some(it.value("--since", U_DIGEST)?);
+            continue;
+        }
+        if let Some(v) = eq(&arg, "--since") {
+            since = Some(v.to_string());
+            continue;
+        }
+        let val = if arg == "--format" {
+            Some(it.value("--format", U_DIGEST)?)
+        } else {
+            eq(&arg, "--format").map(str::to_string)
+        };
+        if let Some(f) = val {
+            format = match f.as_str() {
+                "md" => crate::args::DigestFormat::Md,
+                "json" => crate::args::DigestFormat::Json,
+                other => {
+                    return Err(usage(
+                        format!("unknown format '{other}' (expected md|json)"),
+                        U_DIGEST,
+                    ));
+                }
+            };
+            continue;
+        }
+        match arg.as_str() {
+            "--all" => all = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_DIGEST)),
+        }
+    }
+    if all && common.studio.is_some() {
+        return Err(usage("--all and --studio do not mix", U_DIGEST));
+    }
+    if let Some(ref raw) = since {
+        crate::metrics_cli::parse_duration_ms(raw).map_err(|msg| usage(msg, U_DIGEST))?;
+    }
+    Ok((std::mem::take(common), Cmd::Digest { all, since, format }))
+}
+
 /// `reopen`/`close --person <role key>`: common flags plus the key.
 pub(crate) fn person(
     common: &mut Common,

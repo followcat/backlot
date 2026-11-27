@@ -682,6 +682,8 @@ fn every_command_word_is_registered() {
         "correct",
         "status",
         "records",
+        "metrics",
+        "digest",
         "stage",
         "guide",
     ] {

@@ -39,6 +39,10 @@ const DOCS: &[Topic] = &[
         body: include_str!("../../../docs/studio/limits.md"),
     },
     Topic {
+        name: "metrics",
+        body: include_str!("../../../docs/studio/metrics.md"),
+    },
+    Topic {
         name: "panel",
         body: include_str!("../../../docs/studio/panel.md"),
     },

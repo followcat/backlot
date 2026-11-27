@@ -28,6 +28,12 @@ pub struct Common {
 
 pub use crate::args_source::TextSource;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DigestFormat {
+    Md,
+    Json,
+}
+
 pub(crate) use crate::args_source::Source;
 pub(crate) use crate::args_usage::*;
 
@@ -265,6 +271,16 @@ pub enum Cmd {
         all: bool,
         /// `--kind <task_kind>`: only records of that task kind.
         kind: Option<String>,
+    },
+    Metrics {
+        json: bool,
+        all: bool,
+        since: Option<String>,
+    },
+    Digest {
+        all: bool,
+        since: Option<String>,
+        format: DigestFormat,
     },
     StageStart,
     StageStop,
@@ -615,6 +631,8 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             Cmd::Status { json, all }
         }),
         "records" => args_task::records(&mut common, &mut it),
+        "metrics" => args_task::metrics(&mut common, &mut it),
+        "digest" => args_task::digest(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
         "design" => args_design::design(&mut common, &mut it),
