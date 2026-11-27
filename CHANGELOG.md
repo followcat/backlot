@@ -12,7 +12,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
-- **Studio dialogs, confirms, action toasts, the New Studio wizard, the opening card, and the empty Lot now wear Babylon Art-Deco frames.** Studio dialogs and the New Studio wizard use double borders (`╔══╡ … ╞═══╗`) with `gilt` side rails, teal checkmarks (`✓`) and amber separators (`▸`) across the wizard step bar, and `‹ ↵ … ›` primary buttons (`red` borders + `◉` for destructive confirms); action toasts upgrade to `╔═╡ ● <title> ╞═══╗` on opaque overlay (`● <studio> · THE END` when finishing a studio, `red` + `◉` on failure); the opening card widens to 49 columns with stepped corners and a `─────═══╡ ‹✦› ╞═══─────` intertitle rule; and an empty Lot centers a 3-line star plaque while `--plain` and `[theme] source = "herdr"` keep rounded `╭─╮` popups and `┌─┐` toasts ([docs/studio/panel.md](docs/studio/panel.md), [docs/studio/guide.md](docs/studio/guide.md), [docs/theme.md](docs/theme.md)).
+- **Studio dialogs, notices, the New Studio wizard, and the opening card now wear *Babylon*'s gilded frames.** Destructive confirms are framed in red with a `◉`, the button Enter runs is wrapped in `‹ ›`, finishing a studio shows a `THE END` notice, and an empty Lot shows a small plaque with the keys to start one; `--plain` and `[theme] source = "herdr"` keep rounded frames ([docs/studio/panel.md](docs/studio/panel.md), [docs/studio/guide.md](docs/studio/guide.md), [docs/theme.md](docs/theme.md)).
 
 ## 0.4.26 — 2026-11-27
 
