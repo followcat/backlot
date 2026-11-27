@@ -10,6 +10,7 @@ use ratatui::style::{Modifier, Style};
 
 use super::lines::{Row, lines_for};
 use super::{Sheet, SheetTab};
+use crate::chrome::intertitle::{Flank, Part, draw_intertitle, intertitle};
 use crate::chrome::palette::Palette;
 use crate::chrome::popup_frame::{self, PopupChrome, overlay_bg};
 use crate::chrome::render::put_text;
@@ -260,6 +261,50 @@ pub(crate) fn render_with_shadow(
                 Style::default().fg(palette.accent).bg(palette.selection_bg),
             );
         }
+    }
+
+    let end_y = if sheet.tab == SheetTab::Overview
+        && sheet.view.is_none()
+        && summary.is_some_and(|s| s.state == "finished")
+        && scroll + usize::from(body.height) >= lines.len()
+    {
+        let mut drawn = lines
+            .len()
+            .saturating_sub(scroll)
+            .min(usize::from(body.height));
+        while drawn > 0
+            && lines
+                .get(scroll + drawn - 1)
+                .is_some_and(|l| l.text.trim().is_empty())
+        {
+            drawn -= 1;
+        }
+        if drawn + 1 < usize::from(body.height) {
+            Some(body.y + drawn as u16 + 1)
+        } else if pad_by > 0 {
+            Some(body.bottom())
+        } else if drawn < usize::from(body.height) {
+            Some(body.y + drawn as u16)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(y) = end_y {
+        let gilt = palette.elevation().gilt_style(bg);
+        let segs = intertitle(" T H E   E N D ", 33u16.min(body.width), Flank::Star);
+        draw_intertitle(buf, body.x, y, body.width, &segs, |p| match p {
+            Part::Rule | Part::Clasp => gilt,
+            Part::Star => Style::default()
+                .fg(palette.accent)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+            Part::Label => Style::default()
+                .fg(palette.text)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        });
     }
 
     // The footer: scroll marks plus the keys the sheet owns.
