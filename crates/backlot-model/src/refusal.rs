@@ -186,9 +186,16 @@ pub enum Refusal {
     },
     /// `role.recast` names an unknown permission profile.
     ProfileNotSupported(String),
-    AuditRequiresReadonly { task: String },
-    ReadonlyDeliveryHasCommits { task: String },
-    AuditIntegrationRefused { task: String, why: &'static str },
+    AuditRequiresReadonly {
+        task: String,
+    },
+    ReadonlyDeliveryHasCommits {
+        task: String,
+    },
+    AuditIntegrationRefused {
+        task: String,
+        why: &'static str,
+    },
     /// A `role.recast` would leave a runner cap unable to seat the
     /// studio's fixed roles.
     LimitsUnseated {

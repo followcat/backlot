@@ -745,10 +745,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     }
 }
 
-fn matches_cast(
-    cand: &crate::event::Candidate,
-    actor: &crate::event::ActorIdentity,
-) -> bool {
+fn matches_cast(cand: &crate::event::Candidate, actor: &crate::event::ActorIdentity) -> bool {
     let base = cand.actor();
     base == *actor
         || (actor.permission_profile == "readonly"

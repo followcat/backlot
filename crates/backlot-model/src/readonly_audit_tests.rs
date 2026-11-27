@@ -58,11 +58,7 @@ fn cast_readonly_lowers_candidate_profile_and_audit_requires_readonly() {
 
     // Casting a non-readonly actor on `task_kind == "audit"` refuses.
     assert!(
-        validate(
-            &state,
-            &new_ev("director", cast("t_audit", "actor-a", "a")),
-        )
-        .is_err(),
+        validate(&state, &new_ev("director", cast("t_audit", "actor-a", "a")),).is_err(),
         "audit task must refuse non-readonly cast"
     );
 
@@ -128,7 +124,10 @@ fn readonly_delivery_refuses_commits_and_allows_empty_commits() {
         requirement_version: 1,
         usage: None,
     };
-    assert_eq!(validate(&state, &new_ev("actor-t1-c1", report_only)), Ok(()));
+    assert_eq!(
+        validate(&state, &new_ev("actor-t1-c1", report_only)),
+        Ok(())
+    );
 }
 
 #[test]
