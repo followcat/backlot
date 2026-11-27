@@ -163,6 +163,85 @@ pub fn check_range_with(
     Ok(resolved.join(","))
 }
 
+/// Read-only `deliver` gate: the worktree must have no uncommitted changes
+/// and `HEAD` must still sit on the unmoved task branch tip.
+pub fn check_readonly_clean_with(
+    driver: &dyn MachineDriver,
+    dir: &Path,
+    studio: &str,
+    task: &str,
+    state: &StudioState,
+) -> Result<(), Fail> {
+    let Some(cfg) = state.studio.as_ref() else {
+        return Err(Fail::refused("the studio has no configuration"));
+    };
+    if cfg.no_git {
+        return Ok(());
+    }
+    let areas: Vec<PathBuf> = if cfg.members.is_empty() {
+        vec![work_area(dir, task)?]
+    } else {
+        cfg.members
+            .iter()
+            .map(|m| work_area(dir, &format!("{task}/{}", leaf(m))))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let branch = format!("backlot/{studio}/{task}");
+    let integ = format!("backlot/{studio}/integration");
+    for work in areas {
+        let cwd = work.to_string_lossy().into_owned();
+        let mut git = driver.git();
+        let status = git(&["status", "--porcelain"], &cwd);
+        if status.code != 0 {
+            return Err(Fail::refused(format!(
+                "readonly deliver: 'git status' failed in '{}' ({})",
+                work.display(),
+                workareas::err_line(&status)
+            )));
+        }
+        if !status.stdout.trim().is_empty() {
+            return Err(Fail::refused(format!(
+                "readonly task '{task}' worktree has uncommitted changes; clean them before delivering"
+            )));
+        }
+        let br = git(&["rev-parse", "--abbrev-ref", "HEAD"], &cwd);
+        if br.code != 0 || br.stdout.trim() != branch {
+            return Err(Fail::refused(format!(
+                "readonly task '{task}' HEAD moved off branch '{branch}'"
+            )));
+        }
+        let head = rev_parse(&mut **git, &cwd, "HEAD")?;
+        let reflog = git(&["reflog", "show", "--format=%H", "HEAD"], &cwd);
+        if reflog.code == 0
+            && let Some(initial) = reflog.stdout.lines().map(str::trim).rfind(|l| !l.is_empty())
+            && initial != head
+        {
+            return Err(Fail::refused(format!(
+                "readonly task '{task}' HEAD moved since start (expected {initial}, got {head})"
+            )));
+        }
+        let has_integ = git(
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                &format!("{integ}^{{commit}}"),
+            ],
+            &cwd,
+        );
+        if has_integ.code == 0 {
+            let ahead = git(&["rev-list", "--count", &format!("{integ}..HEAD")], &cwd);
+            if ahead.code != 0 || ahead.stdout.trim() != "0" {
+                return Err(Fail::refused(format!(
+                    "readonly task '{task}' HEAD has commits ahead of integration"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A member repository's leaf name — the `work/<task>/<member>`
 /// subdir and the `member:` prefix's spelling (D10).
 fn leaf(member: &str) -> String {
@@ -258,6 +337,11 @@ pub fn check_dependencies_with(
         let Some(d) = state.tasks.get(dep.as_str()) else {
             continue; // unknown counts as open — the model refuses
         };
+        if d.is_readonly_or_audit() {
+            return Err(Fail::refused(format!(
+                "audit/readonly task '{dep}' cannot be integrated as a dependency"
+            )));
+        }
         if !matches!(
             d.status,
             TaskStatus::Accepted | TaskStatus::PartiallyAccepted

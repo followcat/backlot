@@ -192,6 +192,11 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                 .as_ref()
                 .map(|c| c.candidate.as_str())
                 .unwrap_or("the actor");
+            let commits_label = if d.commits.is_empty() {
+                "(none — readonly)"
+            } else {
+                d.commits.as_str()
+            };
             out.push(Notice {
                 source_seq: d.seq,
                 to: reviewer_for(t),
@@ -203,7 +208,7 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                     t.id,
                     caster,
                     d.n,
-                    d.commits,
+                    commits_label,
                     dir.join(&d.report).display(),
                     d.requirement_version,
                     stage_ran,

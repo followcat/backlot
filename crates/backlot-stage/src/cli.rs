@@ -487,6 +487,12 @@ pub(crate) fn exec_event(
     // re-checks the role under the append lock.
     if let Cmd::Deliver { commits, .. } = &mut cmd {
         let task = caller.task.clone().unwrap_or_default();
+        if commits.is_none() && (caller.task.is_none() || !dir.join("events.jsonl").exists()) {
+            return Err(Fail::usage(format!(
+                "missing --commits\n\n{}",
+                crate::args_usage::U_DELIVER
+            )));
+        }
         let state = load(&dir)?;
         backlot_model::roles::may_deliver(&state, &caller.role, &task).map_err(refused)?;
         let t = state
@@ -497,8 +503,30 @@ pub(crate) fn exec_event(
             return Err(Fail::refused(format!("task '{task}' has no cast")));
         }
         let driver = crate::driver::LocalDriver::new();
-        *commits =
-            crate::range::check_range_with(&driver, &dir, &caller.studio, &task, &state, commits)?;
+        if t.is_readonly_or_audit() {
+            if commits.is_some() {
+                return Err(Fail::refused(format!(
+                    "task '{task}' is readonly: omit --commits and pass --report only"
+                )));
+            }
+            crate::range::check_readonly_clean_with(&driver, &dir, &caller.studio, &task, &state)?;
+            *commits = Some(String::new());
+        } else {
+            let Some(spec) = commits.as_deref() else {
+                return Err(Fail::usage(format!(
+                    "missing --commits\n\n{}",
+                    crate::args_usage::U_DELIVER
+                )));
+            };
+            *commits = Some(crate::range::check_range_with(
+                &driver,
+                &dir,
+                &caller.studio,
+                &task,
+                &state,
+                spec,
+            )?);
+        }
     }
     if let Cmd::AskRun {
         argv, cwd, command, ..

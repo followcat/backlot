@@ -28,6 +28,46 @@ pub(crate) struct GitContext<'a> {
     pub repo_root: Option<&'a Path>,
     pub members: &'a [String],
     pub env: &'a Env,
+    pub readonly: bool,
+    pub studio: Option<&'a str>,
+    pub audit_tasks: Option<&'a std::collections::BTreeSet<String>>,
+}
+
+impl<'a> GitContext<'a> {
+    pub(crate) fn bare(policy: &'a PushPolicy, cwd: &'a Path, env: &'a Env) -> Self {
+        Self {
+            policy,
+            cwd,
+            role_dir: None,
+            work_area: None,
+            repo_root: None,
+            members: &[],
+            env,
+            readonly: false,
+            studio: None,
+            audit_tasks: None,
+        }
+    }
+
+    pub(crate) fn from_info(
+        info: &'a crate::guard::StudioGuardInfo,
+        policy: &'a PushPolicy,
+        cwd: &'a Path,
+        env: &'a Env,
+    ) -> Self {
+        Self {
+            policy,
+            cwd,
+            role_dir: info.role_dir.as_deref(),
+            work_area: info.work_area.as_deref(),
+            repo_root: info.repo_root.as_deref(),
+            members: &info.members,
+            env,
+            readonly: info.readonly,
+            studio: info.studio.as_deref(),
+            audit_tasks: Some(&info.audit_tasks),
+        }
+    }
 }
 
 /// Probe remote push URLs for the studio's bound repository (or workspace members).
@@ -216,8 +256,7 @@ pub(crate) fn is_fast_path(args: &[String], ctx: &GitContext<'_>) -> bool {
     match parsed.subcmd.as_deref() {
         None => true,
         Some("push") => false,
-        Some(sub) if is_builtin_git_cmd(sub) => true,
-        Some(sub) => lookup_alias(sub, &parsed, &eff, ctx).is_none(),
+        Some(_) => crate::guard_probes::is_read_only_git_cmd(&parsed),
     }
 }
 
@@ -299,6 +338,19 @@ pub(crate) fn classify_git(
             return (GuardVerdict::Allow, with_git_prefix(&cur_args), eff);
         };
         if sub == "push" {
+            if ctx.readonly {
+                return (
+                    GuardVerdict::Refuse {
+                        command: raw_cmd,
+                        rule: with_alias(
+                            "readonly role cannot run git writes".into(),
+                            via_alias.as_deref(),
+                        ),
+                    },
+                    with_git_prefix(&cur_args),
+                    eff,
+                );
+            }
             let verdict = crate::guard_git_push::classify_push(
                 &parsed,
                 &eff,
@@ -309,9 +361,45 @@ pub(crate) fn classify_git(
             return (verdict, with_git_prefix(&cur_args), eff);
         }
         if is_builtin_git_cmd(&sub) {
+            if ctx.readonly && !crate::guard_probes::is_read_only_git_cmd(&parsed) {
+                return (
+                    GuardVerdict::Refuse {
+                        command: raw_cmd,
+                        rule: with_alias(
+                            "readonly role cannot run git writes".into(),
+                            via_alias.as_deref(),
+                        ),
+                    },
+                    with_git_prefix(&cur_args),
+                    eff,
+                );
+            }
+            if let Some(audit_rule) = audit_integration_refusal(&sub, &parsed.sub_args, ctx) {
+                return (
+                    GuardVerdict::Refuse {
+                        command: raw_cmd,
+                        rule: with_alias(audit_rule, via_alias.as_deref()),
+                    },
+                    with_git_prefix(&cur_args),
+                    eff,
+                );
+            }
             return (GuardVerdict::Allow, with_git_prefix(&cur_args), eff);
         }
         let Some(alias_val) = lookup_alias(&sub, &parsed, &eff, ctx) else {
+            if ctx.readonly {
+                return (
+                    GuardVerdict::Refuse {
+                        command: raw_cmd,
+                        rule: with_alias(
+                            "readonly role allows read-only git commands only".into(),
+                            via_alias.as_deref(),
+                        ),
+                    },
+                    with_git_prefix(&cur_args),
+                    eff,
+                );
+            }
             return (GuardVerdict::Allow, with_git_prefix(&cur_args), eff);
         };
         let alias_name = via_alias.get_or_insert_with(|| sub.clone()).clone();
@@ -354,6 +442,39 @@ pub(crate) fn classify_git(
     }
 }
 
+fn audit_integration_refusal(sub: &str, sub_args: &[String], ctx: &GitContext<'_>) -> Option<String> {
+    if !matches!(sub, "merge" | "rebase" | "cherry-pick") {
+        return None;
+    }
+    let studio = ctx.studio?;
+    let audit_tasks = ctx.audit_tasks?;
+    if audit_tasks.is_empty() {
+        return None;
+    }
+    let prefix = format!("backlot/{studio}/");
+    for arg in sub_args {
+        if arg.starts_with('-') {
+            continue;
+        }
+        for part in arg.split("..") {
+            let norm = part.trim_start_matches('.');
+            let stripped = norm
+                .strip_prefix("refs/heads/")
+                .or_else(|| norm.strip_prefix("refs/remotes/").and_then(|s| s.split_once('/').map(|(_, r)| r)))
+                .unwrap_or(norm);
+            let branch = stripped.strip_prefix("origin/").unwrap_or(stripped);
+            if let Some(task) = branch.strip_prefix(&prefix)
+                && audit_tasks.contains(task)
+            {
+                return Some(format!(
+                    "audit/readonly task '{task}' cannot be merged or integrated"
+                ));
+            }
+        }
+    }
+    None
+}
+
 fn classify_shell_alias(
     shell_body: &str,
     sub_args: &[String],
@@ -362,6 +483,19 @@ fn classify_shell_alias(
     raw_cmd: &str,
     alias_name: &str,
 ) -> (GuardVerdict, Vec<String>, PathBuf) {
+    if ctx.readonly {
+        return (
+            GuardVerdict::Refuse {
+                command: raw_cmd.to_string(),
+                rule: with_alias(
+                    "readonly role cannot run shell git alias".into(),
+                    Some(alias_name),
+                ),
+            },
+            with_git_prefix(sub_args),
+            eff_cwd.to_path_buf(),
+        );
+    }
     let mut line = shell_body.to_string();
     if !sub_args.is_empty() && !shell_body.contains('$') {
         let quoted: Vec<String> = sub_args
@@ -371,16 +505,9 @@ fn classify_shell_alias(
         line.push(' ');
         line.push_str(&quoted.join(" "));
     }
-    let m = crate::guard_shell::classify_command_line_match(
-        &line,
-        ctx.policy,
-        eff_cwd,
-        ctx.env,
-        ctx.role_dir,
-        ctx.work_area,
-        ctx.repo_root,
-        ctx.members,
-    );
+    let mut alias_ctx = ctx.clone();
+    alias_ctx.cwd = eff_cwd;
+    let m = crate::guard_shell::classify_command_line_with_ctx(&line, &alias_ctx);
     let verdict = match m.verdict {
         GuardVerdict::Allow => GuardVerdict::Allow,
         GuardVerdict::Card { rule, .. } => GuardVerdict::Card {

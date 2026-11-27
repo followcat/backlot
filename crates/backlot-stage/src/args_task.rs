@@ -92,6 +92,7 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     let mut actor = None;
     let mut reason = None;
     let mut priority = None;
+    let mut readonly = false;
     let mut suggest = false;
     let mut json = false;
     while let Some(arg) = it.next() {
@@ -110,6 +111,7 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             _ if eq(&arg, "--priority").is_some() => {
                 priority = Some(parse_level(eq(&arg, "--priority").unwrap(), U_CAST)?)
             }
+            "--readonly" => readonly = true,
             "--suggest" => suggest = true,
             "--json" => json = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_CAST)),
@@ -121,8 +123,11 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         if actor.is_some() {
             return Err(usage("--suggest and --actor do not mix", U_CAST));
         }
-        if reason.is_some() || priority.is_some() {
-            return Err(usage("--suggest takes no --reason or --priority", U_CAST));
+        if reason.is_some() || priority.is_some() || readonly {
+            return Err(usage(
+                "--suggest takes no --reason, --priority, or --readonly",
+                U_CAST,
+            ));
         }
         return Ok((std::mem::take(common), Cmd::CastSuggest { json }));
     }
@@ -135,6 +140,7 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             actor: actor.ok_or_else(|| usage("missing --actor", U_CAST))?,
             reason: reason.unwrap_or_default(),
             priority,
+            readonly,
         },
     ))
 }
@@ -476,7 +482,7 @@ pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     Ok((
         std::mem::take(common),
         Cmd::Deliver {
-            commits: commits.ok_or_else(|| usage("missing --commits", U_DELIVER))?,
+            commits,
             report: report.ok_or_else(|| usage("missing --report", U_DELIVER))?,
             checks,
             usage: (!use_report.is_empty()).then_some(use_report),

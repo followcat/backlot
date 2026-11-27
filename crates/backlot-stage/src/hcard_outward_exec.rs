@@ -108,13 +108,10 @@ fn prepare_outward_exec(
     verify_local_git_clean(cwd, &clean_probe).map_err(PrepErr::Fail)?;
 
     let ctx = GitContext {
-        policy: &cfg.push,
-        cwd,
-        role_dir: None,
         work_area: Some(&work_area),
         repo_root: Some(Path::new(&cfg.repo)),
         members: &cfg.members,
-        env: &clean_probe,
+        ..GitContext::bare(&cfg.push, cwd, &clean_probe)
     };
     let matched = classify_with_context(bin_name, &argv[1..], "", &ctx);
     match &matched.verdict {

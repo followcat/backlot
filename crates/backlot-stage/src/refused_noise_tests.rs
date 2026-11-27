@@ -157,13 +157,10 @@ fn benign_git_probes_and_studio_worktrees_allow_without_refusal() {
                 cwd.display()
             );
             let ctx = GitContext {
-                policy: &policy,
-                cwd,
                 role_dir: Some(&actor_rdir),
                 work_area: Some(&gs.work),
                 repo_root: Some(&gs.repo),
-                members: &[],
-                env: &actor_env,
+                ..GitContext::bare(&policy, cwd, &actor_env)
             };
             assert!(
                 is_fast_path(&argv(args), &ctx),

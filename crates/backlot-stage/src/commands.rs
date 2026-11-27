@@ -648,6 +648,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             actor,
             reason,
             priority,
+            readonly,
         } => {
             let task = caller.task.clone().unwrap_or_default();
             Ok(Box::new(move |state, _| {
@@ -656,11 +657,15 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                     .as_ref()
                     .and_then(|s| s.candidates.iter().find(|c| c.name == actor))
                     .ok_or_else(|| Fail::refused(format!("'{actor}' is not a studio candidate")))?;
+                let mut identity = cand.actor();
+                if readonly {
+                    identity.permission_profile = "readonly".into();
+                }
                 Ok(pending(
                     EventKind::TaskCast {
                         task,
                         candidate: cand.name.clone(),
-                        actor: cand.actor(),
+                        actor: identity,
                         reason,
                         priority,
                     },
@@ -884,7 +889,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                         task: task.clone(),
                         delivery: t.deliveries.len() as u32 + 1,
                         actor: cast.actor,
-                        commits,
+                        commits: commits.unwrap_or_default(),
                         report: pf.dest.clone(),
                         requirement_version: t.requirement_version,
                         checks,

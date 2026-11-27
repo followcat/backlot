@@ -34,15 +34,7 @@ pub(crate) fn classify_command(
     env: &crate::cli::Env,
 ) -> GuardVerdict {
     let info = crate::guard::load_studio_guard_info(env);
-    let ctx = GitContext {
-        policy,
-        cwd,
-        role_dir: info.role_dir.as_deref(),
-        work_area: info.work_area.as_deref(),
-        repo_root: info.repo_root.as_deref(),
-        members: &info.members,
-        env,
-    };
+    let ctx = GitContext::from_info(&info, policy, cwd, env);
     classify_with_context(name, args, "", &ctx).verdict
 }
 

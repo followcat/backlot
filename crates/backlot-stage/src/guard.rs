@@ -96,6 +96,9 @@ pub(crate) struct StudioGuardInfo {
     pub work_area: Option<PathBuf>,
     pub repo_root: Option<PathBuf>,
     pub members: Vec<String>,
+    pub readonly: bool,
+    pub studio: Option<String>,
+    pub audit_tasks: std::collections::BTreeSet<String>,
 }
 
 /// Load studio `PushPolicy` and role work area from the ledger.
@@ -108,8 +111,15 @@ pub(crate) fn load_studio_guard_info(env: &Env) -> StudioGuardInfo {
             work_area: None,
             repo_root: None,
             members: Vec::new(),
+            readonly: false,
+            studio: None,
+            audit_tasks: std::collections::BTreeSet::new(),
         };
     };
+    let studio = sdir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_string);
     let Ok(state) = store::load_state(&sdir) else {
         return StudioGuardInfo {
             policy: PushPolicy::default(),
@@ -117,24 +127,42 @@ pub(crate) fn load_studio_guard_info(env: &Env) -> StudioGuardInfo {
             work_area: fast_work_area(&sdir, &role),
             repo_root: None,
             members: Vec::new(),
+            readonly: false,
+            studio,
+            audit_tasks: std::collections::BTreeSet::new(),
         };
     };
-    let Some(cfg) = state.studio else {
+    let Some(cfg) = state.studio.as_ref() else {
         return StudioGuardInfo {
             policy: PushPolicy::default(),
             role_dir,
             work_area: fast_work_area(&sdir, &role),
             repo_root: None,
             members: Vec::new(),
+            readonly: false,
+            studio,
+            audit_tasks: std::collections::BTreeSet::new(),
         };
     };
     let work_area = crate::workareas::role_dir(&sdir, &cfg.repo, &role, cfg.no_git);
+    let readonly = state
+        .role_actor(&role)
+        .is_some_and(|a| a.permission_profile == "readonly");
+    let audit_tasks = state
+        .tasks
+        .values()
+        .filter(|t| t.is_readonly_or_audit())
+        .map(|t| t.id.clone())
+        .collect();
     StudioGuardInfo {
-        policy: cfg.push,
+        policy: cfg.push.clone(),
         role_dir,
         work_area: Some(work_area),
-        repo_root: Some(PathBuf::from(cfg.repo)),
-        members: cfg.members,
+        repo_root: Some(PathBuf::from(&cfg.repo)),
+        members: cfg.members.clone(),
+        readonly,
+        studio,
+        audit_tasks,
     }
 }
 
@@ -262,13 +290,9 @@ pub(crate) fn run_in_with_stdin(
         let default_policy = PushPolicy::default();
         let fast_work = studio_role_from_env(env).and_then(|(s, r)| fast_work_area(&s, &r));
         let fast_ctx = GitContext {
-            policy: &default_policy,
-            cwd,
             role_dir: role_dir.as_deref(),
             work_area: fast_work.as_deref(),
-            repo_root: None,
-            members: &[],
-            env,
+            ..GitContext::bare(&default_policy, cwd, env)
         };
         if is_fast_path(rest, &fast_ctx) {
             fast_ok = true;
@@ -277,15 +301,7 @@ pub(crate) fn run_in_with_stdin(
 
     if !fast_ok {
         let info = load_studio_guard_info(env);
-        let ctx = GitContext {
-            policy: &info.policy,
-            cwd,
-            role_dir: info.role_dir.as_deref(),
-            work_area: info.work_area.as_deref(),
-            repo_root: info.repo_root.as_deref(),
-            members: &info.members,
-            env,
-        };
+        let ctx = GitContext::from_info(&info, &info.policy, cwd, env);
         let m = classify_with_context(name, rest, stdin_data, &ctx);
         match m.verdict {
             GuardVerdict::Allow => {

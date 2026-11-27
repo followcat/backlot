@@ -141,6 +141,7 @@ pub enum Cmd {
         actor: String,
         reason: String,
         priority: Option<Priority>,
+        readonly: bool,
     },
     /// `cast --task <id> --suggest [--json]` (L3): the candidates'
     /// factual records for that task's kind — read-only, appends
@@ -225,7 +226,7 @@ pub enum Cmd {
         dry_run: bool,
     },
     Deliver {
-        commits: String,
+        commits: Option<String>,
         report: PathBuf,
         checks: Vec<Check>,
         /// Runner-reported token/cost figures (P4a) — `None` when

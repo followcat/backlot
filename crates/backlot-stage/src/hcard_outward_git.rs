@@ -150,15 +150,7 @@ pub(crate) fn verify_branch_on_remote(
 }
 
 fn url_recorded_via_git(policy: &PushPolicy, cwd: &Path, clean: &Env, url: &str) -> bool {
-    let ctx = GitContext {
-        policy,
-        cwd,
-        role_dir: None,
-        work_area: None,
-        repo_root: None,
-        members: &[],
-        env: clean,
-    };
+    let ctx = GitContext::bare(policy, cwd, clean);
     url_matches_policy(url, cwd, &ctx)
 }
 

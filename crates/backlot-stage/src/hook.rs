@@ -199,18 +199,38 @@ fn agy_classify_pre_tool(
     PathBuf,
     String,
 )> {
-    let line = agy_run_command_line(payload)?;
     let info = crate::guard::load_studio_guard_info(env);
-    let m = crate::guard_shell::classify_command_line_match(
-        line,
-        &info.policy,
-        cwd,
-        env,
-        info.role_dir.as_deref(),
-        info.work_area.as_deref(),
-        info.repo_root.as_deref(),
-        &info.members,
-    );
+    if info.readonly
+        && let Some(tool) = payload
+            .get("toolCall")
+            .and_then(|tc| tc.get("name"))
+            .and_then(|v| v.as_str())
+        && matches!(
+            tool,
+            "write_to_file"
+                | "replace_file_content"
+                | "multi_replace_file_content"
+                | "notebook_edit"
+                | "edit_file"
+                | "write_file"
+                | "apply_patch"
+                | "Edit"
+                | "Write"
+                | "NotebookEdit"
+        )
+    {
+        return Some((
+            tool.to_string(),
+            vec![tool.to_string()],
+            "readonly file write".into(),
+            backlot_model::event::RefusalDisposition::Refused,
+            cwd.to_path_buf(),
+            format!("refused by backlot: readonly role cannot run '{tool}'"),
+        ));
+    }
+    let line = agy_run_command_line(payload)?;
+    let ctx = crate::guard_git::GitContext::from_info(&info, &info.policy, cwd, env);
+    let m = crate::guard_shell::classify_command_line_with_ctx(line, &ctx);
     match m.verdict {
         crate::guard_rules::GuardVerdict::Allow => None,
         crate::guard_rules::GuardVerdict::Card { command, rule } => {

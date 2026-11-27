@@ -28,38 +28,15 @@ pub(crate) fn classify_command_line(
     cwd: &Path,
     env: &Env,
 ) -> GuardVerdict {
-    classify_command_line_match(line, policy, cwd, env, None, None, None, &[]).verdict
+    classify_command_line_with_ctx(line, &GitContext::bare(policy, cwd, env)).verdict
 }
 
 /// Classify a shell command line with full role/studio context, returning `GuardMatch`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn classify_command_line_match(
-    line: &str,
-    policy: &PushPolicy,
-    cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
-) -> GuardMatch {
-    classify_line_depth(
-        line, 0, policy, cwd, env, role_dir, work_area, repo_root, members,
-    )
+pub(crate) fn classify_command_line_with_ctx(line: &str, ctx: &GitContext<'_>) -> GuardMatch {
+    classify_line_depth(line, 0, ctx.cwd, ctx)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn classify_line_depth(
-    line: &str,
-    depth: usize,
-    policy: &PushPolicy,
-    cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
-) -> GuardMatch {
+fn classify_line_depth(line: &str, depth: usize, cwd: &Path, ctx: &GitContext<'_>) -> GuardMatch {
     let parsed = match split_shell_segments_checked(line) {
         Ok(p) => p,
         Err(reason) => {
@@ -92,17 +69,7 @@ fn classify_line_depth(
 
     for sub in &parsed.nested {
         if depth < 4 {
-            let m = classify_line_depth(
-                sub,
-                depth + 1,
-                policy,
-                &eff_cwd,
-                env,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-            );
+            let m = classify_line_depth(sub, depth + 1, &eff_cwd, ctx);
             if let Some(refused) = consider(m) {
                 return refused;
             }
@@ -138,8 +105,8 @@ fn classify_line_depth(
             }
             continue;
         }
-        if role_dir.is_some() || env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
-            let role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
+        if ctx.role_dir.is_some() || ctx.env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
+            let role = ctx.env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
             if let Some(rule) = crate::proc_guard::check_segment_self_approval(seg, role) {
                 return GuardMatch {
                     verdict: GuardVerdict::Refuse {
@@ -164,17 +131,7 @@ fn classify_line_depth(
             }
             heredoc = delimiter;
         }
-        let m = eval_segment(
-            seg,
-            depth,
-            policy,
-            &mut eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        );
+        let m = eval_segment(seg, depth, &mut eff_cwd, ctx);
         if let Some(refused) = consider(m) {
             return refused;
         }
@@ -187,17 +144,11 @@ fn classify_line_depth(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn eval_segment(
     seg: &[String],
     depth: usize,
-    policy: &PushPolicy,
     eff_cwd: &mut PathBuf,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
+    ctx: &GitContext<'_>,
 ) -> GuardMatch {
     let mut i = 0;
     while i < seg.len() {
@@ -272,39 +223,14 @@ fn eval_segment(
         };
     }
     match base {
-        "sh" | "bash" | "zsh" | "dash" | "ash" if depth < 4 => eval_nested_shell(
-            rest,
-            depth + 1,
-            policy,
-            eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        ),
-        "eval" if depth < 4 => classify_line_depth(
-            &rest.join(" "),
-            depth + 1,
-            policy,
-            eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        ),
+        "sh" | "bash" | "zsh" | "dash" | "ash" if depth < 4 => {
+            eval_nested_shell(rest, depth + 1, eff_cwd, ctx)
+        }
+        "eval" if depth < 4 => classify_line_depth(&rest.join(" "), depth + 1, eff_cwd, ctx),
         "git" => {
-            let ctx = GitContext {
-                policy,
-                cwd: eff_cwd,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-                env,
-            };
-            let (verdict, argv, cwd_used) = classify_git(rest, &ctx);
+            let mut seg_ctx = ctx.clone();
+            seg_ctx.cwd = eff_cwd;
+            let (verdict, argv, cwd_used) = classify_git(rest, &seg_ctx);
             GuardMatch {
                 verdict,
                 argv,
@@ -312,31 +238,18 @@ fn eval_segment(
             }
         }
         _ => {
-            let ctx = GitContext {
-                policy,
-                cwd: eff_cwd,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-                env,
-            };
-            classify_with_context(base, rest, "", &ctx)
+            let mut seg_ctx = ctx.clone();
+            seg_ctx.cwd = eff_cwd;
+            classify_with_context(base, rest, "", &seg_ctx)
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn eval_nested_shell(
     rest: &[String],
     next_depth: usize,
-    policy: &PushPolicy,
     eff_cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
+    ctx: &GitContext<'_>,
 ) -> GuardMatch {
     let mut j = 0;
     while j < rest.len() {
@@ -353,10 +266,7 @@ fn eval_nested_shell(
             && arg.contains('c')
         {
             if let Some(script) = rest.get(j + 1) {
-                return classify_line_depth(
-                    script, next_depth, policy, eff_cwd, env, role_dir, work_area, repo_root,
-                    members,
-                );
+                return classify_line_depth(script, next_depth, eff_cwd, ctx);
             }
             break;
         }
