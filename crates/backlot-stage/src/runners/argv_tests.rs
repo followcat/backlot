@@ -704,23 +704,45 @@ fn cursor_argv_and_env() {
 #[test]
 fn cmd_argv_and_env() {
     let env = BTreeMap::new();
+    #[cfg(unix)]
+    let scratch_dir = format!("/tmp/commandcode-{}/-home-user-acme-shop", unsafe {
+        libc::getuid()
+    });
+    #[cfg(not(unix))]
+    let scratch_dir = "/tmp/commandcode/-home-user-acme-shop".to_string();
+
     for profile in ["standard", "worktree"] {
+        let mut expected_fresh = vec![
+            "cmd",
+            "-n",
+            "bl-s-t1",
+            "-m",
+            "m",
+            "--trust",
+            "--skip-onboarding",
+            "--no-auto-update",
+            "--add-dir",
+            "/home/user/state/studios/acme-shop",
+        ];
+        let mut expected_resume = vec![
+            "cmd",
+            "-r",
+            "sess-9",
+            "-m",
+            "m",
+            "--trust",
+            "--skip-onboarding",
+            "--no-auto-update",
+            "--add-dir",
+            "/home/user/state/studios/acme-shop",
+        ];
+        if profile == "worktree" {
+            expected_fresh.extend(["--add-dir", &scratch_dir]);
+            expected_resume.extend(["--add-dir", &scratch_dir]);
+        }
+
         let l = plan(&actor("cmd", profile), &ctx(&env, None, None)).unwrap();
-        assert_eq!(
-            l.argv,
-            [
-                "cmd",
-                "-n",
-                "bl-s-t1",
-                "-m",
-                "m",
-                "--trust",
-                "--skip-onboarding",
-                "--no-auto-update",
-                "--add-dir",
-                "/home/user/state/studios/acme-shop"
-            ]
-        );
+        assert_eq!(l.argv, expected_fresh);
         assert_eq!(l.session, Session::PostLaunch);
         assert_eq!(l.env["NODE_USE_ENV_PROXY"], "1");
         // A first prompt is positional and last.
@@ -731,21 +753,7 @@ fn cmd_argv_and_env() {
         // the positional is ignored on a resumed TUI.
         let c = ctx(&env, Some("more"), Some("sess-9"));
         let l = plan(&actor("cmd", profile), &c).unwrap();
-        assert_eq!(
-            l.argv,
-            [
-                "cmd",
-                "-r",
-                "sess-9",
-                "-m",
-                "m",
-                "--trust",
-                "--skip-onboarding",
-                "--no-auto-update",
-                "--add-dir",
-                "/home/user/state/studios/acme-shop"
-            ]
-        );
+        assert_eq!(l.argv, expected_resume);
         assert!(!l.argv.iter().any(|a| a == "more"), "{:?}", l.argv);
         // The never-flags, fresh or resume — `--effort` writes the
         // GLOBAL config (measured); the rest are non-interactive

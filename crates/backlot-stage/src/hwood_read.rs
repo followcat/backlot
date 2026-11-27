@@ -470,6 +470,7 @@ fn dry_run(
             seq: None,
             ask_seq: None,
             first_message,
+            notes: crate::draft::dry_run_notes(cast_file)?,
         },
     ))
 }

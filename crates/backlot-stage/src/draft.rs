@@ -99,3 +99,46 @@ pub(crate) fn check_runners(
     }
     Ok(())
 }
+
+/// Dry-run notes when a cast requests `"worktree"` on runners whose
+/// `"worktree"` and `"standard"` profiles emit the same settings/flags.
+pub(crate) fn dry_run_notes(cast_path: &Path) -> Result<Vec<String>, Fail> {
+    let cast = read_cast(cast_path)?;
+    let mut by_runner: Vec<(String, Vec<String>)> = Vec::new();
+    let mut record = |role: &str, runner: &str, profile: &str| {
+        if profile == "worktree" && crate::runners::IDENTICAL_WORKTREE_RUNNERS.contains(&runner) {
+            if let Some((_, roles)) = by_runner.iter_mut().find(|(r, _)| r == runner) {
+                roles.push(role.to_string());
+            } else {
+                by_runner.push((runner.to_string(), vec![role.to_string()]));
+            }
+        }
+    };
+    record(
+        "producer",
+        &cast.producer.runner,
+        &cast.producer.permission_profile,
+    );
+    record(
+        "director",
+        &cast.director.runner,
+        &cast.director.permission_profile,
+    );
+    record(
+        "writer",
+        &cast.writer.runner,
+        &cast.writer.permission_profile,
+    );
+    for c in &cast.candidates {
+        record(&c.name, &c.runner, &c.permission_profile);
+    }
+    Ok(by_runner
+        .into_iter()
+        .map(|(runner, roles)| {
+            format!(
+                "permission_profile = \"worktree\" is identical to \"standard\" on {runner} ({})",
+                roles.join(", ")
+            )
+        })
+        .collect())
+}

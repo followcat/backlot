@@ -98,10 +98,17 @@ pub fn hollywood_commands() -> &'static [&'static str] {
 /// match nothing.
 #[cfg(test)]
 pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
-    allowed_tools_for(studio_dir, role, checks, false)
+    allowed_tools_for(studio_dir, role, checks, false, false, "")
 }
 
-fn allowed_tools_for(studio_dir: &str, role: &str, checks: &[CheckDecl], readonly: bool) -> String {
+fn allowed_tools_for(
+    studio_dir: &str,
+    role: &str,
+    checks: &[CheckDecl],
+    readonly: bool,
+    worktree: bool,
+    cwd: &str,
+) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
     // One command in both forms Claude's rule syntax takes: bare and
     // with arguments.
@@ -119,6 +126,19 @@ fn allowed_tools_for(studio_dir: &str, role: &str, checks: &[CheckDecl], readonl
     let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
     for cmd in super::READ_ONLY {
         command(&mut rules, cmd);
+    }
+    if worktree {
+        for cmd in super::WORKTREE_DIAGNOSTICS {
+            command(&mut rules, cmd);
+        }
+        for cmd in super::worktree_scoped_commands(role, cwd, |c| !c.contains(['(', ')', ',', '*']))
+        {
+            if cmd.starts_with("cd ") {
+                rules.push(format!("Bash({cmd})"));
+            } else {
+                command(&mut rules, &cmd);
+            }
+        }
     }
     let is_actor = actor_task(role).is_some();
     if is_actor && !readonly {
@@ -227,6 +247,7 @@ pub(crate) fn live_exe(
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let readonly = identity.permission_profile == "readonly";
+    let worktree = identity.permission_profile == "worktree";
     let mode = permission_mode(&identity.permission_profile)?;
     let mut argv: Vec<String> = Vec::new();
     let markers: Vec<&String> = ctx.stage_env.keys().filter(|k| is_marker(k)).collect();
@@ -249,7 +270,14 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
     let hooks = hook_setup_with_deny(ctx, readonly);
-    let tools = allowed_tools_for(ctx.studio_dir, ctx.role, ctx.checks, readonly);
+    let tools = allowed_tools_for(
+        ctx.studio_dir,
+        ctx.role,
+        ctx.checks,
+        readonly,
+        worktree,
+        ctx.cwd,
+    );
     argv.extend([
         "--allowedTools".into(),
         tools,

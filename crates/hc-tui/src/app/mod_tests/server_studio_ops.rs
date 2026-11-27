@@ -121,6 +121,7 @@ pub(super) fn new_studio(seq: Option<u64>) -> Value {
         seq,
         ask_seq: seq.map(|_| 2),
         first_message: seq.is_none().then(|| "Build the shop".into()),
+        notes: Vec::new(),
     })
     .unwrap()
 }

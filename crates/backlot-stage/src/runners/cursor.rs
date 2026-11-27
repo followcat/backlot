@@ -125,10 +125,16 @@ pub fn slug(path: &str) -> String {
 /// pre-allowed.
 #[cfg(test)]
 pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
-    allow_rules_for(role, checks, false)
+    allow_rules_for(role, checks, false, false, "")
 }
 
-pub(crate) fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) -> Vec<String> {
+pub(crate) fn allow_rules_for(
+    role: &str,
+    checks: &[CheckDecl],
+    readonly: bool,
+    worktree: bool,
+    cwd: &str,
+) -> Vec<String> {
     if role == "hollywood" {
         // D17a: exactly the overseer's set — anything else stops at
         // the prompt, which is the user's to answer.
@@ -153,6 +159,14 @@ pub(crate) fn allow_rules_for(role: &str, checks: &[CheckDecl], readonly: bool) 
     let mut rules = vec!["Shell(backlot)".to_string()];
     for cmd in super::READ_ONLY {
         rules.push(format!("Shell({cmd})"));
+    }
+    if worktree {
+        for cmd in super::WORKTREE_DIAGNOSTICS {
+            rules.push(format!("Shell({cmd})"));
+        }
+        for cmd in super::worktree_scoped_commands(role, cwd, expressible) {
+            rules.push(format!("Shell({cmd})"));
+        }
     }
     let is_actor = actor_task(role).is_some();
     if is_actor && !readonly {
@@ -211,9 +225,10 @@ fn env(root: &Path) -> BTreeMap<String, String> {
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    let readonly = match identity.permission_profile.as_str() {
-        "standard" | "worktree" => false,
-        "readonly" => true,
+    let (readonly, worktree) = match identity.permission_profile.as_str() {
+        "standard" => (false, false),
+        "worktree" => (false, true),
+        "readonly" => (true, false),
         other => return Err(PlanError::profile(other)),
     };
     // An empty value is the XDG convention for unset — auth stays at
@@ -253,7 +268,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         prep: Some(Prep::Cursor(CursorPrep {
             project: slug(ctx.cwd),
             root,
-            allow: allow_rules_for(ctx.role, ctx.checks, readonly),
+            allow: allow_rules_for(ctx.role, ctx.checks, readonly, worktree, ctx.cwd),
             global_mcp,
             readonly,
         })),
