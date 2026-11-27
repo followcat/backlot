@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.26 — 2026-11-27
+
 ### Changed
 
 - **backlot's own theme now follows the film *Babylon*: black lacquer, rose velvet and brass, with a matching light theme (`backlot-day`).** The old midnight blue look stays selectable as `backlot-midnight`, `babylon` and `babylon-day` resolve as aliases, and `auto_switch = true` pairs `backlot` with `backlot-day`.
