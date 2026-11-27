@@ -99,16 +99,11 @@ impl App {
         } else {
             design.doc_file.clone()
         };
-        let check_names: Vec<String> = design
-            .proposed_checks
-            .iter()
-            .map(|c| c.name.clone())
-            .collect();
         self.studio_dialog = Some(crate::studio_dialog::StudioDialog::design_sign(
             key,
             skip,
             Some(&file),
-            &check_names,
+            &design.proposed_checks,
         ));
     }
 

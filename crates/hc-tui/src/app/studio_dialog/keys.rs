@@ -87,6 +87,9 @@ impl App {
             Some(StudioDialog::CastEdit(d)) => {
                 self.studio_dialog = self.cast_edit_key(d, combo.code, combo.modifiers);
             }
+            Some(StudioDialog::DesignSign(d)) => {
+                self.studio_dialog = self.design_sign_key(d, combo.code, combo.modifiers);
+            }
             None => {}
         }
     }
@@ -143,7 +146,7 @@ impl App {
                 self.run_action(studio_cmds::prune(key, token.as_deref()));
             }
             ConfirmFor::DesignSign { key, skip } => {
-                self.run_action(studio_cmds::design_sign(key, *skip, None, None));
+                self.run_action(studio_cmds::design_sign(key, *skip, None, None, false));
             }
         }
     }
@@ -378,8 +381,22 @@ impl App {
                         self.studio_dialog = Some(StudioDialog::CastEdit(d));
                     }
                 }
+                Some(StudioDialog::DesignSign(d)) => {
+                    self.design_sign_submit(&d);
+                }
                 None => {}
             }
+            return;
+        }
+        if let Some(idx) = self
+            .studio_dialog_hits
+            .choices
+            .iter()
+            .position(|rect| contains(*rect))
+            && let Some(StudioDialog::DesignSign(mut d)) = self.studio_dialog.take()
+        {
+            d.selected = idx;
+            self.design_sign_submit(&d);
             return;
         }
         if contains(self.studio_dialog_hits.area) {

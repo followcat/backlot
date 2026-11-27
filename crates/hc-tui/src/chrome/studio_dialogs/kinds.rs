@@ -62,6 +62,7 @@ pub(super) fn render_reason(
         body: field,
         summary: Rect::default(),
         cursor,
+        ..DialogHits::default()
     })
 }
 
@@ -87,32 +88,10 @@ pub(super) fn render_confirm(
     };
     let mut lines = Vec::new();
     for para in body.split('\n') {
-        let mut line = String::new();
-        for word in para.split_whitespace() {
-            let word_w = usize::from(display_width(word));
-            let line_w = usize::from(display_width(&line));
-            if line.is_empty() {
-                if word_w <= inner {
-                    line.push_str(word);
-                } else {
-                    lines.push(truncate_end(word, inner));
-                }
-            } else if line_w + 1 + word_w <= inner {
-                line.push(' ');
-                line.push_str(word);
-            } else {
-                lines.push(line);
-                line = if word_w <= inner {
-                    word.to_owned()
-                } else {
-                    lines.push(truncate_end(word, inner));
-                    String::new()
-                };
-            }
+        if para.trim().is_empty() {
+            continue;
         }
-        if !line.is_empty() {
-            lines.push(line);
-        }
+        lines.extend(crate::hollywood::wrap_plain(para.trim(), inner, 0));
     }
     let height = (lines.len() as u16)
         .saturating_add(6)
@@ -166,6 +145,7 @@ pub(super) fn render_confirm(
         body: Rect::default(),
         summary: Rect::default(),
         cursor: None,
+        ..DialogHits::default()
     })
 }
 
@@ -263,6 +243,7 @@ pub(super) fn render_tell(
         body,
         summary: Rect::default(),
         cursor,
+        ..DialogHits::default()
     })
 }
 
@@ -393,5 +374,6 @@ pub(super) fn render_revise(
         body,
         summary,
         cursor,
+        ..DialogHits::default()
     })
 }

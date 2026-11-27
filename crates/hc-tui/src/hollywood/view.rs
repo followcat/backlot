@@ -258,13 +258,7 @@ pub(crate) fn render_view_with_opts(
     };
     let raw_body_y_pre = area.y + if show_row2_actual { 3 } else { 1 };
     let raw_body_h_pre = compose_body_end.saturating_sub(raw_body_y_pre);
-    let pre_py: u16 = if raw_body_h_pre >= 4
-        && (usize::from(raw_body_h_pre) >= total_lines + 2 || raw_body_h_pre >= 6)
-    {
-        1
-    } else {
-        0
-    };
+    let pre_py: u16 = body_py.min(raw_body_h_pre / 2);
     let body_h_pre = raw_body_h_pre.saturating_sub(2 * pre_py);
     let heights: Vec<u16> = wrapped.iter().map(|_| 1).collect();
     let metrics = list_scroll_metrics(&heights, &[], body_h_pre, view.scroll);

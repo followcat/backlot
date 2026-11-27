@@ -241,20 +241,15 @@ impl App {
             return;
         };
         let skip = view.meta.design_phase == Some(backlot_model::design::DesignPhase::SuggestSkip);
-        let check_names = self
+        let proposed_checks = self
             .waiting_design(&key)
-            .map(|d| {
-                d.proposed_checks
-                    .iter()
-                    .map(|c| c.name.clone())
-                    .collect::<Vec<_>>()
-            })
+            .map(|d| d.proposed_checks)
             .unwrap_or_default();
         self.studio_dialog = Some(crate::studio_dialog::StudioDialog::design_sign(
             &key,
             skip,
             view.meta.file.as_deref(),
-            &check_names,
+            &proposed_checks,
         ));
     }
 

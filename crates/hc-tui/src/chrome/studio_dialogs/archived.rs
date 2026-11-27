@@ -173,9 +173,8 @@ pub(super) fn render_restore(
         area: q,
         send: *ok,
         cancel: *cancel,
-        body: Rect::default(),
-        summary: Rect::default(),
         cursor,
+        ..DialogHits::default()
     })
 }
 
