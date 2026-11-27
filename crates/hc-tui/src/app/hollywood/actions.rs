@@ -267,7 +267,7 @@ impl App {
                 self.hollywood_peek(&studio, &role);
             }
             (Some(Target::Role(studio, role)), KeyCode::Char('r')) => {
-                self.hollywood_reply(&studio, &role);
+                self.hollywood_reply(&studio, &role, crate::hollywood::ReplyTargetKind::Ask);
             }
             (Some(Target::Role(studio, role)), KeyCode::Char('x')) => {
                 self.hollywood_ack(&studio, &role);
@@ -378,10 +378,13 @@ impl App {
             self.hollywood.history.reset_nav();
             return;
         }
+        self.sync_hollywood_reply_target();
         self.sync_hollywood_history();
         self.hollywood.history.record_send(&line);
         self.hollywood.input.clear();
-        if let Some((studio, role)) = self.hollywood.reply_to.take() {
+        let reply = self.hollywood.reply_to.take();
+        self.hollywood.clear_reply();
+        if let Some((studio, role)) = reply {
             let seq = self.hollywood.next_reply_echo_seq;
             self.hollywood.next_reply_echo_seq =
                 self.hollywood.next_reply_echo_seq.saturating_add(1);

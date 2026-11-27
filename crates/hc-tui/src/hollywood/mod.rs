@@ -27,6 +27,7 @@ mod handoff_ui;
 mod hints;
 mod items;
 mod keys;
+mod nav_rows;
 mod new_frame;
 mod plan;
 mod reader_banner;
@@ -55,6 +56,7 @@ pub(crate) use handoff_ui::{
 pub(crate) use hints::for_row;
 pub(crate) use items::{WaitBucket, chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
+pub(crate) use nav_rows::nav_band_targets;
 pub(crate) use plan::expanded_extent;
 #[cfg(test)]
 pub(crate) use plan::expanded_height;
@@ -73,8 +75,7 @@ pub(crate) use reader_wrap::{render_body_lines_with_sections, wrap_plain};
 pub(crate) use rows::band_rows;
 pub(crate) use rows::{
     HollywoodActivity, MAX_TALK_ENTRIES, Target, band_rows_with_echoes, frames, hollywood_activity,
-    hollywood_asking, hollywood_reply_max_seq, hollywood_unread_count, local_summary,
-    nav_band_targets, on_set,
+    hollywood_asking, hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
 pub(crate) use view::{CardView, ReaderRenderOpts, render_view_with_opts};
@@ -164,6 +165,13 @@ pub(crate) struct LayerOpts {
     pub no_shadow: bool,
 }
 
+/// Which waiting moment armed Compose's reply target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReplyTargetKind {
+    Ask,
+    Design,
+}
+
 /// The whole client-local layer state (D21): which of the three
 /// states it is in, the selection, the frame window, the card scroll
 /// and the input line's text. Everything on screen is read from the
@@ -195,6 +203,9 @@ pub(crate) struct Hollywood {
     /// `Some((studio, role))` while the compose line is an in-place
     /// reply to that role's question instead of a line to Hollywood.
     pub reply_to: Option<(crate::studio::StudioKey, String)>,
+    /// The waiting moment that armed `reply_to` (`Ask` rows and design
+    /// sign-offs invalidate differently).
+    pub reply_kind: Option<ReplyTargetKind>,
     /// Client-local echo rows for replies sent from this sheet. They
     /// use high synthetic seqs so ledger rows never share their target.
     pub reply_echoes: Vec<backlot_model::summary::Exchange>,
@@ -244,6 +255,7 @@ impl Hollywood {
             input: TextEditor::new("", false),
             editing: false,
             reply_to: None,
+            reply_kind: None,
             reply_echoes: Vec::new(),
             next_reply_echo_seq: u64::MAX - 1_000_000,
             history: Default::default(),
@@ -256,6 +268,12 @@ impl Hollywood {
             active_studio: None,
             now_ms: None,
         }
+    }
+
+    /// Drop the one-moment reply target and its source together.
+    pub(crate) fn clear_reply(&mut self) {
+        self.reply_to = None;
+        self.reply_kind = None;
     }
 
     /// Drawn at all — the pill face counts.

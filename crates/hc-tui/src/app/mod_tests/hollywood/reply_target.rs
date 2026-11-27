@@ -126,6 +126,24 @@ async fn a_click_outside_compose_drops_the_reply_target() {
 }
 
 #[tokio::test]
+async fn a_click_elsewhere_in_the_sheet_drops_the_reply_target() {
+    let mut app = asking_app();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    arm_reply(&mut app);
+    draw_to(&mut app, 120, 24);
+    let hints_y = app.hollywood_hits.area.bottom().saturating_sub(2);
+
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), 60, hints_y));
+    assert!(app.hollywood.reply_to.is_none());
+    send_line(&mut app, "status please");
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[hollywood_tell("status please")]
+    );
+}
+
+#[tokio::test]
 async fn an_ask_answered_elsewhere_drops_the_reply_target() {
     let mut app = asking_app();
     let (recorded, runner) = recorder();

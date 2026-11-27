@@ -1,6 +1,7 @@
 //! The Call Sheet compose line's one-moment reply target.
 
 use super::App;
+use crate::hollywood::ReplyTargetKind;
 use crate::studio::StudioKey;
 use crate::studio_cmds;
 
@@ -26,15 +27,19 @@ impl App {
             .max()
     }
 
-    /// A reply belongs to one open ask only: once that ask is gone
-    /// from the published document — answered, acknowledged, finished,
-    /// or its studio vanished — Compose is Hollywood's again.
+    /// A reply belongs to one open ask or waiting design only: once that
+    /// moment is gone from the published document — answered, acknowledged,
+    /// signed, finished, or its studio vanished — Compose is Hollywood's again.
     pub(crate) fn sync_hollywood_reply_target(&mut self) {
         let Some((studio, role)) = self.hollywood.reply_to.clone() else {
             return;
         };
-        if self.ask_target(&studio, &role).is_none() {
-            self.hollywood.reply_to = None;
+        let valid = match self.hollywood.reply_kind.unwrap_or(ReplyTargetKind::Ask) {
+            ReplyTargetKind::Ask => self.ask_target(&studio, &role).is_some(),
+            ReplyTargetKind::Design => role == "producer" && self.waiting_design(&studio).is_some(),
+        };
+        if !valid {
+            self.hollywood.clear_reply();
         }
     }
 
@@ -48,8 +53,14 @@ impl App {
 
     /// `r` on an ASKS row: compose the person's reply in the sheet's own
     /// compose line, not in a dialog away from the question.
-    pub(in crate::app) fn hollywood_reply(&mut self, studio: &StudioKey, role: &str) {
+    pub(in crate::app) fn hollywood_reply(
+        &mut self,
+        studio: &StudioKey,
+        role: &str,
+        kind: ReplyTargetKind,
+    ) {
         self.hollywood.reply_to = Some((studio.clone(), role.to_string()));
+        self.hollywood.reply_kind = Some(kind);
         self.hollywood_select(crate::hollywood::Target::Input);
         self.hollywood.editing = true;
     }

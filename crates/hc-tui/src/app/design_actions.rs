@@ -116,7 +116,7 @@ impl App {
         if design.suggest_skip || design.phase == DesignPhase::SuggestSkip {
             self.run_action(studio_cmds::design_open(key));
         } else {
-            self.hollywood_reply(key, "producer");
+            self.hollywood_reply(key, "producer", crate::hollywood::ReplyTargetKind::Design);
         }
     }
 
