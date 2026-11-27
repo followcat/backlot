@@ -16,6 +16,9 @@ use crate::watch::trust_dialog;
 /// and claude keep `esc to cancel`/`interrupt` visible on the bottom
 /// bar), `working` markers, then `Waiting`.
 pub(crate) fn work_state(runner: &str, screen: &str) -> Work {
+    if runner == "agy" && agy_signing_in(screen) {
+        return Work::Working;
+    }
     if blocked(runner, screen) || super::dialog::generic_dialog(screen) {
         return Work::Blocked;
     }
@@ -50,12 +53,19 @@ pub(crate) fn interrupted(runner: &str, screen: &str) -> bool {
     })
 }
 
-/// cmd's picker: the option cursor plus both neighbouring options.
-/// Joined first, so the option texts wrapping across lines cannot
-/// hide the picker (S12a).
+/// cmd's permission pickers: `Execute Shell Command` (`2. Yes, don't ask`),
+/// `Tool Permission` (`2. No, tell Command Code what to do differently`), and
+/// `Create File`/edit dialogs (`2. Yes, allow all edits...` + `3. No, tell
+/// Command Code what to do differently`). Joined first so wrapped lines at
+/// narrow widths still match (S12a), without catching plain questions.
 fn cmd_picker(screen: &str) -> bool {
     let flat = joined(screen);
-    flat.contains("❯ 1. Yes") && flat.contains("2. Yes, don't ask") && flat.contains("3. No")
+    flat.contains("❯ 1. Yes")
+        && ((flat.contains("2. Yes, don't ask") && flat.contains("3. No"))
+            || ((flat.contains("2. No, tell Command Code what to do differently")
+                || flat.contains("3. No, tell Command Code what to do differently"))
+                && flat.contains("↑/↓ navigate")
+                && flat.contains("enter select")))
 }
 
 /// The first whole-word position of `word` in the joined text.
@@ -367,8 +377,17 @@ pub(crate) fn agy_question_line(l: &str) -> bool {
 
 /// agy 1.5.16 working turn (R7a): braille spinner + two spaces + verb,
 /// running background-task row or task bar, or `esc to cancel` footer.
+/// agy's transient startup sign-in screen before its first prompt.
+pub(crate) fn agy_signing_in(screen: &str) -> bool {
+    let flat = joined(screen);
+    flat.contains("Welcome to the Antigravity CLI.")
+        && flat.contains("You are currently not signed in.")
+        && (flat.contains("Signing in...") || flat.contains("Signing in…"))
+}
+
 fn agy_working(screen: &str) -> bool {
-    screen.lines().any(agy_spinner_line)
+    agy_signing_in(screen)
+        || screen.lines().any(agy_spinner_line)
         || screen.lines().any(agy_bg_task_line)
         || screen.lines().any(agy_tasks_bar)
         || screen

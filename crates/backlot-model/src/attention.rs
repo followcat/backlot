@@ -69,7 +69,8 @@ impl AttentionClass {
             | "not a git repository"
             | "work area failed"
             | "over budget"
-            | "owed" => AttentionClass::NeedsYou,
+            | "owed"
+            | "auth error" => AttentionClass::NeedsYou,
             "permission prompt" | "agent error" | "stalled" | "rate limited"
             | "connection error" | "question" => AttentionClass::Stuck,
             "session id not found"

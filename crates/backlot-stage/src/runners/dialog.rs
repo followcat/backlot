@@ -28,6 +28,14 @@ pub(crate) fn generic_dialog(screen: &str) -> bool {
         let Some((indent, opt_col)) = option_cursor(line.text) else {
             continue;
         };
+        if line.text[indent..].starts_with("> ")
+            && i > 0
+            && is_composer_rule(tail[i - 1].text)
+            && !has_dialog_footer(&tail, i)
+            && !has_explicit_boxed_options(&tail[i..])
+        {
+            continue;
+        }
         if has_sibling_option(&tail, i, indent, opt_col) || has_dialog_footer(&tail, i) {
             return true;
         }
@@ -79,20 +87,17 @@ fn is_composer_rule(l: &str) -> bool {
 /// row between two horizontal border rules, plus up to 3 trailing
 /// status/shortcut lines) that does not hold multi-option dialog choices
 /// or a dialog action footer.
-fn has_bottom_composer(tail: &[Line<'_>]) -> bool {
+fn find_bottom_composer(tail: &[Line<'_>]) -> Option<(usize, usize)> {
     let min_close = tail.len().saturating_sub(4);
-    let Some(close) = (min_close..tail.len())
-        .rfind(|&idx| !tail[idx].in_fence && is_composer_rule(tail[idx].text))
-    else {
-        return false;
-    };
+    let close = (min_close..tail.len())
+        .rfind(|&idx| !tail[idx].in_fence && is_composer_rule(tail[idx].text))?;
     if tail[close + 1..]
         .iter()
         .any(|l| !l.in_fence && is_action_footer(l.text))
     {
-        return false;
+        return None;
     }
-    let min_open = close.saturating_sub(5);
+    let min_open = close.saturating_sub(10);
     for open in (min_open..close.saturating_sub(1)).rev() {
         if tail[open].in_fence || !is_composer_rule(tail[open].text) {
             continue;
@@ -104,15 +109,153 @@ fn has_bottom_composer(tail: &[Line<'_>]) -> bool {
         {
             continue;
         }
-        let has_options = inner.iter().enumerate().any(|(j, l)| {
-            option_cursor(l.text)
-                .is_some_and(|(ind, opt_col)| has_sibling_option(inner, j, ind, opt_col))
-        });
-        if !has_options {
+        if !has_explicit_boxed_options(inner) {
+            return Some((open, close));
+        }
+    }
+    None
+}
+
+fn has_bottom_composer(tail: &[Line<'_>]) -> bool {
+    find_bottom_composer(tail).is_some()
+}
+
+/// Non-empty user draft inside the runner's bottom composer input box
+/// (excluding empty prompts and idle placeholder/mode banners).
+pub(crate) fn has_non_empty_draft(screen: &str) -> bool {
+    let tail = tail_window(screen);
+    let Some((open, close)) = find_bottom_composer(&tail) else {
+        return false;
+    };
+    let mut lines = tail[open + 1..close]
+        .iter()
+        .map(|l| l.text.trim())
+        .filter(|s| !s.is_empty());
+    let Some(first) = lines.next() else {
+        return false;
+    };
+    let mut chars = first.chars();
+    let Some(marker) = chars.next() else {
+        return false;
+    };
+    if !matches!(marker, '>' | '❯' | '›') {
+        return false;
+    }
+    let first_text = chars.as_str().trim();
+    if lines.next().is_some() {
+        return true;
+    }
+    !first_text.is_empty() && !is_composer_placeholder(first_text)
+}
+
+fn is_composer_placeholder(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.ends_with("(shift+tab to cycle)")
+        || lower.starts_with("accept-edits mode:")
+        || lower.starts_with("plan mode:")
+        || lower.starts_with("auto mode:")
+        || text.starts_with("Try \"")
+        || matches!(
+            lower.as_str(),
+            "ask anything"
+                | "ask a follow-up"
+                | "ask your question"
+                | "what can i do for you?"
+                | "plan, search, build anything"
+                | "describe your edit"
+                | "explain this codebase"
+                | "type a message"
+                | "type your message"
+                | "send a message"
+                | "enter your prompt"
+                | "write your message"
+        )
+}
+
+fn line_after_cursor(l: &str) -> Option<&str> {
+    let indent = leading_spaces(l);
+    let mut chars = l[indent..].chars();
+    let marker = chars.next()?;
+    if !matches!(marker, '❯' | '>' | '→' | '›') {
+        return None;
+    }
+    let rest = chars.as_str();
+    let spaces = leading_spaces(rest);
+    if spaces == 0 {
+        return None;
+    }
+    let trimmed = rest[spaces..].trim();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+fn starts_with_choice_tag(trimmed: &str) -> bool {
+    let bytes = trimmed.as_bytes();
+    if trimmed.starts_with("[ ]") || trimmed.starts_with("[x]") || trimmed.starts_with("[X]") {
+        return trimmed.len() == 3 || bytes[3] == b' ';
+    }
+    if bytes.starts_with(b"[")
+        && let Some(end) = trimmed[1..].find(']')
+        && end > 0
+        && trimmed[1..1 + end].bytes().all(|b| b.is_ascii_digit())
+    {
+        return true;
+    }
+    if bytes.starts_with(b"(")
+        && bytes.len() >= 4
+        && bytes[1].is_ascii_alphanumeric()
+        && bytes[2] == b')'
+        && bytes[3] == b' '
+    {
+        return true;
+    }
+    let digits = bytes.iter().take_while(|b| b.is_ascii_digit()).count();
+    if digits > 0
+        && let Some(&sep) = bytes.get(digits)
+        && matches!(sep, b'.' | b')')
+        && bytes.get(digits + 1) == Some(&b' ')
+    {
+        return true;
+    }
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && matches!(bytes[1], b'.' | b')')
+        && bytes[2] == b' '
+}
+
+fn has_tagged_sibling(lines: &[Line<'_>], i: usize, indent: usize, opt_col: usize) -> bool {
+    for line in &lines[i + 1..] {
+        if line.in_fence || is_composer_rule(line.text) {
+            break;
+        }
+        if option_cursor(line.text).is_some_and(|(ind, _)| ind == indent) {
+            break;
+        }
+        let lead = leading_spaces(line.text);
+        if lead <= indent {
+            break;
+        }
+        if lead == opt_col && starts_with_choice_tag(line.text[lead..].trim()) {
             return true;
         }
     }
     false
+}
+
+fn has_explicit_boxed_options(lines: &[Line<'_>]) -> bool {
+    if lines
+        .iter()
+        .filter(|l| option_cursor(l.text).is_some())
+        .count()
+        >= 2
+    {
+        return true;
+    }
+    lines.iter().enumerate().any(|(j, l)| {
+        option_cursor(l.text).is_some_and(|(ind, opt_col)| {
+            line_after_cursor(l.text).is_some_and(starts_with_choice_tag)
+                && has_tagged_sibling(lines, j, ind, opt_col)
+        })
+    })
 }
 
 fn leading_spaces(l: &str) -> usize {
@@ -252,7 +395,8 @@ pub(crate) fn question_summary(screen: &str) -> Option<String> {
     let header = tail[..cursor_idx]
         .iter()
         .rev()
-        .find(|l| !l.in_fence && !is_composer_rule(l.text))
+        .take_while(|l| !is_composer_rule(l.text))
+        .find(|l| !l.in_fence)
         .map(|l| l.text.trim().to_string())
         .filter(|s| !s.is_empty());
     header.map(|s| s.chars().take(120).collect())

@@ -16,6 +16,9 @@ use crate::ratelimit::{self, RatePace};
 use crate::reconcile::LiveTerminal;
 use crate::runners::{Launch, Prep};
 
+/// Attention reason for a runner stuck signing in or failing authentication.
+pub(crate) const AUTH_ERROR: &str = "auth error";
+
 /// Authoritative active Hollywood terminal lookup (§2.3.1):
 /// 1. Exact `role.terminal` match (excluding `backlot.shell`, `hollywood-handoff`, `hollywood-previous`).
 /// 2. Unique live terminal carrying `backlot.role=hollywood`.

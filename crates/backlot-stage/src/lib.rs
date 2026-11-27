@@ -141,6 +141,7 @@ mod server_mode;
 mod server_service;
 mod service;
 pub mod signals;
+mod signin;
 mod stage;
 mod stage_accounts;
 mod stagelog;
@@ -329,6 +330,8 @@ mod liveness_tests;
 mod loop_cmd_tests;
 #[cfg(test)]
 mod migrate_tests;
+#[cfg(test)]
+mod misreads_tests;
 #[cfg(test)]
 mod msg_show_extra_tests;
 #[cfg(test)]
