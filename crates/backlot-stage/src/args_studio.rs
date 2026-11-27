@@ -753,6 +753,53 @@ fn report_show(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
     ))
 }
 
+/// `msg show <seq> [--json]`: `<seq>` or `#<seq>`, plus `--json` and
+/// common flags.
+pub(crate) fn msg(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let Some(sub) = it.next() else {
+        return Err(usage("missing msg subcommand", U_MSG));
+    };
+    match sub.as_str() {
+        "show" => msg_show(common, it),
+        "-h" | "--help" => Ok((std::mem::take(common), Cmd::Help(U_MSG))),
+        _ => Err(usage(format!("unknown msg subcommand '{sub}'"), U_MSG)),
+    }
+}
+
+fn msg_show(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut seq = None;
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_MSG)));
+        }
+        if common_flag(it, common, &arg, U_MSG)? {
+            continue;
+        }
+        if arg == "--json" {
+            json = true;
+            continue;
+        }
+        if !arg.starts_with('-') && seq.is_none() {
+            let parsed = arg
+                .strip_prefix('#')
+                .unwrap_or(arg.as_str())
+                .parse::<u64>()
+                .map_err(|_| usage(format!("bad seq '{arg}', want <seq>"), U_MSG))?;
+            seq = Some(parsed);
+        } else {
+            return Err(usage(format!("unexpected argument '{arg}'"), U_MSG));
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::MsgShow {
+            seq: seq.ok_or_else(|| usage("missing <seq>", U_MSG))?,
+            json,
+        },
+    ))
+}
+
 pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut role = None;
     let mut src = Source::default();

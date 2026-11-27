@@ -96,6 +96,8 @@ mod liveness_diff;
 mod liveness_probe;
 mod liveness_work;
 mod migrate;
+mod msg_show;
+mod msg_show_fmt;
 mod notices;
 mod nudge;
 mod paths;
@@ -319,6 +321,10 @@ mod liveness_tests;
 mod loop_cmd_tests;
 #[cfg(test)]
 mod migrate_tests;
+#[cfg(test)]
+mod msg_show_extra_tests;
+#[cfg(test)]
+mod msg_show_tests;
 #[cfg(test)]
 mod notices_tests;
 #[cfg(test)]

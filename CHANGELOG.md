@@ -10,9 +10,19 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Read one studio message by ledger `seq` (`backlot msg show`) and cite `#<seq>` in role prompts (`backlot-stage`, docs).** Added the read-only `backlot msg show <seq> [--json]` command (accepting `<seq>` or `#<seq>`, strictly scoped to the caller's own studio) to print sender, recipient, UTC timestamp, kind (`tell`, `ask` with its resolving `answer`, `design note`, `supplement`, `design proposal`/`buildability`/`summary`/`sign-off`, `report`, `finding`), and full body under strict studio-path containment; added `backlot msg show` to the shared `READ_ONLY` runner allowlist (`claude`, `cursor`, `cmd`, `cline`, `devin`); updated `director.md`, `actor.md`, `producer.md`, and `writer.md` (keeping gate-off and `{#design_gate}` sections consistent) to cite binding messages as `Binding: #<seq> (<one-line what>)` instead of retelling them and to open cited `#<seq>` entries before acting; and updated `docs/studio/{design,guide,runners}.md`.
+
 ### Changed
 
+- Test fixtures and docs use neutral names only.
 - **Eliminated `role.refused` and `outward action` noise on benign read-only probes (`backlot-stage`).** Allowed non-repo `git` metadata queries (`--version`, `-v`, `version`, `--help`, `-h`, `help`), layout-only `git rev-parse` probes (`--show-toplevel`, `--git-dir`, `--git-common-dir`, `--is-inside-work-tree`, `--is-bare-repository`, `--show-prefix`, etc. without outside-reach options), read-only `git` queries across a studio's own `work/*` worktrees, bound repo, and workspace members (with `GIT_OPTIONAL_LOCKS=0` outside a role's own worktree), and read-only `gh` commands (`--help`/`-h`, `repo view|list`, `issue view|list|status`, `release view|list`, `gist view|list`, `pr view|list|status|diff|checks`), while narrowing `runners::agy::DENY_PREFIXES` to `gh api` plus write-specific `gh repo`/`gh release`/`gh issue` prefixes for defence in depth. Suppressed `role.refused` and `outward action` ledger events on evidence-backed read-only `git` probe refusals (`git path outside work area` without explicit outside-reach flags and config-override rules for `alias.*`, `core.fsmonitor`, `core.hooksPath`, `submodule.recurse`), keeping `git hooksPath tampered` and `unknown git global option` recorded while tracking suppressed counts in `<studio>/suppressed-probes` (`stage.log`) and keeping writes, pushes, merges, comments, and explicit outside-reaches refused and recorded (`docs/studio/design.md`, `docs/studio/ledger.md`, `docs/studio/limits.md`).
+
+### Fixed
+
+- Retarget the main pane (and studio role cursor / remembered member) to a role's new live terminal when the role resumes, restarts, recasts, or reopens from a finished terminal, while preserving keyboard focus and leaving non-resumed finished terminals alone.
+- The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
 
 ## 0.4.20 — 2026-11-27
 

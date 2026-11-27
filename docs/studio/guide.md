@@ -266,7 +266,7 @@ backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
 `--studio` flag or reads `BACKLOT_STUDIO`. The name resolves across sessions: when it is not
 under the current session's state directory the command scans the sibling core directories, so
-`backlot studio finish --studio aiflows` in a plain shell finds `aiflows` wherever it was made —
+`backlot studio finish --studio orchard` in a plain shell finds `orchard` wherever it was made —
 exactly one match wins, none keeps `no studio`, and several matches refuse with the core ids so
 `--session` can pick one. `BACKLOT_STATE_DIR`, `--session` and `--remote` pin the directory and
 skip the scan. `--repo` must be an absolute path — it names the
@@ -397,6 +397,15 @@ together, as one line naming a `messages/digest-<seq>.md` to read. A stage notic
 has moved on is dropped instead of sent — the ledger keeps the drop (`message.dropped`) and
 `backlot status` counts it under `messages:` — but a `tell` is a person's words and always goes.
 In the ledger you are the role `user`, so person-facing commands take `--as user`.
+
+`backlot msg show <seq> [--json]` reads one recorded message, ask (with its answer when resolved),
+design note, supplement, sign-off, report, or finding of the studio by its ledger `seq` — who sent
+it, to whom, when, its kind, and its full body — strictly scoped to the caller's own studio:
+
+```sh
+backlot msg show 3 --studio acme-shop
+backlot msg show 3 --studio acme-shop --json
+```
 
 `backlot status` shows the studio's recorded state at any time:
 
@@ -702,8 +711,8 @@ in the state directory.
   routed to you after a one-minute grace (see below).
 
 Read-only commands do not prompt at all: `git status`, `git log`, `git show`, `git diff`,
-`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for
-every role on every runner that has an allow list (`runners.md` says which). One plain command per
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head` and `backlot msg show`
+are pre-allowed for every role on every runner that has an allow list (`runners.md` says which). One plain command per
 shell call: a `cd x && git log`, a pipe or `git -C` does not match the rule and prompts.
 
 **A prompt the director cannot answer reaches you with the reason.** An actor's prompt is the

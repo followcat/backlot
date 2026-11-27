@@ -979,11 +979,16 @@ fn every_prompt_reads_its_docs_from_the_guide() {
 /// writer's included — so a role's `git log` never asks a person.
 #[test]
 fn every_runner_pre_allows_the_read_only_set_for_every_role() {
+    assert!(
+        crate::runners::READ_ONLY.contains(&"backlot msg show"),
+        "READ_ONLY misses `backlot msg show`"
+    );
     for role in ["producer", "director", "writer", "actor-t1-c1"] {
         let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", role, &[]);
         let cursor = crate::runners::cursor::allow_rules(role, &[]);
         let cmd = crate::runners::cmd::allow_rules(role, &[]);
         let cline = crate::runners::cline::allow_commands(role, &[]);
+        let devin = crate::runners::devin::allow_rules();
         for cmd_name in crate::runners::READ_ONLY {
             assert!(
                 claude.contains(&format!("Bash({cmd_name} *)")),
@@ -1001,7 +1006,96 @@ fn every_runner_pre_allows_the_read_only_set_for_every_role() {
                 cline.iter().any(|r| r == cmd_name),
                 "cline {role} misses `{cmd_name}`"
             );
+            assert!(
+                devin.iter().any(|r| r == &format!("Exec({cmd_name})")),
+                "devin {role} misses `{cmd_name}`"
+            );
         }
+    }
+}
+
+#[test]
+fn prompts_carry_binding_seq_rules_and_msg_show() {
+    let dir = tmp();
+    for gate in [
+        backlot_model::event::DesignGate::Off,
+        backlot_model::event::DesignGate::Required,
+    ] {
+        let state = state_with_gate(gate);
+
+        let actor_file = prepare(
+            &dir,
+            "acme-shop",
+            &start(RoleKind::Actor, "actor-t1-c1", Some("t1")),
+            &state,
+        )
+        .unwrap();
+        let actor_text = fs::read_to_string(&actor_file).unwrap();
+        assert!(
+            actor_text.contains("`backlot msg show <seq>`"),
+            "actor misses msg show ({gate:?})"
+        );
+        assert!(
+            actor_text.contains("#<seq>") && actor_text.contains("ask the director"),
+            "actor misses seq opening / disagreement rule ({gate:?}):\n{actor_text}"
+        );
+
+        let director_file = prepare(
+            &dir,
+            "acme-shop",
+            &start(RoleKind::Director, "director", None),
+            &state,
+        )
+        .unwrap();
+        let director_text = fs::read_to_string(&director_file).unwrap();
+        assert!(
+            director_text.contains("`backlot msg show <seq>`"),
+            "director misses msg show ({gate:?})"
+        );
+        assert!(
+            director_text.contains("Binding: #<seq>")
+                && director_text.contains("instead of retelling")
+                && director_text.contains("person's answers")
+                && director_text.contains("producer's supplements")
+                && director_text.contains("signed design")
+                && director_text.contains("findings")
+                && director_text.contains("only one line"),
+            "director misses Binding seq rule ({gate:?}):\n{director_text}"
+        );
+
+        let producer_file = prepare(
+            &dir,
+            "acme-shop",
+            &start(RoleKind::Producer, "producer", None),
+            &state,
+        )
+        .unwrap();
+        let producer_text = fs::read_to_string(&producer_file).unwrap();
+        assert!(
+            producer_text.contains("`backlot msg show <seq>`"),
+            "producer misses msg show ({gate:?})"
+        );
+        assert!(
+            producer_text.contains("Binding: #<seq>"),
+            "producer misses Binding seq rule ({gate:?}):\n{producer_text}"
+        );
+
+        let writer_file = prepare(
+            &dir,
+            "acme-shop",
+            &start(RoleKind::Writer, "writer", None),
+            &state,
+        )
+        .unwrap();
+        let writer_text = fs::read_to_string(&writer_file).unwrap();
+        assert!(
+            writer_text.contains("`backlot msg show <seq>`"),
+            "writer misses msg show ({gate:?})"
+        );
+        assert!(
+            writer_text.contains("Binding: #<seq>"),
+            "writer misses Binding seq rule ({gate:?}):\n{writer_text}"
+        );
     }
 }
 
@@ -1040,7 +1134,7 @@ fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState
 #[test]
 fn actor_template_and_render_stay_byte_identical_across_design_gates() {
     let raw = template(RoleKind::Actor);
-    assert_eq!(raw.len(), 2643, "actor.md size must stay byte-identical");
+    assert_eq!(raw.len(), 2931, "actor.md size must stay byte-identical");
     assert!(raw.ends_with("asking to open a PR.\n"));
     assert!(!raw.contains("design_gate"));
     assert!(!raw.contains("backlot design"));
@@ -1140,19 +1234,19 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Producer,
             "producer",
-            5246usize,
+            5505usize,
             "merely to send them there.\n",
         ),
         (
             RoleKind::Writer,
             "writer",
-            2697usize,
+            2975usize,
             "(`backlot tell user --text <note> --note`).\n",
         ),
         (
             RoleKind::Director,
             "director",
-            5830usize,
+            6201usize,
             "is killed for you.\n",
         ),
     ] {

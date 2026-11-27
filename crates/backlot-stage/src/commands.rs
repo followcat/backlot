@@ -988,9 +988,10 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 Vec::new(),
             ))
         })),
-        // `report show` is read-only — `hwood_read` serves it and
-        // the append path never sees it (R24).
+        // `report show` / `msg show` are read-only — `hwood_read` serves them
+        // and the append path never sees them (R24).
         Cmd::ReportShow { .. } => Err(Fail::refused("report show appends nothing")),
+        Cmd::MsgShow { .. } => Err(Fail::refused("msg show appends nothing")),
         Cmd::Progress { source } => {
             let text = read_progress_source(&source)?;
             let role = caller.role.clone();
