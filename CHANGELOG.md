@@ -12,7 +12,9 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-- **Explicit line stop (`backlot halt` / `backlot resume`) and per-role progress alerts.** Any studio role or the person can halt new dispatches (`backlot halt --reason <text>`) without stopping or killing running tasks; only `director`, `producer`, or `user` can resume (`backlot resume [--note <text>] [--false-positive]`), with halts, resumes, false-positive share, and halted duration tracked in `backlot metrics`, shown in `backlot status`, exposed in `backlot/1` summaries (`halted`), and rendered as a red one-line `! HALTED` row (`Enter` opens the reason show view) on the Call Sheet. Stage liveness also detects `looping` (five identical non-probe `role.refused` hits within 10 minutes, `stuck`, routed once per window to the reviewer) and low-noise `no progress` (`info`, once per stretch after `2 × stall_limit_s` of active non-readonly coding work with waits excluded and no file or commit change), and `role.started` now records an optional `prompt_hash`.
+- **You or any role can stop a studio from starting new work with `backlot halt --reason <text>`.** Work already running carries on: deliveries, reviews, tells and questions still go through, and nothing is killed. Only you, the producer or the director can lift it with `backlot resume`. A halted studio shows a red `! HALTED` row on the Call Sheet, and Enter shows who stopped it and why. `backlot status`, the `backlot/1` summary and `backlot metrics` show it too. Two quiet alerts reach the director or producer, never you:
+  - a role that hits the same refused command five times in ten minutes;
+  - a coding actor that has run for 20 minutes, not counting time spent waiting, without changing a file or committing.
 
 ## 0.4.24 — 2026-11-27
 
