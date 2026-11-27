@@ -8,16 +8,32 @@ use super::{CastView, ShellRow};
 use crate::chrome::agents::AgentRow;
 use crate::studio;
 
-/// One cast-list entry — a person (two display lines), the `shells`
-/// group header or one of its shells, the `others` toggle row, or an
-/// expanded herdr agent row.
+/// Build `runner · model · effort` for a non-closed role using only
+/// fields actually present in the summary (never guessing missing ones).
+pub(super) fn role_meta_line(role: &RoleSummary) -> Option<String> {
+    if role.state == "closed" {
+        return None;
+    }
+    let parts: Vec<&str> = [&role.runner, &role.model, &role.effort]
+        .into_iter()
+        .filter_map(|field| field.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+/// One cast-list entry — a person (one line plus optional runner/model
+/// sub-line), the `shells` group header or one of its shells, the
+/// `others` toggle row, or an expanded herdr agent row.
 pub(crate) enum CastRow<'a> {
-    /// A studio person: `role`'s two display lines.
+    /// A studio person: `role`'s primary row plus optional indented model line.
     Person {
         role: &'a RoleSummary,
         /// The person's terminal owns the focus — the active-row
         /// background and the accent `▌`.
         focused: bool,
+        /// Formatted `runner · model · effort` sub-line (`None` on closed
+        /// seats, when omitted, or after height-pressure folding).
+        meta: Option<String>,
     },
     /// A divider separating open and closed roles (`┄ closed (n) ┄`).
     ClosedDivider { count: usize },
@@ -44,11 +60,12 @@ pub(crate) enum CastRow<'a> {
 }
 
 impl CastRow<'_> {
-    /// Display lines — one per person, two per shell, one for group
-    /// headers, the agent row's own token rows.
+    /// Display lines — two per open role with a metadata line (one when
+    /// closed or folded under height pressure), two per shell, one for
+    /// group headers, and the agent row's own token rows.
     pub(crate) fn lines(&self) -> u16 {
         match self {
-            CastRow::Person { .. } => 1,
+            CastRow::Person { meta, .. } => 1 + u16::from(meta.is_some()),
             CastRow::Shell { .. } => 2,
             CastRow::ClosedDivider { .. }
             | CastRow::Shells
@@ -103,6 +120,7 @@ pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
             role,
             focused: view.focused_terminal.is_some()
                 && role.terminal.as_deref() == view.focused_terminal,
+            meta: role_meta_line(role),
         });
     }
     if !view.shells.is_empty() {

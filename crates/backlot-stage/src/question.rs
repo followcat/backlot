@@ -157,6 +157,8 @@ impl Stage {
                             text,
                             needs_user,
                             bound: None,
+                            account: None,
+                            reset_at_ms: None,
                         },
                         move |seq| {
                             let tail = if needs_user { "needs the user; " } else { "" };

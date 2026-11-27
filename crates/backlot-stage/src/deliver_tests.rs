@@ -35,6 +35,7 @@ fn message(seq: u64, to: &str, delivered: bool) -> Message {
         source_seq: None,
         delivered,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     }
@@ -122,6 +123,7 @@ fn the_digest_orders_by_label_then_seq() {
         source_seq: Some(src),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     };
@@ -198,6 +200,7 @@ fn the_plan_request_says_what_is_wanted() {
         source_seq: None,
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -493,6 +496,7 @@ fn notices_are_owed_once_per_source_event() {
             source_seq: Some(n.source_seq),
             delivered: false,
             dropped: false,
+            dropped_reason: None,
             ts_ms: 0,
             delivered_ms: None,
         });

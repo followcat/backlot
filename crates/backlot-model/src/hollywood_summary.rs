@@ -94,6 +94,9 @@ pub struct HollywoodSummary {
     /// Active or most recent make-before-break switch handoff.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<crate::hollywood_switch::HandoffSummary>,
+    /// Derived `<runner>:<label>` account identifier when configured/live.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 pub use crate::hollywood_switch::{HandoffSummary, QueueReason, QueueStatus};
@@ -299,6 +302,7 @@ pub fn hollywood_section_with_activity(
         exchange: exchange(state),
         queue: None,
         handoff: None,
+        account: None,
     }
 }
 

@@ -1,6 +1,7 @@
-//! Zone label rules and optional hairlines for the Call Sheet band:
-//! `── STUDIOS · <S> ──`, `── WAITING ON YOU · <N> ──`, and
-//! `── HOLLYWOOD ──` (with optional fold target `k earlier · ↵ read`).
+//! Zone label rules and perforation headers for the Call Sheet band:
+//! focused `── HOLLYWOOD ──` (with optional `k earlier · ↵ read` fold),
+//! centered `▄▄ ▄▄ …  STUDIOS N  … ▄▄ ▄▄` perforation header above
+//! expanded studio frames, and the no-agent setup hairline when needed.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -13,69 +14,39 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 
-/// Render `── STUDIOS · <count> ────…──`.
-pub(crate) fn draw_studios_rule(
+/// Render the centered film-strip perforation header above focused
+/// studio frames: `▄▄  ▄▄  …  STUDIOS {n}  …  ▄▄  ▄▄`.
+pub(crate) fn draw_studios_perforation(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
     studios: usize,
     focused: bool,
     palette: &Palette,
-) {
-    let label = format!("STUDIOS · {studios}");
-    draw_rule(
-        buf,
-        area,
-        y,
-        &[(&label, label_style(focused, palette))],
-        palette,
-    );
-}
-
-/// Render `── WAITING ON YOU · <total> ────…──`, optionally ending with
-/// the scroll window `<top>–<bot>/<total> ──` when items overflow.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_waiting_rule(
-    buf: &mut Buffer,
-    area: Rect,
-    y: u16,
-    total: usize,
-    user_urgent: bool,
-    focused: bool,
-    scroll_range: Option<(usize, usize)>,
-    palette: &Palette,
+    hits: &mut HollywoodRender,
 ) {
     let elev = palette.elevation();
-    let count_fg = if user_urgent {
-        palette.red
-    } else {
-        palette.peach
-    };
-    let count_str = format!(" · {total}");
-    let left_segs = [
-        ("WAITING ON YOU", label_style(focused, palette)),
-        (
-            count_str.as_str(),
-            Style::default()
-                .fg(count_fg)
-                .bg(elev.surface)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ];
-    let right_badge = scroll_range.map(|(top, bot)| format!("{top}–{bot}/{total}"));
-    if let Some(badge) = right_badge.as_deref() {
-        draw_rule_with_right(
-            buf,
-            area,
-            y,
-            &left_segs,
-            badge,
-            Style::default().fg(elev.muted_surface).bg(elev.surface),
-            None,
-            palette,
-        );
-    } else {
-        draw_rule(buf, area, y, &left_segs, palette);
+    let base = Style::default().bg(elev.surface);
+    let perf = Style::default().fg(elev.border_muted).bg(elev.surface);
+    let text = format!("  STUDIOS {studios}  ");
+    let tw = display_width(&text) as u16;
+    let label_span = (tw <= area.width).then(|| {
+        let lx = area.x + (area.width - tw) / 2;
+        (lx, lx + tw)
+    });
+    let mut x = area.x + 1;
+    let right = area.x + area.width.saturating_sub(1);
+    while x + 1 < right {
+        let overlaps = label_span.is_some_and(|(lx, rx)| x < rx && x + 2 > lx);
+        if !overlaps {
+            put_text(buf, x, y, 2, "▄▄", perf);
+        }
+        x += 4;
+    }
+    if let Some((lx, _)) = label_span {
+        buf.set_style(Rect::new(lx, y, tw, 1), base);
+        put_text(buf, lx, y, tw, &text, label_style(focused, palette));
+        hits.studios_label = Rect::new(lx, y, tw, 1);
     }
 }
 
@@ -142,24 +113,6 @@ pub(crate) fn draw_hollywood_rule(
     ) {
         hits.rows.push((hit, Target::Talk(fold.newest)));
     }
-}
-
-/// Render a plain `border_muted` hairline above Setup when `[hollywood]`
-/// is unconfigured.
-pub(crate) fn draw_setup_hairline(buf: &mut Buffer, area: Rect, y: u16, palette: &Palette) {
-    let width = area.width.saturating_sub(MARGIN * 2);
-    if width == 0 {
-        return;
-    }
-    let elev = palette.elevation();
-    put_text(
-        buf,
-        area.x + MARGIN,
-        y,
-        width,
-        &"─".repeat(width as usize),
-        Style::default().fg(elev.border_muted).bg(elev.surface),
-    );
 }
 
 fn label_style(focused: bool, palette: &Palette) -> Style {

@@ -42,6 +42,7 @@ fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSumm
         can_answer_prompt: true,
         restarted_ms: None,
         idle_since_ms: None,
+        account: None,
     }
 }
 
@@ -79,6 +80,7 @@ fn summary(studio: &str, roles: Vec<RoleSummary>) -> Summary {
         hollywood: None,
         backlot_version: None,
         backlot_build: None,
+        accounts: Vec::new(),
     }
 }
 
@@ -215,4 +217,61 @@ fn an_unchanged_summary_is_not_rewritten_within_the_heartbeat() {
     assert_eq!(due(&changed, Some(&written), 1_001), Write::Now);
     // No file yet: write.
     assert_eq!(due(&written, None, 1_001), Write::Now);
+}
+
+#[test]
+fn accounts_propagate_through_live_json_and_trigger_due() {
+    use backlot_model::summary::{AccountRoleSummary, AccountSummary, QuotaWindow};
+
+    let tmp = TestDir::new("backlot-live-accounts");
+    let mut doc = summary(
+        "acme",
+        vec![role_summary("producer", Some(Work::Working), None)],
+    );
+    let acct = AccountSummary {
+        id: "claude:default".into(),
+        runner: "claude".into(),
+        source: "default".into(),
+        active: 2,
+        working: 1,
+        max_active: None,
+        room: None,
+        queued: 0,
+        stalled: true,
+        last_stall_ms: Some(1_000),
+        reset_at_ms: Some(19_000),
+        window: Some(QuotaWindow::Short),
+        roles: vec![AccountRoleSummary {
+            studio: "acme".into(),
+            role: "producer".into(),
+            model: "opus-5-5".into(),
+            active: true,
+            working: true,
+            held: false,
+            stalled: true,
+        }],
+    };
+    doc.accounts = vec![acct.clone()];
+
+    let live_with = from_summary(&doc, 2_000);
+    assert_eq!(live_with.accounts, vec![acct.clone()]);
+
+    let live_without = from_summary(
+        &summary(
+            "acme",
+            vec![role_summary("producer", Some(Work::Working), None)],
+        ),
+        2_000,
+    );
+    assert_eq!(due(&live_with, Some(&live_without), 2_500), Write::Now);
+
+    write(tmp.path(), &live_with).unwrap();
+    let view = crate::live::LiveView::read(tmp.path(), 2_500);
+    assert_eq!(view.accounts, vec![acct]);
+
+    // Legacy `live.json` without `accounts` field parses cleanly.
+    std::fs::write(path(tmp.path()), r#"{"updated_ms":3000,"roles":[]}"#).unwrap();
+    let legacy = crate::live::LiveView::read(tmp.path(), 3_500);
+    assert!(legacy.running);
+    assert!(legacy.accounts.is_empty());
 }

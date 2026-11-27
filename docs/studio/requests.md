@@ -92,8 +92,10 @@ Within that user-equivalent boundary, the stage enforces hard safety invariants 
 
 ### `backlot` summary projection (`backlot/1`)
 
-The stage publishes the live studio summary under document `backlot` (`schema: "backlot/1"`). Two additive, backward-compatible extensions on each `StudioSummary` entry support forward compatibility and the opening design discussion (missing fields default safely on older readers):
+The stage publishes the live studio summary under document `backlot` (`schema: "backlot/1"`). Additive, backward-compatible extensions within schema version 1 support forward compatibility, opening design, and per-account quota visibility (missing fields default safely on older readers, and `Summary::same_as` stays quiet without countdown churn):
 
+- **`accounts` (`AccountSummary[]`, omitted when empty; also mirrored to `live.json`):** top-level rollup across open studios and Hollywood containing `id` (`<runner>:<label>`), `runner`, non-secret `source`, `active`, `working`, optional `max_active` / `room`, `queued`, `stalled`, steady `last_stall_ms`, unclamped `reset_at_ms`, `window` (`"short" | "long" | "unknown"`), and `roles` (`AccountRoleSummary[]`: `studio`, `role`, `model`, `active`, `working`, `held`, `stalled`).
+- **`RoleSummary.account` & `HollywoodSummary.account` (`string?`, omitted when `null`):** derived non-secret `<runner>:<label>` account identifier for each role.
 - **`needs_upgrade` (`bool`, default `false`) & `unknown_kinds` (`string[]`):** present only when a studio's ledger contains `EventKind::Unknown` records at `v <= LEDGER_VERSION`. Clients display `"upgrade backlot"` and keep that studio read-only.
 - **`design` (`DesignSummary?`, omitted when `null`):** present when `design_gate == "required"` and the current `requirement_version` has opened or signed design state (`phase != "idle"`). Fields:
   - `version` (`u32`), `round` (`u32`), `phase` (`"idle" | "suggest_skip" | "waiting_proposal" | "waiting_buildability" | "waiting_summary" | "waiting_user" | "signed"`)

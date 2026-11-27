@@ -33,23 +33,13 @@ fn put_parts_right(buf: &mut Buffer, rect: Rect, parts: &[(String, Color)]) -> u
     rect.x + rect.width.saturating_sub(glyphs + spaces)
 }
 
-fn studio_title_style(
-    selected: bool,
-    focused: bool,
-    unselected_fg: Color,
-    palette: &Palette,
-) -> Style {
-    if selected {
-        Style::default()
-            .fg(if focused {
-                palette.accent
-            } else {
-                palette.text
-            })
-            .add_modifier(Modifier::BOLD)
+fn studio_title_style(selected: bool, focused: bool, palette: &Palette) -> Style {
+    let fg = if selected && focused {
+        palette.accent
     } else {
-        Style::default().fg(unselected_fg)
-    }
+        palette.text
+    };
+    Style::default().fg(fg).add_modifier(Modifier::BOLD)
 }
 
 /// A stacked block's single line: `╶ <label> ⠿2 ○3 ×1 !<n>` — each
@@ -63,6 +53,7 @@ pub(super) fn draw_stacked(
     label: &StudioLabel,
     selected: bool,
     focused: bool,
+    focused_terminal: bool,
     spin: usize,
     palette: &Palette,
     hits: &mut PanelRender,
@@ -87,17 +78,23 @@ pub(super) fn draw_stacked(
     let tail = put_parts_right(buf, rect, &parts);
     let gap = u16::from(!parts.is_empty());
     let id_end = tail.saturating_sub(gap);
-    if id_end > rect.x + 2 {
-        let id_width = id_end - (rect.x + 2);
-        let style = studio_title_style(selected, focused, palette.subtext0, palette);
-        put_text(
-            buf,
-            rect.x + 2,
-            rect.y,
-            id_width,
-            &label.fit(id_width as usize),
-            style,
-        );
+    let capsule = focused_terminal && !(selected && focused);
+    let cap_pad = u16::from(capsule);
+    if id_end > rect.x + 2 + cap_pad {
+        let id_width = id_end - (rect.x + 2 + cap_pad);
+        let fitted = label.fit(id_width as usize);
+        if capsule {
+            let cap_style = glyphs::studio_capsule_style(palette);
+            let drawn = display_width(&fitted) as u16;
+            put_text(buf, rect.x + 1, rect.y, 1, " ", cap_style);
+            put_text(buf, rect.x + 2, rect.y, id_width, &fitted, cap_style);
+            if drawn > 0 && rect.x + 2 + drawn < id_end {
+                put_text(buf, rect.x + 2 + drawn, rect.y, 1, " ", cap_style);
+            }
+        } else {
+            let style = studio_title_style(selected, focused, palette);
+            put_text(buf, rect.x + 2, rect.y, id_width, &fitted, style);
+        }
     }
 }
 
@@ -159,7 +156,7 @@ pub(super) fn draw_strip(
         truncate_end(&studio.studio.id, label_w as usize)
     };
     if label_w > 0 {
-        let style = studio_title_style(selected, focused, palette.text, palette);
+        let style = studio_title_style(selected, focused, palette);
         put_text(
             buf,
             rect.x + 2,

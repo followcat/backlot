@@ -298,6 +298,8 @@ impl Stage {
                 text,
                 needs_user: user_owned,
                 bound,
+                account: None,
+                reset_at_ms: None,
             },
             move |seq| {
                 if user_owned {

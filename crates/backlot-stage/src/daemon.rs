@@ -343,6 +343,8 @@ pub(crate) struct Stage {
     /// so dead `bl-hollywood` tombstones from this or an earlier launch
     /// get swept via `terminal.rm` even with no finished studio.
     pub(crate) sweep_hollywood_ticks: std::cell::Cell<u8>,
+    /// Last logged suppressed-probe count per studio (`suppressed-probes` file).
+    pub(crate) suppressed_logged: std::cell::RefCell<BTreeMap<String, u64>>,
     /// Rate/connection/error watch state for active Hollywood.
     pub(crate) hrate_pace: std::cell::RefCell<Option<crate::ratelimit::RatePace>>,
     pub(crate) hconn_pace: std::cell::RefCell<Option<crate::connerr::ConnPace>>,
@@ -351,6 +353,9 @@ pub(crate) struct Stage {
     pub(crate) hprevious_until_ms: std::cell::Cell<Option<u64>>,
     /// Cached summary projection of the active or most recent handoff.
     pub(crate) hlast_handoff: std::cell::RefCell<Option<backlot_model::summary::HandoffSummary>>,
+    /// Persistent per-account quota state mirrored to `<state_dir>/accounts.json`.
+    pub(crate) accounts: std::cell::RefCell<crate::accounts_store::AccountsFile>,
+    pub(crate) accounts_loaded: std::cell::Cell<bool>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -370,6 +375,27 @@ impl Stage {
         if self.logged.insert(format!("{studio}: {msg}")) {
             crate::stagelog::stage_log!("{studio}: {msg}");
         }
+    }
+
+    pub(crate) fn flush_suppressed_in(
+        logged: &mut BTreeMap<String, u64>,
+        name: &str,
+        dir: &Path,
+    ) -> Option<String> {
+        let total = crate::guard_probes::read_suppressed_count(dir);
+        let prev = logged.get(name).copied().unwrap_or(0);
+        if total <= prev {
+            return None;
+        }
+        logged.insert(name.to_string(), total);
+        let delta = total - prev;
+        let msg = format!("{name}: suppressed {delta} read-only probe refusal(s) (total {total})");
+        crate::stagelog::stage_log!("{msg}");
+        Some(msg)
+    }
+
+    fn flush_suppressed_probes(&self, name: &str, dir: &Path) {
+        Self::flush_suppressed_in(&mut self.suppressed_logged.borrow_mut(), name, dir);
     }
 
     /// Re-read the user config's `[stage]` section for this tick —
@@ -443,6 +469,7 @@ impl Stage {
         self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
         self.design_watch.borrow_mut().retain(|s, _| keep(s));
         self.design_tainted.borrow_mut().retain(|s, _| keep(s));
+        self.suppressed_logged.borrow_mut().retain(|s, _| keep(s));
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if !present.contains(&entry.studio) {
@@ -498,6 +525,7 @@ impl Stage {
         self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
         self.design_watch.borrow_mut().retain(|s, _| s != name);
         self.design_tainted.borrow_mut().retain(|s, _| s != name);
+        self.suppressed_logged.borrow_mut().retain(|s, _| s != name);
         let mut outward = self.outward_running.borrow_mut();
         for entry in outward.values_mut() {
             if entry.studio == name {
@@ -610,6 +638,7 @@ impl Stage {
         // picks up.
         self.hollywood(&live.terms, &live.finished, &mut real_slot_free, now_ms)
             .await?;
+        self.sync_accounts_at(now_ms);
         Ok(())
     }
 
@@ -628,6 +657,7 @@ impl Stage {
         if !live_ledger() {
             return Ok(());
         }
+        self.flush_suppressed_probes(name, &dir);
         let state = &self.cached[name];
         if !state.unknown_kinds.is_empty() {
             return Ok(());
@@ -994,6 +1024,7 @@ impl Stage {
             hw.handoff = handoff;
             s.hollywood = Some(hw);
         }
+        self.attach_accounts_to_summary(&mut s, now_ms);
         s
     }
 }
@@ -1068,11 +1099,14 @@ impl Stage {
             design_tainted: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             sweep_hollywood_ticks: std::cell::Cell::new(3),
+            suppressed_logged: std::cell::RefCell::new(BTreeMap::new()),
             hrate_pace: std::cell::RefCell::new(None),
             hconn_pace: std::cell::RefCell::new(None),
             herror: std::cell::RefCell::new(None),
             hprevious_until_ms: std::cell::Cell::new(None),
             hlast_handoff: std::cell::RefCell::new(None),
+            accounts: std::cell::RefCell::new(Default::default()),
+            accounts_loaded: std::cell::Cell::new(false),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
@@ -1216,11 +1250,14 @@ async fn run_impl(
         design_tainted: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         sweep_hollywood_ticks: std::cell::Cell::new(3),
+        suppressed_logged: std::cell::RefCell::new(BTreeMap::new()),
         hrate_pace: std::cell::RefCell::new(None),
         hconn_pace: std::cell::RefCell::new(None),
         herror: std::cell::RefCell::new(None),
         hprevious_until_ms: std::cell::Cell::new(None),
         hlast_handoff: std::cell::RefCell::new(None),
+        accounts: std::cell::RefCell::new(Default::default()),
+        accounts_loaded: std::cell::Cell::new(false),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

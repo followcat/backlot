@@ -119,22 +119,7 @@ fn the_working_mark_changes_between_frames() {
 #[test]
 fn expanded_block_draws_frame_people_and_state_words() {
     let summary = summary();
-    // With open sidebar on the current studio, CalmSummary collapses calm
-    // director+writer, leaving producer | actors (1) + InputDivider (1) = 2 rules.
-    let open_panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 26, 30);
-    let (buf, _) = draw(area, Some(&summary), &open_panel, Some("acme-shop"));
-    let open_dividers = (area.y..area.y + area.height)
-        .filter(|&y| buf[(area.x + 1, y)].symbol() == "├")
-        .count();
-    assert_eq!(
-        open_dividers, 2,
-        "open sidebar collapses calm director/writer"
-    );
-
-    // Collapsed left sidebar expands every live group in the Lot.
-    let mut panel = panel(PanelMode::Expanded);
-    panel.sidebar_collapsed = true;
+    let panel = panel(PanelMode::Expanded);
     for width in [26u16, 22, 40] {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
@@ -148,6 +133,14 @@ fn expanded_block_draws_frame_people_and_state_words() {
         let work_word = if width < 24 { "work" } else { "working" };
         assert!(text.contains(work_word), "w{width}: {text}");
         assert!(text.contains("Ⓐ task-1"), "w{width}: {text}");
+        assert!(
+            text.contains("Ⓓ"),
+            "director renders directly w{width}: {text}"
+        );
+        assert!(
+            text.contains("Ⓦ"),
+            "writer renders directly w{width}: {text}"
+        );
         assert!(hits.working_drawn, "w{width}: a working mark was drawn");
         // Three role-group rules separate producer / director / writer /
         // actors, plus the `InputDivider` above `› tell producer`.
@@ -1240,4 +1233,131 @@ fn a_studio_needing_upgrade_draws_single_line_in_lot_and_strip() {
     );
     let strip = lines(&strip_buf, Rect::new(0, 0, 16, 20)).join("\n");
     assert!(strip.contains("! upgrade"), "{strip}");
+}
+
+#[test]
+fn compact_studio_names_are_bold_text_and_focused_hints_prioritize_tab_when_room_allows() {
+    use ratatui::style::Modifier;
+    let pal = palette();
+    let calm_row = |id: &str, state: &str, tasks_done: u64, tasks_total: u64| {
+        serde_json::json!({
+            "id": id,
+            "title": id,
+            "state": state,
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "tasks_done": tasks_done,
+            "tasks_total": tasks_total,
+            "ready_to_finish": state == "live" && tasks_done == tasks_total,
+            "roles": [
+                { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" }
+            ]
+        })
+    };
+    let mut base = summary_json();
+    let doc: Summary = serde_json::from_value(serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 1,
+        "studios": [
+            base["studios"][0].take(),
+            calm_row("gamma-web", "live", 2, 2),
+            calm_row("omega-done", "finished", 2, 2),
+        ]
+    }))
+    .unwrap();
+    let p = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 38, 30);
+    let (buf, hits) = draw(area, Some(&doc), &p, Some("acme-shop"));
+    for id in ["gamma-web", "omega-done"] {
+        let rect = hits
+            .rows
+            .iter()
+            .find_map(|(r, t)| (*t == Target::Block(id.into())).then_some(*r))
+            .unwrap_or_else(|| panic!("missing compact row for {id}"));
+        let name_x = (rect.x..rect.right())
+            .find(|&x| {
+                let sym = buf[(x, rect.y)].symbol();
+                sym == "g" || sym == "o"
+            })
+            .unwrap();
+        assert_eq!(buf[(name_x, rect.y)].fg, pal.text, "{id} fg");
+        assert!(
+            buf[(name_x, rect.y)].modifier.contains(Modifier::BOLD),
+            "{id} must be bold"
+        );
+    }
+
+    // Blank spacer separates `acme-shop` block from the `[gamma-web, omega-done]` compact group,
+    // with no blank row between the two compact rows.
+    let acme_bot_y = (area.y..area.bottom())
+        .find(|&y| buf[(area.x + 1, y)].symbol() == "╰")
+        .unwrap();
+    let gamma_y = hits
+        .rows
+        .iter()
+        .find_map(|(r, t)| (*t == Target::Block("gamma-web".into())).then_some(r.y))
+        .unwrap();
+    let omega_y = hits
+        .rows
+        .iter()
+        .find_map(|(r, t)| (*t == Target::Block("omega-done".into())).then_some(r.y))
+        .unwrap();
+    assert_eq!(gamma_y, acme_bot_y + 2);
+    assert_eq!(omega_y, gamma_y + 1);
+    let spacer_line = &lines(&buf, area)[acme_bot_y as usize + 1];
+    assert_eq!(spacer_line.trim_end(), "│");
+
+    // Focused footer advertises `tab/⇧tab` at 36 cols (`38` dock), stays <= dock width, and
+    // drops less-critical hints gracefully under tight widths.
+    let ms = machines(Some(&doc));
+    let wide_pairs = crate::panel::draw_hints::focused_hint_pairs(
+        Some(&Target::Studio("acme-shop".into())),
+        false,
+        false,
+        &ms,
+        false,
+        false,
+        36,
+    );
+    assert!(
+        wide_pairs.iter().any(|(k, _)| *k == "tab/⇧tab"),
+        "{wide_pairs:?}"
+    );
+    assert!(usize::from(crate::chrome::render::hint_bar_width(&wide_pairs)) <= 36);
+
+    let mid_pairs = crate::panel::draw_hints::focused_hint_pairs(
+        Some(&Target::Studio("acme-shop".into())),
+        false,
+        false,
+        &ms,
+        false,
+        false,
+        34,
+    );
+    assert!(
+        mid_pairs.iter().any(|(k, _)| *k == "tab/⇧tab"),
+        "{mid_pairs:?}"
+    );
+    assert!(
+        !mid_pairs.iter().any(|(k, _)| *k == "m"),
+        "least useful drops: {mid_pairs:?}"
+    );
+    assert!(usize::from(crate::chrome::render::hint_bar_width(&mid_pairs)) <= 34);
+
+    let narrow_pairs = crate::panel::draw_hints::focused_hint_pairs(
+        Some(&Target::Studio("acme-shop".into())),
+        false,
+        false,
+        &ms,
+        false,
+        false,
+        24,
+    );
+    assert!(
+        narrow_pairs.iter().any(|(k, _)| *k == "⏎"),
+        "{narrow_pairs:?}"
+    );
+    assert!(usize::from(crate::chrome::render::hint_bar_width(&narrow_pairs)) <= 24);
 }

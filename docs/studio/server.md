@@ -9,7 +9,7 @@ second local `backlot-server` or legacy `backlot-stage` runs alongside it.
 
 - Server state lives at `$XDG_STATE_HOME/backlot/server/` (default `~/.local/state/backlot/server/`),
   or `BACKLOT_STATE_DIR` when explicitly set:
-  `studios/`, `hollywood/`, `archive/`, `config.toml`, `live.json`, `server.lock`, and `server-lease.json`.
+  `studios/`, `hollywood/`, `archive/`, `config.toml`, `live.json`, `accounts.json`, `server.lock`, and `server-lease.json`.
 - `backlot server run` acquires `server.lock` with `flock(2)` and maintains a liveness lease
   (`server-lease.json`, renewed every 5 s while active). On a crash, the OS releases the `flock`,
   so a stale `server-lease.json` never blocks restart.

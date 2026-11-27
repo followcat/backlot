@@ -33,8 +33,8 @@ async fn alt_y_draws_the_expanded_band_over_the_opening_page() {
     );
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(
-        text.contains("H O L L Y W O O D"),
-        "the band draws over the card: {text}"
+        text.contains("✦ HOLLYWOOD"),
+        "the band draws compact title over the narrow card: {text}"
     );
     assert!(
         !app.hollywood_hits.area.is_empty(),
@@ -79,7 +79,7 @@ async fn the_cards_h_opens_the_tell_line_over_the_page() {
     assert!(app.hollywood.editing, "the line is taking text");
     assert!(app.opening_visible(), "the page stays under the band");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("H O L L Y W O O D"), "{text}");
+    assert!(text.contains("✦ HOLLYWOOD"), "{text}");
 }
 
 /// S1: expanding with `[hollywood]` set always opens Compose on `Target::Input`
@@ -118,17 +118,17 @@ async fn up_rests_a_row_up_and_esc_rest_then_collapse() {
     assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert_eq!(app.hollywood.input.as_str(), "h");
-    // `Esc` rests on `Input`, keeping the draft; then `↑` steps up a row.
+    // Resting on empty calm `Input` steps down into STUDIOS (`+ new`) and `↑` returns to `Input`.
     key(&mut app, hc_vt::Key::Escape);
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert_eq!(app.hollywood.input.as_str(), "h");
-    key(&mut app, hc_vt::Key::ArrowUp);
-    assert!(!app.hollywood.editing);
-    assert!(app.hollywood.selected != Some(Target::Input));
-    assert_eq!(app.hollywood.input.as_str(), "h");
-    // `↓` steps back onto the line — `Resting`, draft still parked.
     key(&mut app, hc_vt::Key::ArrowDown);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // `↑` steps back onto `Input` — `Resting`, draft still parked.
+    key(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "h");

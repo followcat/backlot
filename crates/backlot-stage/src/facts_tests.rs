@@ -22,6 +22,7 @@ fn running(work: BTreeMap<(String, String), Work>) -> LiveView {
         running_cmds: BTreeMap::new(),
         idle: BTreeMap::new(),
         running: true,
+        accounts: Vec::new(),
     }
 }
 
@@ -34,6 +35,8 @@ fn raised(seq: u64, role: &str, reason: &str, detail: &str) -> Event {
             reason: reason.into(),
             detail: detail.into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     )
 }
@@ -88,6 +91,8 @@ fn a_snapshot_attention_carries_its_time_and_stale_warning() {
             reason: "permission prompt".into(),
             detail: "Bash: ls; needs the user; screen saved to attention/9.txt".into(),
             needs_user: true,
+            account: None,
+            reset_at_ms: None,
         },
     ));
     let state = replay(&events);
@@ -122,6 +127,8 @@ fn a_screeenless_attention_has_no_snapshot_note() {
         ts_ms: 0,
         needs_user: false,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     };
     let fact = attention_fact(&a, 5_000);
     assert!(fact.starts_with("stuck · raised 5s ago"), "{fact}");
@@ -260,6 +267,7 @@ fn a_role_idle_at_its_prompt_reads_idle_minutes() {
         running_cmds: BTreeMap::new(),
         idle,
         running: true,
+        accounts: Vec::new(),
     };
     // 90 s and 30 s into the stretch: `idle 1m`, then `idle 30s`… the
     // 60 s floor means a 30 s stretch reads plain `waiting`.

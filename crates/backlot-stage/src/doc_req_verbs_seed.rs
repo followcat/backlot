@@ -206,6 +206,8 @@ pub(crate) fn seed_full_world(base: &Path, env: &Env) -> (u64, u64, u64, u64) {
                     reason: backlot_model::event::STALLED.into(),
                     detail: "idle".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),

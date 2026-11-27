@@ -1,21 +1,18 @@
-//! Lower section and footer painters for the expanded Call Sheet
-//! band: `HOLLYWOOD` rule, fold badge, headline, exchange lines, live
-//! row, compose/setup rows, hints bar, bottom sprocket, and shadow.
+//! Middle HOLLYWOOD zone (`── HOLLYWOOD ──`, headline, talk rows,
+//! live progress, compose/setup) and footer (`hints`, bottom `▀▀` edge).
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
 
+use super::band::RowExtras;
 use super::draw::{HollywoodRender, MARGIN};
 use super::draw_sections::BandCtx;
 use super::rows::{self, Row, Target};
 use super::{band, hints, title};
-use crate::chrome::render::put_text;
 use crate::chrome::scroll::list_scroll_metrics;
-use crate::chrome::text::display_width;
 
-/// Lower zone: `HOLLYWOOD` rule (with embedded fold target) or setup
-/// hairline, then headline, talk, live progress, compose, and setup.
+/// Middle zone: optional focused `── HOLLYWOOD ──` rule (with embedded
+/// fold badge), headline, talk lines, live progress, and compose/setup.
 pub(super) fn draw_lower(
     buf: &mut Buffer,
     mut y: u16,
@@ -37,20 +34,20 @@ pub(super) fn draw_lower(
         Row::Fold { count, newest } => Some((*count, *newest)),
         _ => None,
     });
-    let fold_badge = if skipped_talks > 0 {
-        let newest = talk_entries[skipped_talks - 1].seq;
-        let count = model_fold.map_or(0, |(c, _)| c) + skipped_talks;
+    let total_earlier = model_fold.map_or(0, |(c, _)| c) + skipped_talks;
+    let fold_badge = if total_earlier > 0 {
+        let newest = if skipped_talks > 0 {
+            talk_entries[skipped_talks - 1].seq
+        } else {
+            model_fold.map_or(0, |(_, n)| n)
+        };
         Some(super::zone::FoldBadge {
-            count,
+            count: total_earlier,
             newest,
             selected: ctx.sel_ref == Some(&Target::Talk(newest)),
         })
     } else {
-        model_fold.map(|(count, newest)| super::zone::FoldBadge {
-            count,
-            newest,
-            selected: ctx.sel_ref == Some(&Target::Talk(newest)),
-        })
+        None
     };
 
     if ctx.opts.agent && ctx.plan.hollywood_rule {
@@ -63,9 +60,6 @@ pub(super) fn draw_lower(
             ctx.palette,
             hits,
         );
-        y += 1;
-    } else if !ctx.opts.agent && ctx.plan.setup_hairline {
-        super::zone::draw_setup_hairline(buf, ctx.area, y, ctx.palette);
         y += 1;
     }
 
@@ -86,6 +80,7 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
+                    RowExtras::default(),
                     ctx.palette,
                     hits,
                 );
@@ -99,6 +94,11 @@ pub(super) fn draw_lower(
                 }
                 let h = 1 + ctx.plan.talk_wrap_at(idx);
                 let rect = Rect::new(ctx.area.x, y, ctx.area.width, h);
+                let talk_earlier = if !ctx.plan.hollywood_rule && idx + 1 == talk_total {
+                    total_earlier
+                } else {
+                    0
+                };
                 band::draw_row(
                     buf,
                     rect,
@@ -111,6 +111,10 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
+                    RowExtras {
+                        talk_earlier,
+                        ..RowExtras::default()
+                    },
                     ctx.palette,
                     hits,
                 );
@@ -130,12 +134,13 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
+                    RowExtras::default(),
                     ctx.palette,
                     hits,
                 );
                 y += 1;
             }
-            Row::Input | Row::Setup => {
+            Row::Input | Row::Setup if ctx.plan.tail_rows > 0 => {
                 let rect = Rect::new(ctx.area.x, y, ctx.area.width, 1);
                 band::draw_row(
                     buf,
@@ -149,6 +154,7 @@ pub(super) fn draw_lower(
                     ctx.opts.suppress_highlights,
                     ctx.activity,
                     ctx.now_ms,
+                    RowExtras::default(),
                     ctx.palette,
                     hits,
                 );
@@ -160,14 +166,13 @@ pub(super) fn draw_lower(
     y
 }
 
-/// Scroll metrics, hint bar, bottom sprocket, and external drop shadow.
+/// Scroll metrics, hint bar, and bottom `▀▀` perforation edge (no external shadow).
 pub(super) fn draw_footer(
     buf: &mut Buffer,
     mut y: u16,
     ctx: &BandCtx<'_>,
     hits: &mut HollywoodRender,
 ) {
-    let elev = ctx.palette.elevation();
     hits.metrics = Some(list_scroll_metrics(
         &vec![1; ctx.waits.len()],
         &[],
@@ -197,41 +202,9 @@ pub(super) fn draw_footer(
             &tier,
             ctx.palette,
         );
-        if !ctx.plan.waiting_rule
-            && let Some((top, bot)) = ctx.scroll_range
-        {
-            let mark = format!("{top}–{bot}/{}", ctx.waits.len());
-            let mw = display_width(&mark) as u16;
-            let mx = (ctx.area.x + ctx.area.width).saturating_sub(MARGIN + mw);
-            let hint_w = crate::chrome::render::hint_bar_width(&tier);
-            if mx > ctx.area.x + MARGIN + hint_w + 1 {
-                put_text(
-                    buf,
-                    mx,
-                    y,
-                    mw,
-                    &mark,
-                    Style::default().fg(elev.muted_surface).bg(elev.surface),
-                );
-            }
-        }
         y += 1;
     }
-    if ctx.plan.bottom_sprocket {
+    if ctx.plan.bottom_edge {
         title::draw_sprocket(buf, ctx.area, y, '▀', ctx.palette);
-    }
-    if ctx.plan.shadow {
-        let shadow_row = Rect::new(ctx.area.x, ctx.area.bottom(), ctx.area.width, 1);
-        crate::chrome::popup_frame::draw_bottom_shadow(
-            buf,
-            shadow_row,
-            ctx.frame,
-            ctx.palette,
-            true,
-        );
-        hits.shadow_drawn = !shadow_row
-            .intersection(ctx.frame)
-            .intersection(buf.area)
-            .is_empty();
     }
 }

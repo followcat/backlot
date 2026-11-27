@@ -230,6 +230,9 @@ pub(crate) struct ShellRenderState<'a> {
     /// The current studio — the machines tree highlights its row and
     /// keeps its machine in view.
     pub current_studio: Option<&'a crate::studio::StudioKey>,
+    /// The studio selected inside a focused Lot — quietly marks the
+    /// endpoint row and backlot server row that host it without scrolling.
+    pub lot_selected_studio: Option<&'a crate::studio::StudioKey>,
     /// The machines tree must scroll to the current studio's machine
     /// row this frame (W1, M4).
     pub reveal_studio_row: &'a mut bool,

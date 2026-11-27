@@ -13,21 +13,23 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_role_badged_text, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 
-/// Draw a waiting row's main line: `▌▸` when selected, the glyph,
-/// the head text, then right-aligned chips — the primary one lit
-/// `accent` only on the selected row.
+/// Draw a waiting row's main line: col-0 `▌` across the entire focused
+/// WAITING zone, `▸` + action chips on the selected row, severity bar,
+/// glyph + head text, and an optional `{top}–{bot}/{total}` scroll mark
+/// when the title row has shed.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_wait(
     buf: &mut Buffer,
     rect: Rect,
     row_height: u16,
     wait: &Wait<'_>,
-    waits: &[Wait<'_>],
     hollywood: &Hollywood,
     local: &str,
     multi: bool,
     mobile: bool,
     selected: bool,
+    zone_focused: bool,
+    scroll_badge: Option<(usize, usize, usize)>,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -52,15 +54,11 @@ pub(super) fn draw_wait(
     } else {
         super::items::wait_parts(wait, local, multi)
     };
-    let extra = super::rows::group_extra(waits, wait);
-    if extra > 0 {
-        parts.rest.push_str(&format!(" · +{extra}"));
-    }
     if rect.width < 90 && parts.gap.len() > 1 {
         parts.gap = " ";
     }
     let head_plain = format!("{}{}{}{}", parts.verb, parts.gap, parts.studio, parts.rest);
-    if selected {
+    if zone_focused || selected {
         put_text(
             buf,
             rect.x,
@@ -69,6 +67,8 @@ pub(super) fn draw_wait(
             "▌",
             Style::default().fg(palette.accent).bg(bg),
         );
+    }
+    if selected {
         put_text(
             buf,
             rect.x + 1,
@@ -117,10 +117,14 @@ pub(super) fn draw_wait(
         + gaps;
     let head_x = glyph_x + 2;
     let avail = rect.x + rect.width - MARGIN;
-    let head_room_full = avail.saturating_sub(head_x + full_w + 1);
+    let badge = scroll_badge.map(|(top, bot, total)| format!("{top}–{bot}/{total}"));
+    let badge_reserve = badge.as_deref().map_or(0, |b| {
+        display_width(b) as u16 + u16::from(!chips.is_empty()) + 1
+    });
+    let head_room_full = avail.saturating_sub(head_x + full_w + badge_reserve + 1);
     let compact = mobile || head_room_full < 20.min(display_width(&head_plain) as u16);
     let chips_w = if compact { compact_w } else { full_w };
-    let head_room = avail.saturating_sub(head_x + chips_w + 1);
+    let head_room = avail.saturating_sub(head_x + chips_w + badge_reserve + 1);
 
     let drawn_w = if head_room < 12 && matches!(wait, Wait::Prompt(_)) {
         let ultra = ultra_head(wait, local, multi);
@@ -170,6 +174,20 @@ pub(super) fn draw_wait(
             " …",
             Style::default().fg(elev.muted_surface).bg(bg),
         );
+    }
+    if let Some(mark) = badge.as_deref() {
+        let mw = display_width(mark) as u16;
+        let mx = avail.saturating_sub(chips_w + u16::from(chips_w > 0) + mw);
+        if mx > head_x + drawn_w.min(head_room) {
+            put_text(
+                buf,
+                mx,
+                rect.y,
+                mw,
+                mark,
+                Style::default().fg(elev.muted_surface).bg(bg),
+            );
+        }
     }
     let focused_chip = selected.then(|| {
         hollywood

@@ -98,15 +98,12 @@ async fn standby_writer_disallows_peek_and_focus_offers_recast_and_ignores_count
         );
     }
 
-    // With left sidebar open, standby writer is summarized inside CalmSummary.
+    // Even with left sidebar open, standby writer renders on its own row and can
+    // be selected directly; `p` and `Enter` show short unavailable reasons.
     let dock_open = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
-    assert!(dock_open.contains("Ⓦ standby"), "{dock_open}");
-
-    // When left sidebar collapses, Lot expands all roles so standby writer
-    // can be selected directly; `p` and `Enter` show short unavailable reasons.
-    app.shell_state.sidebar_collapsed = true;
-    app.panel.sidebar_collapsed = true;
-    draw_to(&mut app, 120, 40);
+    assert!(dock_open.contains("Ⓦ"), "{dock_open}");
+    assert!(dock_open.contains("standby"), "{dock_open}");
+    assert!(!dock_open.contains("2 idle"), "{dock_open}");
     app.panel.focused = true;
     app.panel.selected = Some(Target::Person(key_acme.clone(), "writer".into()));
     app.notice = None;

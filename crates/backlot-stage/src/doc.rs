@@ -145,6 +145,7 @@ mod tests {
             hollywood: None,
             backlot_version: None,
             backlot_build: None,
+            accounts: Vec::new(),
         }
     }
 

@@ -191,7 +191,6 @@ pub(super) fn block_states(
             BlockState::Full => block_height(
                 *studio,
                 panel,
-                current,
                 ctx(*studio),
                 panel.accepted_open(key),
                 panel.closed_open(key),

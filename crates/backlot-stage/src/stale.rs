@@ -185,3 +185,77 @@ pub(crate) fn stale_reason(state: &StudioState, m: &Message) -> Option<&'static 
         _ => None,
     }
 }
+
+/// Whether a queued message should be dropped before delivery — either
+/// because its `source_seq` notice went stale ([`stale_reason`]), or
+/// because it targets a specific actor id (`actor-<task>-c<n>`) that
+/// has closed for good with no pending resume and no live terminal
+/// for that actor id.
+///
+/// Fixed-role mail (`producer`, `director`, `writer`), user mail, and
+/// messages for paused, recovering, reopened, restarting, or still-live
+/// actors are never dropped here.
+pub(crate) fn drop_reason(
+    studio: &str,
+    state: &StudioState,
+    live: &[crate::reconcile::LiveTerminal],
+    m: &Message,
+) -> Option<&'static str> {
+    if let Some(reason) = stale_reason(state, m) {
+        return Some(reason);
+    }
+    actor_closed_reason(studio, state, live, m)
+}
+
+fn actor_closed_reason(
+    studio: &str,
+    state: &StudioState,
+    live: &[crate::reconcile::LiveTerminal],
+    m: &Message,
+) -> Option<&'static str> {
+    backlot_model::state::actor_task(&m.to)?;
+    if backlot_model::wanted::wanted_roles(state)
+        .iter()
+        .any(|r| r.role == m.to)
+    {
+        return None;
+    }
+    if actor_has_live_terminal(studio, state, live, &m.to) {
+        return None;
+    }
+    Some(backlot_model::event::ACTOR_CLOSED)
+}
+
+fn actor_has_live_terminal(
+    studio: &str,
+    state: &StudioState,
+    live: &[crate::reconcile::LiveTerminal],
+    role: &str,
+) -> bool {
+    let view = crate::reconcile::studio_view(studio, live);
+    let Some(term_name) = crate::reconcile::terminal_name(studio, role) else {
+        return false;
+    };
+    let Some(live_addr) = view.get(&term_name) else {
+        return false;
+    };
+    let owned_by_other = state.roles.iter().any(|(other_role, other)| {
+        other_role != role
+            && crate::reconcile::terminal_name(studio, other_role).as_deref()
+                == Some(term_name.as_str())
+            && (other.live || other.terminal.as_deref() == Some(live_addr.as_str()))
+    });
+    match state.roles.get(role) {
+        Some(r) if r.closed && !r.live => {
+            !owned_by_other && r.terminal.as_deref() == Some(live_addr.as_str())
+        }
+        Some(r) if !r.live => false,
+        Some(r) => {
+            !owned_by_other
+                && r.terminal
+                    .as_deref()
+                    .is_none_or(|t| t == live_addr.as_str())
+        }
+        None => !owned_by_other,
+    }
+}

@@ -90,7 +90,35 @@ fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String,
     let dir = store::studio_dir(&resolved, &name);
     let state = store::load_state(&dir).map_err(store_fail)?;
     let now_ms = crate::live::now_ms();
-    let live = crate::live::LiveView::read(&resolved, now_ms);
+    let mut live = crate::live::LiveView::read(&resolved, now_ms);
+    if !json && live.accounts.is_empty() {
+        let studio_names = store::studios(&resolved).unwrap_or_default();
+        let mut all_states: Vec<(String, StudioState)> = studio_names
+            .into_iter()
+            .filter_map(|s| {
+                let st = if s == name {
+                    state.clone()
+                } else {
+                    store::load_state(&store::studio_dir(&resolved, &s)).ok()?
+                };
+                Some((s, st))
+            })
+            .collect();
+        if !all_states.iter().any(|(s, _)| s == &name) {
+            all_states.push((name.clone(), state.clone()));
+        }
+        let hstate = store::load_hstate(&store::hollywood_dir(&resolved)).unwrap_or_default();
+        let cfg = config::hollywood(&env.vars).ok().flatten();
+        live.accounts = crate::accounts_summary::derive_accounts_for_lot(
+            &resolved,
+            &env.vars,
+            &all_states,
+            &hstate,
+            cfg.as_ref(),
+            &live,
+            now_ms,
+        );
+    }
     Ok(if json {
         let payload = status_state(&name, state, &live);
         serde_json::to_string_pretty(&payload).map_err(|e| Fail::refused(e.to_string()))?
@@ -460,37 +488,64 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     let live = crate::live::LiveView::read(base, now_ms);
-    let mut blocks = Vec::new();
-    let mut states = BTreeMap::new();
+    let mut loaded = Vec::with_capacity(names.len());
     for name in &names {
         let dir = store::studio_dir(base, name);
         let state = store::load_state(&dir).map_err(store_fail)?;
-        if json {
-            states.insert(name.clone(), status_state(name, state, &live));
-        } else {
-            blocks.push(render::status(
-                name,
-                &state,
-                &crate::signals::failed_roles(&dir, &state),
-                now_ms,
-                &live,
-            ));
-        }
+        loaded.push((name.clone(), dir, state));
     }
     let hstate = store::load_hstate(&store::hollywood_dir(base)).map_err(store_fail)?;
     let cfg = config::hollywood(&env.vars);
+    let accounts = if !live.accounts.is_empty() {
+        live.accounts.clone()
+    } else {
+        let studios_only: Vec<(String, StudioState)> = loaded
+            .iter()
+            .map(|(n, _, s)| (n.clone(), s.clone()))
+            .collect();
+        crate::accounts_summary::derive_accounts_for_lot(
+            base,
+            &env.vars,
+            &studios_only,
+            &hstate,
+            cfg.as_ref().ok().and_then(|c| c.as_ref()),
+            &live,
+            now_ms,
+        )
+    };
     if json {
+        let mut states = BTreeMap::new();
+        for (name, _, state) in loaded {
+            states.insert(name.clone(), status_state(&name, state, &live));
+        }
         let j = serde_json::json!({
             "studios": states,
             "hollywood": hrender::hollywood_json(&hstate, &cfg),
+            "accounts": accounts,
         });
         serde_json::to_string_pretty(&j).map_err(|e| Fail::refused(e.to_string()))
     } else {
+        let mut render_live = live.clone();
+        render_live.accounts = accounts.clone();
+        let mut blocks = Vec::new();
+        for (name, dir, state) in &loaded {
+            blocks.push(render::status(
+                name,
+                state,
+                &crate::signals::failed_roles(dir, state),
+                now_ms,
+                &render_live,
+            ));
+        }
         blocks.push(hrender::hollywood_block(
             &hstate,
             &cfg,
             &std::collections::BTreeMap::new(),
         ));
+        let accts_block = crate::hrender_accounts::accounts_block(&accounts, now_ms);
+        if !accts_block.is_empty() {
+            blocks.push(accts_block);
+        }
         Ok(blocks.join("\n"))
     }
 }
