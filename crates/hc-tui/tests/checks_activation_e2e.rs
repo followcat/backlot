@@ -173,17 +173,18 @@ timeout_s = 30
         "expected second role.refused for git -C /outside:\n{events_2}"
     );
 
-    // 3. Clean check verifies BACKLOT_* is stripped AND `<role_dir>/bin` leads PATH.
+    // 3. Clean check with dirty outer env verifies BACKLOT_*, HC_*, *_TOKEN, and *_PROXY
+    // are all stripped while `<role_dir>/bin` leads PATH.
     let clean_toml = s.fixture(
         "checks-clean.toml",
         r#"[[checks]]
 name = "env_probe"
-run = "env | grep -q '^BA''CKLOT_' && exit 2; case \"$PATH\" in */roles/director/bin:*) echo env_ok=1 ;; *) echo bad_path=$PATH; exit 3 ;; esac"
+run = "env | grep -E '^(BA''CKLOT_|HC_|.*_TOKEN=|.*_PROXY=)' && exit 2; case \"$PATH\" in */roles/director/bin:*) echo env_ok=1 ;; *) echo bad_path=$PATH; exit 3 ;; esac"
 expect = "env_ok=1"
 timeout_s = 30
 "#,
     );
-    let ok_msg = ok(
+    let dirty_out = command(
         &s,
         &[
             "design",
@@ -197,8 +198,158 @@ timeout_s = 30
             "--as",
             "director",
         ],
+    )
+    .env("BACKLOT_ROLE", "director")
+    .env("BACKLOT_SECRET", "leak_secret")
+    .env("HC_SESSION", "leak_hc_session")
+    .env("HC_TOKEN", "leak_hc_token")
+    .env("GITHUB_TOKEN", "leak_gh_token")
+    .env("HTTP_PROXY", "http://127.0.0.1:9")
+    .env("HTTPS_PROXY", "https://127.0.0.1:9")
+    .output()
+    .unwrap();
+    assert!(
+        dirty_out.status.success(),
+        "clean check failed under dirty outer env: {}",
+        stderr(&dirty_out)
     );
+    let ok_msg = stdout(&dirty_out);
     assert!(ok_msg.contains("design.entry"), "{ok_msg}");
+    assert!(
+        s.state
+            .join("studios/acme-shop/roles/director/bin/git")
+            .is_file(),
+        "director git shim must be installed"
+    );
+}
+
+#[test]
+fn preflight_blocks_git_push_origin_head_with_director_role_dir_and_role_refused() {
+    let s = Scratch::new();
+    let bare = s.root.join("files/bare.git");
+    let repo = s.root.join("files/repo");
+    fs::create_dir_all(&bare).unwrap();
+    fs::create_dir_all(&repo).unwrap();
+    git(&bare, &["init", "--bare", "-b", "main"]);
+    git(&repo, &["init", "-b", "main"]);
+    fs::write(repo.join("README.md"), "acme shop\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "init"]);
+
+    // Studio with no recorded push remotes yet + director role dir + integration worktree.
+    let cast = s.fixture(
+        "cast.toml",
+        &format!("design_gate = \"required\"\n{CAST_TOML}\n"),
+    );
+    ok(
+        &s,
+        &[
+            "studio",
+            "new",
+            "--title",
+            "Acme Shop",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--cast",
+            &cast,
+        ],
+    );
+    let sdir = s.state.join("studios/acme-shop");
+    let work = sdir.join("work/integration");
+    let role_bin = sdir.join("roles/director/bin");
+    fs::create_dir_all(&role_bin).unwrap();
+    fs::create_dir_all(work.parent().unwrap()).unwrap();
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "backlot/acme-shop/integration",
+            work.to_str().unwrap(),
+            "HEAD",
+        ],
+    );
+    git(&repo, &["remote", "add", "origin", bare.to_str().unwrap()]);
+
+    open_to_buildability(&s, "req v1", "v1");
+    let d1 = s.fixture("buildability.md", "Buildability notes.\n");
+    let push_head_toml = s.fixture(
+        "checks-push-head.toml",
+        r#"[[checks]]
+name = "push_head"
+run = "git push origin HEAD"
+timeout_s = 30
+"#,
+    );
+    let res = run(
+        &s,
+        &[
+            "design",
+            "write",
+            "--slot",
+            "buildability",
+            "--file",
+            &d1,
+            "--checks-file",
+            &push_head_toml,
+            "--as",
+            "director",
+        ],
+    );
+    assert!(
+        !res.status.success(),
+        "`git push origin HEAD` preflight must be refused: {}",
+        stdout(&res)
+    );
+    let events = fs::read_to_string(s.events()).unwrap();
+    assert!(
+        events.contains(r#""kind":"role.refused""#) && events.contains(r#""role":"director""#),
+        "expected role.refused by director on `git push origin HEAD`:\n{events}"
+    );
+    assert!(
+        !events.contains(r#""slot":"buildability""#),
+        "refused `git push origin HEAD` preflight must append no design.entry:\n{events}"
+    );
+
+    // Second check `env` proves BACKLOT_*, HC_*, *_TOKEN, and *_PROXY are stripped.
+    let env_toml = s.fixture(
+        "checks-env.toml",
+        r#"[[checks]]
+name = "env_dump"
+run = "out=$(env); echo \"$out\"; echo \"$out\" | grep -E '^(BA''CKLOT_|HC_|.*_TOKEN=|.*_PROXY=)' && exit 2; exit 0"
+timeout_s = 30
+"#,
+    );
+    let env_res = command(
+        &s,
+        &[
+            "design",
+            "write",
+            "--slot",
+            "buildability",
+            "--file",
+            &d1,
+            "--checks-file",
+            &env_toml,
+            "--as",
+            "director",
+        ],
+    )
+    .env("BACKLOT_ROLE", "director")
+    .env("BACKLOT_API_KEY", "secret")
+    .env("HC_SESSION", "s1")
+    .env("HC_TOKEN", "hc_tok")
+    .env("MY_TOKEN", "tok")
+    .env("ALL_PROXY", "socks5://127.0.0.1:9")
+    .output()
+    .unwrap();
+    assert!(
+        env_res.status.success(),
+        "env check failed: {}",
+        stderr(&env_res)
+    );
+    assert!(role_bin.join("git").is_file(), "director git shim exists");
 }
 
 #[test]
