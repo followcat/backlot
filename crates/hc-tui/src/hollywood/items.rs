@@ -238,7 +238,10 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             key: "↵",
             primary: true,
         }],
-        Wait::Decision(item) => super::decision::chips(item.design.suggest_skip),
+        Wait::Decision(item) => super::decision::chips(
+            item.design.suggest_skip,
+            !item.design.proposed_checks.is_empty(),
+        ),
         Wait::Ready(_) => vec![
             Chip {
                 label: "finish",

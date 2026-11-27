@@ -45,7 +45,23 @@ impl App {
         {
             return;
         }
-        let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
+        let raw_body = if meta.kind == ReaderKind::Design
+            && !meta.design_finalized()
+            && let Some(key) = meta.sheet_studio_key()
+            && let Some(design) = self.waiting_design(&key)
+            && !design.proposed_checks.is_empty()
+        {
+            let prefix =
+                crate::hollywood::decision::format_proposed_checks_block(&design.proposed_checks);
+            if stdout.is_empty() {
+                prefix
+            } else {
+                format!("{prefix}\n\n{stdout}")
+            }
+        } else {
+            stdout.to_owned()
+        };
+        let lines: Vec<String> = raw_body.lines().map(str::to_string).collect();
         if lines.is_empty() {
             self.reader_clear_loading();
             self.show_notice("Hollywood", &format!("{title}: nothing to show"));
@@ -54,7 +70,7 @@ impl App {
                 card,
                 title,
                 lines,
-                raw_body: stdout.to_owned(),
+                raw_body,
                 scroll: 0,
                 meta,
                 ..CardView::default()

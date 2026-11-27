@@ -470,3 +470,109 @@ async fn dock_decision_keys_r_o_a_and_focused_footer_hints() {
         ]
     );
 }
+
+#[tokio::test]
+async fn callsheet_decision_enter_opens_show_view_with_verbatim_checks() {
+    let mut app = app_with_hollywood();
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = crate::app::pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut doc = summary_json();
+    doc["hollywood"]["cards"] = serde_json::json!([]);
+    doc["studios"][0]["id"] = serde_json::json!("beta");
+    doc["studios"][0]["title"] = serde_json::json!("Beta");
+    doc["studios"][0]["waiting"] = serde_json::json!(0);
+    doc["studios"][0]["roles"] = serde_json::json!([
+        { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" }
+    ]);
+    doc["studios"][0]["design"] = serde_json::json!({
+        "version": 1,
+        "round": 2,
+        "phase": "waiting_user",
+        "waiting_user": true,
+        "suggest_skip": false,
+        "doc_file": "design/v1.md",
+        "summary": "Pick store backend",
+        "questions": [],
+        "proposed_checks": [
+            {
+                "name": "scan",
+                "run": "sh scripts/scan.sh --strict",
+                "timeout_s": 45,
+                "expect": "files_scanned=[1-9]"
+            },
+            {
+                "name": "lint",
+                "run": "cargo clippy --all-targets -- -D warnings",
+                "timeout_s": 120
+            }
+        ],
+        "waiting_since_ms": 940_000
+    });
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.studio.current = Some(StudioKey::local("beta"));
+    app.reconcile_published_view();
+
+    select_decision_in_sheet(&mut app);
+    let sheet_text = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    assert!(
+        sheet_text.contains("+2 checks"),
+        "Call Sheet DECISION row missing `+2 checks`:\n{sheet_text}"
+    );
+
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Expanded,
+        "Enter on DECISION with checks must open show view, not leave Call Sheet"
+    );
+    let view = app
+        .hollywood
+        .view
+        .as_ref()
+        .expect("Enter on DECISION must open CardView show view");
+    assert!(
+        view.raw_body
+            .starts_with("Signing off also activates 2 checks:"),
+        "show view must start with `Signing off also activates 2 checks:`, got:\n{}",
+        view.raw_body
+    );
+
+    let show_screen = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    if std::env::var_os("DECISION_CHECKS_DUMP").is_some() {
+        eprintln!(
+            "=== CALL SHEET (200x44) ===\n{sheet_text}\n=== DECISION SHOW VIEW (200x44) ===\n{show_screen}\n=== END ==="
+        );
+    }
+    for needle in [
+        "Signing off also activates 2 checks:",
+        "scan",
+        "sh scripts/scan.sh --strict",
+        "45s",
+        "files_scanned=[1-9]",
+        "lint",
+        "cargo clippy --all-targets -- -D warnings",
+        "120s",
+    ] {
+        assert!(
+            show_screen.contains(needle),
+            "DECISION show view missing verbatim `{needle}`:\n{show_screen}"
+        );
+    }
+
+    // Pressing `a` inside the DECISION show view opens the sign-off confirm
+    // dialog mentioning the 2 proposed checks.
+    key(&mut app, hc_vt::Key::Char('a'));
+    let confirm_screen = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
+    assert!(
+        confirm_screen.contains("activate 2 checks (scan, lint)"),
+        "confirm dialog missing `activate 2 checks (scan, lint)`:\n{confirm_screen}"
+    );
+    key(&mut app, hc_vt::Key::Escape);
+}

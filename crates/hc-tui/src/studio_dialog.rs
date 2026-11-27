@@ -189,7 +189,12 @@ impl StudioDialog {
 
     /// Confirm opening-design sign-off (`backlot design sign [--skip]`),
     /// shared by Call Sheet, Lot Dock, and Design Reader.
-    pub(crate) fn design_sign(key: &StudioKey, skip: bool, file: Option<&str>) -> StudioDialog {
+    pub(crate) fn design_sign(
+        key: &StudioKey,
+        skip: bool,
+        file: Option<&str>,
+        proposed_check_names: &[String],
+    ) -> StudioDialog {
         let title = if skip {
             format!("Skip opening design? · {}", Self::place(key))
         } else {
@@ -211,8 +216,14 @@ impl StudioDialog {
             format!(
                 "Mode: skip remaining opening design rounds — {freeze_note} and allow execution to begin?"
             )
-        } else {
+        } else if proposed_check_names.is_empty() {
             format!("Mode: sign off opening design — {freeze_note} and unlock execution?")
+        } else {
+            let count = crate::hollywood::decision::checks_count_phrase(proposed_check_names.len());
+            format!(
+                "Mode: sign off opening design — {freeze_note}, activate {count} ({}), and unlock execution?",
+                proposed_check_names.join(", ")
+            )
         };
         Self::confirm(
             title,
