@@ -144,7 +144,7 @@ Opening a studio `✦`/`›` report or message (`Enter` on the dock), a Call She
 | `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U` | Page down / page up (`d` stays unbound to avoid prompt muscle memory) |
 | `g`/`Home`, `G`/`End` | Jump to top / bottom |
 | `←`/`→`, `[`/`]` | Step to previous / next sibling entry, or jump to previous / next `§R<r>.<W\|D\|P\|U>` section inside a `Design` doc (header `◀`/`▶` clicks step too; beside dock `▌` follows live) |
-| `t`, `i`, `r` | Open inline composer (`[t] tell`, or `[r] reply` targeting `producer` inside an active `Design` doc), sharing the studio's dock `›` draft and `↑`/`↓` history (`hollywood` uses the Call Sheet draft/history; `Tab` completes `/verb` on studios; `Enter` sends or retries failed sends; `Esc` returns to reading keeping the draft) |
+| `t`, `i`, `r` | Open inline composer (`t tell`, or `r reply` targeting `producer` inside an active `Design` doc; `[t] tell` / `[r] reply` under `--plain`), sharing the studio's dock `›` draft and `↑`/`↓` history (`hollywood` uses the Call Sheet draft/history; `Tab` completes `/verb` on studios; `Enter` sends or retries failed sends; `Esc` returns to reading keeping the draft) |
 | `o` | Focus the author's live terminal (closing the Reader), or reopen a closed resumable / fixed seat (`□ closed`) |
 | `p` | Peek at the author's live screen read-only (never carrying a prompt; omitted when closed) |
 | `v` | Open the Task & Delivery Sheet for the entry's studio/task (closing the Reader) |

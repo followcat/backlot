@@ -81,6 +81,27 @@ fn is_round_anchor(s: &str) -> bool {
         .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
 }
 
+/// Whether a Markdown heading should render as a Babylon chevron intertitle
+/// banner (`##` headings and `### §R<r>.*` section headings).
+pub(super) fn is_banner_heading(level: u8, heading: &str) -> bool {
+    level == 2
+        || (level == 3
+            && heading
+                .split_whitespace()
+                .next()
+                .is_some_and(is_r_section_prefix))
+}
+
+fn is_r_section_prefix(token: &str) -> bool {
+    let Some(rest) = token.strip_prefix("§R") else {
+        return false;
+    };
+    let Some((digits, tail)) = rest.split_once('.') else {
+        return false;
+    };
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) && !tail.is_empty()
+}
+
 fn is_role_anchor(s: &str) -> bool {
     let Some(rest) = s.strip_prefix("§R") else {
         return false;
@@ -97,9 +118,13 @@ fn is_role_anchor(s: &str) -> bool {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum MdBlock {
-    Heading(String),
+    Heading(u8, String),
     Bullet(Vec<MdInline>),
-    Paragraph(Vec<MdInline>),
+    Quote(Vec<MdInline>),
+    Paragraph {
+        indented: bool,
+        spans: Vec<MdInline>,
+    },
     Code(String),
     Blank,
 }
@@ -149,7 +174,15 @@ pub(super) fn parse_markdown(lines: &[String]) -> Vec<MdBlock> {
         let trimmed = trimmed_end.trim_start();
         let hashes = trimmed.chars().take_while(|c| *c == '#').count();
         if (1..=6).contains(&hashes) && trimmed.get(hashes..).is_some_and(|r| r.starts_with(' ')) {
-            raw_blocks.push(MdBlock::Heading(trimmed[hashes + 1..].trim().to_owned()));
+            raw_blocks.push(MdBlock::Heading(
+                hashes as u8,
+                trimmed[hashes + 1..].trim().to_owned(),
+            ));
+        } else if let Some(quoted) = trimmed
+            .strip_prefix("> ")
+            .or_else(|| trimmed.strip_prefix('>').filter(|r| r.is_empty()))
+        {
+            raw_blocks.push(MdBlock::Quote(parse_inline(quoted.trim_start())));
         } else if let Some(item) = trimmed
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
@@ -157,7 +190,10 @@ pub(super) fn parse_markdown(lines: &[String]) -> Vec<MdBlock> {
         {
             raw_blocks.push(MdBlock::Bullet(parse_inline(item)));
         } else {
-            raw_blocks.push(MdBlock::Paragraph(parse_inline(trimmed)));
+            raw_blocks.push(MdBlock::Paragraph {
+                indented: trimmed.len() < trimmed_end.len(),
+                spans: parse_inline(trimmed),
+            });
         }
     }
     collapse_blanks(raw_blocks)

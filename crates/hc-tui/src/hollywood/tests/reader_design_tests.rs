@@ -108,7 +108,7 @@ fn design_reader_header_and_chips_reflect_phase_and_omit_sign_off_when_finalized
     let vr = render_view(&mut buf, area, &waiting, None, &palette);
     let text = lines(&buf, area).join("\n");
     assert!(
-        text.contains("DESIGN v1"),
+        text.contains("D E S I G N   v 1"),
         "missing DESIGN v1 header:\n{text}"
     );
     assert!(text.contains("R2"), "missing R2:\n{text}");
@@ -204,10 +204,11 @@ fn design_reader_200x44_and_100x40_render_cleanly_with_scroll_anchors() {
             compose: None,
             now_ms: 0,
             shadow: false,
+            plain: false,
         },
     );
     let wide_text = lines(&buf_wide, area_wide).join("\n");
-    assert!(wide_text.contains("DESIGN v1"), "{wide_text}");
+    assert!(wide_text.contains("D E S I G N   v 1"), "{wide_text}");
     assert!(wide_text.contains("sign off"), "{wide_text}");
     assert!(!vr_wide.sections.is_empty(), "expected sections at 200x44");
 
@@ -223,10 +224,11 @@ fn design_reader_200x44_and_100x40_render_cleanly_with_scroll_anchors() {
             compose: None,
             now_ms: 0,
             shadow: false,
+            plain: false,
         },
     );
     let text_100 = lines(&buf_100, area_100).join("\n");
-    assert!(text_100.contains("DESIGN v1"), "{text_100}");
+    assert!(text_100.contains("D E S I G N   v 1"), "{text_100}");
     assert!(text_100.contains("sign off"), "{text_100}");
     assert!(!vr_100.sections.is_empty(), "expected sections at 100x40");
 

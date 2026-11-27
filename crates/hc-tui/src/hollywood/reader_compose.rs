@@ -6,7 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::reader_chrome::draw_divider;
+use super::reader_frame::{DividerKind, babylon_rail_style, draw_divider};
 use super::reader_meta::{ReaderMeta, ReaderOrigin, is_fixed_seat};
 use crate::chrome::help::CursorState;
 use crate::chrome::palette::Palette;
@@ -88,11 +88,16 @@ pub(super) fn draw_compose_band(
     divider_y: u16,
     state: &InlineTellState,
     compose: Option<ReaderComposeOpts<'_>>,
-    edge: Style,
-    palette: &Palette,
+    theme: (Style, &Palette, bool),
 ) -> (Option<Rect>, Option<CursorState>) {
+    let (edge, palette, plain) = theme;
     let row_y = divider_y + 1;
-    draw_divider(buf, area, divider_y, edge, palette);
+    let div_kind = if plain {
+        DividerKind::Plain
+    } else {
+        DividerKind::InnerDouble
+    };
+    draw_divider(buf, area, divider_y, edge, palette, div_kind);
     if area.width <= 4 {
         return (None, None);
     }
@@ -188,14 +193,24 @@ pub(super) fn draw_composing_hints(
     y: u16,
     studio: bool,
     palette: &Palette,
+    plain: bool,
 ) {
+    let stepped = !plain && area.width >= 64;
     if area.width <= 2 {
         return;
     }
-    let strip = Rect::new(area.x + 1, y, area.width - 2, 1);
+    let strip = if stepped {
+        let rail = babylon_rail_style(palette);
+        put_text(buf, area.x, y, 4, "║  │", rail);
+        put_text(buf, area.right() - 4, y, 4, "│  ║", rail);
+        Rect::new(area.x + 4, y, area.width - 8, 1)
+    } else {
+        Rect::new(area.x + 1, y, area.width - 2, 1)
+    };
     let bg = Style::default().bg(palette.surface0);
     buf.set_style(strip, bg);
-    let avail = usize::from(area.width.saturating_sub(4));
+    let inset: u16 = if stepped { 5 } else { 2 };
+    let avail = usize::from(area.width.saturating_sub(2 * inset));
     if avail == 0 {
         return;
     }
@@ -221,7 +236,7 @@ pub(super) fn draw_composing_hints(
     let fitted = truncate_end(chosen, avail);
     put_text(
         buf,
-        area.x + 2,
+        area.x + inset,
         y,
         display_width(&fitted) as u16,
         &fitted,

@@ -1218,7 +1218,7 @@ fn the_card_view_draws_over_the_layer() {
     let view_hits = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("draft line 0"), "{text}");
-    assert!(text.contains("╭"), "{text}");
+    assert!(text.contains("╔"), "{text}");
     assert!(text.contains("c4"), "{text}");
     assert!(view_hits.metrics.unwrap().max_offset_from_bottom > 0);
 }
@@ -1249,11 +1249,11 @@ fn the_card_view_has_a_complete_border_and_footer() {
     let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palette);
     let b = border_of(&buf, view.area);
     let top = row_of(&buf, area, b.y);
-    assert!(top.contains('╭') && top.contains('╮'), "top edge: {top}");
-    // Everything after the title up to `╮` is `─`.
+    assert!(top.contains('╔') && top.contains('╗'), "top edge: {top}");
+    // Everything after the title up to `╗` is `═`.
     let title_end = top.rfind("c4 ").expect("the title is on the top edge") + 3;
-    let fill = &top[title_end..top.rfind('╮').unwrap()];
-    assert!(fill.chars().all(|c| c == '─'), "top fill: {fill:?}");
+    let fill = &top[title_end..top.rfind('╗').unwrap()];
+    assert!(fill.chars().all(|c| c == '═'), "top fill: {fill:?}");
     let column = |x: u16| {
         (b.y..b.y + b.height)
             .map(|y| buf[(x, y)].symbol())
@@ -1265,14 +1265,14 @@ fn the_card_view_has_a_complete_border_and_footer() {
     let right_side: Vec<&str> = (b.y + 1..b.bottom() - 1)
         .map(|y| buf[(b.right() - 1, y)].symbol())
         .collect();
-    assert_eq!(left_side[left_side.len() - 2], "├");
-    assert_eq!(right_side[right_side.len() - 2], "┤");
+    assert_eq!(left_side[left_side.len() - 2], "╟");
+    assert_eq!(right_side[right_side.len() - 2], "╢");
     assert!(
         left_side
             .iter()
             .enumerate()
             .filter(|(i, _)| *i != left_side.len() - 2)
-            .all(|(_, s)| *s == "│"),
+            .all(|(_, s)| *s == "║"),
         "left edge: {left_side:?}"
     );
     assert!(
@@ -1280,20 +1280,20 @@ fn the_card_view_has_a_complete_border_and_footer() {
             .iter()
             .enumerate()
             .filter(|(i, _)| *i != right_side.len() - 2)
-            .all(|(_, s)| *s == "│"),
+            .all(|(_, s)| *s == "║"),
         "right edge: {right_side:?}"
     );
     let _ = column;
     let action_strip = row_of(&buf, area, b.bottom() - 2);
     assert!(
-        action_strip.contains("[a] apply")
-            && action_strip.contains("[x] cancel")
+        action_strip.contains(" a apply ")
+            && action_strip.contains(" x cancel ")
             && action_strip.contains("esc"),
         "action strip: {action_strip}"
     );
     let bottom = row_of(&buf, area, b.bottom() - 1);
     assert!(
-        bottom.contains('╰') && bottom.contains('╯'),
+        bottom.contains('╚') && bottom.contains('╝'),
         "bottom: {bottom}"
     );
 }
@@ -1341,11 +1341,11 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
     assert!(top.contains("hollywood #7"), "top: {top}");
     let strip = row_of(&buf, area, b.bottom() - 2);
     assert!(
-        strip.contains("[y] copy") && strip.contains("esc"),
+        strip.contains(" y copy ") && strip.contains("esc"),
         "read-only action strip: {strip}"
     );
-    assert!(!strip.contains("[a] apply"), "no card keys: {strip}");
-    assert!(!strip.contains("[x] cancel"), "no card keys: {strip}");
+    assert!(!strip.contains("a apply"), "no card keys: {strip}");
+    assert!(!strip.contains("x cancel"), "no card keys: {strip}");
 }
 
 #[test]
@@ -1566,8 +1566,8 @@ fn card_view_cjk_title_places_right_corners_at_exact_right_edge() {
     let b = border_of(&buf, rendered.area);
     let right_x = b.right() - 1;
     let bottom_y = b.bottom() - 1;
-    assert_eq!(buf[(right_x, b.y)].symbol(), "╮");
-    assert_eq!(buf[(right_x, bottom_y)].symbol(), "╯");
+    assert_eq!(buf[(right_x, b.y)].symbol(), "╗");
+    assert_eq!(buf[(right_x, bottom_y)].symbol(), "╝");
     let top = wide_row_of(&buf, b.x, b.right(), b.y);
     assert!(
         top.contains("已记录最终需求 v6"),
@@ -1705,8 +1705,8 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
         .collect();
     let joined = text.join("\n");
     assert!(
-        joined.contains("MixedCase Heading"),
-        "case preserved: {joined}"
+        joined.contains("‹✦› MixedCase Heading ‹✦›"),
+        "banner + case preserved: {joined}"
     );
     assert!(joined.contains("▪ Bold code docs dbbe825be"), "{joined}");
     assert!(
@@ -1722,9 +1722,15 @@ fn card_view_renders_markdown_lite_styles_and_plain_log_mode() {
     let rb = border_of(&buf, rendered.area);
     let text_x = rb.x + 3;
     let heading_y = (rendered.body.y..rendered.body.bottom())
-        .find(|&y| buf[(text_x, y)].symbol() == "M")
+        .find(|&y| {
+            wide_row_of(&buf, rendered.body.x, rendered.body.right(), y)
+                .contains("MixedCase Heading")
+        })
         .expect("MixedCase Heading row");
-    assert_eq!(buf[(text_x, heading_y)].fg, palette.accent);
+    let heading_x = (rendered.body.x..rendered.body.right())
+        .find(|&x| buf[(x, heading_y)].symbol() == "M")
+        .expect("MixedCase Heading 'M'");
+    assert_eq!(buf[(heading_x, heading_y)].fg, palette.accent);
     // Find `▏` row and ensure all content cells up to right pad have `surface1`.
     let code_y = (rendered.body.y..rendered.body.bottom())
         .find(|&y| buf[(text_x, y)].symbol() == "▏")
@@ -1844,7 +1850,7 @@ fn card_view_renders_all_five_entry_kinds_and_omits_missing_optional_fields() {
     assert!(ctx_row.contains("t1 · reports/12.md"), "{ctx_row}");
     assert_eq!(
         buf[(b.x, b.y + 2)].symbol(),
-        "├",
+        "╟",
         "Row 2 header divider present"
     );
     let sq_x = (b.x..b.right())
@@ -2047,11 +2053,11 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let wb = border_of(&wbuf, wren.area);
     let wstrip = wide_row_of(&wbuf, wb.x, wb.right(), wb.bottom() - 2);
     assert!(
-        wstrip.contains("[t] tell")
-            && wstrip.contains("[o] focus")
-            && wstrip.contains("[p] peek")
-            && wstrip.contains("[v] sheet")
-            && wstrip.contains("[y] copy"),
+        wstrip.contains(" t tell ")
+            && wstrip.contains(" o focus ")
+            && wstrip.contains(" p peek ")
+            && wstrip.contains(" v sheet ")
+            && wstrip.contains(" y copy "),
         "full tier strip: {wstrip}"
     );
     for expected in ['t', 'o', 'p', 'v', 'y'] {
@@ -2059,15 +2065,15 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
             .chips
             .iter()
             .find(|(_, ch)| *ch == expected)
-            .unwrap_or_else(|| panic!("missing chip [{expected}] in {wstrip}"));
+            .unwrap_or_else(|| panic!("missing chip {expected} in {wstrip}"));
         let text = wide_row_of(&wbuf, rect.x, rect.right(), rect.y);
         assert!(
-            text.starts_with(&format!("[{expected}]")),
-            "chip [{expected}] rect mismatch: got {text:?} from {wstrip:?}"
+            text.trim().starts_with(expected),
+            "chip {expected} rect mismatch: got {text:?} from {wstrip:?}"
         );
     }
 
-    // Tier 1 medium 52-col border (`avail = 48`), +2 gutter = 54 outer: `[t] tell [o] focus [y] copy  ←/→ · esc`.
+    // Tier 1 medium 52-col border (`avail = 48`), +2 gutter = 54 outer: ` t tell  o focus  y copy   ←/→ · esc`.
     let medium_view = make_outcome(vec!["ok".into()]);
     let medium = Rect::new(0, 0, 56, 12);
     let mut mbuf = Buffer::empty(medium);
@@ -2077,14 +2083,14 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     assert_eq!(mren.area.width, 54);
     let mstrip = wide_row_of(&mbuf, mb.x, mb.right(), mb.bottom() - 2);
     assert!(
-        mstrip.contains("[t] tell")
-            && mstrip.contains("[o] focus")
-            && mstrip.contains("[y] copy")
-            && !mstrip.contains("[p]"),
+        mstrip.contains(" t tell ")
+            && mstrip.contains(" o focus ")
+            && mstrip.contains(" y copy ")
+            && !mstrip.contains(" peek "),
         "medium tier strip: {mstrip}"
     );
 
-    // Tier 2 squeezed fallback: `[t] [o] [y]  ? keys`, never mid-word cut.
+    // Tier 2 squeezed fallback: `t o y  ? keys`, never mid-word cut.
     let narrow = Rect::new(0, 0, 40, 12);
     let mut nbuf = Buffer::empty(narrow);
     let nren = crate::hollywood::render_view(&mut nbuf, narrow, &medium_view, None, palette);
@@ -2092,11 +2098,11 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     assert_eq!(nb.width, 40);
     let nstrip = wide_row_of(&nbuf, nb.x, nb.right(), nb.bottom() - 2);
     assert!(
-        nstrip.contains("[t] [o] [y]") && nstrip.contains("? keys"),
+        nstrip.contains("t o y") && nstrip.contains("? keys"),
         "narrow fallback strip: {nstrip}"
     );
 
-    // Narrow actionable card: `[a] [x] [y]  ? keys`, and pending card locks `a`/`x`.
+    // Narrow actionable card: `a x y  ? keys`, and pending card locks `a`/`x`.
     let card_view = CardView {
         card: Some("c3".into()),
         title: "c3".into(),
@@ -2120,7 +2126,7 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let cb = border_of(&cbuf, cren.area);
     let cstrip = wide_row_of(&cbuf, cb.x, cb.right(), cb.bottom() - 2);
     assert!(
-        cstrip.contains("[a] [x] [y]") && cstrip.contains("? keys"),
+        cstrip.contains("a x y") && cstrip.contains("? keys"),
         "narrow card strip: {cstrip}"
     );
 
@@ -2165,14 +2171,17 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let clren = crate::hollywood::render_view(&mut clbuf, wide, &closed_view, None, palette);
     let clb = border_of(&clbuf, clren.area);
     let clstrip = wide_row_of(&clbuf, clb.x, clb.right(), clb.bottom() - 2);
-    assert!(!clstrip.contains("[p]"), "{clstrip}");
-    assert!(!clstrip.contains("[o]"), "{clstrip}");
+    assert!(!clstrip.contains(" peek "), "{clstrip}");
     assert!(
-        clstrip.contains("[t] tell") && clstrip.contains("[y] copy"),
+        !clstrip.contains(" focus ") && !clstrip.contains(" reopen "),
+        "{clstrip}"
+    );
+    assert!(
+        clstrip.contains(" t tell ") && clstrip.contains(" y copy "),
         "{clstrip}"
     );
 
-    // Records at 40 cols keeps `[y] copy  esc`, and below Tier 1 degrades to `[y]  ? keys`.
+    // Records at 40 cols keeps ` y copy   esc`, and below Tier 1 degrades to `y  ? keys`.
     let records_view = CardView {
         card: None,
         title: "records acme-shop".into(),
@@ -2192,14 +2201,14 @@ fn card_view_action_bar_degrades_across_width_tiers_and_records_chip_hits() {
     let rren = crate::hollywood::render_view(&mut rbuf, narrow, &records_view, None, palette);
     let rb = border_of(&rbuf, rren.area);
     let rstrip = wide_row_of(&rbuf, rb.x, rb.right(), rb.bottom() - 2);
-    assert!(rstrip.contains("[y] copy"), "records tier1: {rstrip}");
+    assert!(rstrip.contains(" y copy "), "records tier1: {rstrip}");
 
     let tiny = Rect::new(0, 0, 16, 10);
     let mut tbuf = Buffer::empty(tiny);
     let tren = crate::hollywood::render_view(&mut tbuf, tiny, &records_view, None, palette);
     let tb = border_of(&tbuf, tren.area);
     let tstrip = wide_row_of(&tbuf, tb.x, tb.right(), tb.bottom() - 2);
-    assert!(tstrip.contains("[y]  ? keys"), "records tier2: {tstrip}");
+    assert!(tstrip.contains("y  ? keys"), "records tier2: {tstrip}");
 }
 
 #[test]

@@ -537,8 +537,8 @@ async fn records_action_opens_read_only_card_view_without_stuffing_card_id() {
     assert_eq!(view.title, "records acme-shop");
     let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
     assert!(text.contains("■ RECORDS · acme-shop"), "{text}");
-    assert!(text.contains("[y] copy") && text.contains("esc"), "{text}");
-    assert!(!text.contains("[a] apply"), "{text}");
+    assert!(text.contains(" y copy ") && text.contains("esc"), "{text}");
+    assert!(!text.contains("a apply"), "{text}");
 
     // `a`/`x` do nothing; `Esc` closes the read-only CardView cleanly.
     key(&mut app, hc_vt::Key::Char('a'));

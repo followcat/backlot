@@ -76,7 +76,7 @@ async fn design_reader_section_jump_reply_and_sign_off_work_end_to_end() {
     let initial_backend = draw_to(&mut app, 120, 32);
     let initial_text = screen_lines(&initial_backend).join("\n");
     assert!(
-        initial_text.contains("DESIGN v1"),
+        initial_text.contains("D E S I G N   v 1") || initial_text.contains("DESIGN v1"),
         "expected DESIGN v1 header:\n{initial_text}"
     );
     assert!(
@@ -227,8 +227,27 @@ async fn design_reader_200x44_and_100x40_and_no_design_identity() {
     app.area = (100, 40);
     let dump_100 = screen_lines(&draw_to(&mut app, 100, 40)).join("\n");
 
-    assert!(dump_200.contains("DESIGN v1"), "{dump_200}");
+    assert!(dump_200.contains("D E S I G N   v 1"), "{dump_200}");
     assert!(dump_200.contains("sign off"), "{dump_200}");
-    assert!(dump_100.contains("DESIGN v1"), "{dump_100}");
+    assert!(dump_100.contains("D E S I G N   v 1"), "{dump_100}");
     assert!(dump_100.contains("sign off"), "{dump_100}");
+}
+
+#[tokio::test]
+async fn app_plain_and_source_herdr_keep_reader_unchanged() {
+    for (plain_flag, herdr_source) in [(true, false), (false, true)] {
+        let mut app = app_with_panel_doc();
+        app.plain = plain_flag;
+        app.shell.own_theme.source_herdr = herdr_source;
+        app.shell.studio_chrome = !plain_flag && !herdr_source;
+        app.area = (90, 30);
+        open_design_in(&mut app, DesignPhase::WaitingUser, "design/v1.md", false);
+
+        let text = screen_lines(&draw_to(&mut app, 90, 30)).join("\n");
+        assert!(text.contains("╭"), "plain rounded corner:\n{text}");
+        assert!(text.contains("■ DESIGN v1"), "plain design title:\n{text}");
+        assert!(text.contains("[r] reply"), "plain reply chip:\n{text}");
+        assert!(!text.contains("╔══╤═"), "no Babylon step in plain:\n{text}");
+        assert!(!text.contains("‹✦›"), "no Babylon banner in plain:\n{text}");
+    }
 }
