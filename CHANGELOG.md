@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The Lot Reader adopts the Babylon gilded intertitle frame (stepped brass at 64 columns and wider, collapsing to a plain double frame below 64, and keeping the classic rounded look under `--plain` or herdr themes), letter-spaced design titles when room allows, centred chevron section banners, and gold margin bars on questions and blockquotes without changing prose width or row height.** A finished studio's Task & Delivery Sheet Overview also now ends with a centred `THE END` rule on an existing blank row.
+
 ## 0.4.26 — 2026-11-27
 
 ### Changed
