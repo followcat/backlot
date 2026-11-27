@@ -85,6 +85,7 @@ pub(super) fn render_overlays_and_cursor(
             focus_crumb.as_deref(),
             &app.live,
             &app.shell.palette,
+            app.shell.studio_chrome,
         )
     };
     if mode_bar == Some(layout.tab_bar) {
@@ -189,6 +190,7 @@ pub(super) fn render_overlays_and_cursor(
         // S2: a newer installed backlot than this client runs puts
         // one dim line at the foot of the lot (the row model reads it).
         app.panel.update = app.update_hint();
+        app.panel.plain_chrome = !app.shell.studio_chrome;
         crate::panel::render(
             buf,
             rect,

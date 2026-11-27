@@ -21,7 +21,7 @@ async fn alt_l_hint_shows_in_lot_header_help_and_launcher() {
         let header = screen.lines().next().unwrap_or_default();
         let lot_header = header.rsplit('│').next().unwrap_or_default();
         assert!(
-            lot_header.contains("lot · 1"),
+            lot_header.contains("L O T · 1"),
             "{cols}x{rows} header: {header}"
         );
         assert!(

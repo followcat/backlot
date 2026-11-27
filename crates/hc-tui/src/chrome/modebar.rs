@@ -1,5 +1,8 @@
 // Derived from herdr src/client/shell/render.rs::render_mode_bar (Apache-2.0).
 
+#[path = "modebar_deco.rs"]
+mod deco;
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -37,6 +40,7 @@ pub(crate) fn render_mode_bar(
     focus_breadcrumb: Option<&str>,
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
+    studio_chrome: bool,
 ) -> Option<Rect> {
     if (mode == ClientShellMode::Terminal
         && !keyboard_locked
@@ -54,6 +58,22 @@ pub(crate) fn render_mode_bar(
         pane_area.width,
         1,
     );
+    if studio_chrome {
+        return deco::render_deco_mode_bar(
+            buffer,
+            bar,
+            mode,
+            keyboard_locked,
+            copy_mode,
+            endpoint_error,
+            update_available,
+            restart_ready,
+            stage_log,
+            focus_breadcrumb,
+            keybinds,
+            palette,
+        );
+    }
     let base = Style::default().fg(palette.overlay0).bg(palette.panel_bg);
     for x in bar.x..bar.x + bar.width {
         buffer[(x, bar.y)].set_symbol(" ").set_style(base);
@@ -274,3 +294,7 @@ pub(crate) fn render_mode_bar(
     }
     Some(bar)
 }
+
+#[cfg(test)]
+#[path = "modebar_tests.rs"]
+mod tests;

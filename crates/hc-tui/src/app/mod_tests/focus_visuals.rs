@@ -161,7 +161,7 @@ async fn single_focus_ring_invariant_and_breadcrumb_200x44() {
         "Lot shows heavy accent focus chrome:\n{lot_text}"
     );
     assert!(
-        lot_text.contains("FOCUS: lot › acme-shop"),
+        lot_text.contains("FOCUS: LOT · acme-shop"),
         "modebar shows FOCUS breadcrumb:\n{lot_text}"
     );
 
@@ -178,15 +178,15 @@ async fn single_focus_ring_invariant_and_breadcrumb_200x44() {
     prefix_key(&mut app, 't');
     let tree_text = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
     assert!(
-        tree_text.contains("FOCUS: tree"),
-        "Tree focus shows FOCUS: tree breadcrumb:\n{tree_text}"
+        tree_text.contains("FOCUS: TREE"),
+        "Tree focus shows FOCUS: TREE breadcrumb:\n{tree_text}"
     );
 
     key(&mut app, hc_vt::Key::Tab);
     let cast_text = screen_lines(&draw_to(&mut app, 200, 44)).join("\n");
     assert!(
-        cast_text.contains("FOCUS: cast"),
-        "Cast focus shows FOCUS: cast breadcrumb:\n{cast_text}"
+        cast_text.contains("FOCUS: CAST"),
+        "Cast focus shows FOCUS: CAST breadcrumb:\n{cast_text}"
     );
 
     key(&mut app, hc_vt::Key::Escape);
@@ -214,7 +214,7 @@ async fn narrow_overlay_focus_visuals_100x40() {
         eprintln!("=== 100x40 ===\n{screen}\n=== END 100x40 ===");
     }
     assert!(
-        screen.contains("FOCUS: lot › acme-shop"),
+        screen.contains("FOCUS: LOT · acme-shop"),
         "narrow overlay still displays modebar breadcrumb:\n{screen}"
     );
     assert!(
