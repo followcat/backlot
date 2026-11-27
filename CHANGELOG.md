@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- Test fixtures and docs use neutral names only.
+
 ## 0.4.20 — 2026-11-27
 
 ### Added

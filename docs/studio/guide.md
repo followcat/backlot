@@ -266,7 +266,7 @@ backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
 `--studio` flag or reads `BACKLOT_STUDIO`. The name resolves across sessions: when it is not
 under the current session's state directory the command scans the sibling core directories, so
-`backlot studio finish --studio aiflows` in a plain shell finds `aiflows` wherever it was made —
+`backlot studio finish --studio orchard` in a plain shell finds `orchard` wherever it was made —
 exactly one match wins, none keeps `no studio`, and several matches refuse with the core ids so
 `--session` can pick one. `BACKLOT_STATE_DIR`, `--session` and `--remote` pin the directory and
 skip the scan. `--repo` must be an absolute path — it names the
