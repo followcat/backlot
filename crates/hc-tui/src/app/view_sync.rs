@@ -82,6 +82,7 @@ impl App {
         self.settle_opening(self.now());
         self.fence_chrome_core();
         self.follow_shared_focus();
+        self.retarget_resumed_role();
         // The dead pane's context survives the reprojection for the
         // fallback below — a transient inventory view can precede the
         // layout write that names the real successor.
@@ -209,6 +210,41 @@ impl App {
                         .any(|pane| pane.pane_id == focused)
             }
         }
+    }
+
+    /// Retarget `self.focused` when a resumed studio role receives a new
+    /// live terminal, without altering keyboard focus (`panel.focused`,
+    /// `tree_focus`, etc.) or recording the dead terminal in history.
+    fn retarget_resumed_role(&mut self) {
+        if self.plain || self.mode == Mode::Copy {
+            return;
+        }
+        let summaries = self.panel_summaries();
+        let closed = &self.project_cache.own_document(&self.view).closed;
+        let focused = self.focused.as_deref();
+        let Some(next) = self.studio.retarget_resumed(&summaries, focused, |addr| {
+            self.view.inventory.get(addr).is_some_and(|term| {
+                !term.labels.contains_key(crate::app::popup::POPUP_LABEL)
+                    && closed.get(addr) != Some(&term.created_ms)
+                    && matches!(
+                        crate::sidebar::classify(term),
+                        crate::sidebar::Life::Live | crate::sidebar::Life::Pending
+                    )
+            })
+        }) else {
+            return;
+        };
+        let old = self.focused.replace(next.clone());
+        if old.as_deref() == self.last_focus.as_deref() {
+            self.last_focus = Some(next.clone());
+        }
+        if old.as_deref() == self.previous_pane.as_deref() {
+            self.previous_pane = Some(next.clone());
+        }
+        if old.as_deref() == self.before_navigate.as_deref() {
+            self.before_navigate = Some(next);
+        }
+        self.shell_state.reveal_focused_agent = true;
     }
 
     /// Request a surface draw; Source acknowledges only displayed output.

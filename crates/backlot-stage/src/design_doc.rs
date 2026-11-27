@@ -339,7 +339,7 @@ fn render_version_markdown(
 }
 
 /// Format unix milliseconds as `YYYY-MM-DD HH:MM:SS UTC`.
-fn utc_timestamp(ms: u64) -> String {
+pub(crate) fn utc_timestamp(ms: u64) -> String {
     let total_secs = ms / 1000;
     let sod = total_secs % 86_400;
     let hh = sod / 3_600;

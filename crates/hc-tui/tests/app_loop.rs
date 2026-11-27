@@ -117,7 +117,7 @@ async fn sidebar_divider_drag_changes_the_drawn_geometry() {
     assert_ne!(terminal.backend().buffer()[(25, 10)].symbol(), "│");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn late_host_appearance_updates_the_drawn_auto_theme() {
     let mut config = hc_tui::config::Config::default();
     config.theme.auto_switch = true;
@@ -128,17 +128,27 @@ async fn late_host_appearance_updates_the_drawn_auto_theme() {
         std::path::PathBuf::new(),
     );
     let (mut app, probe) = app_with_config(&config);
+    app.use_tokio_clock();
+    // Wait for the reply to actually be applied (`on_host_replies` emits
+    // the color re-query after updating `shell.palette`) and then for a
+    // draw after that point, rather than assuming draw #2 is the reply.
+    let (applied_tx, mut applied_rx) = tokio::sync::watch::channel(None::<u64>);
+    let tap_probe = probe.clone();
+    app.set_host_control(Box::new(move |bytes| {
+        if bytes.starts_with(b"\x1b]10;?") {
+            let _ = applied_tx.send(Some(tap_probe.draws.load(Ordering::Relaxed)));
+        }
+        Ok(())
+    }));
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let (ui_tx, mut ui) = mpsc::channel(1);
     let (reply_tx, mut replies) = mpsc::channel(1);
     let producer = tokio::spawn(async move {
-        while probe.draws.load(Ordering::Relaxed) == 0 {
-            tokio::task::yield_now().await;
-        }
+        loopcore::draws_beyond(&probe, 0).await;
         reply_tx.send(hc_tui::host::HostReply::Light).await.unwrap();
-        while probe.draws.load(Ordering::Relaxed) < 2 {
-            tokio::task::yield_now().await;
-        }
+        let draws_at_apply =
+            (*applied_rx.wait_for(|draws| draws.is_some()).await.unwrap()).unwrap();
+        loopcore::draws_beyond(&probe, draws_at_apply).await;
         drop(ui_tx);
     });
     tokio::time::timeout(

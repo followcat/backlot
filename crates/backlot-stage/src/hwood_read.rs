@@ -34,6 +34,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             let mut out = std::io::stdout().lock();
             Some(report_show(common, env, base, file, &mut out).map(|()| String::new()))
         }
+        Cmd::MsgShow { seq, json } => Some(crate::msg_show::show(common, env, base, *seq, *json)),
         Cmd::Design(crate::args::DesignCmd::Show {
             version,
             round,

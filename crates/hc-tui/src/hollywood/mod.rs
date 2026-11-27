@@ -10,9 +10,15 @@
 //! timer — the frame is byte-identical to herdr (D15, D6).
 
 mod band;
+mod band_detail;
+mod band_lower;
+mod band_wait;
 mod chips;
 mod decision;
 mod draw;
+mod draw_chips;
+mod draw_lower;
+mod draw_sections;
 mod frames;
 mod handoff_ui;
 mod hints;
