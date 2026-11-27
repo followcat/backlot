@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.27 — 2026-11-27
+
 ### Changed
 
 - **The Lot, the top bar, the modebar and the sidebar take on *Babylon*'s gilded style.** A studio's frame gets heavier as you select it and enter it, finished studios end on `THE END`, and the top pill turns red with a `◉` while something is blocking.
