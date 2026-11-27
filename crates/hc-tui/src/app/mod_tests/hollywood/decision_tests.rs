@@ -96,7 +96,6 @@ fn design_app(suggest_skip: bool, include_design: bool) -> App {
     app.studio.current = Some(StudioKey::local("beta"));
     app.panel.mode = PanelMode::Expanded;
     app.shell_state.sidebar_collapsed = true;
-    app.panel.sidebar_collapsed = true;
     app.reconcile_published_view();
     app
 }

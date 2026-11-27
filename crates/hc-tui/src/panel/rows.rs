@@ -160,14 +160,8 @@ pub(crate) enum Row<'a> {
     },
     /// `╰──╯`
     BlockBottom(StudioRef<'a>),
-    /// 1-line summary of calm/standby live roles omitted on the current
-    /// studio while Left Cast already shows the full roster:
-    /// `│ ○ 2 idle · Ⓦ standby │`.
-    CalmSummary {
-        studio: StudioRef<'a>,
-        idle_count: usize,
-        standby_badges: String,
-    },
+    /// 1 blank row separating studio blocks or compact-rows groups.
+    Spacer,
     /// Borderless 1-line compact studio (`✓ gamma-web  5/5 ready [f]`).
     CompactStudio {
         studio: StudioRef<'a>,
@@ -302,7 +296,7 @@ impl Row<'_> {
             | Row::Usage { .. }
             | Row::InputDivider { .. }
             | Row::BlockBottom(_)
-            | Row::CalmSummary { .. }
+            | Row::Spacer
             | Row::Divider { .. }
             | Row::Drawer { .. }
             | Row::Update { .. } => Target::None,
@@ -334,16 +328,75 @@ impl Row<'_> {
     pub fn height(&self) -> u16 {
         1
     }
+
+    /// Which studio block and section an actionable row belongs to, for
+    /// `Tab` / `Shift+Tab` section cycling inside the focused Lot.
+    pub(crate) fn section_key(&self) -> Option<(StudioKey, Section)> {
+        if self.target() == Target::None {
+            return None;
+        }
+        match self {
+            Row::BlockTop { studio, .. }
+            | Row::Owed {
+                studio,
+                kind: Owed::StageDown,
+                ..
+            }
+            | Row::CompactStudio { studio, .. }
+            | Row::Stacked(studio)
+            | Row::Strip { studio, .. }
+            | Row::StripRole { studio, .. }
+            | Row::StripSummary { studio, .. } => Some((studio.key(), Section::Header)),
+            Row::Person { studio, role } if role.state != "closed" => {
+                Some((studio.key(), Section::People))
+            }
+            Row::Person { studio, .. }
+            | Row::OutwardCard { studio, .. }
+            | Row::Task { studio, .. }
+            | Row::DesignHeader { studio, .. }
+            | Row::DesignPreview { studio, .. }
+            | Row::DesignActions { studio, .. }
+            | Row::AcceptedFold { studio, .. }
+            | Row::ClosedFold { studio, .. } => Some((studio.key(), Section::Tasks)),
+            Row::Talk { studio, .. } => Some((studio.key(), Section::Exchange)),
+            Row::Input { studio } | Row::ReopenProducer { studio } => {
+                Some((studio.key(), Section::Input))
+            }
+            Row::Title
+            | Row::StageDown { .. }
+            | Row::ServerStopped { .. }
+            | Row::Offline { .. }
+            | Row::StoppedLedger { .. }
+            | Row::Empty
+            | Row::Owed { .. }
+            | Row::Usage { .. }
+            | Row::InputDivider { .. }
+            | Row::BlockBottom(_)
+            | Row::Spacer
+            | Row::Divider { .. }
+            | Row::Drawer { .. }
+            | Row::SetupHint
+            | Row::Update { .. } => None,
+        }
+    }
+}
+
+/// Ordered sections inside a Lot studio block (`Tab` / `Shift+Tab` stops).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Section {
+    Header,
+    People,
+    Tasks,
+    Exchange,
+    Input,
 }
 
 /// One studio's expanded block: header, owed-step subheader, live
-/// roles (or calm summary when current and sidebar expanded), task rows,
-/// folds, bounded exchange rows, input row, bottom border.
+/// roles, task rows, folds, bounded exchange rows, input row, bottom border.
 fn block_rows<'a>(
     out: &mut Vec<Row<'a>>,
     studio: StudioRef<'a>,
     panel: &Panel,
-    current: Option<&StudioKey>,
     stage: bool,
     reachable: bool,
     talk_limit: usize,
@@ -433,14 +486,7 @@ fn block_rows<'a>(
             }
         }
     };
-    let (calm, shown_roles) = live_person_plan(studio, panel, current);
-    if let Some((idle_count, standby_badges)) = calm {
-        out.push(Row::CalmSummary {
-            studio,
-            idle_count,
-            standby_badges,
-        });
-    }
+    let shown_roles = live_roles(studio.studio);
     push_grouped_roles(out, studio, &shown_roles, emit_person);
     for card in &studio.studio.outward_cards {
         out.push(Row::OutwardCard { studio, card });
@@ -698,32 +744,69 @@ pub(crate) fn rows<'a>(
                 header_rows,
                 &owed,
             );
+            let state_of = |studio: StudioRef<'_>| {
+                states
+                    .get(&studio.key())
+                    .copied()
+                    .unwrap_or(BlockState::Stacked)
+            };
+            let is_single_row =
+                |s: BlockState| matches!(s, BlockState::Compact(_) | BlockState::Stacked);
+            let spacer_slots: Vec<bool> = (0..studios.len())
+                .map(|i| {
+                    let Some(next) = studios.get(i + 1) else {
+                        return false;
+                    };
+                    !(is_single_row(state_of(studios[i])) && is_single_row(state_of(*next)))
+                })
+                .collect();
+            let spacer_count = spacer_slots.iter().filter(|&&emit| emit).count();
+            let mut body_blocks = Vec::new();
+            let mut end_indices = Vec::with_capacity(studios.len());
             for studio in studios {
                 let key = studio.key();
                 let stage = stage_running(studio.machine);
                 let reach = reachable(studio.machine);
-                match states.get(&key).copied().unwrap_or(BlockState::Stacked) {
+                match state_of(studio) {
                     BlockState::Full => {
                         let talk_limit = budgets.get(&key).copied().unwrap_or(0);
-                        block_rows(&mut out, studio, panel, current, stage, reach, talk_limit);
+                        block_rows(&mut body_blocks, studio, panel, stage, reach, talk_limit);
                     }
-                    BlockState::Folded => folded_block_rows(&mut out, studio, stage, reach),
+                    BlockState::Folded => {
+                        folded_block_rows(&mut body_blocks, studio, stage, reach);
+                    }
                     BlockState::Compact(kind) => {
-                        out.push(Row::CompactStudio { studio, kind });
+                        body_blocks.push(Row::CompactStudio { studio, kind });
                         if panel.finish_confirm.as_ref() == Some(&key) {
                             let pending = if super::data::report_pending(studio.studio) {
                                 " (report pending)"
                             } else {
                                 ""
                             };
-                            out.push(Row::Owed {
+                            body_blocks.push(Row::Owed {
                                 studio,
                                 kind: Owed::Confirm,
                                 text: format!("finish {}{pending}? [y/n]", studio.studio.id),
                             });
                         }
                     }
-                    BlockState::Stacked => out.push(Row::Stacked(studio)),
+                    BlockState::Stacked => body_blocks.push(Row::Stacked(studio)),
+                }
+                end_indices.push(body_blocks.len());
+            }
+            let tail_chrome =
+                usize::from(panel.hollywood_hint) + usize::from(panel.update.is_some());
+            let include_spacers = body_height == 0
+                || header_rows + body_blocks.len() + tail_chrome + spacer_count
+                    <= usize::from(body_height);
+            let mut start = 0usize;
+            let mut iter = body_blocks.into_iter();
+            for (i, end) in end_indices.into_iter().enumerate() {
+                let take = end - start;
+                out.extend(iter.by_ref().take(take));
+                start = end;
+                if include_spacers && spacer_slots[i] {
+                    out.push(Row::Spacer);
                 }
             }
             // H4: with no `[hollywood]` the expanded panel's last row

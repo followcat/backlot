@@ -137,35 +137,68 @@ fn draw(view: &CastView<'_>, width: u16, height: u16) -> (Buffer, ShellHitMap, u
 
 #[test]
 fn the_header_names_the_studio_and_its_position() {
+    use ratatui::style::Modifier;
     let summary = summary();
+    let palette = config().palette;
     let view = cast_view(&summary, vec![], false, Some("t4"));
     let (buf, ..) = draw(&view, 26, 20);
     let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
     assert!(!text.contains("cast ·"), "{text}");
     assert!(text.contains("1/1"), "{text}");
+    // Header stands out in bold `palette.text` even while the cast itself is unfocused.
+    assert_eq!(buf[(1, 1)].fg, palette.text);
+    assert!(buf[(1, 1)].modifier.contains(Modifier::BOLD));
+    assert_eq!(buf[(25, 1)].fg, palette.text);
+    assert!(buf[(25, 1)].modifier.contains(Modifier::BOLD));
 }
 
 #[test]
-fn a_person_draws_one_line_with_role_badge_state_and_omits_runner_model() {
-    let summary = summary();
+fn open_roles_show_runner_model_effort_subline_while_closed_and_missing_stay_one_line() {
+    let mut val = summary_json();
+    val["studios"][0]["roles"][0]["effort"] = serde_json::json!("xhigh");
+    // Closed actor carrying runner/model still stays one line with no model row.
+    val["studios"][0]["roles"][3]["runner"] = serde_json::json!("closed-runner");
+    val["studios"][0]["roles"][3]["model"] = serde_json::json!("closed-model");
+    let summary: Summary = serde_json::from_value(val).unwrap();
+    let palette = Palette::from_name("catppuccin").unwrap();
     let view = cast_view(&summary, vec![], false, None);
-    for width in [26u16, 20] {
-        let (buf, ..) = draw(&view, width, 20);
-        let text = lines(&buf, Rect::new(0, 0, width, 20)).join("\n");
-        assert!(text.contains("Ⓟ"), "w{width}: {text}");
-        assert!(text.contains("Ⓐ"), "w{width}: {text}");
-        assert!(text.contains("dave"), "w{width}: {text}");
-        assert!(!text.contains("agent-a"), "w{width}: {text}");
-        assert!(!text.contains("opus"), "w{width}: {text}");
-        assert!(!text.contains("sonnet"), "w{width}: {text}");
-    }
-    let (buf, ..) = draw(&view, 32, 20);
-    let text = lines(&buf, Rect::new(0, 0, 32, 20)).join("\n");
-    assert!(text.contains("Ⓐ task-1"), "{text}");
-    assert!(text.contains("working"), "{text}");
-    assert!(text.contains("dir"), "{text}");
-    assert!(text.contains("closed"), "{text}");
+
+    let (buf, ..) = draw(&view, 40, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 40, 20));
+    let text = rows.join("\n");
+    assert!(
+        text.contains("devin · anthropic/claude-opus-4-7 ·"),
+        "{text}"
+    );
+    assert!(text.contains("agent-a · claude-sonnet-4-5"), "{text}");
+    // Bob has runner `agent-b` and missing model -> renders `agent-b` only (no trailing `·`).
+    let bob_meta = rows
+        .iter()
+        .find(|l| l.contains("agent-b"))
+        .expect("bob meta row");
+    assert_eq!(bob_meta.trim(), "agent-b");
+    let meta_x = bob_meta.find("agent-b").unwrap() as u16;
+    let bob_y = rows.iter().position(|l| l.contains("agent-b")).unwrap() as u16;
+    assert_eq!(buf[(meta_x, bob_y)].fg, palette.subtext0);
+
+    // Closed dave never renders a model line.
+    assert!(!text.contains("closed-runner"), "{text}");
+    assert!(!text.contains("closed-model"), "{text}");
+
+    // At 26 cols, long metadata truncates cleanly with `…`.
+    let (nbuf, ..) = draw(&view, 26, 20);
+    let ntext = lines(&nbuf, Rect::new(0, 0, 26, 20)).join("\n");
+    assert!(ntext.contains("devin · anthropic/clau…"), "{ntext}");
+    assert!(ntext.contains("agent-a · claude-sonne…"), "{ntext}");
+
+    // Role with neither runner, model, nor effort stays strictly 1 line.
+    let mut bare = summary_json();
+    bare["studios"][0]["roles"][2]["runner"] = serde_json::Value::Null;
+    let bare_summary: Summary = serde_json::from_value(bare).unwrap();
+    let bare_view = cast_view(&bare_summary, vec![], false, None);
+    let built = cast_rows(&bare_view);
+    assert_eq!(built[2].lines(), 1);
 }
 
 #[test]
@@ -271,10 +304,12 @@ fn the_focused_person_gets_the_overlay_bar_and_active_background() {
         .find(|(_, t)| t == "t4")
         .map(|(rect, _)| *rect)
         .expect("alice's hit row");
-    assert_eq!(alice.height, 1);
+    assert_eq!(alice.height, 2);
     assert_eq!(buf[(alice.x, alice.y)].symbol(), "▎");
     assert_eq!(buf[(alice.x, alice.y)].fg, palette.overlay1);
     assert_eq!(buf[(alice.x, alice.y)].bg, palette.active_row_bg);
+    assert_eq!(buf[(alice.x + 3, alice.y + 1)].bg, palette.active_row_bg);
+    assert_eq!(buf[(alice.x + 3, alice.y + 1)].fg, palette.subtext0);
 }
 
 #[test]
@@ -454,4 +489,70 @@ fn cast_divider_uses_border_muted_and_closed_divider_omits_when_homogeneous() {
             .iter()
             .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
     );
+}
+
+#[test]
+fn height_pressure_drops_unfocused_model_lines_before_focused_and_cjk_truncates_safely() {
+    let mut val = summary_json();
+    val["studios"][0]["roles"][1]["name"] = serde_json::json!("张伟核心");
+    val["studios"][0]["roles"][1]["task"] = serde_json::Value::Null;
+    val["studios"][0]["roles"][1]["effort"] = serde_json::json!("high");
+    let summary: Summary = serde_json::from_value(val).unwrap();
+    // Alice (`t4`) is focused; producer, alice, bob, closed divider, dave = 8 rows total when expanded.
+    let view = cast_view(&summary, vec![], false, Some("t4"));
+
+    // Generous height (`3` header + `8` body = 11): all open roles show their model line.
+    let (wide_buf, ..) = draw(&view, 40, 11);
+    let wide_text = lines(&wide_buf, Rect::new(0, 0, 40, 11)).join("\n");
+    assert!(
+        wide_text.contains("devin · anthropic/claude-opus-4-7"),
+        "{wide_text}"
+    );
+    assert!(
+        wide_text.contains("agent-a · claude-sonnet-4-5 · high"),
+        "{wide_text}"
+    );
+    assert!(wide_text.contains("agent-b"), "{wide_text}");
+
+    // Tight height (`3` header + `6` body = 9): unfocused roles (`bob`, `producer`) fall back to
+    // 1 line first so focused `alice` keeps her model line and every role stays visible!
+    let (tight_buf, ..) = draw(&view, 40, 9);
+    let tight_text = lines(&tight_buf, Rect::new(0, 0, 40, 9)).join("\n");
+    assert!(
+        tight_text.contains("agent-a · claude-sonnet-4-5 · high"),
+        "{tight_text}"
+    );
+    assert!(
+        !tight_text.contains("devin"),
+        "unfocused producer dropped model first: {tight_text}"
+    );
+    assert!(
+        !tight_text.contains("agent-b"),
+        "unfocused bob dropped model first: {tight_text}"
+    );
+    assert!(tight_text.contains("Ⓟ"), "producer role itself still shown");
+    assert!(tight_text.contains("dave"), "closed actor still shown");
+
+    // Ultra-tight height (`3` header + `5` body = 8): focused `alice` drops her model line too
+    // so NO role is hidden to keep a model line.
+    let (cramped_buf, ..) = draw(&view, 40, 8);
+    let cramped_text = lines(&cramped_buf, Rect::new(0, 0, 40, 8)).join("\n");
+    assert!(!cramped_text.contains("claude-sonnet"), "{cramped_text}");
+    assert!(cramped_text.contains("Ⓟ"), "{cramped_text}");
+    assert!(cramped_text.contains("张 伟 核 心"), "{cramped_text}");
+    assert!(cramped_text.contains("dave"), "{cramped_text}");
+
+    // CJK wide name + long CJK-friendly model line both truncate safely at 26 columns.
+    let (cjk_buf, ..) = draw(&view, 26, 20);
+    let cjk_rows = lines(&cjk_buf, Rect::new(0, 0, 26, 20));
+    let alice_row = cjk_rows
+        .iter()
+        .find(|l| l.contains("张"))
+        .expect("alice CJK row");
+    assert!(alice_row.contains("work"), "{alice_row}");
+    let meta_row = cjk_rows
+        .iter()
+        .find(|l| l.contains("agent-a"))
+        .expect("alice meta");
+    assert!(meta_row.ends_with('…'), "{meta_row}");
 }

@@ -333,6 +333,7 @@ pub(crate) fn backlot_help_groups(
             "studio dock (open)",
             vec![
                 entry("↑↓ j k / home end", "move · ⏎ open · focus · read"),
+                entry("tab / ⇧tab", "next · previous section"),
                 entry("i / /", "compose on › · ↑↓ history · ⏎ send → rest"),
                 entry("o / p / v", "reopen closed · peek · task sheet"),
                 entry("space / c", "drawer · fold / collapse"),
