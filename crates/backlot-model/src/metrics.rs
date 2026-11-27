@@ -17,6 +17,7 @@ mod timing;
 #[path = "metrics_types.rs"]
 mod types;
 
+pub use detail::is_209_probe;
 pub use digest::{compute_digest, extract_design_refs};
 pub use digest_types::{
     BlockedTaskItem, CoverageCheck, CoverageRow, DIGEST_SCHEMA_VERSION, DeliveredItem, DigestInput,
@@ -26,9 +27,9 @@ pub use digest_types::{
 pub use types::{
     AggregateMetrics, AggregateTimingMetrics, ApprovalMetrics, AttentionByClass,
     AttentionClassBucket, AttentionMetrics, ChecksCounts, ContinuityMetrics, CountOpenMs,
-    FindingsMetrics, HollywoodMetrics, METRICS_SCHEMA_VERSION, MetricsInput, MetricsReport,
-    QualityMetrics, RateLimitedMetrics, RefusedMetrics, RefusedRuleCounts, StudioChecksMetrics,
-    StudioEventsInput, StudioMetrics, StudioTimingMetrics,
+    FindingsMetrics, HaltMetrics, HollywoodMetrics, METRICS_SCHEMA_VERSION, MetricsInput,
+    MetricsReport, QualityMetrics, RateLimitedMetrics, RefusedMetrics, RefusedRuleCounts,
+    StudioChecksMetrics, StudioEventsInput, StudioMetrics, StudioTimingMetrics,
 };
 
 /// Check whether `ts_ms` falls at or after `since_ms`.
@@ -154,6 +155,7 @@ fn compute_studio(
         refused: detail::compute_refused(&input.events, since_ms),
         hollywood: detail::compute_hollywood(hstate, Some(&input.studio), since_ms),
         timing: timing_metrics,
+        halts: detail::compute_halts(&state, since_ms, now_ms),
     };
     (metrics, timing_samples)
 }
@@ -245,6 +247,11 @@ fn aggregate(
         all.timing.pause_clusters += smp.pause_clusters;
         all.timing.paused_tasks_in_clusters += smp.paused_tasks_in_clusters;
 
+        all.halts.halts += s.halts.halts;
+        all.halts.resumes += s.halts.resumes;
+        all.halts.false_positives += s.halts.false_positives;
+        all.halts.halted_ms += s.halts.halted_ms;
+
         if !hollywood_include_unscoped {
             all.hollywood.notices_sent += s.hollywood.notices_sent;
             all.hollywood.notices_dropped += s.hollywood.notices_dropped;
@@ -282,6 +289,7 @@ fn aggregate(
     all.timing.review_latency_p90_ms = timing::percentile_ms(&review_ms, 0.90);
     all.timing.task_wall_clock_samples = wall_ms.len();
     all.timing.task_wall_clock_p50_ms = timing::percentile_ms(&wall_ms, 0.50);
+    all.halts.false_positive_share = ratio(all.halts.false_positives, all.halts.resumes);
     all
 }
 

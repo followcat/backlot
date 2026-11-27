@@ -88,6 +88,7 @@ pub fn role_started(role: &str) -> EventKind {
         actor: None,
         session_id: None,
         reason: None,
+        prompt_hash: None,
     }
 }
 

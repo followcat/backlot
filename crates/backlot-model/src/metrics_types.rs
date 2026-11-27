@@ -57,6 +57,7 @@ pub struct StudioMetrics {
     pub refused: RefusedMetrics,
     pub hollywood: HollywoodMetrics,
     pub timing: StudioTimingMetrics,
+    pub halts: HaltMetrics,
 }
 
 /// Cross-studio aggregate metrics document.
@@ -77,6 +78,7 @@ pub struct AggregateMetrics {
     pub refused: RefusedMetrics,
     pub hollywood: HollywoodMetrics,
     pub timing: AggregateTimingMetrics,
+    pub halts: HaltMetrics,
 }
 
 /// Delivery, review, and early-task quality metrics.
@@ -226,4 +228,14 @@ pub struct AggregateTimingMetrics {
     pub task_wall_clock_samples: usize,
     pub pause_clusters: usize,
     pub paused_tasks_in_clusters: usize,
+}
+
+/// Explicit halt/resume counts, false-positive share, and halted duration.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct HaltMetrics {
+    pub halts: usize,
+    pub resumes: usize,
+    pub false_positives: usize,
+    pub false_positive_share: Option<f64>,
+    pub halted_ms: u64,
 }

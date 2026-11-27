@@ -157,6 +157,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             ..
         } if purpose == "dispatch" => {
             let studio = require_studio(state)?;
+            require_not_halted(state)?;
             crate::design_validate::require_signed(studio, state)?;
             Ok(())
         }
@@ -533,6 +534,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             ..
         } => {
             let studio = require_studio(state)?;
+            require_not_halted(state)?;
             crate::design_validate::require_signed(studio, state)?;
             let t = require_task(state, task)?;
             check_task_open(t, false)?;
@@ -782,8 +784,38 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        EventKind::StudioHalted { reason } => {
+            require_studio(state)?;
+            if state.finished.is_some() {
+                return Err(Refusal::AlreadyFinished);
+            }
+            if state.halted.is_some() {
+                return Err(Refusal::AlreadyHalted);
+            }
+            if reason.trim().is_empty() {
+                return Err(Refusal::EmptyHaltReason);
+            }
+            Ok(())
+        }
+        EventKind::StudioResumed { .. } => {
+            require_studio(state)?;
+            if state.halted.is_none() {
+                return Err(Refusal::NotHalted);
+            }
+            Ok(())
+        }
         EventKind::Unknown { raw_kind } => Err(Refusal::NewerRecords(vec![raw_kind.clone()])),
     }
+}
+
+fn require_not_halted(state: &StudioState) -> Result<(), Refusal> {
+    if let Some(h) = &state.halted {
+        return Err(Refusal::StudioHalted {
+            by: h.by.clone(),
+            reason: h.reason.clone(),
+        });
+    }
+    Ok(())
 }
 
 fn matches_cast(cand: &crate::event::Candidate, actor: &crate::event::ActorIdentity) -> bool {

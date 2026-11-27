@@ -133,14 +133,16 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
                 let acceptance = first_plan_after(state, PlanKind::Acceptance, m.seq);
                 match (plan, acceptance) {
                     // Both published after the request: the producer
-                    // owes the dispatch — owed from the second publish.
-                    (Some((s1, t1)), Some((s2, t2))) => out.push(Step {
+                    // owes the dispatch — owed from the second publish
+                    // (held while the studio is halted).
+                    (Some((s1, t1)), Some((s2, t2))) if state.halted.is_none() => out.push(Step {
                         key: s1.max(s2),
                         label: "dispatch".into(),
                         owner: "producer".into(),
                         command: "backlot dispatch --file <file>".into(),
                         since_ms: t1.max(t2),
                     }),
+                    (Some(_), Some(_)) => {}
                     _ => out.push(Step {
                         key: m.seq,
                         label: "plan and acceptance list".into(),
@@ -179,7 +181,8 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
         // usual hand. A task whose dependencies are still open — or
         // blocked by an unsigned design gate — owes no cast step.
         if t.casts.is_empty() {
-            if !t.open_dependencies(state).is_empty()
+            if state.halted.is_some()
+                || !t.open_dependencies(state).is_empty()
                 || (crate::design_steps::design_gate_active(state)
                     && state.design_phase() != crate::design::DesignPhase::Signed)
             {

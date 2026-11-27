@@ -143,6 +143,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             actor,
             session_id,
             reason,
+            ..
         }
         | EventKind::RoleResumed {
             role,
@@ -667,6 +668,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             {
                 a.open = false;
                 a.cleared_reason = reason.clone();
+                state.attention_cleared_ms.insert(*target, ts);
                 if reason.as_deref().is_some_and(|r| r.starts_with("sent ")) {
                     touched_role = Some(a.role.clone());
                 }
@@ -702,6 +704,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             rule,
             disposition,
         } => {
+            state.role_refusals.push(RoleRefusalRecord {
+                seq,
+                ts_ms: ts,
+                role: role.clone(),
+                command: command.clone(),
+                rule: rule.clone(),
+                disposition: *disposition,
+                is_probe: crate::metrics::is_209_probe(command, argv),
+            });
             if *disposition == RefusalDisposition::Card {
                 state.outward_requests.push(OutwardRequestRecord {
                     seq,
@@ -810,6 +821,40 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 reason: reason.clone(),
                 set: set.clone(),
             });
+        }
+        EventKind::StudioHalted { reason } => {
+            state.halted = Some(HaltRecord {
+                seq,
+                by: event.by.role.clone(),
+                reason: reason.clone(),
+                since_ms: ts,
+            });
+            state.halts.push(HaltEpisode {
+                halted_seq: seq,
+                by: event.by.role.clone(),
+                reason: reason.clone(),
+                since_ms: ts,
+                resumed_seq: None,
+                resumed_by: None,
+                resumed_ms: None,
+                note: None,
+                false_positive: false,
+            });
+            state.targets.insert(seq, SeqTarget::Studio);
+        }
+        EventKind::StudioResumed {
+            note,
+            false_positive,
+        } => {
+            state.halted = None;
+            if let Some(ep) = state.halts.last_mut().filter(|h| h.resumed_seq.is_none()) {
+                ep.resumed_seq = Some(seq);
+                ep.resumed_by = Some(event.by.role.clone());
+                ep.resumed_ms = Some(ts);
+                ep.note = note.clone();
+                ep.false_positive = *false_positive;
+            }
+            state.targets.insert(seq, SeqTarget::Studio);
         }
         EventKind::Unknown { .. } => {}
     }

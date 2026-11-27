@@ -110,7 +110,9 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             {
                 Ok(())
             }
-            EventKind::RoleRefused { .. } | EventKind::OutwardRequested { .. } => Ok(()),
+            EventKind::RoleRefused { .. }
+            | EventKind::OutwardRequested { .. }
+            | EventKind::StudioHalted { .. } => Ok(()),
             EventKind::RoleProgress {
                 role: target, task, ..
             } if target == role && task.as_deref().is_none_or(|t| t == own) => Ok(()),
@@ -121,7 +123,8 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         let ok = match &new.kind {
             EventKind::PlanPublished { .. }
             | EventKind::RoleRefused { .. }
-            | EventKind::OutwardRequested { .. } => true,
+            | EventKind::OutwardRequested { .. }
+            | EventKind::StudioHalted { .. } => true,
             EventKind::DesignEntry {
                 slot: DesignSlot::Proposal | DesignSlot::Supplement,
                 ..
@@ -193,6 +196,20 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Ok(())
         } else {
             Err(cannot(role, "the user"))
+        };
+    }
+    if let EventKind::StudioHalted { .. } = &new.kind {
+        return if matches!(role, "user" | "producer" | "director") {
+            Ok(())
+        } else {
+            Err(cannot(role, who_can(&new.kind)))
+        };
+    }
+    if let EventKind::StudioResumed { .. } = &new.kind {
+        return if matches!(role, "user" | "producer" | "director") {
+            Ok(())
+        } else {
+            Err(cannot(role, who_can(&new.kind)))
         };
     }
     match &new.kind {
@@ -296,5 +313,7 @@ fn who_can(kind: &EventKind) -> &'static str {
             crate::design::DesignSlot::UserInput => "the user, the producer or the stage",
         },
         EventKind::DesignSigned { .. } => "the user",
+        EventKind::StudioHalted { .. } => "any studio role or the user",
+        EventKind::StudioResumed { .. } => "the user, the producer or the director",
     }
 }

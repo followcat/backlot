@@ -86,3 +86,67 @@ fn unknown_kind_parses_advances_seq_refuses_writes_and_marks_summary() {
         serde_json::json!(["future.annotated"])
     );
 }
+
+#[test]
+fn studio_halted_and_resumed_replay_and_unknown_compat() {
+    let mut events = base_events();
+    let halt_line = r#"{"v":1,"seq":4,"ts_ms":4000,"by":{"role":"producer"},"kind":"studio.halted","reason":"wrong base"}"#;
+    let halt_ev: Event = serde_json::from_str(halt_line).expect("parse studio.halted");
+    assert!(
+        matches!(
+            &halt_ev.kind,
+            EventKind::StudioHalted { reason } if reason == "wrong base"
+        ),
+        "expected EventKind::StudioHalted, got {:?}",
+        halt_ev.kind
+    );
+    events.push(halt_ev);
+
+    let halted_state = replay(&events);
+    let halted = halted_state
+        .halted
+        .as_ref()
+        .expect("state.halted must be populated on replay");
+    assert_eq!(halted.by, "producer");
+    assert_eq!(halted.reason, "wrong base");
+    assert_eq!(halted.since_ms, 4000);
+
+    let sum_halted = serde_json::to_value(summary(
+        &[("acme-shop".into(), halted_state.clone())],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        5000,
+    ))
+    .unwrap();
+    assert_eq!(
+        sum_halted["studios"][0]["halted"],
+        serde_json::json!({
+            "by": "producer",
+            "reason": "wrong base",
+            "since": 4000
+        })
+    );
+
+    // Resuming clears state.halted cleanly; a future unknown event alongside still falls back cleanly.
+    let resume_line = r#"{"v":1,"seq":5,"ts_ms":6000,"by":{"role":"director"},"kind":"studio.resumed","note":"fixed base","false_positive":true}"#;
+    let resume_ev: Event = serde_json::from_str(resume_line).expect("parse studio.resumed");
+    assert!(matches!(
+        &resume_ev.kind,
+        EventKind::StudioResumed { note: Some(n), false_positive: true } if n == "fixed base"
+    ));
+    events.push(resume_ev);
+    let resumed_state = replay(&events);
+    assert!(resumed_state.halted.is_none());
+
+    let future_line = r#"{"v":1,"seq":6,"ts_ms":7000,"by":{"role":"stage"},"kind":"studio.future_stop","extra":1}"#;
+    let future_ev: Event = serde_json::from_str(future_line).expect("parse future unknown");
+    assert!(matches!(
+        future_ev.kind,
+        EventKind::Unknown { ref raw_kind } if raw_kind == "studio.future_stop"
+    ));
+    events.push(future_ev);
+    let compat_state = replay(&events);
+    assert!(compat_state.unknown_kinds.contains("studio.future_stop"));
+}

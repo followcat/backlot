@@ -194,6 +194,14 @@ pub const FOLDER_TRUST: &str = "folder-trust";
 /// decides whether to run it outside backlot.
 pub const OUTWARD_ACTION: &str = "outward action";
 
+/// The `attention` reason a looping role raises (Rule A): the same
+/// role hit `>= 5` matching `role.refused` events within 10 minutes.
+pub const LOOPING: &str = "looping";
+
+/// The `attention` reason a coding actor raises after `2 * stall_limit_s`
+/// of active `Running` time with no work-area file or commit change (Rule B).
+pub const NO_PROGRESS: &str = "no progress";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel — and, since S9e, the actors a runner cap picks first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -494,6 +502,8 @@ pub enum EventKind {
         session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt_hash: Option<String>,
     },
     #[serde(rename = "role.lost")]
     RoleLost {
@@ -881,6 +891,18 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
     },
+    /// Explicit line stop raised by a studio role or the user: freezes new
+    /// `task.cast` dispatches without killing or pausing running tasks.
+    #[serde(rename = "studio.halted")]
+    StudioHalted { reason: String },
+    /// Explicit line stop cleared by the director, producer, or user.
+    #[serde(rename = "studio.resumed")]
+    StudioResumed {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        false_positive: bool,
+    },
     /// `target` is the seq of the event being corrected; `set` holds
     /// the changed fields. The earlier event stays in the log.
     #[serde(rename = "correction")]
@@ -975,6 +997,8 @@ impl EventKind {
             EventKind::DesignOpened { .. } => "design.opened",
             EventKind::DesignEntry { .. } => "design.entry",
             EventKind::DesignSigned { .. } => "design.signed",
+            EventKind::StudioHalted { .. } => "studio.halted",
+            EventKind::StudioResumed { .. } => "studio.resumed",
             EventKind::Correction { .. } => "correction",
             EventKind::Unknown { .. } => "unknown",
         }

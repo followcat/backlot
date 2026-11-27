@@ -129,6 +129,7 @@ fn role_progress_reduces_without_adding_obligations() {
             actor: Some(actor("a")),
             session_id: Some("s1".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let mut events = base.clone();
@@ -181,6 +182,7 @@ fn summary_populates_progress_and_working_only_running_capped_at_60() {
             actor: Some(actor("prod")),
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     });
     base.push(Event {
@@ -194,6 +196,7 @@ fn summary_populates_progress_and_working_only_running_capped_at_60() {
             actor: Some(actor("a")),
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     });
     base.push(Event {
@@ -460,6 +463,7 @@ fn frozen_v030_summary_reads_new_document_with_legacy_doing_string() {
                 actor: Some(actor("prod")),
                 session_id: None,
                 reason: None,
+                prompt_hash: None,
             },
         ),
         ev(

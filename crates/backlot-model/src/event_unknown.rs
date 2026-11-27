@@ -46,6 +46,8 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "studio.finished",
     "studio.reopened",
     "studio.deleted",
+    "studio.halted",
+    "studio.resumed",
     "design.opened",
     "design.entry",
     "design.signed",
