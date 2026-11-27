@@ -1,6 +1,6 @@
 //! The film-strip title card and its fallback ladder.
 //!
-//! Full size: a 47-column card of 13 rows with three actions, two
+//! Full size: a 49-column card of 13 rows with three actions, two
 //! sprocket rows and the footer. Step by step for smaller panes:
 //! drop the sprockets, replace the art title with `B A C K L O T`,
 //! then drop the frame (the plain layout in `opening/mod.rs`).
@@ -15,7 +15,7 @@ use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 
 /// The card's full width.
-const WIDTH: u16 = 47;
+const WIDTH: u16 = 49;
 /// The sprocket rows' width (two leading spaces, 15 two-cell holes).
 const SPROCKETS_W: u16 = 46;
 /// The narrowest framed card: the tagline plus its three-cell margins.
@@ -130,7 +130,43 @@ fn draw_frame(buffer: &mut Buffer, card: Rect, palette: &Palette) {
     if card.width < 2 || card.height < 2 {
         return;
     }
-    let style = Style::default().fg(palette.accent).bg(palette.surface_dim);
+    let bg = palette.surface_dim;
+    let elev = palette.elevation();
+    let frame = Style::default().fg(palette.accent).bg(bg);
+    let corner = elev.gilt_style(bg);
+    if card.width >= 10 && card.height >= 4 {
+        let mid = (card.width - 8) as usize;
+        put_text(
+            buffer,
+            card.x,
+            card.y,
+            card.width,
+            &format!("╔══╤{}╤══╗", "═".repeat(mid)),
+            frame,
+        );
+        put_text(buffer, card.x, card.y + 1, 1, "╟", frame);
+        put_text(buffer, card.x + 1, card.y + 1, 3, "──┘", corner);
+        put_text(buffer, card.right() - 4, card.y + 1, 3, "└──", corner);
+        put_text(buffer, card.right() - 1, card.y + 1, 1, "╢", frame);
+        for row in 2..card.height.saturating_sub(2) {
+            put_text(buffer, card.x, card.y + row, 1, "║", frame);
+            put_text(buffer, card.right() - 1, card.y + row, 1, "║", frame);
+        }
+        let bstep = card.bottom() - 2;
+        put_text(buffer, card.x, bstep, 1, "╟", frame);
+        put_text(buffer, card.x + 1, bstep, 3, "──┐", corner);
+        put_text(buffer, card.right() - 4, bstep, 3, "┌──", corner);
+        put_text(buffer, card.right() - 1, bstep, 1, "╢", frame);
+        put_text(
+            buffer,
+            card.x,
+            card.bottom() - 1,
+            card.width,
+            &format!("╚══╧{}╧══╝", "═".repeat(mid)),
+            frame,
+        );
+        return;
+    }
     let inner = card.width - 2;
     put_text(
         buffer,
@@ -138,11 +174,11 @@ fn draw_frame(buffer: &mut Buffer, card: Rect, palette: &Palette) {
         card.y,
         card.width,
         &format!("╔{}╗", "═".repeat(inner as usize)),
-        style,
+        frame,
     );
     for row in 1..card.height.saturating_sub(1) {
-        put_text(buffer, card.x, card.y + row, 1, "║", style);
-        put_text(buffer, card.right() - 1, card.y + row, 1, "║", style);
+        put_text(buffer, card.x, card.y + row, 1, "║", frame);
+        put_text(buffer, card.right() - 1, card.y + row, 1, "║", frame);
     }
     put_text(
         buffer,
@@ -150,7 +186,7 @@ fn draw_frame(buffer: &mut Buffer, card: Rect, palette: &Palette) {
         card.bottom() - 1,
         card.width,
         &format!("╚{}╝", "═".repeat(inner as usize)),
-        style,
+        frame,
     );
 }
 
@@ -212,17 +248,25 @@ fn draw_content(
     );
     row += 1;
 
-    // The rule: three cells of air each side, the rest the line.
+    // The rule: three cells of air each side, the rest the intertitle rule.
     let rule_w = inner.width.saturating_sub(6);
     if rule_w > 0 {
-        put_text(
-            buffer,
-            inner.x + 3,
-            row,
+        let elev = palette.elevation();
+        let bg = palette.surface_dim;
+        let segs = crate::chrome::intertitle::intertitle(
+            "",
             rule_w,
-            &"─".repeat(rule_w as usize),
-            Style::default().fg(palette.surface1),
+            crate::chrome::intertitle::Flank::Chevron,
         );
+        crate::chrome::intertitle::draw_intertitle(buffer, inner.x + 3, row, rule_w, &segs, |p| {
+            use crate::chrome::intertitle::Part;
+            match p {
+                Part::Rule => Style::default().fg(palette.surface1).bg(bg),
+                Part::Clasp => elev.gilt_style(bg),
+                Part::Star => Style::default().fg(palette.accent).bg(bg),
+                Part::Label => Style::default().fg(palette.text).bg(bg),
+            }
+        });
     }
     row += 1;
 

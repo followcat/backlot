@@ -53,31 +53,31 @@ fn footer() -> String {
     format!(" v{} · {}", env!("CARGO_PKG_VERSION"), PLAIN_HINT)
 }
 
-/// The target page, exactly as the brief draws it, 47 columns wide.
+/// The target page, 49 columns wide with stepped Deco corners and intertitle rule.
 fn target() -> [String; 16] {
     [
         "  ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄ ▄▄".into(),
-        "╔═════════════════════════════════════════════╗".into(),
-        "║                                             ║".into(),
-        "║         █▀▄ ▄▀▄ ▄▀▀ █▄▀ █   ▄▀▄ ▀█▀         ║".into(),
-        "║         █▀▄ █▀█ █   █▀▄ █   █ █  █          ║".into(),
-        "║         ▀▀  ▀ ▀  ▀▀ ▀ ▀ ▀▀▀  ▀   ▀          ║".into(),
-        "║                                             ║".into(),
-        "║       a film studio for coding agents       ║".into(),
-        "║   ───────────────────────────────────────   ║".into(),
-        "║       n   New studio                        ║".into(),
-        "║       s   Start the stage                   ║".into(),
-        "║       q   detach                            ║".into(),
-        "║                                             ║".into(),
-        "╚═════════════════════════════════════════════╝".into(),
+        "╔══╤═════════════════════════════════════════╤══╗".into(),
+        "╟──┘                                         └──╢".into(),
+        "║          █▀▄ ▄▀▄ ▄▀▀ █▄▀ █   ▄▀▄ ▀█▀          ║".into(),
+        "║          █▀▄ █▀█ █   █▀▄ █   █ █  █           ║".into(),
+        "║          ▀▀  ▀ ▀  ▀▀ ▀ ▀ ▀▀▀  ▀   ▀           ║".into(),
+        "║                                               ║".into(),
+        "║        a film studio for coding agents        ║".into(),
+        "║   ──────────────═══╡ ‹✦› ╞═══──────────────   ║".into(),
+        "║       n   New studio                          ║".into(),
+        "║       s   Start the stage                     ║".into(),
+        "║       q   detach                              ║".into(),
+        "╟──┐                                         ┌──╢".into(),
+        "╚══╧═════════════════════════════════════════╧══╝".into(),
         "  ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀ ▀▀".into(),
         footer(),
     ]
 }
 
-/// The block's top-left cell at 47×16 inside `area`.
+/// The block's top-left cell at 49×16 inside `area`.
 fn origin(width: u16, height: u16) -> (u16, u16) {
-    ((width - 47) / 2, (height - 16) / 2)
+    ((width - 49) / 2, (height - 16) / 2)
 }
 
 /// The card's top and bottom rows, found by its frame.
@@ -100,12 +100,12 @@ fn the_full_card_matches_the_target_cell_for_cell() {
     render_opening(&mut buffer, area, &palette(), THREE, None);
     let (x, y) = origin(120, 40);
     for (row, want) in target().iter().enumerate() {
-        let got: String = (x..x + 47)
+        let got: String = (x..x + 49)
             .map(|x| buffer[(x, y + row as u16)].symbol())
             .collect();
         assert_eq!(
             got,
-            format!("{want:<47}"),
+            format!("{want:<49}"),
             "row {row} at {x},{y}:\n{}",
             dump(&buffer, area)
         );
@@ -115,6 +115,7 @@ fn the_full_card_matches_the_target_cell_for_cell() {
 #[test]
 fn one_cell_per_part_has_its_palette_colour() {
     let p = palette();
+    let elev = p.elevation();
     let area = Rect::new(0, 0, 120, 40);
     let mut buffer = Buffer::empty(area);
     render_opening(&mut buffer, area, &p, THREE, None);
@@ -130,22 +131,29 @@ fn one_cell_per_part_has_its_palette_colour() {
     let frame = at(0, 1);
     assert_eq!(frame.symbol(), "╔");
     assert_eq!(frame.fg, p.accent);
-    // The card's inside: surface_dim.
-    assert_eq!(at(1, 2).bg, p.surface_dim);
+    // Stepped inner corner: gilt on surface_dim.
+    let corner = at(3, 2);
+    assert_eq!(corner.symbol(), "┘");
+    assert_eq!(corner.fg, elev.gilt);
+    assert_eq!(corner.bg, p.surface_dim);
     // The block title: accent, bold.
-    let title = at(10, 3);
+    let title = at(11, 3);
     assert_eq!(title.symbol(), "█");
     assert_eq!(title.fg, p.accent);
     assert!(title.modifier.contains(Modifier::BOLD));
     assert_eq!(title.bg, p.surface_dim);
     // The tagline: subtext0.
-    let tagline = at(8, 7);
+    let tagline = at(9, 7);
     assert_eq!(tagline.symbol(), "a");
     assert_eq!(tagline.fg, p.subtext0);
-    // The rule: surface1.
+    // The rule: surface1 on the hairline, gilt on clasp, accent on star.
     let rule = at(4, 8);
     assert_eq!(rule.symbol(), "─");
     assert_eq!(rule.fg, p.surface1);
+    assert_eq!(at(18, 8).symbol(), "═");
+    assert_eq!(at(18, 8).fg, elev.gilt);
+    assert_eq!(at(24, 8).symbol(), "✦");
+    assert_eq!(at(24, 8).fg, p.accent);
     // Keys: accent, bold; labels: text.
     let key = at(8, 9);
     assert_eq!(key.symbol(), "n");
@@ -171,12 +179,13 @@ fn the_footer_carries_the_sidebar_version() {
 
 #[test]
 fn a_narrow_card_uses_the_plain_title() {
-    // 46 columns: one short of the art title, so the text title and
+    // 46 columns: short of the 49-col art title, so the text title and
     // the sprockets (46 columns) still draw.
     let out = draw(46, 20, THREE, None);
     assert!(out.contains("B A C K L O T"), "{out}");
     assert!(out.contains('╔'), "{out}");
     assert!(out.contains('▄'), "{out}");
+    assert!(out.contains("‹✦›"), "{out}");
     assert!(!out.contains("█▀▄"), "{out}");
 }
 
@@ -187,6 +196,41 @@ fn forty_four_by_14_drops_the_sprockets() {
     assert!(out.contains('╔'), "{out}");
     assert!(!out.contains('▄'), "{out}");
     assert!(out.contains("New studio"), "{out}");
+}
+
+#[test]
+fn opening_card_ladder_80x24_49x16_46x14_42x12_36x10() {
+    let full_80 = draw(80, 24, THREE, None);
+    assert!(full_80.contains("╔══╤"), "{full_80}");
+    assert!(full_80.contains("╟──┘"), "{full_80}");
+    assert!(full_80.contains("‹✦›"), "{full_80}");
+    assert!(full_80.contains("█▀▄"), "{full_80}");
+    assert!(full_80.contains("▄ ▄"), "{full_80}");
+
+    let exact_49 = draw(49, 16, THREE, None);
+    assert!(exact_49.contains("╔══╤"), "{exact_49}");
+    assert!(exact_49.contains("█▀▄"), "{exact_49}");
+    assert!(exact_49.contains("▄ ▄"), "{exact_49}");
+
+    let mid_46 = draw(46, 14, THREE, None);
+    assert!(mid_46.contains("╔══╤"), "{mid_46}");
+    assert!(mid_46.contains("B A C K L O T"), "{mid_46}");
+    assert!(mid_46.contains("‹✦›"), "{mid_46}");
+    assert!(mid_46.contains("▄ ▄"), "46x14 retains sprockets:\n{mid_46}");
+    assert!(!mid_46.contains("█▀▄"), "{mid_46}");
+
+    let min_42 = draw(42, 12, THREE, None);
+    assert!(min_42.contains("╔══╤"), "{min_42}");
+    assert!(min_42.contains("B A C K L O T"), "{min_42}");
+    assert!(!min_42.contains("▄ ▄"), "{min_42}");
+
+    let plain_36 = draw(36, 10, THREE, None);
+    assert!(
+        !plain_36.contains('╔'),
+        "plain fallback below 42:\n{plain_36}"
+    );
+    assert!(plain_36.contains(TAGLINE), "{plain_36}");
+    assert!(plain_36.contains("New studio"), "{plain_36}");
 }
 
 #[test]
@@ -258,7 +302,7 @@ fn the_first_frame_fades_the_title_and_shifts_the_sprockets() {
     let mut buffer = Buffer::empty(area);
     render_opening(&mut buffer, area, &palette(), THREE, Some(0));
     let (x, y) = origin(120, 40);
-    let title = &buffer[(x + 10, y + 3)];
+    let title = &buffer[(x + 11, y + 3)];
     assert_eq!(title.symbol(), "█");
     assert_eq!(title.fg, palette().surface1);
     assert!(!title.modifier.contains(Modifier::BOLD));

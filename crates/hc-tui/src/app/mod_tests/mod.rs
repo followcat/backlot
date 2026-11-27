@@ -2,6 +2,7 @@
 mod alt_arrows;
 mod alt_arrows_b;
 mod argv_hygiene;
+mod babylon_modals;
 mod cases_1;
 mod cases_2;
 mod cast_edit;

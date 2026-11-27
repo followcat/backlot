@@ -68,3 +68,101 @@ fn runner_versions_never_repeat_the_runner_name() {
     // A longer word that merely starts with the name is not a token.
     assert_eq!(version_label("fake", "fake-runner2"), "fake fake-runner2");
 }
+
+#[test]
+fn wizard_72_cols_step2_renders_deco_greenlight_and_plaque_step_row() {
+    use super::{Step, render_styled};
+
+    let palette = Palette::backlot();
+    let elev = palette.elevation();
+    let band = Rect::new(0, 0, 72, 24);
+    let mut buf = Buffer::empty(band);
+    let mut ns = NewStudio::new();
+    ns.step = Step::IdTitle;
+    let hits = render(&mut buf, &ns, &palette, band);
+    let dump: String = (0..band.height)
+        .map(|y| {
+            (0..band.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        dump.contains("╔══╡ ✦ NEW STUDIO · [2/4] ID & Title ╞"),
+        "{dump}"
+    );
+    assert!(dump.contains("esc step back ══╗"), "{dump}");
+    assert!(dump.contains("✓ 1 Machine & Repo"), "{dump}");
+    assert!(dump.contains("╡ 2 ID & Title ╞"), "{dump}");
+    assert!(dump.contains("3 Cast"), "{dump}");
+    assert!(dump.contains("4 Check & Start"), "{dump}");
+
+    // Locate `✓`, `▸`, and `╡ 2 ID & Title ╞` directly on the step row to verify styles.
+    let step_y = (0..band.height)
+        .find(|&y| {
+            (0..band.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .contains("╡ 2 ID & Title ╞")
+        })
+        .expect("step row");
+    let divider_row: String = (0..band.width)
+        .map(|x| buf[(x, step_y + 1)].symbol())
+        .collect();
+    assert!(
+        divider_row.contains("╟───") && divider_row.contains("───╢"),
+        "expected step divider under step strip:\n{dump}"
+    );
+    let div_x = (0..band.width)
+        .find(|&x| buf[(x, step_y + 1)].symbol() == "╟")
+        .expect("left divider cap");
+    assert_eq!(buf[(div_x, step_y + 1)].fg, elev.gilt);
+    assert_eq!(buf[(div_x + 1, step_y + 1)].fg, elev.border_muted);
+    let check_x = (0..band.width)
+        .find(|&x| buf[(x, step_y)].symbol() == "✓")
+        .expect("check glyph");
+    assert_eq!(buf[(check_x, step_y)].fg, palette.teal);
+    let sep_x = (0..band.width)
+        .find(|&x| buf[(x, step_y)].symbol() == "▸")
+        .expect("gilt separator");
+    assert_eq!(buf[(sep_x, step_y)].fg, elev.gilt);
+    let plaque_x = (0..band.width)
+        .find(|&x| buf[(x, step_y)].symbol() == "╡")
+        .expect("active step plaque");
+    assert_eq!(buf[(plaque_x, step_y)].bg, palette.accent);
+    assert_eq!(
+        buf[(plaque_x, step_y)].fg,
+        crate::chrome::dialogs::contrast(&palette)
+    );
+    assert!(
+        buf[(plaque_x + 2, step_y)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+
+    let tab_hit = hits
+        .cells
+        .iter()
+        .find(|(_, hit)| matches!(hit, super::NsHit::StepTab(Step::MachineRepo)))
+        .map(|(r, _)| *r)
+        .expect("completed step tab hit rect");
+    assert_eq!(tab_hit.y, step_y);
+    assert!(tab_hit.contains(ratatui::layout::Position::new(check_x, step_y)));
+
+    // Rounded Herdr mode (`deco = false`) remains unchanged.
+    let mut plain_buf = Buffer::empty(band);
+    let _plain_hits = render_styled(&mut plain_buf, &ns, &palette, band, true, false);
+    let plain_dump: String = (0..band.height)
+        .map(|y| {
+            (0..band.width)
+                .map(|x| plain_buf[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(plain_dump.contains('╭'), "{plain_dump}");
+    assert!(plain_dump.contains("2 ID & Title"), "{plain_dump}");
+    assert!(!plain_dump.contains("✦ NEW STUDIO"), "{plain_dump}");
+}

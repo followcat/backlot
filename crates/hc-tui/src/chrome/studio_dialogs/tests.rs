@@ -230,7 +230,22 @@ fn design_sign_modal_wraps_150_char_run_verbatim_at_80_and_200_cols_with_three_c
             .map(|l| {
                 l.trim()
                     .trim_matches(|c: char| {
-                        c == '│' || c == '╭' || c == '╮' || c == '╰' || c == '╯' || c == '─'
+                        matches!(
+                            c,
+                            '│' | '╭'
+                                | '╮'
+                                | '╰'
+                                | '╯'
+                                | '─'
+                                | '║'
+                                | '╔'
+                                | '╗'
+                                | '╚'
+                                | '╝'
+                                | '═'
+                                | '╡'
+                                | '╞'
+                        )
                     })
                     .trim()
             })
@@ -256,4 +271,99 @@ fn design_sign_modal_wraps_150_char_run_verbatim_at_80_and_200_cols_with_three_c
         }
         assert_eq!(hits.choices.len(), 3, "expected 3 choice hit rects");
     }
+}
+
+#[test]
+fn deco_standard_and_destructive_dialogs_and_herdr_fallback() {
+    use crate::studio_dialog::{ConfirmFor, ReasonFor};
+    use ratatui::style::Modifier;
+
+    let palette = Palette::catppuccin();
+    let elev = palette.elevation();
+    let band = Rect::new(0, 0, 90, 26);
+
+    // Non-destructive sign-off uses accent top/bottom, gilt sides, `‹ ↵ … ›` bold on accent.
+    let sign = StudioDialog::design_sign(&key(Some("host-b")), false, Some("design/v1.md"), &[]);
+    let mut sign_buf = Buffer::empty(band);
+    let sign_hits = render(&mut sign_buf, band, &sign, &palette).unwrap();
+    let sign_text = text_of(&sign_buf, sign_hits.area);
+    assert!(sign_text.contains("╔══╡ "), "{sign_text}");
+    assert!(
+        !sign_text.contains('◉'),
+        "sign off is non-destructive:\n{sign_text}"
+    );
+    assert!(sign_text.contains("‹ ↵ "), "{sign_text}");
+    let bx = sign_hits.area.x + 1;
+    let by = sign_hits.area.y + 1;
+    assert_eq!(sign_buf[(bx, by)].symbol(), "╔");
+    assert_eq!(sign_buf[(bx, by)].fg, palette.accent);
+    assert_eq!(sign_buf[(bx, by + 1)].symbol(), "║");
+    assert_eq!(sign_buf[(bx, by + 1)].fg, elev.gilt);
+    assert_eq!(
+        sign_buf[(sign_hits.send.x, sign_hits.send.y)].bg,
+        palette.accent
+    );
+    assert!(
+        sign_buf[(sign_hits.send.x + 2, sign_hits.send.y)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+
+    // Destructive confirms use `palette.red` border (top + sides) + `◉` in title + red button.
+    let destructive = [
+        StudioDialog::confirm(
+            "Delete studio acme-shop".into(),
+            "Removes studio files.".into(),
+            ConfirmFor::DeleteStudio {
+                key: key(Some("host-b")),
+                force: false,
+                kept: vec![],
+                token: None,
+            },
+        ),
+        StudioDialog::reason(
+            "Abandon task-1".into(),
+            true,
+            ReasonFor::TaskVerb {
+                key: key(None),
+                verb: "abandon",
+                task: "task-1".into(),
+            },
+        ),
+        StudioDialog::confirm(
+            "Stop stage".into(),
+            "Stops every running studio.".into(),
+            ConfirmFor::StageStop { machine: None },
+        ),
+    ];
+    for dialog in destructive {
+        let mut buf = Buffer::empty(band);
+        let hits = render(&mut buf, band, &dialog, &palette).unwrap();
+        let text = text_of(&buf, hits.area);
+        assert!(text.contains("╔══╡ ◉ "), "{text}");
+        let x = hits.area.x + 1;
+        let y = hits.area.y + 1;
+        assert_eq!(buf[(x, y)].fg, palette.red, "{text}");
+        assert_eq!(buf[(x, y + 1)].fg, palette.red, "{text}");
+        assert_eq!(buf[(hits.send.x, hits.send.y)].bg, palette.red, "{text}");
+    }
+
+    // Herdr mode (`deco = false`) preserves rounded `╭─╮` borders.
+    let del = StudioDialog::confirm(
+        "Delete studio acme-shop".into(),
+        "Removes studio files.".into(),
+        ConfirmFor::DeleteStudio {
+            key: key(None),
+            force: false,
+            kept: vec![],
+            token: None,
+        },
+    );
+    let mut herdr_buf = Buffer::empty(band);
+    let herdr_hits =
+        super::render_styled(&mut herdr_buf, band, &del, &palette, true, false).unwrap();
+    assert_eq!(
+        herdr_buf[(herdr_hits.area.x + 1, herdr_hits.area.y + 1)].symbol(),
+        "╭"
+    );
 }

@@ -11,7 +11,7 @@ use super::super::palette::Palette;
 use super::super::popup_frame::overlay_bg;
 use super::super::render::put_text;
 use super::super::text::truncate_end;
-use super::{DialogHits, cancel_button, centered_panel, dialog_width, send_button};
+use super::{ChromeMode, DialogHits, cancel_button, centered_titled, dialog_width, send_button};
 use crate::hollywood::wrap_plain;
 use crate::studio_dialog::{DesignSignChoice, DesignSignDialog};
 
@@ -75,7 +75,7 @@ pub(super) fn render_design_sign(
     band: Rect,
     d: &DesignSignDialog,
     palette: &Palette,
-    shadow: bool,
+    mode: ChromeMode,
 ) -> Option<DialogHits> {
     let width = dialog_width(band.width);
     let inner_w = width.saturating_sub(4).max(10) as usize;
@@ -85,21 +85,23 @@ pub(super) fn render_design_sign(
     let ideal_h = (body_lines.len() as u16).saturating_add(9);
     let max_h = band.height.saturating_sub(2).max(8);
     let height = ideal_h.min(max_h);
-    let (q, i) = centered_panel(b, band, width, height, palette, shadow)?;
+    let (q, i) = centered_titled(b, band, width, height, &d.title, mode, palette)?;
     let bg = overlay_bg(palette);
     let raised = palette.elevation().raised_on_overlay;
 
-    put_text(
-        b,
-        i.x,
-        i.y,
-        i.width,
-        &truncate_end(&format!(" {}", d.title), i.width as usize),
-        Style::default()
-            .fg(palette.accent)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD),
-    );
+    if !mode.deco {
+        put_text(
+            b,
+            i.x,
+            i.y,
+            i.width,
+            &truncate_end(&format!(" {}", d.title), i.width as usize),
+            Style::default()
+                .fg(palette.accent)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
 
     // Reserve bottom rows: 3 choices + 1 blank/button gap + 1 button row (when height allows).
     let fixed_bottom = if i.height >= 7 { 5 } else { 3 };
@@ -164,14 +166,14 @@ pub(super) fn render_design_sign(
     let mut send_rect = Rect::default();
     let mut cancel_rect = Rect::default();
     if i.height >= 7 {
-        let rs = super::super::dialogs::row(i, &[18, 13], 2, i.height.saturating_sub(1));
+        let rs = super::super::dialogs::row(i, &[20, 13], 2, i.height.saturating_sub(1));
         if let [ok, cancel] = rs.as_slice() {
             let ok_label = match d.chosen() {
                 DesignSignChoice::SignWithChecks => " ↵ sign + checks ",
                 DesignSignChoice::SignWithoutChecks => " ↵ no checks ",
                 DesignSignChoice::Cancel => " ↵ close ",
             };
-            send_button(b, *ok, ok_label, true, palette);
+            send_button(b, *ok, ok_label, true, mode, palette);
             cancel_button(b, *cancel, palette);
             send_rect = *ok;
             cancel_rect = *cancel;
