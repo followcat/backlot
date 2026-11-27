@@ -2,8 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 use backlot_model::event::PushPolicy;
 
+#[cfg(test)]
 use crate::cli::Env;
 use crate::guard_git::{GitContext, classify_git};
 use crate::guard_rules::{GuardMatch, GuardVerdict, cap_command, classify_with_context};
@@ -28,38 +30,15 @@ pub(crate) fn classify_command_line(
     cwd: &Path,
     env: &Env,
 ) -> GuardVerdict {
-    classify_command_line_match(line, policy, cwd, env, None, None, None, &[]).verdict
+    classify_command_line_with_ctx(line, &GitContext::bare(policy, cwd, env)).verdict
 }
 
 /// Classify a shell command line with full role/studio context, returning `GuardMatch`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn classify_command_line_match(
-    line: &str,
-    policy: &PushPolicy,
-    cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
-) -> GuardMatch {
-    classify_line_depth(
-        line, 0, policy, cwd, env, role_dir, work_area, repo_root, members,
-    )
+pub(crate) fn classify_command_line_with_ctx(line: &str, ctx: &GitContext<'_>) -> GuardMatch {
+    classify_line_depth(line, 0, ctx.cwd, ctx)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn classify_line_depth(
-    line: &str,
-    depth: usize,
-    policy: &PushPolicy,
-    cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
-) -> GuardMatch {
+fn classify_line_depth(line: &str, depth: usize, cwd: &Path, ctx: &GitContext<'_>) -> GuardMatch {
     let parsed = match split_shell_segments_checked(line) {
         Ok(p) => p,
         Err(reason) => {
@@ -92,91 +71,44 @@ fn classify_line_depth(
 
     for sub in &parsed.nested {
         if depth < 4 {
-            let m = classify_line_depth(
-                sub,
-                depth + 1,
-                policy,
-                &eff_cwd,
-                env,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-            );
+            let m = classify_line_depth(sub, depth + 1, &eff_cwd, ctx);
             if let Some(refused) = consider(m) {
                 return refused;
             }
         }
     }
 
-    let mut heredoc: Option<String> = None;
     for seg in &parsed.segments {
         if seg.iter().any(|t| t.contains("BACKLOT_")) {
-            return GuardMatch {
-                verdict: GuardVerdict::Refuse {
-                    command: cap_command(&seg.join(" ")),
-                    rule: "touches BACKLOT_* environment".into(),
-                },
-                argv: seg.clone(),
-                cwd: eff_cwd,
-            };
+            return refuse_seg(seg, "touches BACKLOT_* environment", &eff_cwd);
         }
-        if let Some(delimiter) = heredoc.as_deref() {
-            if seg.len() == 1 && seg[0] == delimiter {
-                heredoc = None;
-                continue;
-            }
-            if interpreter_code_names_server(&seg.join(" ")) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule: "server socket or queue write".into(),
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
-            }
-            continue;
-        }
-        if role_dir.is_some() || env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
-            let role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
+        if ctx.role_dir.is_some() || ctx.env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty()) {
+            let role = ctx.env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
             if let Some(rule) = crate::proc_guard::check_segment_self_approval(seg, role) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule,
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
+                return refuse_seg(seg, &rule, &eff_cwd);
             }
         }
-        if let Some((delimiter, code)) = interpreter_code(seg) {
-            if interpreter_code_names_server(&code) {
-                return GuardMatch {
-                    verdict: GuardVerdict::Refuse {
-                        command: cap_command(&seg.join(" ")),
-                        rule: "server socket or queue write".into(),
-                    },
-                    argv: seg.clone(),
-                    cwd: eff_cwd,
-                };
-            }
-            heredoc = delimiter;
+        if let Some(code) = interpreter_code(seg)
+            && interpreter_code_names_server(&code)
+        {
+            return refuse_seg(seg, "server socket or queue write", &eff_cwd);
         }
-        let m = eval_segment(
-            seg,
-            depth,
-            policy,
-            &mut eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        );
+        let m = eval_segment(seg, depth, &mut eff_cwd, ctx);
         if let Some(refused) = consider(m) {
             return refused;
+        }
+    }
+
+    for h in &parsed.heredocs {
+        for idx in h.seg_idx..parsed.segments.len() {
+            if parsed.pipe_ids[idx] != h.pipe_id {
+                break;
+            }
+            if let Some(m) = check_heredoc_target(&parsed.segments[idx], h, depth, &eff_cwd, ctx)
+                && let Some(refused) = consider(m)
+            {
+                return refused;
+            }
         }
     }
 
@@ -187,17 +119,11 @@ fn classify_line_depth(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn eval_segment(
     seg: &[String],
     depth: usize,
-    policy: &PushPolicy,
     eff_cwd: &mut PathBuf,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
+    ctx: &GitContext<'_>,
 ) -> GuardMatch {
     let mut i = 0;
     while i < seg.len() {
@@ -272,39 +198,14 @@ fn eval_segment(
         };
     }
     match base {
-        "sh" | "bash" | "zsh" | "dash" | "ash" if depth < 4 => eval_nested_shell(
-            rest,
-            depth + 1,
-            policy,
-            eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        ),
-        "eval" if depth < 4 => classify_line_depth(
-            &rest.join(" "),
-            depth + 1,
-            policy,
-            eff_cwd,
-            env,
-            role_dir,
-            work_area,
-            repo_root,
-            members,
-        ),
+        "sh" | "bash" | "zsh" | "dash" | "ash" if depth < 4 => {
+            eval_nested_shell(rest, depth + 1, eff_cwd, ctx)
+        }
+        "eval" if depth < 4 => classify_line_depth(&rest.join(" "), depth + 1, eff_cwd, ctx),
         "git" => {
-            let ctx = GitContext {
-                policy,
-                cwd: eff_cwd,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-                env,
-            };
-            let (verdict, argv, cwd_used) = classify_git(rest, &ctx);
+            let mut seg_ctx = ctx.clone();
+            seg_ctx.cwd = eff_cwd;
+            let (verdict, argv, cwd_used) = classify_git(rest, &seg_ctx);
             GuardMatch {
                 verdict,
                 argv,
@@ -312,31 +213,18 @@ fn eval_segment(
             }
         }
         _ => {
-            let ctx = GitContext {
-                policy,
-                cwd: eff_cwd,
-                role_dir,
-                work_area,
-                repo_root,
-                members,
-                env,
-            };
-            classify_with_context(base, rest, "", &ctx)
+            let mut seg_ctx = ctx.clone();
+            seg_ctx.cwd = eff_cwd;
+            classify_with_context(base, rest, "", &seg_ctx)
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn eval_nested_shell(
     rest: &[String],
     next_depth: usize,
-    policy: &PushPolicy,
     eff_cwd: &Path,
-    env: &Env,
-    role_dir: Option<&Path>,
-    work_area: Option<&Path>,
-    repo_root: Option<&Path>,
-    members: &[String],
+    ctx: &GitContext<'_>,
 ) -> GuardMatch {
     let mut j = 0;
     while j < rest.len() {
@@ -353,10 +241,7 @@ fn eval_nested_shell(
             && arg.contains('c')
         {
             if let Some(script) = rest.get(j + 1) {
-                return classify_line_depth(
-                    script, next_depth, policy, eff_cwd, env, role_dir, work_area, repo_root,
-                    members,
-                );
+                return classify_line_depth(script, next_depth, eff_cwd, ctx);
             }
             break;
         }
@@ -424,10 +309,45 @@ fn program_index(seg: &[String]) -> Option<usize> {
     None
 }
 
-/// The code an interpreter segment runs: `Some((heredoc delimiter, code))`
-/// for `-c`/`-e`/`--eval` inline code, a here-string, or a heredoc whose
-/// body follows in later segments.
-fn interpreter_code(seg: &[String]) -> Option<(Option<String>, String)> {
+fn refuse_seg(seg: &[String], rule: &str, cwd: &Path) -> GuardMatch {
+    GuardMatch {
+        verdict: GuardVerdict::Refuse {
+            command: cap_command(&seg.join(" ")),
+            rule: rule.into(),
+        },
+        argv: seg.to_vec(),
+        cwd: cwd.to_path_buf(),
+    }
+}
+
+fn check_heredoc_target(
+    seg: &[String],
+    heredoc: &crate::guard_shell_lex::Heredoc,
+    depth: usize,
+    eff_cwd: &Path,
+    ctx: &GitContext<'_>,
+) -> Option<GuardMatch> {
+    let idx = program_index(seg)?;
+    let base = seg[idx].rsplit('/').next().unwrap_or(&seg[idx]);
+    if INTERPRETERS.contains(&base) {
+        if heredoc.body.contains("BACKLOT_") {
+            return Some(refuse_seg(seg, "touches BACKLOT_* environment", eff_cwd));
+        }
+        if interpreter_code_names_server(&heredoc.body) {
+            return Some(refuse_seg(seg, "server socket or queue write", eff_cwd));
+        }
+    } else if matches!(base, "sh" | "bash" | "zsh" | "dash" | "ash" | "eval") && depth < 4 {
+        let m = classify_line_depth(&heredoc.body, depth + 1, eff_cwd, ctx);
+        if !matches!(m.verdict, GuardVerdict::Allow) {
+            return Some(m);
+        }
+    }
+    None
+}
+
+/// The code an interpreter segment runs inline (`-c`/`-e`/`--eval` or a here-string).
+/// Heredocs are scanned directly via `parsed.heredocs`.
+fn interpreter_code(seg: &[String]) -> Option<String> {
     let idx = program_index(seg)?;
     let base = seg[idx].rsplit('/').next().unwrap_or(&seg[idx]);
     if !INTERPRETERS.contains(&base) {
@@ -442,28 +362,17 @@ fn interpreter_code(seg: &[String]) -> Option<(Option<String>, String)> {
                 && !a.starts_with("--")
                 && (a[1..].contains('c') || a[1..].contains('e')))
         {
-            return Some((None, args[i + 1..].join(" ")));
+            return Some(args[i + 1..].join(" "));
         }
         if let Some(code) = a.strip_prefix("<<<") {
             return Some(if code.is_empty() {
-                (None, args[i + 1..].join(" "))
+                args[i + 1..].join(" ")
             } else {
-                (None, code.to_owned())
+                code.to_owned()
             });
         }
-        if let Some(rest) = a.strip_prefix("<<") {
-            let delimiter = if rest.is_empty() {
-                args.get(i + 1).map(String::as_str).unwrap_or("")
-            } else {
-                rest
-            };
-            return Some((
-                Some(delimiter.trim_start_matches('-').to_owned()),
-                String::new(),
-            ));
-        }
     }
-    Some((None, String::new()))
+    None
 }
 
 /// Interpreter code that writes the person's queue or reaches the core

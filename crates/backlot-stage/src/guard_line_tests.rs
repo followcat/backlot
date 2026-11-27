@@ -171,4 +171,23 @@ fn plain_command_words_that_name_the_server_are_allowed() {
     ] {
         assert!(refused_command_line(line).is_some(), "must refuse `{line}`");
     }
+
+    // Non-interpreter single-quoted heredoc (`backlot deliver --report - <<'EOF'`)
+    // allows arbitrary markdown prose (apostrophes, backticks, `$VAR`, `git push`, `BACKLOT_*`),
+    // while shell/piped/unquoted/trailing escapes are still caught.
+    let safe_deliver = "backlot deliver --report - <<'EOF'\n# Audit findings\nIt's clean! Never run `git push`, avoid $HOME, check BACKLOT_ROLE.\nEOF";
+    assert_eq!(
+        refused_command_line(safe_deliver),
+        None,
+        "must allow `{safe_deliver}`"
+    );
+    for bad in [
+        "backlot deliver --report - <<'EOF'\nhi\nEOF\ngit push origin main",
+        "backlot deliver --report - <<EOF\n$(git push origin main)\nEOF",
+        "bash <<'EOF'\ngit push origin main\nEOF",
+        "cat <<'EOF' | sh\ngit push origin main\nEOF",
+        "backlot deliver --report - <<'EOF'\nunclosed",
+    ] {
+        assert!(refused_command_line(bad).is_some(), "must refuse `{bad}`");
+    }
 }

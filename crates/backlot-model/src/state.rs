@@ -269,6 +269,15 @@ pub struct Task {
 }
 
 impl Task {
+    /// Whether this task is a read-only audit (`audit` kind or `readonly` cast).
+    pub fn is_readonly_or_audit(&self) -> bool {
+        self.task_kind == "audit"
+            || self
+                .cast
+                .as_ref()
+                .is_some_and(|c| c.actor.permission_profile == "readonly")
+    }
+
     /// Unfinished work whose pin is older than `current`.
     pub fn is_behind(&self, current: u32) -> bool {
         !self.status.is_terminal() && self.requirement_version < current
@@ -803,6 +812,30 @@ impl StudioState {
                 "director" => Some(&cfg.roles.director),
                 _ => Some(&cfg.roles.writer),
             })
+    }
+
+    /// Current effective identity of any studio role (`producer`, `director`,
+    /// `writer`, or `actor-<task>-c<n>`).
+    pub fn role_actor(&self, role: &str) -> Option<ActorIdentity> {
+        if matches!(role, "producer" | "director" | "writer") {
+            return self.fixed_identity(role).cloned();
+        }
+        if let Some(task_id) = actor_task(role)
+            && let Some(task) = self.tasks.get(task_id)
+            && let Some((_, num)) = role.rsplit_once("-c")
+            && let Ok(n) = num.parse::<usize>()
+            && n >= 1
+        {
+            if task.casts.len() == n
+                && let Some(c) = &task.cast
+            {
+                return Some(c.actor.clone());
+            }
+            if let Some(c) = task.casts.get(n - 1) {
+                return Some(c.actor.clone());
+            }
+        }
+        self.roles.get(role).and_then(|r| r.actor.clone())
     }
 }
 

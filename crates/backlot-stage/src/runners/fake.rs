@@ -23,7 +23,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     if let Some(prompt) = ctx.prompt {
         env.insert("FAKE_PROMPT".into(), prompt.to_owned());
     }
-    let hooks = super::claude::hook_setup(ctx);
+    let hooks = super::claude::hook_setup_with_deny(ctx, identity.permission_profile == "readonly");
     env.insert("BACKLOT_HOOK_CMD".into(), hooks.command.clone());
     let override_path = ctx
         .stage_env

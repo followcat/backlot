@@ -51,7 +51,7 @@ pub const MODELS: &[&str] = &[
 /// `--permission-mode`'s value for the profile.
 fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     match profile {
-        "standard" => Ok("manual"),
+        "standard" | "readonly" => Ok("manual"),
         "worktree" => Ok("acceptEdits"),
         other => Err(PlanError::profile(other)),
     }
@@ -96,7 +96,12 @@ pub fn hollywood_commands() -> &'static [&'static str] {
 /// argv. `//` is Claude Code's rule syntax for an absolute path; a
 /// single leading `/` would anchor at the working directory and
 /// match nothing.
+#[cfg(test)]
 pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
+    allowed_tools_for(studio_dir, role, checks, false)
+}
+
+fn allowed_tools_for(studio_dir: &str, role: &str, checks: &[CheckDecl], readonly: bool) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
     // One command in both forms Claude's rule syntax takes: bare and
     // with arguments.
@@ -116,7 +121,7 @@ pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) 
         command(&mut rules, cmd);
     }
     let is_actor = actor_task(role).is_some();
-    if is_actor {
+    if is_actor && !readonly {
         for cmd in ["git add", "git commit"] {
             command(&mut rules, cmd);
         }
@@ -152,7 +157,7 @@ pub(crate) fn sh_quote(s: &str) -> String {
 /// the user's own hooks keep running and no user settings file is
 /// touched. The command is the running binary's absolute path —
 /// both paths shell-quoted.
-pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
+pub(crate) fn hook_setup_with_deny(ctx: &LaunchCtx, readonly: bool) -> HookSetup {
     let role_dir = std::path::Path::new(ctx.studio_dir)
         .join("roles")
         .join(ctx.role);
@@ -180,8 +185,13 @@ pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
             )
         })
         .collect();
+    let deny: &[&str] = if readonly {
+        &["AskUserQuestion", "Edit", "Write", "NotebookEdit"]
+    } else {
+        &["AskUserQuestion"]
+    };
     let content = serde_json::to_string_pretty(&serde_json::json!({
-        "permissions": {"deny": ["AskUserQuestion"]},
+        "permissions": {"deny": deny},
         "hooks": events,
     }))
     .unwrap_or_default()
@@ -216,6 +226,7 @@ pub(crate) fn live_exe(
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
+    let readonly = identity.permission_profile == "readonly";
     let mode = permission_mode(&identity.permission_profile)?;
     let mut argv: Vec<String> = Vec::new();
     let markers: Vec<&String> = ctx.stage_env.keys().filter(|k| is_marker(k)).collect();
@@ -237,8 +248,8 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // The `--allowedTools` list is variadic, so the pair goes before
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
-    let hooks = hook_setup(ctx);
-    let tools = allowed_tools(ctx.studio_dir, ctx.role, ctx.checks);
+    let hooks = hook_setup_with_deny(ctx, readonly);
+    let tools = allowed_tools_for(ctx.studio_dir, ctx.role, ctx.checks, readonly);
     argv.extend([
         "--allowedTools".into(),
         tools,

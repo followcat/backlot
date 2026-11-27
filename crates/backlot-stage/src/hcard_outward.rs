@@ -61,13 +61,11 @@ pub(crate) fn validate_ask_run(
     };
     let role_dir = crate::guard::role_dir_from_env(env);
     let ctx = GitContext {
-        policy: &cfg.push,
-        cwd: &eff_cwd,
         role_dir: role_dir.as_deref(),
         work_area: Some(&work_area),
         repo_root: Some(Path::new(&cfg.repo)),
         members: &cfg.members,
-        env,
+        ..GitContext::bare(&cfg.push, &eff_cwd, env)
     };
     let m = classify_with_context(&argv[0], &argv[1..], "", &ctx);
     match m.verdict {
@@ -168,13 +166,10 @@ fn build_proposal(
     }
     let clean = stage_probe_env();
     let ctx = GitContext {
-        policy: &cfg.push,
-        cwd,
-        role_dir: None,
         work_area: Some(&work_area),
         repo_root: Some(Path::new(&cfg.repo)),
         members: &cfg.members,
-        env: &clean,
+        ..GitContext::bare(&cfg.push, cwd, &clean)
     };
     let rule = match classify_with_context(&req.argv[0], &req.argv[1..], "", &ctx).verdict {
         GuardVerdict::Card { rule, .. } => rule,
@@ -274,13 +269,9 @@ pub(crate) fn outward_stale(
     {
         let branch = remote_ref.strip_prefix("refs/heads/").unwrap_or(remote_ref);
         let ctx = GitContext {
-            policy: &cfg.push,
-            cwd: cwd_p,
-            role_dir: None,
-            work_area: None,
             repo_root: Some(Path::new(&cfg.repo)),
             members: &cfg.members,
-            env: &clean,
+            ..GitContext::bare(&cfg.push, cwd_p, &clean)
         };
         let remote_name = resolve_default_remote(cwd_p, Some(branch), &ctx);
         if let Err(e) = verify_branch_on_remote(

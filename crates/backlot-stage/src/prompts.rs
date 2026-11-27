@@ -36,28 +36,27 @@ pub fn template(kind: RoleKind) -> &'static str {
     }
 }
 
-/// Keep or strip `{#design_gate}...{/design_gate}` blocks before field
-/// substitution so `design_gate = off` renders stay byte-identical to
-/// templates without the section.
-fn apply_design_gate_block(template: &str, required: bool) -> String {
-    const OPEN: &str = "{#design_gate}";
-    const CLOSE: &str = "{/design_gate}";
-    if !template.contains(OPEN) {
+/// Keep or strip `{#<tag>}...{/<tag>}` blocks before field
+/// substitution so unused sections stay absent cleanly.
+fn apply_block(template: &str, tag: &str, keep: bool) -> String {
+    let open = format!("{{#{tag}}}");
+    let close = format!("{{/{tag}}}");
+    if !template.contains(&open) {
         return template.to_string();
     }
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
-    while let Some(start) = rest.find(OPEN) {
+    while let Some(start) = rest.find(&open) {
         out.push_str(&rest[..start]);
-        let after_open = &rest[start + OPEN.len()..];
-        let Some(end) = after_open.find(CLOSE) else {
-            out.push_str(OPEN);
+        let after_open = &rest[start + open.len()..];
+        let Some(end) = after_open.find(&close) else {
+            out.push_str(&open);
             out.push_str(after_open);
             return out;
         };
         let body = &after_open[..end];
-        let after_close = &after_open[end + CLOSE.len()..];
-        if required {
+        let after_close = &after_open[end + close.len()..];
+        if keep {
             out.push_str(body.strip_prefix('\n').unwrap_or(body));
         }
         rest = after_close.strip_prefix('\n').unwrap_or(after_close);
@@ -70,7 +69,10 @@ fn apply_design_gate_block(template: &str, required: bool) -> String {
 /// literal so a template typo is visible, not silently dropped.
 pub fn render(template: &str, fields: &BTreeMap<String, String>) -> String {
     let required = fields.get("design_gate").map(String::as_str) == Some("required");
-    let mut out = apply_design_gate_block(template, required);
+    let readonly = fields.get("permission_profile").map(String::as_str) == Some("readonly");
+    let mut out = apply_block(template, "design_gate", required);
+    out = apply_block(&out, "readonly", readonly);
+    out = apply_block(&out, "writable", !readonly);
     for (k, v) in fields {
         out = out.replace(&format!("{{{k}}}"), v);
     }
@@ -144,12 +146,30 @@ fn fields(
             )
         }
     };
+    let readonly = start.actor.permission_profile == "readonly"
+        || start
+            .task
+            .as_deref()
+            .and_then(|id| state.tasks.get(id))
+            .is_some_and(|t| t.is_readonly_or_audit());
+    let profile = if readonly {
+        "readonly"
+    } else {
+        start.actor.permission_profile.as_str()
+    };
     let declared = state
         .studio
         .as_ref()
         .map(|s| s.checks.as_slice())
         .unwrap_or(&[]);
-    let checks = if declared.is_empty() {
+    let checks = if readonly {
+        concat!(
+            "- `backlot deliver --report -` — send your findings report via stdin in\n",
+            "  one shell call using a single-quoted heredoc (`<<'EOF'` … `EOF`), and\n",
+            "  pass no `--commits` or `--check` flags.\n",
+        )
+        .to_string()
+    } else if declared.is_empty() {
         concat!(
             "- `backlot deliver --commits <A..B> --report <file>` — the cast\n",
             "  declares no checks, so `deliver` takes no `--check` here.\n"
@@ -188,6 +208,7 @@ fn fields(
         ("req_version".into(), state.requirement_version.to_string()),
         ("design_gate".into(), design_gate.into()),
         ("design_file".into(), design_file),
+        ("permission_profile".into(), profile.into()),
         ("repo_notes".into(), repo_notes),
         ("work".into(), work),
         ("branch".into(), branch),

@@ -3,7 +3,9 @@
 //! stdin seam; the staged temp file must never survive a run.
 
 use crate::cli::{Env, run_stdin};
-use crate::cli_testkit::{CAST_TOML, STAGE_LOCK, fixture, ok, scratch, usage};
+use crate::cli_testkit::{
+    CAST_TOML, STAGE_LOCK, fixture, ok, scratch, shared_area, shared_repo, usage,
+};
 use crate::store;
 
 fn args(s: &str) -> Vec<String> {
@@ -187,4 +189,58 @@ fn a_body_another_test_is_staging_is_not_this_tests_leak() {
     let left = staged_left();
     let _ = std::fs::remove_file(&other);
     assert!(left.is_empty(), "{left:?}");
+}
+
+#[test]
+fn deliver_report_dash_reads_stdin_refuses_empty_and_cleans_up() {
+    let _g = STAGE_LOCK.lock().unwrap();
+    let (scratch, env) = scratch();
+    let repo = shared_repo(&scratch);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
+    ok(
+        &env,
+        &format!(
+            "studio new --title Shop --repo {} --cast {cast}",
+            repo.display()
+        ),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary first --as producer"),
+    );
+    let acc = fixture(&scratch, "acc.md", "# acc\n");
+    ok(
+        &env,
+        &format!("task new --title audit-1 --kind audit --acceptance-file {acc} --as director"),
+    );
+    ok(
+        &env,
+        "cast --task t1 --actor actor-a --readonly --as director",
+    );
+    let _work = shared_area(&scratch, "t1");
+
+    for empty in ["", "   \n"] {
+        let err = run_in(
+            &env,
+            "deliver --report - --as actor-t1-c1 --task t1",
+            Some(empty),
+        )
+        .unwrap_err();
+        assert_eq!(err.message(), "the report body is empty");
+    }
+    assert!(staged_left().is_empty(), "{:?}", staged_left());
+
+    let out = run_in(
+        &env,
+        "deliver --report - --as actor-t1-c1 --task t1",
+        Some("# Audit report\nEverything is clean.\n"),
+    )
+    .unwrap();
+    assert!(out.contains("task.delivered t1 d1"), "{out}");
+    assert!(staged_left().is_empty(), "{:?}", staged_left());
 }

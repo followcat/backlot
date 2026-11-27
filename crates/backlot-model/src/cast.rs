@@ -205,7 +205,10 @@ pub fn check_runnable(state: &StudioState, new: &CastSettings) -> Result<(), Ref
         return Err(Refusal::CastBadMaxActors);
     }
     for actor in new.identities() {
-        if !matches!(actor.permission_profile.as_str(), "standard" | "worktree") {
+        if !matches!(
+            actor.permission_profile.as_str(),
+            "standard" | "worktree" | "readonly"
+        ) {
             return Err(Refusal::ProfileNotSupported(
                 actor.permission_profile.clone(),
             ));

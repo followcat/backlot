@@ -65,7 +65,10 @@ Keep each task acceptance file concise (under ~25 lines) with six short items:
 6. Required verification and non-empty check evidence.
 
 When splitting 3+ near-identical tasks whose pattern is unproven, sequence one
-canary task first with `--depends-on` before fanning out the rest.{repo_notes}
+canary task first with `--depends-on` before fanning out the rest. When
+planning high-risk or security-sensitive deliverables (not routine tasks), flag
+candidates for a separate read-only audit (`--kind audit` with `--readonly`),
+which stays unmerged into integration.{repo_notes}
 
 Questions belong to the producer. Ask the user directly only when the
 decision is theirs alone; then put the question first and use

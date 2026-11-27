@@ -137,7 +137,7 @@ fn resume_argv_has_no_prompt() {
 fn every_argv_carries_yolo() {
     let env = BTreeMap::new();
     for effort in backlot_model::caps::CLINE.effort.levels() {
-        for profile in ["standard", "worktree"] {
+        for profile in ["standard", "worktree", "readonly"] {
             for (prompt, resume) in [
                 (None, None),
                 (Some("first"), None),

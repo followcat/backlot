@@ -1202,8 +1202,8 @@ fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState
 #[test]
 fn actor_template_and_render_stay_byte_identical_across_design_gates() {
     let raw = template(RoleKind::Actor);
-    assert_eq!(raw.len(), 3272, "actor.md size must stay byte-identical");
-    assert!(raw.ends_with("asking to open a PR.\n"));
+    assert_eq!(raw.len(), 3761, "actor.md size must stay byte-identical");
+    assert!(raw.ends_with("asking to open a PR.\n{/writable}\n"));
     assert!(!raw.contains("design_gate"));
     assert!(!raw.contains("backlot design"));
 
@@ -1310,13 +1310,13 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Writer,
             "writer",
-            3542usize,
+            3744usize,
             "(`backlot tell user --text <note> --note`).\n",
         ),
         (
             RoleKind::Director,
             "director",
-            7159usize,
+            8380usize,
             "is killed for you.\n",
         ),
     ] {

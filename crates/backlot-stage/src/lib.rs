@@ -383,6 +383,8 @@ mod range_cmd_tests;
 #[cfg(test)]
 mod range_tests;
 #[cfg(test)]
+mod readonly_audit_tests;
+#[cfg(test)]
 mod recast_cmd_tests;
 #[cfg(test)]
 mod recast_standby_tests;

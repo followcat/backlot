@@ -221,12 +221,15 @@ pub fn owed(state: &StudioState) -> Option<Owed> {
         return None;
     }
     for t in state.tasks.values() {
-        if t.status != TaskStatus::Delivered {
+        if t.status != TaskStatus::Delivered || t.is_readonly_or_audit() {
             continue;
         }
         let Some(d) = t.deliveries.last() else {
             continue;
         };
+        if d.commits.is_empty() {
+            continue;
+        }
         for c in checks {
             if !t.checked_of(d.n).any(|r| r.name == c.name) {
                 return Some(Owed {

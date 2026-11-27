@@ -75,11 +75,11 @@ prints `already at ledger v1`.
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
-| `task.cast` | task, actor identity, reason, optional priority, by (the caster) |
+| `task.cast` | task, actor identity, reason, optional priority, by (the caster) — `--kind audit` requires `permission_profile == "readonly"` |
 | `task.priority` | task, priority |
-| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, actor-reported checks, optional `usage` |
-| `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
-| `task.checked` | task, delivery number, check name, exit code, `timed_out`, optional `expect_failed`, output log, duration — `stage` only |
+| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`, or empty `""` on `readonly`/`audit` tasks), report file, requirement version, actor-reported checks, optional `usage` |
+| `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes (`upstream_changes` refused on `readonly`/`audit` tasks) |
+| `task.checked` | task, delivery number, check name, exit code, `timed_out`, optional `expect_failed`, output log, duration — `stage` only (not scheduled for `readonly`/`audit` empty-commit deliveries) |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq`; `delivered` carries the target seq |
@@ -216,7 +216,12 @@ delivery notice to the producer; a director's or unattributed cast routes it to 
 runs git in the task's `work/<task>` area, resolves both ends to full shas, refuses an empty range,
 and refuses a tip that `git merge-base --is-ancestor` does not place on the task's
 `backlot/<studio>/<task>` branch. The ledger holds `sha..sha`, never the symbolic input; the model
-itself runs no git.
+itself runs no git. `--report -` reads the report body from stdin (staging it outside the worktree
+under `reports/`), readable via `backlot msg show` and `backlot report show`. On a `readonly` or
+`audit` task, `--commits` is refused: `backlot deliver --report -` (or `--report <file>`) verifies
+every worktree is clean with unmoved `HEAD` (zero commits ahead of integration), records an empty
+range (`""`), and skips stage `[[checks]]`. Audit tasks cannot be depended upon, cannot carry
+`upstream_changes` on review, and `guard` refuses merging any audit branch into `integration`.
 
 `task.delivered` may carry `usage` — the runner's own reported figures, optional and absent by
 default (P4a): `input_tokens`, `output_tokens`, `cache_read_tokens` and `cost_micros_usd`

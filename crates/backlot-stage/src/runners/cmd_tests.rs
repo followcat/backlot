@@ -282,6 +282,7 @@ fn prepare_writes_the_settings_file() {
         additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
         global_mcp: home.join(".commandcode/mcp.json"),
         signals: dir.join("signals.jsonl"),
+        readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     let mode = fs::metadata(&prep.settings).unwrap().permissions().mode() & 0o777;
@@ -335,6 +336,7 @@ fn prepare_errors_never_carry_content() {
         additional_dirs: vec!["/state/studios/acme-shop".into()],
         global_mcp: mcp,
         signals: dir.join("signals.jsonl"),
+        readonly: false,
     };
     let err = prepare(&prep).unwrap_err();
     assert!(err.contains("mcp.json"), "{err}");
@@ -615,6 +617,7 @@ fn cmd_hooks_splice_preserves_auth_info_and_user_hooks() {
         additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
         global_mcp: home.join(".commandcode/mcp.json"),
         signals: dir.join("signals.jsonl"),
+        readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     let out = fs::read_to_string(&settings).unwrap();
@@ -669,6 +672,7 @@ fn cmd_excludes_new_settings_and_skips_tracked() {
         additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
         global_mcp: home.join(".commandcode/mcp.json"),
         signals: dir.join("signals.jsonl"),
+        readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
     let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();

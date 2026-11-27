@@ -186,6 +186,16 @@ pub enum Refusal {
     },
     /// `role.recast` names an unknown permission profile.
     ProfileNotSupported(String),
+    AuditRequiresReadonly {
+        task: String,
+    },
+    ReadonlyDeliveryHasCommits {
+        task: String,
+    },
+    AuditIntegrationRefused {
+        task: String,
+        why: &'static str,
+    },
     /// A `role.recast` would leave a runner cap unable to seat the
     /// studio's fixed roles.
     LimitsUnseated {
@@ -456,7 +466,25 @@ impl fmt::Display for Refusal {
             Refusal::ProfileNotSupported(profile) => {
                 write!(
                     f,
-                    "unknown permission profile '{profile}'; want standard|worktree"
+                    "unknown permission profile '{profile}'; want standard|worktree|readonly"
+                )
+            }
+            Refusal::AuditRequiresReadonly { task } => {
+                write!(
+                    f,
+                    "task '{task}' is an audit task and requires the readonly permission profile"
+                )
+            }
+            Refusal::ReadonlyDeliveryHasCommits { task } => {
+                write!(
+                    f,
+                    "task '{task}' has a readonly actor and cannot deliver commits"
+                )
+            }
+            Refusal::AuditIntegrationRefused { task, why } => {
+                write!(
+                    f,
+                    "audit/readonly task '{task}' cannot be integrated ({why})"
                 )
             }
             Refusal::LimitsUnseated { runner, cap } => write!(

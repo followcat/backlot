@@ -28,10 +28,10 @@ pub const MODELS: &[&str] = &[
 ];
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
-    match identity.permission_profile.as_str() {
-        "standard" | "worktree" => {}
+    let sandbox = match identity.permission_profile.as_str() {
+        "standard" | "worktree" | "readonly" => "workspace-write",
         other => return Err(PlanError::profile(other)),
-    }
+    };
     let mut argv = vec!["codex".to_string()];
     if let Some(id) = ctx.resume {
         argv.extend(["resume".into(), id.to_string()]);
@@ -47,7 +47,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "-c".into(),
         format!("projects={{\"{}\"={{trust_level=\"trusted\"}}}}", ctx.cwd),
         "-s".into(),
-        "workspace-write".into(),
+        sandbox.into(),
         "-a".into(),
         "on-request".into(),
     ]);

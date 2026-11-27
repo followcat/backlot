@@ -12,8 +12,9 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-- **A check can require its output, so "scanned 0 files" is not a pass.** `expect = "<regex>"` (and `min_matches`) on a check makes a run that exits 0 without the expected output fail, and a failing check blocks accepting the delivery. `backlot studio check add` and `remove` let you manage checks on a running studio.
 - **Checks are proposed at the opening and switched on when you sign.** In the buildability step the director proposes the repo's real test or lint commands (`design write --slot buildability --checks-file <toml>`). Each one first runs once in the director's own worktree, under its guard and without credentials or proxies; a failing one is refused. On the Call Sheet the design shows `+N checks`, and signing (`a`) shows every command in full and lets you sign with the checks, sign without them, or cancel.
+- **A check can require its output, so "scanned 0 files" is not a pass.** `expect = "<regex>"` (and `min_matches`) on a check makes a run that exits 0 without the expected output fail, and a failing check blocks accepting the delivery. `backlot studio check add` and `remove` let you manage checks on a running studio.
+- **A director can ask for a read-only audit by someone who didn't build the work.** `backlot task new --kind audit` and `backlot cast --readonly` give an actor a seat that reads the code but cannot change it: git writes are refused, its file-edit tools are off, and its delivery must leave the worktree untouched, with the report passed on stdin (`backlot deliver --report - <<'EOF'`). The audit task gets only the diff, the acceptance criteria and the design sections to check against, not the build discussion. It is never merged; the director records the defects it confirms as findings. Directors are told to use it at integration points, for risky deliveries and after a send-back, not for every task.
 
 ## 0.4.23 — 2026-11-27
 

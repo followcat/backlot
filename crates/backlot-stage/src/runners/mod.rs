@@ -511,6 +511,8 @@ mod fake_runner_tests;
 #[cfg(test)]
 mod normalise_tests;
 #[cfg(test)]
+mod readonly_tests;
+#[cfg(test)]
 mod resolve_tests;
 #[cfg(test)]
 mod work_tests;
