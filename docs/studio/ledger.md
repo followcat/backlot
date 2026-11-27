@@ -216,11 +216,12 @@ delivery notice to the producer; a director's or unattributed cast routes it to 
 runs git in the task's `work/<task>` area, resolves both ends to full shas, refuses an empty range,
 and refuses a tip that `git merge-base --is-ancestor` does not place on the task's
 `backlot/<studio>/<task>` branch. The ledger holds `sha..sha`, never the symbolic input; the model
-itself runs no git. On a `readonly` or `audit` task, `--commits` is refused: `backlot deliver
---report <file>` verifies every worktree is clean with unmoved `HEAD` (zero commits ahead of
-integration), records an empty range (`""`), and skips stage `[[checks]]`. Audit tasks cannot be
-depended upon, cannot carry `upstream_changes` on review, and `guard` refuses merging any audit
-branch into `integration`.
+itself runs no git. `--report -` reads the report body from stdin (staging it outside the worktree
+under `reports/`), readable via `backlot msg show` and `backlot report show`. On a `readonly` or
+`audit` task, `--commits` is refused: `backlot deliver --report -` (or `--report <file>`) verifies
+every worktree is clean with unmoved `HEAD` (zero commits ahead of integration), records an empty
+range (`""`), and skips stage `[[checks]]`. Audit tasks cannot be depended upon, cannot carry
+`upstream_changes` on review, and `guard` refuses merging any audit branch into `integration`.
 
 `task.delivered` may carry `usage` — the runner's own reported figures, optional and absent by
 default (P4a): `input_tokens`, `output_tokens`, `cache_read_tokens` and `cost_micros_usd`

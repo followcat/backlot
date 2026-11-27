@@ -124,7 +124,7 @@ timeout_s = 120
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode`, `cursor`, `cmd`, `cline` or `agy`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. A `cline` model must be a `cline-pass/<model>` id: the provider is taken from it, and any other id is refused. |
 | `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort` — `low`, `medium`, `high`, `xhigh` or `max`; Codex `model_reasoning_effort` — the same plus `ultra`; agy `--effort` — `low` through `max`; cline `--thinking` — `none`, `low`, `medium`, `high` or `xhigh`). `cursor` and `devin` carry the depth in the model id, `cmd`'s flag writes global config and `opencode`'s launch carries none, so all four omit it — a set `effort` on `cursor` or `cmd` is refused, on `devin` or `opencode` ignored. |
-| `permission_profile` | `standard`, `worktree` or `readonly`. On Claude these map to `--permission-mode manual`, `acceptEdits` and `plan`; the other runners map `readonly` to their own read-only settings (`runners.md`). `worktree` is the right choice for actors working inside their own worktree, and `backlot cast --readonly` lowers a candidate to `readonly` per task (required for `--kind audit`). |
+| `permission_profile` | `standard`, `worktree` or `readonly`. On Claude `standard` maps to `--permission-mode manual`, `worktree` to `acceptEdits`, and `readonly` keeps `manual` with `Edit`/`Write`/`NotebookEdit` in `permissions.deny` (`runners.md`); the other runners similarly keep their normal working modes/sandboxes with native edit-tool deny rules so `backlot` commands execute normally. `worktree` is the right choice for actors working inside their own worktree, and `backlot cast --readonly` lowers a candidate to `readonly` per task (required for `--kind audit`). |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
 | `design_gate` | Optional opening design policy: `"required"` (the default for new studios) or `"off"`. Historical studios whose `studio.created` event predates `design_gate` keep `"off"`; set `design_gate = "off"` in `cast.toml` or apply it later with `backlot studio cast set` to skip the opening design discussion for a studio. |
@@ -526,13 +526,15 @@ that names only the commit range/diff to verify and the original acceptance/desi
 ```sh
 backlot task new --title "Audit payment" --kind audit --acceptance-file /home/user/audit-acc.md --as director
 backlot cast --task <task> --actor <actor> --readonly --reason "independent audit" --as director
-backlot deliver --report <file>
+backlot deliver --report -
 backlot finding --task <task> --delivery <delivery> --findings <file> --as director
 ```
 
 An audit task requires `--readonly`, refuses `--commits` at delivery (verifying a clean worktree and
-unmoved `HEAD`), cannot be depended upon or merged into `integration`, and feeds confirmed defects
-back onto the audited build task via `backlot finding`.
+unmoved `HEAD`), accepts stdin via `backlot deliver --report -` (e.g. a single-quoted heredoc
+`<<'EOF'` … `EOF`, leaving the worktree spotless) or `--report <file>`, cannot be depended upon or
+merged into `integration`, and feeds confirmed defects back onto the audited build task via
+`backlot finding`.
 
 ### What the panel and the cast show
 
