@@ -214,6 +214,16 @@ pub(crate) fn start_event(
     }
 }
 
+struct LaunchCall<'a> {
+    studio: &'a str,
+    dir: &'a Path,
+    state: &'a StudioState,
+    start: &'a Start,
+    launch: &'a runners::Launch,
+    runner_env: BTreeMap<String, String>,
+    prompt_hash: Option<String>,
+}
+
 /// The labels a role terminal carries (design.md "Role terminals").
 /// Since U2 a role lives in its own studio's space under the
 /// person's name — an actor's tab carries its task (`actor-b t2`).
@@ -258,16 +268,16 @@ impl Stage {
     /// once per role and reason — reports `false` so the tick's
     /// real-launch slot is handed back, and the start is retried
     /// next tick. `true` is accepted; a dead wire is fatal.
-    async fn launch(
-        &self,
-        studio: &str,
-        dir: &Path,
-        state: &StudioState,
-        start: &Start,
-        launch: &runners::Launch,
-        runner_env: BTreeMap<String, String>,
-        prompt_hash: Option<String>,
-    ) -> Result<bool, Fail> {
+    async fn launch(&self, call: LaunchCall<'_>) -> Result<bool, Fail> {
+        let LaunchCall {
+            studio,
+            dir,
+            state,
+            start,
+            launch,
+            runner_env,
+            prompt_hash,
+        } = call;
         // A runner's per-launch filesystem prep — cursor's
         // isolated tree — before anything starts. A failure is an
         // attention, not a half-configured role; the start retries
@@ -689,15 +699,15 @@ impl Stage {
                             .first()
                             .and_then(|program| self.runner_version(program));
                         if !self
-                            .launch(
+                            .launch(LaunchCall {
                                 studio,
                                 dir,
                                 state,
-                                &start,
-                                launch.as_ref(),
+                                start: &start,
+                                launch: launch.as_ref(),
                                 runner_env,
                                 prompt_hash,
-                            )
+                            })
                             .await?
                         {
                             *real_slot_free = true;

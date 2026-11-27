@@ -73,8 +73,9 @@ fn cli_halt_resume_status_and_metrics_end_to_end() {
     assert!(cast_err.contains("halted"), "{cast_err}");
 
     // Running task t1 still delivers, reports progress, tells, and asks.
-    let mut actor_env = crate::cli::Env::default();
-    actor_env.vars = env.vars.clone();
+    let mut actor_env = crate::cli::Env {
+        vars: env.vars.clone(),
+    };
     actor_env
         .vars
         .insert("BACKLOT_ROLE".into(), "actor-t1-c1".into());
