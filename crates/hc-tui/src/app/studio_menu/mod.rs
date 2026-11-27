@@ -48,6 +48,9 @@ impl App {
             .find(|(rect, _)| rect.contains(pos))
             .map(|(_, terminal)| terminal.clone());
         if let Some(terminal) = terminal {
+            self.focus_pane_preserving_focus(terminal.clone());
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
+            self.cast_follow_active();
             return self.cast_menu(&terminal, point);
         }
         let ws = self

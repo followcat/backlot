@@ -224,15 +224,27 @@ pub(crate) fn render_expanded(
     } else {
         sidebar_section_divider_rect(area, state.sidebar_section_split)
     };
+    let header_fg = if state.tree_focused {
+        palette.accent
+    } else {
+        palette.overlay0
+    };
+    let header_title = if state.tree_focused {
+        if workspace_area.width >= 20 {
+            " ▸ machines [C-b t]"
+        } else {
+            " ▸ machines"
+        }
+    } else {
+        " machines"
+    };
     put_text(
         buffer,
         workspace_area.x,
         workspace_area.y,
         workspace_area.width,
-        " machines",
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
+        header_title,
+        Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
     );
     // The version badge shares the header row, right-aligned a cell
     // short of the divider column and never touching `machines`.
@@ -242,13 +254,15 @@ pub(crate) fn render_expanded(
         workspace_area.width.saturating_sub(1),
         1,
     );
-    hits.update_badge = put_version_badge(
-        buffer,
-        badge_row,
-        workspace_area.x.saturating_add(10),
-        state.update_badge,
-        palette,
-    );
+    if !state.tree_focused {
+        hits.update_badge = put_version_badge(
+            buffer,
+            badge_row,
+            workspace_area.x.saturating_add(10),
+            state.update_badge,
+            palette,
+        );
+    }
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
@@ -412,6 +426,20 @@ pub(crate) fn render_expanded(
                 });
                 if is_cursor {
                     paint_tree_cursor(buffer, rect, palette);
+                } else if !lot_marked
+                    && !state.tree_focused
+                    && state.tree_remembered.is_some()
+                    && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
+                    && !rect.is_empty()
+                {
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y
                     .saturating_add(height)
@@ -503,6 +531,19 @@ pub(crate) fn render_expanded(
                 });
                 if is_cursor {
                     paint_tree_cursor(buffer, rect, palette);
+                } else if !state.tree_focused
+                    && state.tree_remembered.is_some()
+                    && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
+                    && !rect.is_empty()
+                {
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y
                     .saturating_add(height)
@@ -525,6 +566,19 @@ pub(crate) fn render_expanded(
                 );
                 if is_cursor {
                     paint_tree_cursor(buffer, rect, palette);
+                } else if !state.tree_focused
+                    && state.tree_remembered.is_some()
+                    && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
+                    && !rect.is_empty()
+                {
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y.saturating_add(1);
             }
@@ -537,7 +591,20 @@ pub(crate) fn render_expanded(
     }
 
     let footer_y = workspace_area.bottom().saturating_sub(1);
-    if config.mouse_capture {
+    if state.tree_focused && workspace_area.height > 1 {
+        let hint = crate::chrome::text::fit_hints(
+            &["↑↓ ←→ Tab ↵ m n Esc", "↑↓ Tab ↵ n Esc", "Esc back"],
+            workspace_area.width.saturating_sub(1) as usize,
+        );
+        put_text(
+            buffer,
+            workspace_area.x + 1,
+            footer_y,
+            workspace_area.width.saturating_sub(1),
+            hint,
+            Style::default().fg(palette.overlay0),
+        );
+    } else if config.mouse_capture {
         let label = format!(
             " new · {}",
             super::endpoint_sidebar_row::active_endpoint_label(state)

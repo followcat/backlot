@@ -82,36 +82,41 @@ impl App {
         else {
             return;
         };
-        let draft = self.panel.draft_mut(&key);
-        let seed = match (slash, &person_role) {
-            // `/` starts the verb cleanly; an existing `/`-draft
-            // keeps what it had.
-            (true, _) if draft.as_str().is_empty() => Some("/".to_owned()),
-            (true, _) => None,
-            (false, Some(role)) if draft.as_str().is_empty() => Some(format!("/tell {role} ")),
-            (false, _) => None,
+        let cursor_role = person_role.clone();
+        let target = if slash {
+            crate::focus::TellTarget::default()
+        } else if let Some(role) = person_role {
+            crate::focus::TellTarget::Role(role)
+        } else if matches!(selected, Some(Target::Input(_))) {
+            self.panel.tell_target.clone()
+        } else {
+            crate::focus::TellTarget::default()
         };
-        if let Some(seed) = seed {
-            draft.clear();
-            let _ = draft.insert(&seed);
+        if let Some(role) = cursor_role {
+            self.panel.compose_cursor_role = Some(role);
+        } else if !matches!(selected, Some(Target::Input(_))) {
+            self.panel.compose_cursor_role = None;
         }
-        self.panel.selected = Some(Target::Input(key));
+        self.panel.tell_target = target.clone();
+        let draft = self.panel.draft_mut(&key);
+        if slash && draft.as_str().is_empty() {
+            draft.clear();
+            let _ = draft.insert("/");
+        }
+        self.panel.selected = Some(Target::Input(key.clone()));
         self.panel.selected_row = Some(row);
         self.panel.editing = true;
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+            crate::focus::LotLevel::Compose {
+                studio: key,
+                target,
+            },
+        ));
     }
 
     /// Focus the `›` producer compose line for a specific studio (e.g. `r` reply on a design row).
     pub(in crate::app) fn panel_input_focus_studio(&mut self, key: &StudioKey) {
-        let Some(row) = self
-            .panel_targets()
-            .iter()
-            .position(|t| matches!(t, Target::Input(k) if k == key))
-        else {
-            return;
-        };
-        self.panel.selected = Some(Target::Input(key.clone()));
-        self.panel.selected_row = Some(row);
-        self.panel.editing = true;
+        self.enter_lot_compose(key, crate::focus::TellTarget::default());
     }
 
     /// `⏎` on the `›` line: a plain line is a `tell` to the
@@ -160,19 +165,50 @@ impl App {
         }
         match line.strip_prefix('/') {
             Some(rest) => self.panel_slash(&key, rest),
-            None => self.run_action(studio_cmds::tell(&key, "producer", &line)),
+            None => {
+                let target = match &self.focus.workspace {
+                    crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Compose {
+                        target,
+                        ..
+                    }) => target.clone(),
+                    _ => self.panel.tell_target.clone(),
+                };
+                match target {
+                    crate::focus::TellTarget::Hollywood => {
+                        self.run_action(studio_cmds::tell_hollywood(&line));
+                    }
+                    crate::focus::TellTarget::Role(role) => {
+                        self.run_action(studio_cmds::tell(&key, &role, &line));
+                    }
+                }
+            }
         }
         self.panel.clear_draft(&key);
+        self.panel.tell_target = crate::focus::TellTarget::default();
+        self.panel.compose_cursor_role = None;
         self.panel.editing = false;
     }
 
-    /// `Tab` on a `/verb` prefix: the shared stem extends, a unique
-    /// verb completes with its trailing space — anything else is a
-    /// no-op (spec.md's `/verb` completion, R3-B2).
+    /// `Tab` in Compose: on an empty buffer cycles `producer` -> remembered
+    /// cursor role -> `hollywood`; on a `/verb` prefix completes `/verb`.
     pub(super) fn panel_input_complete(&mut self) {
         let Some(Target::Input(key)) = self.panel.selected.clone() else {
             return;
         };
+        if self.panel.draft(&key).is_none_or(|d| d.as_str().is_empty()) {
+            let next = self
+                .panel
+                .tell_target
+                .cycle_next(self.panel.compose_cursor_role.as_deref());
+            self.panel.tell_target = next.clone();
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                crate::focus::LotLevel::Compose {
+                    studio: key,
+                    target: next,
+                },
+            ));
+            return;
+        }
         self.panel_input_complete_for(&key);
     }
 

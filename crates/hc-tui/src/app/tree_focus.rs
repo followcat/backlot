@@ -24,20 +24,28 @@ use crate::studio::StudioKey;
 use super::App;
 
 impl App {
-    /// Whether this press is the tree's focus chord tail (`t` while the
-    /// prefix is armed). Studio mode only.
+    /// Whether this press is the tree's focus chord tail (`prefix+t` by
+    /// default, configurable via `[keys] focus_tree`). Studio mode only.
     pub(crate) fn tree_focus_press(&self, key: &TerminalKey) -> bool {
         if !self.studio.active {
             return false;
         }
         let combo = crate::input::terminal_key_of(key);
-        let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
-        code == KeyCode::Char('t') && modifiers.is_empty()
+        self.panel_config.keys.focus_tree.matches_chord(&combo)
+    }
+
+    /// Whether this press is `[keys] focus_tree` configured as a direct chord.
+    pub(crate) fn tree_focus_direct_press(&self, key: &TerminalKey) -> bool {
+        if !self.studio.active || self.panel_editing() || self.hollywood.editing {
+            return false;
+        }
+        let combo = crate::input::terminal_key_of(key);
+        self.panel_config.keys.focus_tree.matches_direct(&combo)
     }
 
     /// Whether the left tree owns the keys right now.
     pub(crate) fn tree_focused(&self) -> bool {
-        self.tree_focus.is_some()
+        self.focus.workspace == crate::focus::WorkspaceRegion::Tree || self.tree_focus.is_some()
     }
 
     /// `Ctrl+B t`: open the sidebar if it is collapsed, select the row
@@ -58,9 +66,6 @@ impl App {
         }
         self.peek = None;
         let rows = self.tree_rows();
-        if rows.is_empty() {
-            return;
-        }
         let focused_workspace = self.projection.snapshot.focused_workspace_id.clone();
         let active = self.projection.active_endpoint_id.clone();
         let selected = focused_workspace
@@ -72,17 +77,31 @@ impl App {
                     })
                     .cloned()
             })
+            .or_else(|| {
+                self.tree_remembered
+                    .as_ref()
+                    .filter(|r| rows.contains(r))
+                    .cloned()
+            })
             .or_else(|| rows.first().cloned());
-        self.tree_focus = selected;
+        self.tree_focus = selected.clone();
+        if selected.is_some() {
+            self.tree_remembered = selected;
+        }
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::Tree);
         self.shell_state.reveal_tree_row = true;
         self.sched.mark_dirty(Instant::now());
     }
 
     /// `Esc` (or a press that leaves the tree): give the keys back.
     pub(crate) fn tree_focus_leave(&mut self) {
-        if self.tree_focus.take().is_some() {
-            self.sched.mark_dirty(Instant::now());
+        if let Some(row) = self.tree_focus.take() {
+            self.tree_remembered = Some(row);
         }
+        if self.focus.workspace == crate::focus::WorkspaceRegion::Tree {
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+        }
+        self.sched.mark_dirty(Instant::now());
     }
 
     /// The flat left-tree rows right now — the cursor's own list.
@@ -110,11 +129,106 @@ impl App {
         let press = key.input.action == hc_vt::Action::Press;
         match code {
             KeyCode::Esc if press => self.tree_focus_leave(),
+            KeyCode::Tab | KeyCode::BackTab
+                if plain || modifiers == crossterm::event::KeyModifiers::SHIFT =>
+            {
+                self.cast_focus_enter();
+            }
             KeyCode::Up | KeyCode::Char('k') if plain => self.tree_move(-1),
             KeyCode::Down | KeyCode::Char('j') if plain => self.tree_move(1),
+            KeyCode::Left | KeyCode::Char('h') if plain && press => self.tree_left(),
+            KeyCode::Right | KeyCode::Char('l') if plain && press => self.tree_right(),
+            KeyCode::Char(' ') if plain && press => self.tree_space(),
+            KeyCode::Char('n') if plain && press => {
+                let machine = match &self.tree_focus {
+                    Some(SidebarRow::Machine(ep))
+                    | Some(SidebarRow::Workspace { endpoint: ep, .. })
+                    | Some(SidebarRow::Studio { endpoint: ep, .. }) => machine_of(ep),
+                    None => None,
+                };
+                self.new_studio_open(machine);
+            }
             KeyCode::Enter if press => self.tree_activate(),
             KeyCode::Char('m') if plain && press => self.tree_menu(),
             _ => {}
+        }
+    }
+
+    fn tree_left(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => {
+                self.shell_state.collapsed_endpoints.insert(endpoint);
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { open: true, .. },
+            } => {
+                self.studio.finished_open.remove(&machine_of(&endpoint));
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Workspace { endpoint, .. } | SidebarRow::Studio { endpoint, .. } => {
+                self.tree_focus = Some(SidebarRow::Machine(endpoint));
+                self.shell_state.reveal_tree_row = true;
+                self.sched.mark_dirty(Instant::now());
+            }
+        }
+    }
+
+    fn tree_right(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => {
+                self.shell_state.collapsed_endpoints.remove(&endpoint);
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { open: false, .. },
+            } => {
+                self.studio.finished_open.insert(machine_of(&endpoint));
+                self.sched.mark_dirty(Instant::now());
+            }
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::Studio { id, .. } | StudioRow::Finished { id },
+            } => {
+                let key = StudioKey {
+                    machine: machine_of(&endpoint),
+                    id,
+                };
+                self.panel.mode = crate::panel::PanelMode::Expanded;
+                self.enter_studio_in_lot(&key);
+            }
+            SidebarRow::Workspace {
+                endpoint,
+                workspace_id,
+            } => {
+                if let Some(key) = self.studio_for_workspace(&endpoint, &workspace_id) {
+                    self.panel.mode = crate::panel::PanelMode::Expanded;
+                    self.enter_studio_in_lot(&key);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn tree_space(&mut self) {
+        let Some(row) = self.tree_focus.clone() else {
+            return;
+        };
+        match row {
+            SidebarRow::Machine(endpoint) => self.tree_toggle_endpoint(&endpoint),
+            SidebarRow::Studio {
+                endpoint,
+                row: StudioRow::FinishedFold { .. },
+            } => self.toggle_finished_group(machine_of(&endpoint)),
+            _ => self.tree_activate(),
         }
     }
 

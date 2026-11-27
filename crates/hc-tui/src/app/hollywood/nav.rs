@@ -310,5 +310,12 @@ impl App {
         self.hollywood.editing = false;
         self.hollywood.history.reset_nav();
         self.hollywood.view = None;
+        self.call_sheet_return = None;
+        if matches!(
+            self.focus.workspace,
+            crate::focus::WorkspaceRegion::CallSheet(_)
+        ) {
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
+        }
     }
 }

@@ -160,11 +160,16 @@ async fn a_studio_switch_collapses_the_call_sheet() {
     alt(&mut app, hc_vt::Key::PageDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(app.focused.as_deref(), Some("t7"));
+    // Part 1 §1.2.6: while resting in CallSheet, Alt+PageDown keeps CallSheet
+    // open and syncs its frame selection to the switched studio behind it.
     assert!(
-        !app.hollywood.expanded(),
-        "the sheet no longer owns the keys"
+        app.hollywood.expanded(),
+        "CallSheet remains open in resting mode"
     );
-    assert!(typed_reaches_pane(&mut app), "typing reaches t7");
+    assert_eq!(
+        app.hollywood.selected,
+        Some(crate::hollywood::Target::Studio("night-owl".into()))
+    );
 }
 
 #[tokio::test]

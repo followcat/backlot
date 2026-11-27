@@ -106,10 +106,13 @@ fn fit_prioritized(
 
 /// Focused Lot footer hint pairs (verbful `(key, verb)` pairs, dropping
 /// least-useful hints first under narrow dock widths).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn focused_hint_pairs(
     selected: Option<&Target>,
     editing: bool,
     confirm: bool,
+    entered: bool,
+    row_actions: bool,
     machines: &[MachineSummary],
     overlay: bool,
     pane_refuses: bool,
@@ -125,6 +128,16 @@ pub(super) fn focused_hint_pairs(
     if confirm {
         return fit_pairs(
             &[("y", "finish"), ("d", "cancel"), ("esc", esc_verb)],
+            width,
+        );
+    }
+    if row_actions {
+        return fit_pairs(
+            &[
+                ("←→", "chip"),
+                ("⏎", "run"),
+                ("esc", if pane_refuses { "close" } else { "row" }),
+            ],
             width,
         );
     }
@@ -196,12 +209,26 @@ pub(super) fn focused_hint_pairs(
                     TAB,
                     (1, ("m", "menu")),
                 ]
+            } else if role.is_some_and(|r| r.asks.as_ref().is_some_and(|a| !a.is_empty())) {
+                vec![
+                    (3, ("r", "reply")),
+                    (2, ("←→", "chip")),
+                    TAB,
+                    (1, ("esc", esc_verb)),
+                ]
             } else if role.is_some_and(|r| r.attention_seq.is_some() && r.can_answer_prompt) {
                 vec![
                     (3, ("y/d", "decide")),
-                    (2, ("p", "peek")),
+                    (2, ("←→", "chip")),
                     TAB,
-                    (1, ("m", "menu")),
+                    (1, ("esc", esc_verb)),
+                ]
+            } else if entered && role.is_some_and(|r| r.terminal.is_some()) {
+                vec![
+                    (3, ("⏎", "open")),
+                    (2, ("←→", "chip")),
+                    TAB,
+                    (1, ("esc", esc_verb)),
                 ]
             } else if role.is_some_and(|r| r.terminal.is_some()) {
                 vec![
@@ -264,7 +291,7 @@ pub(super) fn focused_hint_pairs(
         }
         Some(Target::Studio(_)) => {
             vec![
-                (3, ("⏎", "focus")),
+                (3, ("⏎/→", if entered { "studio" } else { "enter" })),
                 TAB,
                 (1, ("m", "menu")),
                 (3, ("esc", esc_verb)),

@@ -304,11 +304,13 @@ async fn the_panel_chord_still_toggles_while_the_layer_is_expanded() {
     app.area = (200, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // The studio panel keeps `prefix+y`.
+    // The studio panel keeps `prefix+y`; under Part 1 single-focus-owner
+    // rules focusing the Lot collapses the Call Sheet cleanly.
     prefix(&mut app);
     key(&mut app, hc_vt::Key::Char('y'));
     assert_eq!(app.panel.mode, crate::panel::PanelMode::Expanded);
-    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert!(app.panel.focused);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
 }
 
 #[tokio::test]

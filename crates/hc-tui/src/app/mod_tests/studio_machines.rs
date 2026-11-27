@@ -354,12 +354,19 @@ async fn focused_lot_marks_selected_studios_endpoint_and_server_row_without_scro
             app.area.0,
         );
     };
-    while !matches!(
-        app.panel.selected.as_ref().and_then(|t| t.studio()),
-        Some(k) if k.id == "beta-tools"
-    ) {
+    for _ in 0..16 {
+        if matches!(
+            app.panel.selected.as_ref().and_then(|t| t.studio()),
+            Some(k) if k.id == "beta-tools"
+        ) {
+            break;
+        }
         press(&mut app, hc_vt::Key::Tab);
     }
+    assert!(matches!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(k) if k.id == "beta-tools"
+    ));
     let focused_remote = draw_to(&mut app, 140, 30);
     let rbuf = focused_remote.buffer();
     let (r_local, r_local_srv) = find_endpoint_ys(rbuf, "▾ Local");
@@ -376,26 +383,33 @@ async fn focused_lot_marks_selected_studios_endpoint_and_server_row_without_scro
             .contains(Modifier::BOLD)
     );
 
-    // ArrowUp back into `acme-shop` (Local): mark follows back to Local.
+    // InsideStudio bounds ↑/↓ within `beta-tools`; ← steps back to Studios level, then ↑
+    // moves into `acme-shop` (Local) and the mark follows back to Local.
+    press(&mut app, hc_vt::Key::ArrowLeft);
     press(&mut app, hc_vt::Key::ArrowUp);
-    while matches!(
+    assert!(matches!(
         app.panel.selected.as_ref().and_then(|t| t.studio()),
-        Some(k) if k.id == "beta-tools"
-    ) {
-        press(&mut app, hc_vt::Key::ArrowUp);
-    }
+        Some(k) if k.id == "acme-shop"
+    ));
     let back_local = draw_to(&mut app, 140, 30);
     let bbuf = back_local.buffer();
     assert_eq!(bbuf[(0, r_local)].symbol(), "▎");
     assert_eq!(bbuf[(0, r_host)].symbol(), " ");
 
     // Collapse `host-b` while `beta-tools` is selected -> collapsed `▸ host-b` still gets `▎`.
-    while !matches!(
-        app.panel.selected.as_ref().and_then(|t| t.studio()),
-        Some(k) if k.id == "beta-tools"
-    ) {
+    for _ in 0..16 {
+        if matches!(
+            app.panel.selected.as_ref().and_then(|t| t.studio()),
+            Some(k) if k.id == "beta-tools"
+        ) {
+            break;
+        }
         press(&mut app, hc_vt::Key::Tab);
     }
+    assert!(matches!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(k) if k.id == "beta-tools"
+    ));
     app.shell_state.collapsed_endpoints.insert(remote("host-b"));
     let collapsed = draw_to(&mut app, 140, 30);
     let cbuf = collapsed.buffer();
@@ -403,7 +417,9 @@ async fn focused_lot_marks_selected_studios_endpoint_and_server_row_without_scro
     assert_eq!(cbuf[(0, c_host)].symbol(), "▎");
     assert_eq!(cbuf[(0, c_host)].fg, accent);
 
-    // Losing Lot focus (`Esc`) removes the mark immediately.
+    // Losing Lot focus (`Esc` out of InsideStudio -> Studios, then `Esc` -> Terminal) removes the mark.
+    press(&mut app, hc_vt::Key::Escape);
+    assert!(app.panel.focused);
     press(&mut app, hc_vt::Key::Escape);
     assert!(!app.panel.focused);
     let after_esc = draw_to(&mut app, 140, 30);
