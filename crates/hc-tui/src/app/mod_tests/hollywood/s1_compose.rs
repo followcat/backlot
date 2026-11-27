@@ -235,15 +235,17 @@ async fn compose_esc_rests_and_tab_hits_first_wait() {
     assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
 
+    // Screen order: `Hollywood (Input) -> Studios -> Waiting (c3) -> Hollywood`,
+    // keeping draft across zone switches.
     type_str(&mut app, "keep draft");
     key(&mut app, hc_vt::Key::Tab);
     assert!(!app.hollywood.editing);
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
     assert_eq!(app.hollywood.input.as_str(), "keep draft");
 
     key(&mut app, hc_vt::Key::Tab);
     assert!(!app.hollywood.editing);
-    assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
 
     key(&mut app, hc_vt::Key::Tab);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
@@ -251,27 +253,26 @@ async fn compose_esc_rests_and_tab_hits_first_wait() {
     assert_eq!(app.hollywood.input.as_str(), "keep draft");
 
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
-    assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
-    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
 
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
-    key(&mut app, hc_vt::Key::Tab);
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     key(&mut app, hc_vt::Key::Char('a'));
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "apply", "c3", "--as", "user"]]
     );
 
+    // Tab skips empty Waiting (`Talk` alone sits in Hollywood): `Compose -> Studios -> Compose`.
     let mut talk_app = app_calm_with_exchange(true);
     talk_app.area = (120, 24);
     alt_y(&mut talk_app);
-    key(&mut talk_app, hc_vt::Key::Tab);
-    assert_eq!(talk_app.hollywood.selected, Some(Target::Talk(11)));
     key(&mut talk_app, hc_vt::Key::Tab);
     assert!(matches!(
         talk_app.hollywood.selected,
@@ -279,6 +280,13 @@ async fn compose_esc_rests_and_tab_hits_first_wait() {
     ));
     key(&mut talk_app, hc_vt::Key::Tab);
     assert!(talk_app.hollywood.editing);
+    assert_eq!(talk_app.hollywood.selected, Some(Target::Input));
+    // `Shift+Tab` while Waiting is empty returns to Studios without visiting Talk.
+    key(&mut talk_app, hc_vt::Key::BackTab);
+    assert!(matches!(
+        talk_app.hollywood.selected,
+        Some(Target::Studio(_))
+    ));
 
     let mut bare_app = app_calm_with_exchange(false);
     bare_app.area = (120, 24);
@@ -356,9 +364,9 @@ async fn compose_footer_hints_adapt_with_waits_and_width() {
     with_waits.area = (140, 24);
     alt_y(&mut with_waits);
     let wide = screen_lines(&draw_to(&mut with_waits, 140, 24)).join("\n");
-    assert!(wide.contains("⏎ send  ↑↓ history  tab waiting  esc rows  alt+y close"));
+    assert!(wide.contains("⏎ send  ↑↓ history  tab next zone  esc rows  alt+y close"));
     let mid = screen_lines(&draw_to(&mut with_waits, 52, 24)).join("\n");
-    assert!(mid.contains("⏎ send  ↑↓ hist  tab waits  esc rows"));
+    assert!(mid.contains("⏎ send  ↑↓ hist  tab zone  esc rows"));
     let tight = screen_lines(&draw_to(&mut with_waits, 30, 24)).join("\n");
     assert!(tight.contains("⏎ ↑↓ esc"));
 
@@ -366,9 +374,9 @@ async fn compose_footer_hints_adapt_with_waits_and_width() {
     no_waits.area = (140, 24);
     alt_y(&mut no_waits);
     let wide = screen_lines(&draw_to(&mut no_waits, 140, 24)).join("\n");
-    assert!(wide.contains("⏎ send  ↑↓ history  tab studios  esc rows  alt+y close"));
+    assert!(wide.contains("⏎ send  ↑↓ history  tab next zone  esc rows  alt+y close"));
     let mid = screen_lines(&draw_to(&mut no_waits, 52, 24)).join("\n");
-    assert!(mid.contains("⏎ send  ↑↓ hist  tab studios  esc rows"));
+    assert!(mid.contains("⏎ send  ↑↓ hist  tab zone  esc rows"));
     let tight = screen_lines(&draw_to(&mut no_waits, 30, 24)).join("\n");
     assert!(tight.contains("⏎ ↑↓ esc"));
 }

@@ -20,6 +20,7 @@ mod draw_chips;
 mod draw_lower;
 mod draw_sections;
 mod frames;
+mod frames_draw;
 mod handoff_ui;
 mod hints;
 mod items;
@@ -41,6 +42,7 @@ mod view;
 mod zone;
 
 pub(crate) use draw::{HollywoodRender, render};
+pub(crate) use frames::reveal_frame_scroll;
 pub(crate) use handoff_ui::{
     PillSwitchState, handoff_phase, handoff_target_short, is_handoff_active, is_quota_or_error,
     pill_switch_state, rollback_banner,
@@ -65,7 +67,7 @@ pub(crate) use reader_meta::{
 pub(crate) use reader_wrap::{render_body_lines_with_sections, wrap_plain};
 pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
-    hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
+    hollywood_reply_max_seq, hollywood_unread_count, local_summary, nav_band_targets, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
 pub(crate) use view::{CardView, ReaderRenderOpts, render_view_with_opts};
@@ -87,23 +89,48 @@ pub(crate) enum LayerMode {
     Expanded,
 }
 
-/// The two independent keyboard-navigation sections inside the expanded
-/// Call Sheet (`Tab` switches between them).
+/// The three keyboard-navigation and focus zones inside the expanded
+/// Call Sheet, in top-to-bottom screen order (`Tab` cycles them).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Section {
-    /// Top strip: studio frames and the `+ new studio` frame.
-    Upper,
-    /// Bottom band: headline, waiting items, exchange lines, and input.
+    /// Top zone: items waiting on the user.
+    Waiting,
+    /// Middle zone: Hollywood headline, exchange, live row, and compose.
     #[default]
-    Lower,
+    Hollywood,
+    /// Bottom zone: studio strip or expanded film strip + `+ new`.
+    Studios,
 }
 
 impl Section {
-    /// Which section owns `target`.
+    /// Which focus zone owns `target`.
     pub(crate) fn of(target: &Target) -> Section {
         match target {
-            Target::Title | Target::Studio(_) | Target::NewStudio => Section::Upper,
-            _ => Section::Lower,
+            Target::Prompt(..)
+            | Target::Role(..)
+            | Target::Tell(_)
+            | Target::Upgrade(_)
+            | Target::Decision(_)
+            | Target::Stage(..)
+            | Target::Card(_)
+            | Target::OutwardCard(..)
+            | Target::Ready(_)
+            | Target::Hollywood => Section::Waiting,
+            Target::Headline
+            | Target::Talk(_)
+            | Target::HollywoodLive
+            | Target::Input
+            | Target::Setup
+            | Target::Calm => Section::Hollywood,
+            Target::Title | Target::Studio(_) | Target::NewStudio => Section::Studios,
+        }
+    }
+
+    /// Focus zone expanded when `target` is selected (`Title` has no zone expansion).
+    pub(crate) fn focus_of(target: &Target) -> Option<Section> {
+        match target {
+            Target::Title | Target::Calm => None,
+            other => Some(Self::of(other)),
         }
     }
 }

@@ -113,7 +113,7 @@ fn select_decision_in_sheet(app: &mut App) {
         .as_ref()
         .is_some_and(|t| format!("{t:?}").contains("Decision"))
     {
-        key(app, hc_vt::Key::Tab);
+        key(app, hc_vt::Key::BackTab);
     }
     assert!(
         app.hollywood
@@ -196,7 +196,7 @@ async fn callsheet_and_dock_200x44_and_100x40_render_pill_decision_card_and_stri
         app.hollywood.mode = LayerMode::Collapsed;
         alt_y(&mut app);
         draw_to(&mut app, cols, rows);
-        key(&mut app, hc_vt::Key::Tab);
+        key(&mut app, hc_vt::Key::BackTab);
         let sheet_buf = draw_to(&mut app, cols, rows);
         let sheet_screen = screen_lines(&sheet_buf).join("\n");
         if std::env::var_os("DESIGN_CARD_DUMP").is_some() {

@@ -3,6 +3,7 @@
 //! `acme-shop`, `beta-tools`, `alice`.
 mod decision_tests;
 mod draw_tests;
+mod focus_dock_tests;
 mod keys_tests;
 mod reader_design_tests;
 mod rows_tests;

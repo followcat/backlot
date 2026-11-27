@@ -175,13 +175,31 @@ impl App {
         rows.iter().map(|r| r.target(&waits)).collect()
     }
 
-    /// Every actionable target: the title row, the frames, then the
-    /// band's rows — selection works on stable identities, never
-    /// positions.
+    /// Render/layout-aware vertical navigation stops across WAITING and
+    /// HOLLYWOOD (`Wait` + visible `Fold`/`Headline`/`Talk`/`Live`/`Input|Setup`).
+    pub(super) fn hollywood_nav_band(&self) -> Vec<Target> {
+        let machines = self.panel_summaries();
+        let status = hollywood::status_of(&self.view);
+        let band_rect = if self.area.0 == 0 || self.area.1 == 0 {
+            ratatui::layout::Rect::new(0, 0, 120, 40)
+        } else {
+            self.call_sheet_band(ratatui::layout::Rect::new(0, 0, self.area.0, self.area.1))
+        };
+        let opts = hollywood::LayerOpts {
+            agent: self.has_hollywood_cfg,
+            mobile: self.area.0 <= self.shell.mobile_width_threshold,
+            suppress_highlights: false,
+            no_shadow: true,
+        };
+        hollywood::nav_band_targets(band_rect, &machines, &status, &self.hollywood, opts)
+    }
+
+    /// Every actionable target in screen order: title, waiting + hollywood
+    /// rows, then the studio frames and `+ new`.
     pub(crate) fn hollywood_targets(&self) -> Vec<Target> {
         let mut targets = vec![Target::Title];
-        targets.extend(self.hollywood_frames());
         targets.extend(self.hollywood_band());
+        targets.extend(self.hollywood_frames());
         targets
     }
 
@@ -202,8 +220,12 @@ impl App {
             })
     }
 
-    /// How many frames the last draw showed, and how many per row.
+    /// How many frames (or studio chips in strip mode) the last draw showed,
+    /// and how many per row.
     pub(super) fn hollywood_frame_window(&self) -> (usize, usize) {
+        if self.hollywood_hits.strip {
+            return (self.hollywood_hits.drawn_studios.max(1), 1);
+        }
         let rects: Vec<ratatui::layout::Rect> = self
             .hollywood_hits
             .rows
@@ -376,10 +398,10 @@ impl App {
             let sec = Section::of(&sel);
             self.hollywood.section = sec;
             match sec {
-                Section::Upper if !matches!(sel, Target::Title) => {
+                Section::Studios if !matches!(sel, Target::Title) => {
                     self.hollywood.last_upper = Some(sel);
                 }
-                Section::Lower => self.hollywood.last_lower = Some(sel),
+                Section::Waiting | Section::Hollywood => self.hollywood.last_lower = Some(sel),
                 _ => {}
             }
         }

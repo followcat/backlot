@@ -43,20 +43,20 @@ fn a_missing_document_still_offers_the_entry() {
 }
 
 #[test]
-fn the_band_is_the_headline_the_waits_and_the_input() {
+fn the_band_is_the_waits_the_headline_and_the_input() {
     let summary = summary();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    // The fixture carries two open cards and no prompts — the waits
-    // are the cards, in document order.
+    // The fixture carries two open cards and no prompts — waits render
+    // before HOLLYWOOD (`Headline`, `Talk`, `Live`, `Input`).
     assert_eq!(waits.len(), 2);
     let targets: Vec<Target> = rows.iter().map(|r| r.target(&waits)).collect();
     assert_eq!(
         targets,
         vec![
-            Target::Headline,
             Target::Card("c3".into()),
             Target::Card("c4".into()),
+            Target::Headline,
             Target::Input,
         ]
     );
@@ -92,10 +92,9 @@ fn a_calm_band_still_ends_in_the_input_line() {
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
     assert!(waits.is_empty());
-    assert_eq!(rows.len(), 3); // headline, calm, input
-    // acme-shop's screen is stalled (stuck, not the user's), so the
-    // sheet lists nothing and the calm row names all three studios.
-    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
+    assert_eq!(rows.len(), 2); // headline, input (WAITING omitted when calm)
+    assert!(matches!(rows[0], Row::Headline(_)));
+    assert!(matches!(rows[1], Row::Input));
 }
 
 /// A blocked Hollywood is on the needs-you list — the bar is never
@@ -116,7 +115,7 @@ fn a_blocked_hollywood_is_not_calm() {
         crate::hollywood::items::wait_head(hollywood, "Local", false).0,
         "HOLLYWOOD blocked"
     );
-    assert!(!rows.iter().any(|r| matches!(r, Row::Calm { .. })));
+    assert!(rows.iter().any(|r| matches!(r, Row::Wait(_))));
 }
 
 /// A Hollywood permission prompt is the asks row: the same `y` allow
@@ -200,7 +199,7 @@ fn an_info_attention_alone_stays_calm() {
         "{:?}",
         waits.iter().map(|w| w.target()).collect::<Vec<_>>()
     );
-    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
+    assert!(matches!(rows.as_slice(), [Row::Headline(_), Row::Input]));
 }
 
 /// A studio with no requirement is listed with its next step.
@@ -264,11 +263,14 @@ fn cast_marks_follow_the_role_state() {
 #[test]
 fn the_headline_never_repeats_the_newest_reply() {
     // Baseline: the fixture has a headline and no exchange — the
-    // headline row lists.
+    // headline row lists after any waits.
     let summary = summary();
     let list = machines(Some(&summary));
     let (_, rows) = band_rows(&list, &all_live, true);
-    assert!(matches!(rows[0], Row::Headline("acme-shop needs a look")));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Headline("acme-shop needs a look")))
+    );
 
     // The newest reply already carries the headline's text — no
     // second copy above the waits.
@@ -311,7 +313,10 @@ fn the_headline_never_repeats_the_newest_reply() {
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (_, rows) = band_rows(&list, &all_live, true);
-    assert!(matches!(rows[0], Row::Headline("acme-shop needs a look")));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Headline("acme-shop needs a look")))
+    );
 }
 
 /// A document with one unanswered `user ›` line, its Hollywood state
@@ -467,24 +472,24 @@ fn an_idle_hollywood_says_it_has_not_answered() {
     );
 }
 
-/// The talk keeps the newest turn and the turn before it; older lines
-/// fold into one row. Enter on the fold opens the newest folded entry.
+/// Talk keeps up to 8 newest entries; older lines fold into `Row::Fold`.
+/// Enter on the fold opens the newest folded entry.
 #[test]
 fn older_turns_fold_into_one_row() {
     let mut value = summary_json();
-    value["hollywood"]["exchange"] = serde_json::json!([
-        { "seq": 1, "who": "user", "text": "first ask" },
-        { "seq": 2, "who": "hollywood", "text": "first answer" },
-        { "seq": 3, "who": "user", "text": "second ask" },
-        { "seq": 4, "who": "hollywood", "text": "second answer" },
-        { "seq": 5, "who": "user", "text": "third ask" },
-        { "seq": 6, "who": "hollywood", "text": "third answer" },
-    ]);
+    value["hollywood"]["exchange"] = serde_json::json!(
+        (1..=10)
+            .map(|i| serde_json::json!({
+                "seq": i,
+                "who": if i % 2 == 1 { "user" } else { "hollywood" },
+                "text": format!("msg {i}")
+            }))
+            .collect::<Vec<_>>()
+    );
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    // The newest turn (#5, #6) and the one before (#3, #4) stay; the
-    // two oldest lines (#1, #2) fold.
+    // Newest 8 (#3..=#10) stay; #1..=#2 fold.
     let fold = rows
         .iter()
         .position(|r| matches!(r, Row::Fold { .. }))
@@ -507,21 +512,23 @@ fn older_turns_fold_into_one_row() {
             _ => None,
         })
         .collect();
-    assert_eq!(talk, [3, 4, 5, 6]);
-    // Enter on the fold opens the newest folded entry (#2).
+    assert_eq!(talk, [3, 4, 5, 6, 7, 8, 9, 10]);
     assert_eq!(rows[fold].target(&waits), Target::Talk(2));
 }
 
-/// With no user line at all, the newest two lines show and the rest
-/// fold.
+/// Without user lines, the newest 8 Hollywood lines show and older ones fold.
 #[test]
-fn without_a_user_line_the_newest_two_lines_show() {
+fn without_a_user_line_the_newest_eight_lines_show() {
     let mut value = summary_json();
-    value["hollywood"]["exchange"] = serde_json::json!([
-        { "seq": 1, "who": "hollywood", "text": "one" },
-        { "seq": 2, "who": "hollywood", "text": "two" },
-        { "seq": 3, "who": "hollywood", "text": "three" },
-    ]);
+    value["hollywood"]["exchange"] = serde_json::json!(
+        (1..=9)
+            .map(|i| serde_json::json!({
+                "seq": i,
+                "who": "hollywood",
+                "text": format!("line {i}")
+            }))
+            .collect::<Vec<_>>()
+    );
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
@@ -543,7 +550,7 @@ fn without_a_user_line_the_newest_two_lines_show() {
             _ => None,
         })
         .collect();
-    assert_eq!(talk, [2, 3]);
+    assert_eq!(talk, [2, 3, 4, 5, 6, 7, 8, 9]);
     assert_eq!(rows[fold].target(&waits), Target::Talk(1));
 }
 

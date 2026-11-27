@@ -20,6 +20,7 @@ pub(super) fn draw_detail(
     wait: &Wait<'_>,
     hollywood: &Hollywood,
     selected: bool,
+    zone_focused: bool,
     palette: &Palette,
 ) {
     let elev = palette.elevation();
@@ -29,7 +30,7 @@ pub(super) fn draw_detail(
         elev.surface
     };
     buf.set_style(rect, Style::default().bg(bg));
-    if selected {
+    if zone_focused || selected {
         put_text(
             buf,
             rect.x,
@@ -78,7 +79,7 @@ pub(super) fn draw_detail(
         for (idx, line) in lines.into_iter().take(rect.height as usize).enumerate() {
             let y = rect.y + idx as u16;
             if idx > 0 {
-                if selected {
+                if zone_focused || selected {
                     put_text(
                         buf,
                         rect.x,

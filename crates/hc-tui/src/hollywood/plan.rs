@@ -1,25 +1,34 @@
-//! The band's height ladder: which rows draw and how tall the frames
-//! are when the screen is short. The blanks go first, then the
-//! unselected waiting rows' detail lines, then the frames fold into
-//! the one-row chip strip, then the headline, then the hints; the
-//! top sprocket only leaves under ten rows, and a waiting row is
-//! never dropped — when they outgrow the room the window scrolls and
-//! the `i/N` marker says so. The `tell` row never leaves either.
+//! The Call Sheet's two-phase focus-aware height planner:
 //!
-//! `expanded_height` and `plan` live here too — the dock's seam and
-//! the band's draw both read the same ladder.
+//! 1. **Lay out every zone in its unfocused form first** (title, 1-line
+//!    waiting items, 1 newest talk line + compose, 1-row studio chip
+//!    strip, hints, bottom edge — no top perforation, no external shadow).
+//!    If that exceeds `cap`, shed in order: hints -> bottom edge ->
+//!    unfocused talk (never when HOLLYWOOD is focused) -> title -> studio
+//!    strip (never when STUDIOS is focused) -> scroll waiting list
+//!    keeping selection. Compose and the selected waiting row never drop.
+//! 2. **Expand only the focused zone into the remaining rows** (`cap - base`):
+//!    - WAITING: selected item's detail (`why:`, `Q1..Q3`, `finish?`).
+//!    - HOLLYWOOD: `── HOLLYWOOD ──` rule + newest talk lines with wraps
+//!      (up to 8); if no room for rule, keep talk with `N earlier` inline.
+//!    - STUDIOS: perforation + 7-row frames -> 5 rows -> 3 rows ->
+//!      focused 1-row strip.
+//!
+//! Expansion never pushes another zone's unfocused line out.
 
 use ratatui::layout::Rect;
 
 use super::rows::{self, Row, Target};
 use super::sheet::{Status, Wait};
-use super::{Confirm, Hollywood, LayerOpts, frames, talk};
+use super::{Confirm, Hollywood, LayerOpts, Section, frames, talk};
 use crate::panel::data::MachineSummary;
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
 /// Every exchange message clamps to at most 2 wrapped lines.
 pub(crate) const WRAP_TALK_ROWS: u16 = 2;
+/// Maximum talk entries shown in the focused HOLLYWOOD zone.
+const MAX_FOCUSED_TALK: usize = super::rows::MAX_TALK_ENTRIES;
 
 /// The band's height while expanded — the dock's seam (A5.2) reads
 /// the same number before it picks its own `y`.
@@ -35,7 +44,7 @@ pub(crate) fn expanded_height(
 }
 
 /// Both the band's internal height (`bar_h`) and its external bottom
-/// drop-shadow height (`0` or `1`), so a beside Lot dock clears the shadow.
+/// drop-shadow height (always `0` for the docked Call Sheet).
 pub(crate) fn expanded_extent(
     frame: Rect,
     machines: &[MachineSummary],
@@ -45,7 +54,16 @@ pub(crate) fn expanded_extent(
 ) -> (u16, u16) {
     let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
     let p = plan(frame, &waits, &band_rows, hollywood, opts);
-    (p.height(), u16::from(p.shadow))
+    (p.height(), 0)
+}
+
+/// The height cap in rows for `frame`.
+pub(crate) fn band_cap(frame: Rect, mobile: bool) -> u16 {
+    if mobile {
+        frame.height.min(16)
+    } else {
+        (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
+    }
 }
 
 /// The plan for one layout pass — shared by the height read and the
@@ -57,109 +75,110 @@ pub(crate) fn plan(
     hollywood: &Hollywood,
     opts: LayerOpts,
 ) -> Plan {
-    let cap = if opts.mobile {
-        frame.height.min(16)
-    } else {
-        (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
-    };
+    let cap = band_cap(frame, opts.mobile);
+    let focus = hollywood.selected.as_ref().and_then(Section::focus_of);
     let selected_wait = hollywood
         .selected
         .as_ref()
         .and_then(|t| waits.iter().position(|w| &w.target() == t));
-    let confirming = hollywood.confirm.as_ref().map(|c| match c {
-        Confirm::Finish(key) => Target::Ready(key.clone()),
+    let confirming = hollywood.confirm.as_ref().and_then(|c| match c {
+        Confirm::Finish(key) => {
+            let target = Target::Ready(key.clone());
+            waits.iter().position(|w| w.target() == target)
+        }
     });
-    let talk_wraps: Vec<u16> = band_rows
+    let talk_entries: Vec<&backlot_model::summary::Exchange> = band_rows
         .iter()
         .filter_map(|r| match r {
-            Row::Talk(e) => {
-                let text_w = talk::talk_text_width(frame.width, &e.who);
-                let rows = crate::hollywood::reader_wrap::wrap_plain(
-                    &e.text,
-                    text_w,
-                    WRAP_TALK_ROWS as usize,
-                );
-                Some((rows.len() as u16).saturating_sub(1))
-            }
+            Row::Talk(e) => Some(*e),
             _ => None,
         })
         .collect();
-    let total_talk = talk_wraps.len() as u16;
-    let breathing = frame.height >= 50;
+    let total_talk = talk_entries.len();
+    let talk_want_wraps: Vec<u16> = talk_entries
+        .iter()
+        .map(|e| {
+            let text_w = talk::talk_text_width(frame.width, &e.who);
+            let rows =
+                crate::hollywood::reader_wrap::wrap_plain(&e.text, text_w, WRAP_TALK_ROWS as usize);
+            (rows.len() as u16).saturating_sub(1)
+        })
+        .collect();
+    let has_headline = band_rows.iter().any(|r| matches!(r, Row::Headline(_)));
+    let has_live = band_rows.iter().any(|r| matches!(r, Row::Live(_)));
+    let want_detail_extra: Vec<u16> = waits
+        .iter()
+        .map(|w| match w {
+            Wait::Decision(item) => {
+                (super::decision::detail_lines(item).len() as u16).saturating_sub(1)
+            }
+            _ => 0,
+        })
+        .collect();
+
     let mut plan = Plan {
-        top_sprocket: true,
         title: true,
-        blank_1: breathing,
-        studios_rule: true,
-        frames_h: frames::FRAME_H,
-        blank_2: breathing || waits.is_empty(),
-        waiting_rule: !waits.is_empty(),
-        headline: band_rows.iter().any(|r| matches!(r, Row::Headline(_))),
-        details: waits
-            .iter()
-            .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
-            .collect(),
-        detail_extra: waits
-            .iter()
-            .map(|w| match w {
-                Wait::Decision(item) => {
-                    (super::decision::detail_lines(item).len() as u16).saturating_sub(1)
-                }
-                _ => 0,
-            })
-            .collect(),
         shown: waits.len(),
-        hollywood_rule: opts.agent,
-        setup_hairline: !opts.agent && breathing,
-        talk: total_talk,
-        talk_wraps,
-        live: band_rows.iter().any(|r| matches!(r, Row::Live(_))),
-        tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
+        details: vec![false; waits.len()],
+        detail_extra: vec![0; waits.len()],
+        hollywood_rule: false,
+        headline: opts.agent && total_talk == 0 && has_headline,
+        talk: u16::from(opts.agent && total_talk > 0),
+        talk_wraps: vec![0; total_talk],
+        live: false,
+        tail_rows: 1,
+        studios_perf: false,
+        frames_h: 1,
         hints: true,
-        bottom_sprocket: true,
-        shadow: !opts.no_shadow && frame.height >= 16,
+        bottom_edge: true,
     };
-    fit(&mut plan, cap, frame.height, selected_wait);
-    if opts.no_shadow || frame.height < 16 || plan.height() >= frame.height {
-        plan.shadow = false;
-    }
+
+    fit_base(&mut plan, cap, focus, waits.len());
+    expand_focused(
+        &mut plan,
+        cap,
+        focus,
+        waits,
+        selected_wait,
+        confirming,
+        &want_detail_extra,
+        opts.agent,
+        has_headline,
+        has_live,
+        &talk_want_wraps,
+    );
     plan
 }
 
-/// One fitted plan of the expanded band.
+/// One fitted plan of the expanded docked Call Sheet.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
-    pub top_sprocket: bool,
     pub title: bool,
-    pub blank_1: bool,
-    pub studios_rule: bool,
-    /// `7` draws the film frames, `1` the chip strip, `0` nothing.
-    pub frames_h: u16,
-    pub blank_2: bool,
-    pub waiting_rule: bool,
-    /// The headline row — dropped after zone rules and old talk.
-    pub headline: bool,
+    /// How many waiting rows the scroll window shows (`>= 1` while waits exist).
+    pub shown: usize,
     /// Per waiting item: `true` draws its detail line.
     pub details: Vec<bool>,
     /// Additional detail lines beyond the first (used by multi-question design decisions).
     pub detail_extra: Vec<u16>,
-    /// How many waiting rows the scroll window shows — never fewer
-    /// than `1` while items exist.
-    pub shown: usize,
+    /// Focused HOLLYWOOD zone header `── HOLLYWOOD ──`.
     pub hollywood_rule: bool,
-    pub setup_hairline: bool,
-    /// How many `Row::Talk` lines draw above the compose field.
+    /// Hollywood's headline row when shown inside the HOLLYWOOD zone.
+    pub headline: bool,
+    /// How many `Row::Talk` entries draw above compose.
     pub talk: u16,
-    /// Extra wrapped line (`0` or `1`) per visible `Row::Talk`, oldest first.
+    /// Extra wrapped row (`0` or `1`) per entry in `talk_entries`.
     pub talk_wraps: Vec<u16>,
-    /// Hollywood's live progress row under the newest user line.
+    /// Hollywood's live progress row (focused HOLLYWOOD only).
     pub live: bool,
-    /// The tell/setup/calm tail rows — never drops below `1`.
+    /// The compose (`›`) / setup row — never drops when height >= 1.
     pub tail_rows: u16,
+    /// Focused STUDIOS top perforation row `▄▄ ▄▄ … STUDIOS N …`.
+    pub studios_perf: bool,
+    /// `7`/`5`/`3` draws frames, `1` draws the 1-row chip strip, `0` none.
+    pub frames_h: u16,
     pub hints: bool,
-    pub bottom_sprocket: bool,
-    /// External 1-row bottom shadow drawn at `y = area.bottom()`.
-    pub shadow: bool,
+    /// Single bottom `▀▀ ▀▀ …` perforation edge (no external shadow row).
+    pub bottom_edge: bool,
 }
 
 impl Plan {
@@ -181,7 +200,7 @@ impl Plan {
         }
     }
 
-    /// The plan's internal height in rows (excluding the external bottom shadow).
+    /// Total band height in screen rows (external shadow is always 0).
     pub fn height(&self) -> u16 {
         let waits: u16 = self
             .details
@@ -196,7 +215,7 @@ impl Plan {
                 }
             })
             .sum();
-        // When the selected item scrolls past `0..self.shown`, `draw_waiting`
+        // When the kept waiting item scrolls past `0..self.shown`, `draw_waiting`
         // slides the window to include it and drops an unselected item.
         let kept_outside = if self.shown > 0 && !self.details.iter().take(self.shown).any(|d| *d) {
             self.details
@@ -209,112 +228,147 @@ impl Plan {
             0
         };
         let talk = self.talk + self.wrap_rows();
-        u16::from(self.top_sprocket)
-            + u16::from(self.title)
-            + u16::from(self.blank_1)
-            + u16::from(self.studios_rule)
-            + self.frames_h
-            + u16::from(self.blank_2)
-            + u16::from(self.waiting_rule)
-            + u16::from(self.headline)
+        u16::from(self.title)
             + waits
             + kept_outside
             + u16::from(self.hollywood_rule)
-            + u16::from(self.setup_hairline)
+            + u16::from(self.headline)
             + talk
             + u16::from(self.live)
             + self.tail_rows
+            + u16::from(self.studios_perf)
+            + self.frames_h
             + u16::from(self.hints)
-            + u16::from(self.bottom_sprocket)
+            + u16::from(self.bottom_edge)
     }
 }
 
-/// 10-step compression ladder into `height`:
-/// 1. blanks / optional hairlines
-/// 2. exchange 2-line wrap -> 1-line (oldest wrapped message first)
-/// 3. unselected waiting details (`keep` keeps its detail)
-/// 4. oldest visible `Row::Talk` lines (bumps `earlier` count on `HOLLYWOOD` rule)
-/// 5. zone label rules (`HOLLYWOOD` -> `WAITING ON YOU` -> `STUDIOS`)
-/// 6. non-duplicate `Row::Headline`
-/// 7. 7-row frames -> 1-row chip strip, then `Row::Live`
-/// 8. hint row
-/// 9. waiting scroll window down to `1`
-/// 10. external shadow -> top sprocket -> bottom sprocket -> chip strip (`0`) -> title
-pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) {
-    while plan.height() > height {
-        let skip = plan.talk_wraps.len().saturating_sub(plan.talk as usize);
-        if plan.blank_1 {
-            plan.blank_1 = false;
-        } else if plan.blank_2 {
-            plan.blank_2 = false;
-        } else if plan.setup_hairline {
-            plan.setup_hairline = false;
-        } else if let Some(idx) = plan
-            .talk_wraps
-            .iter()
-            .enumerate()
-            .skip(skip)
-            .find(|(_, w)| **w > 0)
-            .map(|(i, _)| i)
-        {
-            plan.talk_wraps[idx] -= 1;
-        } else if let Some(i) = plan
-            .detail_extra
-            .iter()
-            .enumerate()
-            .rfind(|(i, extra)| {
-                **extra > 0 && plan.details.get(*i).copied().unwrap_or(false) && Some(*i) != keep
-            })
-            .map(|(i, _)| i)
-        {
-            plan.detail_extra[i] -= 1;
-        } else if let Some(i) = plan
-            .details
-            .iter()
-            .enumerate()
-            .rfind(|(i, d)| **d && Some(*i) != keep)
-            .map(|(i, _)| i)
-        {
-            plan.details[i] = false;
-        } else if plan.talk > 0 {
-            plan.talk -= 1;
-        } else if plan.hollywood_rule {
-            plan.hollywood_rule = false;
-        } else if plan.waiting_rule {
-            plan.waiting_rule = false;
-        } else if plan.studios_rule {
-            plan.studios_rule = false;
+/// Phase 1: shed base unfocused rows into `cap`. Compose (`tail_rows`)
+/// and the selected waiting row (`shown >= 1`) never drop while `cap >= 2`.
+pub(crate) fn fit_base(plan: &mut Plan, cap: u16, focus: Option<Section>, total_waits: usize) {
+    let min_shown = usize::from(total_waits > 0);
+    while plan.height() > cap {
+        if plan.hints {
+            plan.hints = false;
+        } else if plan.bottom_edge {
+            plan.bottom_edge = false;
+        } else if focus != Some(Section::Hollywood) && plan.headline {
+            plan.headline = false;
+        } else if focus != Some(Section::Hollywood) && plan.talk > 0 {
+            plan.talk = 0;
+        } else if plan.title {
+            plan.title = false;
+        } else if focus != Some(Section::Studios) && plan.frames_h > 0 {
+            plan.frames_h = 0;
+        } else if plan.shown > min_shown {
+            plan.shown -= 1;
         } else if plan.headline {
             plan.headline = false;
-        } else if plan.frames_h > 1 {
-            plan.frames_h = 1;
-        } else if plan.live {
-            plan.live = false;
-        } else if plan.hints {
-            plan.hints = false;
-        } else if let Some(i) = keep.filter(|&k| {
-            plan.details.get(k).copied().unwrap_or(false)
-                && plan.detail_extra.get(k).copied().unwrap_or(0) > 0
-        }) {
-            plan.detail_extra[i] -= 1;
-        } else if plan.shown > usize::from(!plan.details.is_empty()) {
-            plan.shown -= 1;
+        } else if plan.talk > 0 {
+            plan.talk = 0;
+        } else if plan.frames_h > 0 {
+            plan.frames_h = 0;
+        } else if plan.shown > 0 && cap < 2 {
+            plan.shown = 0;
+        } else if plan.tail_rows > 0 && cap == 0 {
+            plan.tail_rows = 0;
         } else {
-            // Step 10 drops the external shadow row first, then tight chrome.
-            plan.shadow = false;
-            if plan.top_sprocket && (rows < 10 || plan.height() > height) {
-                plan.top_sprocket = false;
-            } else if plan.bottom_sprocket {
-                plan.bottom_sprocket = false;
-            } else if plan.frames_h > 0 {
-                plan.frames_h = 0;
-            } else if plan.title {
-                plan.title = false;
-            } else if plan.tail_rows > 1 {
-                plan.tail_rows -= 1;
-            } else {
-                break;
+            break;
+        }
+    }
+}
+
+/// Phase 2: expand only the focused zone into rows left under `cap`.
+#[allow(clippy::too_many_arguments)]
+fn expand_focused(
+    plan: &mut Plan,
+    cap: u16,
+    focus: Option<Section>,
+    waits: &[Wait<'_>],
+    selected_wait: Option<usize>,
+    confirming: Option<usize>,
+    want_detail_extra: &[u16],
+    agent: bool,
+    has_headline: bool,
+    has_live: bool,
+    talk_want_wraps: &[u16],
+) {
+    let mut spare = cap.saturating_sub(plan.height());
+    // An armed inline `finish studio? y/n` on a Ready item (even if
+    // armed from STUDIOS) needs its 1-line ask visible.
+    if let Some(ci) = confirming
+        && Some(ci) != selected_wait
+        && spare > 0
+    {
+        plan.details[ci] = true;
+        spare -= 1;
+    }
+
+    match focus {
+        Some(Section::Waiting) => {
+            if let Some(sel) = selected_wait
+                && spare > 0
+                && (waits[sel].detailable() || confirming == Some(sel))
+            {
+                let want = 1 + want_detail_extra.get(sel).copied().unwrap_or(0);
+                let give = spare.min(want);
+                plan.details[sel] = true;
+                plan.detail_extra[sel] = give - 1;
             }
         }
+        Some(Section::Hollywood) if agent => {
+            let mut rem = spare;
+            let total_talk = talk_want_wraps.len();
+            if has_live && rem > 0 {
+                plan.live = true;
+                rem -= 1;
+            }
+            if rem > 0 {
+                plan.hollywood_rule = true;
+                rem -= 1;
+            }
+            if total_talk > 0 && rem > 0 {
+                let last = total_talk - 1;
+                let w = talk_want_wraps[last].min(rem);
+                plan.talk_wraps[last] = w;
+                rem -= w;
+
+                let oldest = total_talk.saturating_sub(MAX_FOCUSED_TALK);
+                for idx in (oldest..last).rev() {
+                    if rem == 0 {
+                        break;
+                    }
+                    let extra = talk_want_wraps[idx];
+                    if rem > extra {
+                        plan.talk += 1;
+                        plan.talk_wraps[idx] = extra;
+                        rem -= 1 + extra;
+                    } else {
+                        plan.talk += 1;
+                        rem -= 1;
+                    }
+                }
+            }
+            if has_headline && !plan.headline && rem > 0 {
+                plan.headline = true;
+            }
+        }
+        Some(Section::Studios) => {
+            // `plan.frames_h` starts at `1` unless cap was < 2.
+            if plan.frames_h == 1 {
+                let avail = 1 + spare;
+                if avail > frames::FRAME_H {
+                    plan.studios_perf = true;
+                    plan.frames_h = frames::FRAME_H;
+                } else if avail > frames::FRAME_H_MID {
+                    plan.studios_perf = true;
+                    plan.frames_h = frames::FRAME_H_MID;
+                } else if avail > frames::FRAME_H_MIN {
+                    plan.studios_perf = true;
+                    plan.frames_h = frames::FRAME_H_MIN;
+                }
+            }
+        }
+        _ => {}
     }
 }
