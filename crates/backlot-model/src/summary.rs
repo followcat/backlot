@@ -321,6 +321,10 @@ pub struct RoleSummary {
     /// `waiting`. Documents an older stage wrote have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_since_ms: Option<u64>,
+    /// Summary of queued undelivered messages for this role and why
+    /// they are waiting (§1.3.2). Absent on older stage documents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue: Option<QueueStatus>,
     /// Derived `<runner>:<label>` account identifier when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
@@ -720,6 +724,7 @@ pub fn summary_with_running(
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
                 restarted_ms: None,
                 idle_since_ms: None,
+                queue: None,
                 account: None,
             });
         }
@@ -744,12 +749,12 @@ pub fn summary_with_running(
                 .values()
                 .filter(|t| t.status == TaskStatus::Delivered)
                 .count() as u32,
-            // `info` is the stage's own bookkeeping — it shows on the
-            // role's record but never counts as something the person
-            // must act on.
+            // Only attentions needing the person count toward `waiting`
+            // (`Stuck` is handled by another role or the stage; `Info`
+            // is bookkeeping).
             waiting: state
                 .open_attention()
-                .filter(|a| AttentionClass::of(&a.reason, a.needs_user) != AttentionClass::Info)
+                .filter(|a| AttentionClass::of(&a.reason, a.needs_user) == AttentionClass::NeedsYou)
                 .count() as u32,
             error,
             next: crate::steps::next_steps(state)

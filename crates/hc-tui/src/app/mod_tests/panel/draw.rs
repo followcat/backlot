@@ -159,8 +159,15 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     let strip = columns_text(&collapsed, 104, 120);
     assert!(strip.contains("lot"), "{strip}");
     assert!(!strip.contains("PANE-ALPHA"), "{strip}");
-    let panes = columns_text(&collapsed, 0, 104);
-    assert!(!panes.contains(" lot"), "{panes}");
+    let panes_above_modebar: String = columns_text(&collapsed, 0, 104)
+        .lines()
+        .take(23)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !panes_above_modebar.contains(" lot"),
+        "{panes_above_modebar}"
+    );
     // Expanding again puts the full column back.
     app.panel.mode = PanelMode::Expanded;
     let expanded = draw_to(&mut app, 120, 24);

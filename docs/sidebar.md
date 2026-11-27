@@ -197,3 +197,12 @@ Sidebar widths, collapse behavior, mobile header, tab bar, pane gutters and
 borders use the reference configuration and geometry. Narrow terminals do
 not introduce a separate backlot status-line format. Divider dragging updates
 both drawing and the size allocated to the attached program.
+
+In studio mode, the left sidebar holds two keyboard-focusable sections (`Tree` via
+`Ctrl+B t` / `[keys] focus_tree` and `Cast` via `Ctrl+B a` / `[keys] focus_cast`):
+`Tab` / `Shift+Tab` swaps focus between them while `Esc` returns focus to the terminal.
+In `Cast`, `↑`/`↓`/`j`/`k` walk live roles, studio shells, and `others`; `←`/`→`/`h`/`l` step
+inline action chips on urgent roles; `t`/`r` open targeted Lot compose; `x` acks asks; and
+`y`/`d`/`p`/`m`/`o` match the Lot's actions. Under the single-focus-ring invariant, only the
+active region renders bright `selection_bg` / accent rails, while non-focused cursors demote to a
+faint `·`.

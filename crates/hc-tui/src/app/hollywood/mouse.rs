@@ -29,6 +29,7 @@ impl App {
             && matches!(kind, MouseEventKind::Down(_))
             && self.hollywood.view.is_none()
         {
+            self.call_sheet_return = None;
             self.hollywood_collapse();
         }
     }

@@ -111,12 +111,27 @@ pub(crate) fn render(
     if area.width == 0 || area.height == 0 {
         return hits;
     }
+    let lot_focused = panel.focused && active_surface;
+    let entered_focus = lot_focused && panel.entered_studio.is_some();
     if area.width > 1 {
-        let seam = Style::default().fg(elev.border_muted).bg(elev.surface);
+        let seam_style = if lot_focused {
+            Style::default().fg(palette.accent).bg(elev.surface)
+        } else {
+            Style::default().fg(elev.border_muted).bg(elev.surface)
+        };
         for y in area.y..area.bottom() {
+            let sym = if entered_focus && y == area.y {
+                "┏"
+            } else if entered_focus && area.height > 1 && y + 1 == area.bottom() {
+                "┗"
+            } else if entered_focus {
+                "┃"
+            } else {
+                "│"
+            };
             if let Some(cell) = buf.cell_mut((area.x, y)) {
-                cell.set_symbol("│");
-                cell.set_style(seam);
+                cell.set_symbol(sym);
+                cell.set_style(seam_style);
             }
         }
     }
@@ -126,9 +141,7 @@ pub(crate) fn render(
         area
     };
 
-    let lot_focused = panel.focused && active_surface;
-    // `lot · <n>` — accent while the panel owns the keys; the call
-    // sheet's key sits at the row's right end when it fits.
+    // `lot · <n>` — accent heavy focus chrome when entered inside a studio.
     let title = Rect::new(inner.x, inner.y, inner.width, 1);
     let title_fg = if lot_focused {
         palette.accent
@@ -137,7 +150,9 @@ pub(crate) fn render(
     };
     let studios = studio_count(machines);
     let title_text = match mode {
+        PanelMode::Collapsed if entered_focus => format!(" ▸ lot {studios}"),
         PanelMode::Collapsed => format!(" lot {studios}"),
+        _ if entered_focus => format!(" ▸ lot · {studios} "),
         _ => format!(" lot · {studios}"),
     };
     put_text(
@@ -148,23 +163,57 @@ pub(crate) fn render(
         &title_text,
         Style::default().fg(title_fg).add_modifier(Modifier::BOLD),
     );
-    if let Some(hint) = super::draw_hints::header_hint(
+    let hint_room = title
+        .width
+        .saturating_sub(display_width(&title_text) as u16 + 2) as usize;
+    let hint = super::draw_hints::header_hint(
         panel.focused,
         overlay,
         pane_refuses,
         mode,
         keys,
         area.width,
-        title
-            .width
-            .saturating_sub(display_width(&title_text) as u16 + 1) as usize,
-    ) {
-        let hint_width = display_width(&hint) as u16;
+        hint_room,
+    );
+    let hint_w = hint.as_deref().map_or(0, display_width) as u16;
+    if entered_focus && title.width >= 8 {
+        let cap_end = title.x + title.width - 1;
         put_text(
             buf,
-            title.x + title.width - hint_width,
+            cap_end,
             title.y,
-            hint_width,
+            1,
+            "┓",
+            Style::default().fg(palette.accent),
+        );
+        let fill_start = title.x + (display_width(&title_text) as u16).min(title.width);
+        let fill_end = cap_end.saturating_sub(hint_w + u16::from(hint_w > 0));
+        if fill_end > fill_start {
+            put_text(
+                buf,
+                fill_start,
+                title.y,
+                fill_end - fill_start,
+                &"━".repeat((fill_end - fill_start) as usize),
+                Style::default().fg(palette.accent),
+            );
+        }
+        if let Some(hint) = hint {
+            put_text(
+                buf,
+                cap_end.saturating_sub(hint_w),
+                title.y,
+                hint_w,
+                &hint,
+                Style::default().fg(elev.muted_surface),
+            );
+        }
+    } else if let Some(hint) = hint {
+        put_text(
+            buf,
+            title.x + title.width - hint_w,
+            title.y,
+            hint_w,
             &hint,
             Style::default().fg(elev.muted_surface),
         );
@@ -172,7 +221,7 @@ pub(crate) fn render(
     hits.title = title;
 
     // Footer hint isolation: when unfocused, keep bottom row blank `elev.surface`;
-    // when focused, draw a `border_muted` hairline above up to 3 verbful hints.
+    // when focused, draw hairline above truthful 1-line hints.
     let shortcuts = area.height >= 8;
     let footer_rows = if shortcuts {
         if panel.focused { 2 } else { 1 }
@@ -193,6 +242,8 @@ pub(crate) fn render(
             panel.selected.as_ref(),
             panel.editing,
             panel.finish_confirm.is_some(),
+            panel.entered_studio.is_some(),
+            panel.active_chip.is_some(),
             machines,
             overlay,
             pane_refuses,
@@ -379,6 +430,7 @@ pub(crate) fn render(
             }
             Row::BlockTop { studio, health } => {
                 let is_selected = lot_focused && selected_studio.as_ref() == Some(&studio.key());
+                let entered = lot_focused && panel.entered_studio.as_ref() == Some(&studio.key());
                 let frame = frame_of(&studio.key());
                 draw_top(
                     buf,
@@ -388,6 +440,7 @@ pub(crate) fn render(
                     *health,
                     is_selected,
                     mark == Some(&studio.key()),
+                    entered,
                     frame,
                     palette,
                 );
@@ -399,17 +452,33 @@ pub(crate) fn render(
                 draw_usage(buf, rect, *studio, frame_of(&studio.key()), palette);
             }
             Row::BlockBottom(studio) => {
+                let entered = lot_focused && panel.entered_studio.as_ref() == Some(&studio.key());
                 let edge = frame_of(&studio.key());
-                put_text(buf, rect.x, rect.y, 1, "╰", edge);
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    1,
+                    if entered { "┗" } else { "╰" },
+                    edge,
+                );
                 put_text(
                     buf,
                     rect.x + 1,
                     rect.y,
                     rect.width.saturating_sub(2),
-                    &"─".repeat(rect.width.saturating_sub(2) as usize),
+                    &(if entered { "━" } else { "─" })
+                        .repeat(rect.width.saturating_sub(2) as usize),
                     edge,
                 );
-                put_text(buf, rect.x + rect.width - 1, rect.y, 1, "╯", edge);
+                put_text(
+                    buf,
+                    rect.x + rect.width - 1,
+                    rect.y,
+                    1,
+                    if entered { "┛" } else { "╯" },
+                    edge,
+                );
             }
             Row::Person { studio, role } => {
                 hits.working_drawn |= matches!(Person::of(role), Person::Working);
@@ -503,6 +572,19 @@ pub(crate) fn render(
             Row::Talk { studio, line } => {
                 draw_talk(buf, rect, line, paints, frame_of(&studio.key()), palette);
             }
+            Row::TalkStatus { studio, line } => {
+                hits.working_drawn |= super::talk_status::draw_talk_status(
+                    buf,
+                    rect,
+                    *studio,
+                    line,
+                    stage_running(studio.machine),
+                    pending,
+                    frame_of(&studio.key()),
+                    palette,
+                    now_ms,
+                );
+            }
             Row::InputDivider { studio } => {
                 let edge = frame_of(&studio.key());
                 let rule = Style::default().fg(elev.border_muted).bg(elev.surface);
@@ -522,12 +604,21 @@ pub(crate) fn render(
                 }
             }
             Row::Input { studio } => {
-                let producer_mark = crate::action::mark::role(&studio.key(), "producer");
+                let target_label = if paints {
+                    panel.tell_target.as_str()
+                } else {
+                    "producer"
+                };
+                let target_mark = if target_label == "hollywood" {
+                    crate::action::mark::hollywood()
+                } else {
+                    crate::action::mark::role(&studio.key(), target_label)
+                };
                 let tell_in_flight = pending
-                    .pending_label(&producer_mark)
+                    .pending_label(&target_mark)
                     .is_some_and(|l| l.starts_with("telling "));
-                let producer_working = studio.studio.roles.iter().any(|r| {
-                    r.role == "producer"
+                let role_working = studio.studio.roles.iter().any(|r| {
+                    r.role == target_label
                         && r.state == "live"
                         && r.work == Some(backlot_model::summary::Work::Working)
                 });
@@ -536,9 +627,16 @@ pub(crate) fn render(
                     .exchange
                     .last()
                     .is_some_and(|e| e.who == "user");
-                let cue = if studio.studio.pending_tell || tell_in_flight {
+                let cue = if studio.studio.pending_tell
+                    || studio
+                        .studio
+                        .roles
+                        .iter()
+                        .any(|r| r.role == target_label && r.queue.is_some())
+                    || tell_in_flight
+                {
                     Some(("queued", palette.peach))
-                } else if awaiting_reply && producer_working {
+                } else if awaiting_reply && role_working {
                     Some(("thinking", palette.accent))
                 } else {
                     None
@@ -560,6 +658,7 @@ pub(crate) fn render(
                     buf,
                     rect,
                     draft,
+                    target_label,
                     paints,
                     composing,
                     cue,
@@ -631,13 +730,28 @@ pub(crate) fn render(
                 );
             }
         }
-        if paints && !matches!(row, Row::Input { .. }) {
-            // `▌` over the row's left edge — inside the block border
-            // on a person's row — after the content, so nothing
-            // redraws over it.
-            let bar_x = if matches!(
+        let interior = matches!(
+            row,
+            Row::Person { .. }
+                | Row::Task { .. }
+                | Row::OutwardCard { .. }
+                | Row::DesignHeader { .. }
+                | Row::DesignPreview { .. }
+                | Row::DesignActions { .. }
+                | Row::AcceptedFold { .. }
+                | Row::ClosedFold { .. }
+                | Row::Talk { .. }
+                | Row::ReopenProducer { .. }
+        );
+        if lot_focused
+            && panel.entered_studio.is_some()
+            && row.owning_studio().as_ref() == panel.entered_studio.as_ref()
+            && matches!(
                 row,
-                Row::Person { .. }
+                Row::Owed { .. }
+                    | Row::Usage { .. }
+                    | Row::Person { .. }
+                    | Row::Divider { .. }
                     | Row::Task { .. }
                     | Row::OutwardCard { .. }
                     | Row::DesignHeader { .. }
@@ -645,13 +759,33 @@ pub(crate) fn render(
                     | Row::DesignActions { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
+                    | Row::Drawer { .. }
                     | Row::Talk { .. }
+                    | Row::TalkStatus { .. }
+                    | Row::InputDivider { .. }
+                    | Row::Input { .. }
                     | Row::ReopenProducer { .. }
-            ) {
-                rect.x + 1
+            )
+        {
+            let sym = if matches!(row, Row::Divider { .. } | Row::InputDivider { .. }) {
+                "┣"
             } else {
-                rect.x
+                "┃"
             };
+            put_text(
+                buf,
+                rect.x,
+                rect.y,
+                1,
+                sym,
+                Style::default().fg(palette.accent).bg(elev.surface),
+            );
+        }
+        let bar_x = if interior { rect.x + 1 } else { rect.x };
+        if paints && !matches!(row, Row::Input { .. }) {
+            // `▌` over the row's left edge — inside the block border
+            // on a person's row — after the content, so nothing
+            // redraws over it.
             put_text(
                 buf,
                 bar_x,
@@ -660,6 +794,20 @@ pub(crate) fn render(
                 glyphs::SELECTION_BAR,
                 Style::default().bg(palette.selection_bg).fg(palette.accent),
             );
+            if let Some(chip_idx) = panel.active_chip {
+                let row_chips = super::chips::row_chips(machines, &target);
+                if !row_chips.is_empty() {
+                    let chip_rect = if interior && rect.width > 3 {
+                        Rect::new(rect.x + 2, rect.y, rect.width - 3, 1)
+                    } else {
+                        rect
+                    };
+                    super::chips::draw_row_chips(buf, chip_rect, &row_chips, chip_idx, palette);
+                }
+            }
+        } else if !lot_focused && selected == Some(&target) && interior {
+            // Remembered unfocused interior cursor renders a faint `·` without `selection_bg` or `accent`.
+            put_text(buf, bar_x, rect.y, 1, "·", dim);
         }
         // S3's pending mark — `⠋ <label>…` while the row's action
         // runs (§3.1).

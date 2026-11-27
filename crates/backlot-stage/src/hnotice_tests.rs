@@ -34,16 +34,22 @@ fn one(studios: &[(&str, StudioState)]) -> Vec<HNotice> {
     hnotice::owed(&map, &BTreeMap::new(), &HollywoodState::default(), 0)
 }
 
-/// An open attention is one notice, named with its studio and
-/// pointing at the raising seq.
+/// An open `Stuck` actor prompt stays silent when fresh and reaches
+/// Hollywood past the threshold, naming its studio and raising seq.
 #[test]
 fn an_attention_names_its_studio() {
     let mut s = StudioState::default();
     s.attention
         .push(attention(7, "actor-t1-c1", PERMISSION_PROMPT, false));
-    // An actor's own prompt is just attention — the director may
-    // still answer it.
-    let n = one(&[("acme-shop", s)]);
+    assert!(one(&[("acme-shop", s.clone())]).is_empty());
+
+    let map: BTreeMap<String, StudioState> = [("acme-shop".to_string(), s)].into();
+    let n = hnotice::owed(
+        &map,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        hnotice::stuck_threshold_ms(),
+    );
     assert_eq!(n.len(), 1);
     assert_eq!(n[0].label, "attention");
     assert_eq!(n[0].studio.as_deref(), Some("acme-shop"));
@@ -52,19 +58,24 @@ fn an_attention_names_its_studio() {
 }
 
 /// A prompt only the user may answer — `needs_user` or a role with
-/// no task — is the `prompt` notice; a stall nobody routes is
-/// `stalled`.
+/// no task — is the `prompt` notice immediately; an overdue stall
+/// nobody routes is `stalled`.
 #[test]
 fn the_prompt_and_unrouted_stall_labels() {
     let mut s = StudioState::default();
     s.attention
         .push(attention(3, "producer", PERMISSION_PROMPT, true));
     s.attention.push(attention(4, "producer", STALLED, false));
-    let n = one(&[("acme", s)]);
+    let n = hnotice::owed(
+        &[("acme".to_string(), s)].into(),
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        hnotice::stuck_threshold_ms(),
+    );
     let labels: Vec<&str> = n.iter().map(|x| x.label).collect();
     assert_eq!(labels, vec!["prompt", "stalled"]);
 
-    // A `cannot resume` the producer owns routes nowhere either.
+    // A `cannot resume` the producer owns is `NeedsYou` at once.
     let mut s = StudioState::default();
     s.attention
         .push(attention(5, "producer", CANNOT_RESUME, false));
@@ -72,7 +83,7 @@ fn the_prompt_and_unrouted_stall_labels() {
     assert_eq!(n[0].label, "stalled");
 }
 
-/// A producer that stalls or cannot resume is always Hollywood's
+/// An overdue producer stall or `cannot resume` leads Hollywood's
 /// `stalled` notice, and duplicate `(studio, role, label)` attentions
 /// coalesce to the newest one.
 #[test]
@@ -86,7 +97,12 @@ fn a_producer_down_leads_hollywoods_notice() {
         },
     );
     s.attention.push(attention(4, "producer", STALLED, false));
-    let n = one(&[("acme", s.clone())]);
+    let n = hnotice::owed(
+        &[("acme".to_string(), s.clone())].into(),
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        hnotice::stuck_threshold_ms(),
+    );
     assert_eq!(n.len(), 1);
     assert_eq!(n[0].label, "stalled");
     assert!(
@@ -98,7 +114,12 @@ fn a_producer_down_leads_hollywoods_notice() {
 
     s.attention
         .push(attention(5, "producer", CANNOT_RESUME, false));
-    let n = one(&[("acme", s)]);
+    let n = hnotice::owed(
+        &[("acme".to_string(), s)].into(),
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        hnotice::stuck_threshold_ms(),
+    );
     assert_eq!(
         n.len(),
         1,
@@ -325,4 +346,77 @@ fn an_attention_notice_carries_its_class_and_age() {
     );
     assert!(n[0].body.contains("screen at "), "{}", n[0].body);
     assert!(n[0].body.contains("may be stale"), "{}", n[0].body);
+}
+
+#[test]
+fn director_handled_prompt_waits_for_threshold_while_needs_you_fires_at_once() {
+    let t0 = 1_000_000;
+    let threshold_ms = u64::from(backlot_model::event::default_stall_limit_s()) * 1000;
+    let mut s = StudioState::default();
+    s.roles.insert(
+        "director".into(),
+        RoleState {
+            live: true,
+            ..RoleState::default()
+        },
+    );
+    let mut prompt = attention(7, "actor-t1-c1", PERMISSION_PROMPT, false);
+    prompt.ts_ms = t0;
+    s.attention.push(prompt);
+    let map: BTreeMap<String, StudioState> = [("acme-shop".to_string(), s.clone())].into();
+
+    // Fresh director-handled prompt emits no Hollywood notice.
+    let fresh = hnotice::owed(
+        &map,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        t0 + 60_000,
+    );
+    assert!(
+        fresh.is_empty(),
+        "fresh director prompt should hold: {fresh:?}"
+    );
+
+    // Same prompt past the threshold reaches Hollywood with wait duration and why.
+    let overdue = hnotice::owed(
+        &map,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        t0 + threshold_ms,
+    );
+    assert_eq!(overdue.len(), 1, "{overdue:?}");
+    assert!(
+        overdue[0].body.contains("10m") && overdue[0].body.contains("not answering"),
+        "{}",
+        overdue[0].body
+    );
+
+    // Rate-limited director past the threshold names rate limit as why.
+    let mut s_rl = s.clone();
+    let mut rl = attention(8, "director", crate::ratelimit::RATE_LIMITED, false);
+    rl.ts_ms = t0;
+    s_rl.attention.push(rl);
+    let map_rl: BTreeMap<String, StudioState> = [("acme-shop".to_string(), s_rl)].into();
+    let overdue_rl = hnotice::owed(
+        &map_rl,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        t0 + threshold_ms,
+    );
+    assert!(
+        overdue_rl.iter().any(|n| n.source_seq == Some(7)
+            && n.body.contains("10m")
+            && n.body.contains("rate limited")),
+        "{overdue_rl:?}"
+    );
+
+    // NeedsYou prompt sends a notice at once at ts_ms.
+    let mut s_user = StudioState::default();
+    let mut urgent = attention(9, "actor-t1-c1", PERMISSION_PROMPT, true);
+    urgent.ts_ms = t0;
+    s_user.attention.push(urgent);
+    let map_user: BTreeMap<String, StudioState> = [("acme-shop".to_string(), s_user)].into();
+    let immediate = hnotice::owed(&map_user, &BTreeMap::new(), &HollywoodState::default(), t0);
+    assert_eq!(immediate.len(), 1, "{immediate:?}");
+    assert_eq!(immediate[0].label, "prompt");
 }

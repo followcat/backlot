@@ -27,9 +27,37 @@ expanded by default; `--plain` starts it closed for the parity harness's frame. 
 in herdr's defaults and the parity scripts never send it. A configured herdr binding on the same
 tail still wins while the panel is closed or unfocused.
 
-`Alt+L` (`[keys] focus_lot`) opens or expands the dock if hidden or collapsed, moves focus to it,
-and scrolls the selection to its last selectable row without starting compose; pressing it while
-focused jumps back to the last row and never closes the dock.
+`Alt+L` (`[keys] focus_lot`) opens or expands the dock and enters the target studio on its priority
+landing row (`InsideStudio`: prompt → open ask → needs-you/design/card → active member → `producer`
+→ `›`); from `Lot(Studios)` it enters the selected studio, and a second `Alt+L` inside a studio
+jumps straight into `Compose`.
+
+## Focus model & inline navigation
+
+Only one region owns keyboard focus (`FocusState`: `Terminal`, `Tree`, `Cast`, `Lot(Studios | InsideStudio |
+RowActions | Compose)`, or `CallSheet`):
+
+- **Single focus ring & modebar:** Whenever focus is outside `Terminal`, bordered panes mute with
+  `[unfocused · Esc returns]` in their border title and borderless studio headers carry the cue at
+  the right end of the top bar (never drawn over terminal content), the modebar shows `FOCUS:
+  <region>` (for example `FOCUS: lot › acme-shop › ask`), and entered Lot studios draw heavy accent
+  rails (`┏`/`┃`) with `entered studio` in the header. Remembered cursors in non-focused lists show
+  a faint `·` without `selection_bg`.
+- **Keyboard in Cast (`Ctrl+B a`) & Tree (`Ctrl+B t`):** Focuses the left sidebar sections (`Tab`/`Shift+Tab`
+  between them, `Esc` returns to `Terminal`). In Cast, `←`/`→` steps inline action chips on urgent roles,
+  `t`/`r` opens targeted Lot compose, and `x` acknowledges an open ask.
+- **In-studio Lot grammar (`InsideStudio`):** `j`/`k` and `↑`/`↓` stay bounded within the entered studio;
+  `Tab`/`Shift+Tab` jumps non-empty sections (`Header` → `People` → `Tasks` → `Exchange` → `›` Input),
+  wrapping across studios (`InsideStudio` follows the target studio);
+  `←`/`→` steps into `RowActions` to cycle inverted `« chip »` action pills (`Enter` executes the chip,
+  `Esc` returns to the row); `Esc` steps back one level (`Compose` / `RowActions` → `InsideStudio` →
+  `Studios` when ≥ 2 studios exist → `Terminal`).
+- **Targeted compose & TALK delivery lifecycle:** Pressing `t` or `i` (or `r` on an ask) pre-targets the
+  selected role without inserting `/tell <role> ` clutter into the input buffer (`Tab` on an empty buffer
+  cycles `producer → cursor role → hollywood`, while `/…` keeps `/verb` completion). Under the newest
+  `user` turn in `TALK`, a live status line renders `… sending…`, `… queued · <reason>` (`RoleSummary.queue`
+  and client-derived `stage stopped — [s] start`), `✓ delivered · <age>`, or `⠶ thinking…`, clearing once
+  a reply lands.
 
 ## Focused keys
 
@@ -251,7 +279,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 
 | Reason | Class | Shown as |
 |---|---|---|
-| `permission prompt` | needs you | `needs you · <what>`; the prompt row keeps `y`/`d`/`p`, and a non-actor's reads `USER` |
+| `permission prompt` | stuck | `stuck · <what>` when the director handles an actor's; `needs you · <what>` when `needs_user` is set (fixed role, sensitive, or escalated), keeping `y`/`d`/`p` and `USER` on non-actors |
 | `outward action` | info | the role's details only, dimmed — a refusal the role's own turn moved past; no counts, no notice |
 | `folder-trust` | needs you | `needs you · <what>` |
 | `folder trust refused` | needs you | `needs you · <what>` |
@@ -265,7 +293,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `not a git repository` | needs you | `needs you · <what>` |
 | `work area failed` | needs you | `needs you · <what>` |
 | `over budget` | needs you | `needs you · <what>` |
-| `agent error` | needs you | `needs you · <what>` |
+| `agent error` | stuck | `stuck · <what>` when an actor's goes to the director; `needs you · <what>` when `needs_user` is set (fixed roles) |
 | `owed` | needs you | `needs you · <what>` — the escalated stall |
 | `<runner> prep failed` | needs you | `needs you · <what>` |
 | `stalled` | stuck | `stuck · <plain reason>` |
@@ -277,19 +305,23 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `cursor dir was open` | info | the role's details only, dimmed |
 | `hooks unavailable` | info | the role's details only, dimmed |
 
-A `stuck` episode that escalates — `rate limited` or `connection error` after its auto-retries,
-or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you` through
-`attention.escalated` on the same attention, so one stall stays one row and Hollywood hears once. A reason
+A `stuck` episode that escalates — a director-handled `permission prompt` when the director is
+blocked, not live, or unanswered past ten minutes (`default_stall_limit_s`), `rate limited` or
+`connection error` after its auto-retries, or a stall whose nudge went unanswered for
+`escalate_after_s` — becomes `needs you` through `attention.escalated` on the same attention,
+so one episode stays one row and Hollywood hears once. A reason
 the table does not list is `needs you`, so nothing important is hidden. Stage bookkeeping never
 changes a person's state and never counts as flagged.
 
 **What reaches the person, and why.** Only reasons where the person alone can act are `needs you`
 and count toward the person's needs-you list, the lot pill and notifications: a permission or
-trust prompt the stage will not answer (`permission prompt`, `folder-trust`, `folder trust
-refused`), a question addressed to the user, `cannot resume`, `launch refused` and the
-`<runner> prep failed` / `not supported` / `config malformed` / `not a git repository` / `work
-area failed` launches only the person can fix, `over budget`, `agent error`, and the escalated
-`owed` step. `outward action` is `info`: the guard stopped a role's command and told the role to
+trust prompt the stage or director will not answer (`permission prompt` with `needs_user`,
+`folder-trust`, `folder trust refused`), a question addressed to the user, `cannot resume`,
+`launch refused` and the `<runner> prep failed` / `not supported` / `config malformed` /
+`not a git repository` / `work area failed` launches only the person can fix, `over budget`,
+fixed-role `agent error`, and the escalated `owed` step. `permission prompt` and `agent error`
+on an actor start `needs_user: false` (`stuck`, handled by the director) and therefore do not
+increment `StudioSummary.waiting` until escalated. `outward action` is `info`: the guard stopped a role's command and told the role to
 `backlot ask` if it still needs it, so the refusal stays on the studio's attention list and the
 role's row but never counts as the person's to-do — it clears as `role moved on` once the role
 writes anything else to the ledger after it (or the stage delivers it new work). A carded
@@ -441,6 +473,8 @@ next_studio = "alt+pagedown"
 previous_role = "alt+up"
 next_role = "alt+down"
 focus_lot = "alt+l"
+focus_tree = "prefix+t"
+focus_cast = "prefix+a"
 call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
 prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
 

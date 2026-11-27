@@ -48,6 +48,15 @@ impl SheetTab {
         }
     }
 
+    /// `Shift+Tab` steps backward, wrapping.
+    pub(crate) fn prev(self) -> SheetTab {
+        match self {
+            SheetTab::Overview => SheetTab::Records,
+            SheetTab::Deliveries => SheetTab::Overview,
+            SheetTab::Records => SheetTab::Deliveries,
+        }
+    }
+
     /// `1`–`3` jump straight to a tab.
     pub(crate) fn of(digit: char) -> Option<SheetTab> {
         match digit {

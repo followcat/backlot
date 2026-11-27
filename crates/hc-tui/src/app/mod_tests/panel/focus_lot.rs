@@ -64,7 +64,7 @@ pub(super) fn app_with_studio_and_talk() -> App {
 }
 
 #[tokio::test]
-async fn alt_l_from_pane_with_lot_hidden_shows_focuses_and_selects_last_row() {
+async fn alt_l_from_pane_with_lot_hidden_enters_studio_on_priority_row() {
     let mut app = app_with_studio_and_talk();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Closed;
@@ -76,18 +76,16 @@ async fn alt_l_from_pane_with_lot_hidden_shows_focuses_and_selects_last_row() {
 
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert!(!app.panel.editing, "selecting Input must not start compose");
-    assert_eq!(app.pane.input_backlog().0, before, "alt+l was consumed");
-
-    // Up walks to the newest exchange entry; i starts composing; Esc rests then unfocuses.
-    key(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(
         app.panel.selected,
-        Some(Target::Talk("acme-shop".into(), 11))
+        Some(Target::Person("acme-shop".into(), "actor-bob".into())),
+        "Needs-you blocked actor-bob is selected on studio entry"
     );
-    assert!(!app.panel.editing);
-    key(&mut app, hc_vt::Key::Char('i'));
+    assert!(!app.panel.editing, "entering studio must not start compose");
+    assert_eq!(app.pane.input_backlog().0, before, "alt+l was consumed");
+
+    // 2nd Alt+L inside studio starts compose on `›`; Esc rests then unfocuses straight to Terminal (1 studio).
+    alt_l(&mut app);
     assert!(app.panel_editing());
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
     key(&mut app, hc_vt::Key::Escape);
@@ -97,20 +95,23 @@ async fn alt_l_from_pane_with_lot_hidden_shows_focuses_and_selects_last_row() {
     assert!(!app.panel.focused);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
 
-    // Narrow desktop (80x24): unfocused dock auto-hides; Alt+L opens overlay on last row, Esc closes.
+    // Narrow desktop (80x24): unfocused dock auto-hides; Alt+L opens overlay inside studio, Esc closes.
     app.area = (80, 24);
     assert_eq!(app.panel_mode_at(80), PanelMode::Closed);
     alt_l(&mut app);
     assert_eq!(app.panel_mode_at(80), PanelMode::Expanded);
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
     assert!(!app.panel.editing);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.panel.mode, PanelMode::Closed);
 }
 
 #[tokio::test]
-async fn alt_l_from_collapsed_strip_expands_and_focuses_last_row() {
+async fn alt_l_from_collapsed_strip_expands_and_enters_studio() {
     let mut app = app_with_studio_and_talk();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Collapsed;
@@ -121,12 +122,15 @@ async fn alt_l_from_collapsed_strip_expands_and_focuses_last_row() {
 
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
     assert!(!app.panel.editing);
 }
 
 #[tokio::test]
-async fn alt_l_with_lot_open_unfocused_and_mid_selection_moves_to_last_row() {
+async fn alt_l_with_lot_open_unfocused_enters_current_studio_priority_row() {
     let mut app = app_with_studio_and_talk();
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
@@ -136,33 +140,37 @@ async fn alt_l_with_lot_open_unfocused_and_mid_selection_moves_to_last_row() {
     alt_l(&mut app);
 
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
     assert!(!app.panel.editing);
 }
 
 #[tokio::test]
-async fn alt_l_inside_the_lot_jumps_to_last_row_and_never_closes() {
+async fn alt_l_inside_the_lot_enters_compose_on_second_press_and_never_closes() {
     let mut app = app_with_studio_and_talk();
     app.area = (120, 24);
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "producer".into()));
+    app.sync_focus();
 
     alt_l(&mut app);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert!(!app.panel.editing);
+    assert!(app.panel.editing);
 
-    // Pressing Alt+L again while already on the last row keeps it there and open.
+    // Pressing Alt+L again while composing keeps it open and composing.
     alt_l(&mut app);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert!(!app.panel.editing);
+    assert!(app.panel.editing);
 }
 
 #[tokio::test]
-async fn alt_l_scrolls_long_lot_list_so_last_row_is_visible() {
+async fn alt_l_scrolls_long_lot_list_so_landing_and_compose_rows_are_visible() {
     let mut app = app_with_studio_and_talk();
     let mut doc = overflow_doc();
     doc.value["hollywood"] = serde_json::json!({
@@ -180,13 +188,20 @@ async fn alt_l_scrolls_long_lot_list_so_last_row_is_visible() {
     app.panel.scroll = 0;
 
     alt_l(&mut app);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
     assert!(!app.panel.editing);
 
+    // 2nd Alt+L jumps to Input and scrolls it into viewport.
+    alt_l(&mut app);
+    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert!(app.panel.editing);
     let text = screen_lines(&draw_to(&mut app, 120, 20)).join("\n");
     assert!(
         text.contains("tell producer"),
-        "last row must be visible after Alt+L:\n{text}"
+        "compose row must be visible after 2nd Alt+L:\n{text}"
     );
     assert!(
         app.panel_hits
@@ -238,7 +253,10 @@ async fn focus_lot_config_rebinds_and_unbinds() {
     alt_o(&mut app);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel.focused);
-    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-bob".into()))
+    );
 
     // Unbind with empty string: neither alt+l nor alt+o triggers.
     std::fs::write(&path, "[keys]\nfocus_lot = \"\"\n").unwrap();

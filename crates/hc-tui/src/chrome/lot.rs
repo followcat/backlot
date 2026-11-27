@@ -53,6 +53,9 @@ pub(crate) struct LotFrame<'a> {
     pub agent: bool,
     pub pill: bool,
     pub header: Option<&'a StudioHeader>,
+    /// Show `[unfocused · Esc returns]` at the right end of the studio top bar
+    /// (before the pill) when focus leaves a borderless single pane.
+    pub unfocused_cue: bool,
     /// The full terminal width — the pill tier and the header's
     /// truncation read it.
     pub cols: u16,
@@ -335,13 +338,29 @@ pub(crate) fn render_studio_header(
         if let Some(meta) =
             fit_role_meta(runner.as_deref(), model.as_deref(), effort.as_deref(), room)
         {
+            let meta_w = display_width(&meta).min(right.saturating_sub(x));
             put_text(
                 buf,
                 x,
                 area.y,
-                display_width(&meta).min(right.saturating_sub(x)),
+                meta_w,
                 &meta,
                 Style::default().fg(palette.subtext0).bg(header_bg),
+            );
+            x = x.saturating_add(meta_w);
+        }
+    }
+    if lot.unfocused_cue {
+        let cue = "[unfocused · Esc returns]";
+        let cue_w = display_width(cue);
+        if right.saturating_sub(x) >= cue_w + 2 {
+            put_text(
+                buf,
+                right.saturating_sub(cue_w + 1),
+                area.y,
+                cue_w,
+                cue,
+                Style::default().fg(palette.overlay0).bg(header_bg),
             );
         }
     }

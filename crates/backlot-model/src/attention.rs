@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttentionClass {
-    /// The person must act: a prompt, a refusal, a failed launch, a
-    /// budget overrun, or anything the stage does not recognise.
+    /// The person must act: a user-owned prompt or failure that neither
+    /// the stage nor another role can resolve, a budget overrun, an
+    /// owed step, or anything the stage does not recognise.
     NeedsYou,
-    /// Something is wrong while the stage still retries it — a stall
-    /// with nudges left, a rate limit or a connection error that has
+    /// Something the stage or another role is handling — a
+    /// director-handled actor prompt, question, or agent error, a stall
+    /// with nudges left, a rate limit, or a connection error that has
     /// not escalated yet.
     Stuck,
     /// The stage's own bookkeeping. The person cannot act on it; it
@@ -35,10 +37,13 @@ impl AttentionClass {
     }
 
     /// Sort `reason` into its class. `needs_user` is the ledger
-    /// attention's own escalation flag — a `rate limited` or
-    /// `connection error` episode that exhausted its retries sets it,
-    /// and the reason then stops being `stuck`. An unknown reason is
-    /// `NeedsYou`, so nothing important is hidden.
+    /// attention's own escalation/ownership flag — when set (e.g. a
+    /// non-actor's prompt, a sensitive command, or an escalated
+    /// director/stage episode), the class is always `NeedsYou`. Reasons
+    /// handled by the director or stage (`permission prompt`,
+    /// `question`, `agent error`, `stalled`, `rate limited`,
+    /// `connection error`) are `Stuck` while `needs_user` is false.
+    /// An unknown reason is `NeedsYou`, so nothing important is hidden.
     ///
     /// An `outward action` refusal is the role's own record of what the
     /// guard stopped: the role was told to `backlot ask` if it still
@@ -52,8 +57,7 @@ impl AttentionClass {
             return AttentionClass::Info;
         }
         match reason {
-            "permission prompt"
-            | "folder-trust"
+            "folder-trust"
             | "folder trust refused"
             | "cannot resume"
             | "launch refused"
@@ -65,9 +69,9 @@ impl AttentionClass {
             | "not a git repository"
             | "work area failed"
             | "over budget"
-            | "agent error"
             | "owed" => AttentionClass::NeedsYou,
-            "stalled" | "rate limited" | "connection error" | "question" => AttentionClass::Stuck,
+            "permission prompt" | "agent error" | "stalled" | "rate limited"
+            | "connection error" | "question" => AttentionClass::Stuck,
             "session id not found"
             | "inherited XDG_CONFIG_HOME"
             | "cursor dir was open"

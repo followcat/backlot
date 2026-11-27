@@ -130,16 +130,10 @@ impl App {
         mods: crossterm::event::KeyModifiers,
     ) -> Option<StudioDialog> {
         match code {
-            KeyCode::Esc => return None,
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.recast_move(&mut d, -1);
-                return Some(StudioDialog::Recast(d));
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.recast_move(&mut d, 1);
-                return Some(StudioDialog::Recast(d));
-            }
-            KeyCode::Left | KeyCode::Backspace => {
+            KeyCode::Esc | KeyCode::Left | KeyCode::Backspace => {
+                if code == KeyCode::Esc && d.step == RecastStep::Runner {
+                    return None;
+                }
                 d.step = match d.step {
                     RecastStep::Runner => RecastStep::Runner,
                     RecastStep::Model => RecastStep::Runner,
@@ -153,6 +147,14 @@ impl App {
                     }
                 };
                 d.error = None;
+                return Some(StudioDialog::Recast(d));
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.recast_move(&mut d, -1);
+                return Some(StudioDialog::Recast(d));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.recast_move(&mut d, 1);
                 return Some(StudioDialog::Recast(d));
             }
             KeyCode::Enter => {}

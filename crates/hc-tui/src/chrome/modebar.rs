@@ -34,13 +34,15 @@ pub(crate) fn render_mode_bar(
     restart_ready: bool,
     // S1: the focused pane is the stage log — a read-only frame.
     stage_log: bool,
+    focus_breadcrumb: Option<&str>,
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
 ) -> Option<Rect> {
     if (mode == ClientShellMode::Terminal
         && !keyboard_locked
         && endpoint_error.is_none()
-        && !stage_log)
+        && !stage_log
+        && focus_breadcrumb.is_none())
         || pane_area.is_empty()
     {
         return None;
@@ -203,13 +205,31 @@ pub(crate) fn render_mode_bar(
                     ]);
                 }
             }
-            // Only a read-only stage log reaches the bar in Terminal
-            // mode (S1): keys are dropped, and the bar says so.
+            // Stage log (read-only) or non-terminal focus breadcrumb.
             ClientShellMode::Terminal => {
-                segments.extend([
-                    (" STAGE LOG ".to_owned(), mode_style),
-                    (" stage log — read only".to_owned(), base),
-                ]);
+                if stage_log {
+                    segments.extend([
+                        (" STAGE LOG ".to_owned(), mode_style),
+                        (" stage log — read only".to_owned(), base),
+                    ]);
+                } else if let Some(crumb) = focus_breadcrumb {
+                    let body = crumb.strip_prefix("FOCUS:").unwrap_or(crumb).trim_start();
+                    segments.extend([
+                        (" FOCUS: ".to_owned(), mode_style),
+                        (
+                            format!("{body} "),
+                            Style::default()
+                                .fg(palette.accent)
+                                .bg(palette.panel_bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        (
+                            " │  Alt+L lot  Alt+Y call sheet  Alt+←→ studio  C-b t/a sidebar"
+                                .to_owned(),
+                            base,
+                        ),
+                    ]);
+                }
             }
         }
     }
