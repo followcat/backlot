@@ -581,10 +581,7 @@ draw East-Asian-ambiguous characters wide will shift the cells after them. The m
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line counts the studios (`✦ L O T · 2` in expanded mode). `stage stopped` means no live
-`backlot-stage` terminal — the panel and the cast keep the last document. The collapsed
-16-column strip shows each studio's health, a short `id·machine` label and progress or
-attention, and one row per active or blocked role.
+The title line counts the studios (`✦ L O T · 2` in expanded mode). Within the Lot, the current studio (`▸`) wears a thin warm-brass marquee frame with `▪` bulbs every 3 cells along its top rule and bottom border when resting, yielding to double `╔═╗` when selected and heavy `┏━┓` when entered (`--plain` and `[theme] source = "herdr"` keep plain borders). `stage stopped` means no live `backlot-stage` terminal — the panel and the cast keep the last document. The collapsed 16-column strip shows each studio's health, a short `id·machine` label and progress or attention, and one row per active or blocked role.
 
 Panel keys use one unified focus grammar across levels (`Studios → InsideStudio → RowActions /
 Compose`): `j`/`k` or `↑`/`↓` move the selection (bounded within the studio once entered), `Tab` /
@@ -681,7 +678,7 @@ While studios come from one machine nothing looks different. Once they span mach
 header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-b` is never
 confused with the local `acme-shop`.
 
-The **left machines tree** (` ✦ MACHINES` header on `stage_well`, footer `+ new · <machine>`) lists every machine's studios even when its document cannot answer (`✦ <id>` for finished studios in studio mode).
+The **left machines tree** (` ✦ MACHINES` header on `stage_well`, footer `+ new · <machine>`) lists every machine's studios even when its document cannot answer (`✦ <id>` for finished studios in studio mode), and highlights the machine hosting the current studio with its name in bold accent plus ` ✦` (dropping ` ✦` when a long name fills the row so the right-side status dot stays put; `--plain` and `[theme] source = "herdr"` keep plain rows).
 Drawing the tree is only half of it: `Ctrl+B t` moves the keyboard into it (opening the sidebar
 if it is collapsed), `↑`/`↓` move the highlight, `Enter` runs the row's click action — a studio's
 space, `stage down` start, the finished fold, a finished studio's menu — and `m` opens the row's
