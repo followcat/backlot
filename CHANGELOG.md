@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **Closed roles fold into one line in the Cast; click it to pick one to reopen.** Clicking a closed role no longer shows a disconnected-terminal error.
+
 ## 0.4.27 — 2026-11-27
 
 ### Changed

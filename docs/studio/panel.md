@@ -434,7 +434,7 @@ non-closed actors) show an indented second line in quiet `palette.subtext0` carr
 under height pressure unfocused roles fall back to one line first so the focused role keeps its
 model line longest, and no role is ever hidden for a model line). An `info` attention stays hidden
 from the row. The person whose terminal is focused gets the active-row background and an accent `▌`
-in the first column. In studio mode the Cast top rule renders as `──╡ ✦ CAST ╞────` (`━━╡ ▸ CAST ╞━━━━` in `accent` while focused) in the same row, and closed people fold behind `── · closed (n) · ───────` (`┄ closed (n) ┄` in `--plain` / `source = "herdr"`), staying strictly one line with no model row.
+in the first column. In studio mode the Cast top rule renders as `──╡ ✦ CAST ╞────` (`━━╡ ▸ CAST ╞━━━━` in `accent` while focused) in the same row, and closed people collapse onto a single interactive line `── · <n> closed · <names> ▸` (`▸` at the right end, truncating `<names>` with `…` while keeping `<n> closed` and `▸` whole; `--plain` and `[theme] source = "herdr"` keep the `┄ closed (n) ┄` layout). Clicking the line or pressing `Enter`/`o` on it opens the studio's `reopen a closed role` picker sorted numerically by task (offline seats stay dimmed), and no closed role registers an attach hit.
 
 After the people, a `shells` header groups the studio's **shells** — the user's own terminals
 opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). One line each: a dim `$` (or the
