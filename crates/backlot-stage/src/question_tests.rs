@@ -107,6 +107,7 @@ fn question_notice_body_and_staleness() {
         source_seq: Some(21),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     };

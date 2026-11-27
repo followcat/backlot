@@ -171,6 +171,7 @@ fn waiting_user_and_suggest_skip_are_never_nudged_while_role_slots_nudge() {
         source_seq: Some(2),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     };
@@ -293,6 +294,7 @@ fn gate_off_notices_and_nudges_are_byte_identical_to_baseline() {
         source_seq: Some(source_seq),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     };

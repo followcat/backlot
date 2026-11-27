@@ -23,6 +23,7 @@ fn notice(seq: u64, source_seq: u64, label: &str) -> Message {
         source_seq: Some(source_seq),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     }

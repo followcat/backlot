@@ -167,6 +167,7 @@ pub(super) fn studio_exchange_meta(
     };
     meta.from = Some(entry.who.clone());
     meta.to = entry.to.clone();
+    meta.dropped_reason = entry.dropped_reason.clone();
     meta.task = entry.task.clone();
     meta.file = entry
         .file

@@ -570,6 +570,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 source_seq: *source_seq,
                 delivered: false,
                 dropped: false,
+                dropped_reason: None,
                 ts_ms: ts,
                 delivered_ms: None,
             });
@@ -602,11 +603,12 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             }
             _ => {}
         },
-        EventKind::MessageDropped { target, .. } => {
+        EventKind::MessageDropped { target, reason } => {
             if let Some(SeqTarget::Message(idx)) = state.targets.get(target)
                 && let Some(m) = state.messages.get_mut(*idx)
             {
                 m.dropped = true;
+                m.dropped_reason = Some(reason.clone());
             }
         }
         EventKind::ReportSent { to, node, file } => {

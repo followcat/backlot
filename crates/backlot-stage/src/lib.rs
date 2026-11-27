@@ -200,6 +200,8 @@ mod cli_testkit;
 #[cfg(test)]
 mod cli_tests;
 #[cfg(test)]
+mod closed_actor_mail_tests;
+#[cfg(test)]
 mod daemon_tests;
 #[cfg(test)]
 mod delete_tests;
