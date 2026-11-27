@@ -12,18 +12,20 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
-<<<<<<< HEAD
 - **Checks proposed at the opening, activated on sign-off, with no false greens (`expect` / `min_matches`).**
   - `[[checks]]` entries (`cast.toml`, `--checks-file`, or `backlot studio check add`) now accept optional `expect = "<regex>"` and `min_matches = <k>` (default `1` when `expect` is set). A command that exits `0` without matching at least `min_matches` non-overlapping occurrences in combined stdout+stderr fails the check (`task.checked` keeps real `exit_code` and sets `expect_failed`), blocking accepting reviews over empty/no-op runs.
   - During opening design, `backlot design write --slot buildability --file <file> --checks-file <toml>` validates `[[checks]]` statically, preflights every proposed check once in the director's worktree under a stripped check environment and the director's outward-action guard (120 s cap), refuses any failing/timed-out/missed-expect check with its output tail, and records `design.entry.checks`.
   - The Call Sheet `DECISION` row shows `+N check(s)`, `Enter` opens a read-only view starting with `Signing off also activates N check(s):` and every check verbatim (`name`, wrapped `run`, `timeout_s`, `expect`), `[o]` includes the same summary, and pressing `a` opens a 3-choice modal (shared by Call Sheet, Lot Dock, and Design Reader) displaying every proposed check verbatim so you can sign and activate checks, sign without checks (`--no-checks`), or cancel (`--skip` activates none).
   - User-only `backlot studio check add` (with optional `--expect`, `--min-matches`, `--preflight`) and `backlot studio check remove` let you manage checks on a live studio (`--as user`), while `studio cast show` → `studio cast set` preserves `design` and `user` origins when specs are unchanged (`docs/studio/design.md`, `docs/studio/guide.md`, `docs/studio/ledger.md`).
-=======
-- **Shorter, clearer task briefs.** The director and writer prompts now use a six-item brief (goal, scope, decided contracts, no-gos, what's open, checks), try one canary task before fanning out near-identical ones, and start the design with an architecture spine (`AD-1..k`). Actors can add a short "Decisions / Discoveries for siblings" section to their report. Roles pick this up when they next start.
-- **Notes about a repository carry over to the next studio on it.** When a director, producer or Hollywood finds a trap in a repo's environment (a path, a proxy, a slow test), it proposes a repo note. You see it as a card and apply it with `a`. Applied notes are kept on this machine only, never in the repo, and the next studio's director and writer are told to read them. Text that looks like a secret is refused. `backlot repo-note show` and `remove` let you look at or drop them.
-- **A decision reaches every role that needs it.** The director (or producer, or you) records a cross-task ruling once with `backlot decide --id AD-<n> --file <path>`, optionally `--notify active-actors` or named roles, and `--supersedes` an older one. Each role gets it like a tell. `decisions/current.md` lists the current decisions with their ledger number and keeps superseded ones as history; the Reader and wherdr can open it.
->>>>>>> origin/main
+
+## 0.4.23 — 2026-11-27
+
+### Added
+
 - **`backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone.** `metrics` lists first-delivery pass rate, send-backs, what waited on you and for how long, rate-limit windows, approvals and refusals, Hollywood notices, and review and task times, per studio or for all (`--json` for scripts). `digest` is a daily report: what finished, was sent back, is blocked or waits on you, plus a table from each design section to its task, commits, checks and verdict. Neither command uses a model or writes anything (`docs/studio/metrics.md`).
+- **A decision reaches every role that needs it.** The director (or producer, or you) records a cross-task ruling once with `backlot decide --id AD-<n> --file <path>`, optionally `--notify active-actors` or named roles, and `--supersedes` an older one. Each role gets it like a tell. `decisions/current.md` lists the current decisions with their ledger number and keeps superseded ones as history; the Reader and wherdr can open it.
+- **Notes about a repository carry over to the next studio on it.** When a director, producer or Hollywood finds a trap in a repo's environment (a path, a proxy, a slow test), it proposes a repo note. You see it as a card and apply it with `a`. Applied notes are kept on this machine only, never in the repo, and the next studio's director and writer are told to read them. Text that looks like a secret is refused. `backlot repo-note show` and `remove` let you look at or drop them.
+- **Shorter, clearer task briefs.** The director and writer prompts now use a six-item brief (goal, scope, decided contracts, no-gos, what's open, checks), try one canary task before fanning out near-identical ones, and start the design with an architecture spine (`AD-1..k`). Actors can add a short "Decisions / Discoveries for siblings" section to their report. Roles pick this up when they next start.
 
 ### Fixed
 
