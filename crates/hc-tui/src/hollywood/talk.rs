@@ -1,6 +1,6 @@
 //! The band's conversation rows: fixed speaker column, right-aligned
-//! relative age (or ` ↵ read ` chip when selected), and up to 2 wrapped
-//! lines with hanging indent on continuation rows.
+//! relative age (with optional `· N earlier` when unfocused/collapsed) or
+//! clickable ` ↵ read ` chip when selected, and up to 2 wrapped lines.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -8,7 +8,9 @@ use ratatui::style::{Modifier, Style};
 
 use backlot_model::summary::Exchange;
 
+use super::Target;
 use super::band::MARGIN;
+use super::draw::HollywoodRender;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
@@ -28,15 +30,19 @@ pub(crate) fn talk_text_width(width: u16, _who: &str) -> usize {
 }
 
 /// Draw one exchange row: fixed speaker column (`✦ hollywood` / `› you`
-/// / `· <who>`), body wrapped up to 2 lines, and right-aligned age (or
-/// ` ↵ read ` chip on line 1 when selected and width permits).
+/// / `· <who>`), body wrapped up to `rect.height.clamp(1, 2)` lines, and
+/// right-aligned age (plus `· <earlier> earlier` when folded inline) or
+/// ` ↵ read ` chip on line 1 when selected.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_talk(
     buf: &mut Buffer,
     rect: Rect,
     line: &Exchange,
     selected: bool,
     now_ms: u64,
+    earlier: usize,
     palette: &Palette,
+    hits: &mut HollywoodRender,
 ) {
     let elev = palette.elevation();
     let bg = if selected {
@@ -67,11 +73,6 @@ pub(crate) fn draw_talk(
     );
 
     let show_read = selected && rect.width >= 60;
-    let age = if show_read {
-        None
-    } else {
-        super::reader_meta::age_label(line.ts_ms, now_ms)
-    };
     let right_edge = (rect.x + rect.width).saturating_sub(MARGIN);
     let body_x = label_x + label_w + 2;
     let body_end = if show_read {
@@ -86,23 +87,34 @@ pub(crate) fn draw_talk(
             };
             let chip_style = Style::default().fg(palette.subtext0).bg(chip_bg);
             put_text(buf, cx, rect.y, w, chip, chip_style);
+            hits.chips
+                .push((Rect::new(cx, rect.y, w, 1), Target::Talk(line.seq), '\r'));
             cx.saturating_sub(2)
         } else {
             right_edge
         }
-    } else if let Some(age) = age {
-        let w = display_width(&age) as u16;
-        let ax = right_edge.saturating_sub(w);
-        if ax > body_x + 2 {
-            put_text(buf, ax, rect.y, w, &age, base.fg(elev.muted_surface));
-            right_edge
-                .saturating_sub(RIGHT_SLOT_W.max(w))
-                .saturating_sub(2)
+    } else {
+        let age = super::reader_meta::age_label(line.ts_ms, now_ms);
+        let right_label = match (age, earlier) {
+            (Some(a), 0) => Some(a),
+            (Some(a), n) => Some(format!("{a} · {n} earlier")),
+            (None, 0) => None,
+            (None, n) => Some(format!("{n} earlier")),
+        };
+        if let Some(label) = right_label {
+            let w = display_width(&label) as u16;
+            let ax = right_edge.saturating_sub(w);
+            if ax > body_x + 2 {
+                put_text(buf, ax, rect.y, w, &label, base.fg(elev.muted_surface));
+                right_edge
+                    .saturating_sub(RIGHT_SLOT_W.max(w))
+                    .saturating_sub(2)
+            } else {
+                right_edge
+            }
         } else {
             right_edge
         }
-    } else {
-        right_edge
     };
     let body_w = body_end.saturating_sub(body_x);
     if body_w == 0 {

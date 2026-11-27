@@ -123,11 +123,15 @@ impl App {
                         self.hollywood_select(target);
                         return;
                     }
-                    // A row click selects and acts like Enter (S5
-                    // §2), except prompt/live rows stay selected without
-                    // leaving the sheet so accidental clicks on prompt
-                    // text never dump into `bl-hollywood`. The
-                    // `+ new studio` frame is a button, not a row.
+                    // `STUDIOS N` header/label -> focuses/expands the STUDIOS zone.
+                    if contains(self.hollywood_hits.studios_label, point) {
+                        let _ = self.hollywood_focus_studios();
+                        return;
+                    }
+                    // Clicking a waiting row or talk line selects it (focus
+                    // follows); actions run via the item's action chips or
+                    // keyboard shortcuts. Clicking a studio chip/frame opens
+                    // that studio and collapses; `[+ new]` opens the wizard.
                     let hit = self
                         .hollywood_hits
                         .rows
@@ -137,15 +141,19 @@ impl App {
                     match hit {
                         Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
                         Some(
-                            target @ (crate::hollywood::Target::Prompt(..)
-                            | crate::hollywood::Target::Hollywood
-                            | crate::hollywood::Target::HollywoodLive),
+                            target @ (crate::hollywood::Target::Studio(_)
+                            | crate::hollywood::Target::Setup
+                            | crate::hollywood::Target::Title),
                         ) => {
                             self.hollywood_select(target);
+                            self.hollywood_activate();
                         }
                         Some(target) => {
-                            self.hollywood_select(target);
-                            self.hollywood_activate();
+                            let band = self.hollywood_nav_band();
+                            self.hollywood_select(target.clone());
+                            if let Some(index) = band.iter().position(|t| t == &target) {
+                                self.hollywood_reveal_card(&band, index);
+                            }
                         }
                         None => {}
                     }
@@ -203,12 +211,18 @@ impl App {
         !rect.is_empty() && contains(rect, point)
     }
 
-    /// The wheel's sideways step over the frames: one frame, clamped
-    /// into the window.
+    /// The wheel's sideways step over the frames or studio chip strip.
     fn hollywood_frame_scroll(&mut self, delta: isize) {
         let (visible, _) = self.hollywood_frame_window();
-        let frames = self.hollywood_frames().len();
-        let max = frames.saturating_sub(visible);
+        let total = if self.hollywood_hits.strip {
+            self.hollywood_frames()
+                .iter()
+                .filter(|t| matches!(t, crate::hollywood::Target::Studio(_)))
+                .count()
+        } else {
+            self.hollywood_frames().len()
+        };
+        let max = total.saturating_sub(visible);
         let next = self.hollywood.frame_scroll as isize + delta;
         self.hollywood.frame_scroll = next.clamp(0, max as isize) as usize;
     }

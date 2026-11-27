@@ -1,6 +1,7 @@
-//! The band's top and bottom edges: the sprocket rows and the
-//! title row — the mark, the agent's square and role, and the
-//! right-aligned studio count with what waits on you.
+//! The band's top title row and bottom perforation edge:
+//! `✦  H O L L Y W O O D   ● live · <agent>` on the left (compressed to
+//! `✦ HOLLYWOOD` under 100 columns), and Lot-pill-matching bucket counts
+//! (`6 studios · !B · ?A · Cc · ✓R ready`) on the right.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -9,16 +10,18 @@ use ratatui::style::{Color, Modifier, Style};
 use super::Target;
 use super::band::MARGIN;
 use super::draw::{HollywoodRender, MARK};
+use super::items::WaitBucket;
 use super::rows;
 use super::sheet::Wait;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
+use crate::chrome::text::display_width;
 use crate::panel::data::{MachineSummary, studio_count};
 
-/// One sprocket row: `▄▄`/`▀▀` every four columns. On `sidebar_bg`
-/// the holes are `surface1`; where `sidebar_bg` is `Reset` (light
-/// themes) they are `overlay0` on `surface0` so the perforations
-/// stay opaque and legible.
+/// Compressed mark shown below 100 columns.
+const NARROW_MARK: &str = "✦ HOLLYWOOD";
+
+/// One perforation row (`▀▀` every four columns for the bottom edge).
 pub(crate) fn draw_sprocket(buf: &mut Buffer, area: Rect, y: u16, glyph: char, palette: &Palette) {
     let elev = palette.elevation();
     let (fg, bg) = if elev.is_terminal_16 {
@@ -38,17 +41,73 @@ pub(crate) fn draw_sprocket(buf: &mut Buffer, area: Rect, y: u16, glyph: char, p
     }
 }
 
-/// The display width of `text`, in cells — a floor for the title row's
-/// room sums.
 fn width_of(text: &str) -> u16 {
-    crate::chrome::text::display_width(text) as u16
+    display_width(text) as u16
 }
 
-/// The title row: the mark, the agent's square and role, and the
-/// right-aligned studio count with what waits on you — red when the
-/// user owns any of it, peach when only cards and finish-ready
-/// studios do. The count spans machines; the agent's words stay
-/// this core's.
+fn build_right_segs(
+    studios: usize,
+    waits: &[Wait<'_>],
+    title_scroll: Option<(usize, usize)>,
+    compact: bool,
+    palette: &Palette,
+) -> Vec<(String, Style)> {
+    let elev = palette.elevation();
+    let base = Style::default().bg(elev.surface);
+    let muted = base.fg(elev.muted_surface);
+    let (mut b, mut a, mut c, mut r) = (0usize, 0usize, 0usize, 0usize);
+    for w in waits {
+        match WaitBucket::of(w) {
+            WaitBucket::Blocking => b += 1,
+            WaitBucket::Asks => a += 1,
+            WaitBucket::Cards => c += 1,
+            WaitBucket::Ready => r += 1,
+        }
+    }
+    let mut segs = Vec::new();
+    let studio_text = if compact {
+        format!("{studios}")
+    } else {
+        format!("{studios} studio{}", if studios == 1 { "" } else { "s" })
+    };
+    segs.push((studio_text, muted));
+    let mut push_bucket = |tok: String, fg: Color| {
+        segs.push((" · ".to_string(), muted));
+        segs.push((tok, base.fg(fg).add_modifier(Modifier::BOLD)));
+    };
+    if b > 0 {
+        push_bucket(format!("!{b}"), palette.red);
+    }
+    if a > 0 {
+        push_bucket(format!("?{a}"), palette.peach);
+    }
+    if c > 0 {
+        push_bucket(format!("{c}c"), palette.peach);
+    }
+    if r > 0 {
+        let tok = if compact {
+            format!("✓{r}")
+        } else {
+            format!("✓{r} ready")
+        };
+        push_bucket(tok, palette.teal);
+    }
+    if let Some((top, bot)) = title_scroll {
+        segs.push((" · ".to_string(), muted));
+        segs.push((
+            format!("{top}–{bot}/{}", waits.len()),
+            muted.add_modifier(Modifier::BOLD),
+        ));
+    }
+    segs
+}
+
+fn segs_width(segs: &[(String, Style)]) -> u16 {
+    segs.iter().map(|(s, _)| width_of(s)).sum()
+}
+
+/// The title row: left mark + agent status, right-aligned Lot-matching
+/// studio and wait bucket summary (`!B`, `?A`, `Cc`, `✓R ready`).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_title(
     buf: &mut Buffer,
@@ -68,35 +127,27 @@ pub(crate) fn draw_title(
     hits.rows.push((row, Target::Title));
     let elev = palette.elevation();
     let base = Style::default().bg(elev.surface);
-    let mark_w = MARK.chars().count() as u16;
+
+    let mark = if area.width < 100 { NARROW_MARK } else { MARK };
+    let mark_w = mark.chars().count() as u16;
+    let mark_gap = if area.width < 100 { 2 } else { 3 };
     put_text(
         buf,
         area.x + MARGIN,
         y,
         mark_w,
-        MARK,
+        mark,
         base.fg(palette.accent).add_modifier(Modifier::BOLD),
     );
-    let x = area.x + MARGIN + mark_w + 3;
+    let x = area.x + MARGIN + mark_w + mark_gap;
 
     let studios = studio_count(machines);
-    let count = format!("{studios} studio{}", if studios == 1 { "" } else { "s" });
-    let wait = if waits.is_empty() {
-        String::new()
-    } else if let Some((top, bot)) = title_scroll {
-        format!("  ·  {top}–{bot}/{} waiting on you", waits.len())
-    } else {
-        format!("  ·  {} waiting on you", waits.len())
-    };
-    // User urgency is red: a prompt, blocked/needs-you role, user-prompting
-    // hollywood, or a down/offline stage. Cards and ready studios alone are peach.
-    let user_urgent = super::items::any_user_urgent(waits);
+    let full_right = build_right_segs(studios, waits, title_scroll, false, palette);
+    let compact_right = build_right_segs(studios, waits, title_scroll, true, palette);
+
     let summary = rows::local_summary(machines);
     let hw = summary.and_then(|s| s.hollywood.as_ref());
     let state = hw.map(|h| h.state.as_str());
-    // The agent's words: the full line when it fits, the state alone
-    // when it does not. If even that is squeezed, the counts step
-    // aside — the state is what the row must say.
     let (agent_line, short_line) = if let Some(hw) = hw
         && let Some(over) =
             super::handoff_ui::title_override(hw, activity, crate::update_state::now_ms())
@@ -132,27 +183,37 @@ pub(crate) fn draw_title(
     } else {
         ("no agent".to_string(), String::new())
     };
-    let mut right_w = count.chars().count() as u16 + wait.chars().count() as u16;
-    let mut right_x = (area.x + area.width).saturating_sub(MARGIN + right_w);
-    let mut room = right_x.saturating_sub(x + 2);
-    // The longest line that fits; if none does, the counts step aside
-    // for it — the state is what the row must say.
-    let pick = |room: u16| {
-        if width_of(&agent_line) <= room {
-            agent_line.clone()
-        } else if !short_line.is_empty() && width_of(&short_line) <= room {
-            short_line.clone()
+
+    let pick_for = |right_w: u16| -> Option<String> {
+        let right_x = if right_w > 0 {
+            (area.x + area.width).saturating_sub(MARGIN + right_w)
         } else {
-            String::new()
+            area.x + area.width
+        };
+        let room = right_x.saturating_sub(x + 2);
+        if width_of(&agent_line) <= room {
+            Some(agent_line.clone())
+        } else if !short_line.is_empty() && width_of(&short_line) <= room {
+            Some(short_line.clone())
+        } else {
+            None
         }
     };
-    let mut text = pick(room);
-    if text.is_empty() && right_w > 0 {
-        right_w = 0;
-        right_x = area.x + area.width;
-        room = right_x.saturating_sub(x + 2);
-        text = pick(room);
-    }
+
+    let (chosen_right, text) = {
+        let full_w = segs_width(&full_right);
+        let compact_w = segs_width(&compact_right);
+        if let Some(t) = pick_for(full_w) {
+            (full_right, t)
+        } else if let Some(t) = pick_for(compact_w) {
+            (compact_right, t)
+        } else if let Some(t) = pick_for(0) {
+            (Vec::new(), t)
+        } else {
+            (compact_right, String::new())
+        }
+    };
+
     if agent {
         let (glyph, colour) = if let Some(hw) = hw
             && super::handoff_ui::handoff_phase(hw) == Some("needs_approval")
@@ -178,16 +239,22 @@ pub(crate) fn draw_title(
                 }
             }
         };
-        put_text(buf, x, y, 1, glyph, base.fg(colour));
-    } else {
+        if x < area.x + area.width {
+            put_text(buf, x, y, 1, glyph, base.fg(colour));
+        }
+    } else if x < area.x + area.width {
         put_text(buf, x, y, 1, "·", base.fg(elev.muted_surface));
     }
+
+    let right_w = segs_width(&chosen_right);
+    let right_x = (area.x + area.width).saturating_sub(MARGIN + right_w);
+    let text_room = right_x.saturating_sub(x + 2);
     if !text.is_empty() {
         put_text(
             buf,
             x + 2,
             y,
-            room,
+            text_room,
             &text,
             base.fg(if agent {
                 palette.subtext0
@@ -197,30 +264,11 @@ pub(crate) fn draw_title(
         );
     }
     if right_w > 0 && right_x > x {
-        put_text(
-            buf,
-            right_x,
-            y,
-            count.chars().count() as u16,
-            &count,
-            base.fg(elev.muted_surface),
-        );
-        if !wait.is_empty() {
-            let style = base
-                .fg(if user_urgent {
-                    palette.red
-                } else {
-                    palette.peach
-                })
-                .add_modifier(Modifier::BOLD);
-            put_text(
-                buf,
-                right_x + count.chars().count() as u16,
-                y,
-                wait.chars().count() as u16,
-                &wait,
-                style,
-            );
+        let mut rx = right_x;
+        for (seg, style) in chosen_right {
+            let sw = width_of(&seg);
+            put_text(buf, rx, y, sw, &seg, style);
+            rx += sw;
         }
     }
 }

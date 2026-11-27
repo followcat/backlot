@@ -350,6 +350,7 @@ fn ask_age(studio: &backlot_model::summary::StudioSummary, role: &str) -> Option
 }
 
 /// Whether any waiting item demands the user's direct attention (red urgency).
+#[cfg(test)]
 pub(crate) fn any_user_urgent(waits: &[Wait<'_>]) -> bool {
     waits.iter().any(|w| {
         matches!(w, Wait::Prompt(_) | Wait::Stage(_))

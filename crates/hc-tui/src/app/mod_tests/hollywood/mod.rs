@@ -8,6 +8,7 @@ mod cursor;
 mod decision_tests;
 mod entry;
 mod finish_key;
+mod focus_dock_tests;
 mod hints;
 mod keys;
 mod liveness;

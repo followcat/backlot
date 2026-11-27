@@ -1,71 +1,64 @@
-//! The Call Sheet's renderer (S1): the film-strip band dropped from
-//! the top over the whole width — sprocket rows, the title row, one
-//! frame per studio (or the chip strip), the headline, the waiting
-//! items with their action chips and detail lines, the `tell
-//! hollywood` line and the hint row. It never reserves a row or a
-//! column: the pane layout is never recomputed for it.
-//!
-//! The frames live in `frames.rs`, the chip strip in `chips.rs`,
-//! the waiting rows in `band.rs`, the section painters in
-//! `draw_sections.rs` and `draw_lower.rs`, the wait-row action chips
-//! in `draw_chips.rs`, the height ladder in `plan.rs`; this file owns
-//! the hit map, the mode entry point and top-level band setup.
+//! The Call Sheet's renderer (S1): the docked Call Sheet band dropped
+//! from the top over the whole width — title row, WAITING items,
+//! HOLLYWOOD talk/live/compose, STUDIOS strip/frames, hints bar, and the
+//! bottom perforation edge. Never reserves columns or rows.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 use super::draw_lower::{draw_footer, draw_lower};
-use super::draw_sections::{BandCtx, draw_upper, draw_waiting};
+use super::draw_sections::{BandCtx, draw_studios, draw_title_row, draw_waiting};
 use super::plan;
 use super::rows::{self, Row, Target};
 use super::sheet::Status;
 use super::view;
-use super::{Hollywood, LayerMode, LayerOpts};
+use super::{Confirm, Hollywood, LayerMode, LayerOpts, Section};
 use crate::chrome::palette::Palette;
 use crate::panel::data::{MachineSummary, spans_machines};
 
 pub(crate) use super::draw_chips::{CHIP_GAP, paint_wait_chips};
 
-/// The title row's mark.
+/// The title row's wide mark.
 pub(crate) const MARK: &str = "✦  H O L L Y W O O D";
-/// The title row's left margin.
+/// The band's left margin.
 pub(super) const MARGIN: u16 = 2;
 
 /// What the mouse needs: the bar's whole rect, the title row, the
-/// frames and band rows with their targets, the input line, the
-/// waiting list's scroll metrics and the open view's map.
+/// `STUDIOS N` focus label, the frames/chips and band rows with their
+/// targets, the input line, the waiting list's scroll metrics and the
+/// open view's map.
 #[derive(Default)]
 pub(crate) struct HollywoodRender {
-    /// The band's rect — the click boundary.
+    /// The band's rect — the click boundary (ends right below `▀▀`).
     pub area: Rect,
     /// The title row (expanded).
     pub title: Rect,
-    /// The frames and band rows (expanded).
+    /// The `STUDIOS N` header label (on perforation row or 1-row strip).
+    pub studios_label: Rect,
+    /// The studio frames or 1-row chip strip rect.
     pub body: Rect,
-    /// Hit rows with their targets — the title, the frames/chips
-    /// and the band rows alike (S1's mouse selects through them).
+    /// True when STUDIOS currently draws as the 1-row chip strip.
+    pub strip: bool,
+    /// Number of studio chips drawn in the 1-row strip (excludes `[+ new]`).
+    pub drawn_studios: usize,
+    /// Hit rows with their targets — title, waiting/talk rows, frames/chips.
     pub rows: Vec<(Rect, Target)>,
-    /// A waiting row's action chips (S5 §2): the chip's rect, its
-    /// row's target and its key — a chip click selects its row and
-    /// runs the key's action.
+    /// Action chips (`y`/`d`/`↵ read`): rect, target, key.
     pub chips: Vec<(Rect, Target, char)>,
-    /// Full horizontal + vertical chip area per `Wait` row so clicks on
-    /// the 1-cell gap between chips select the row without triggering
-    /// row activation.
+    /// Full chip area per `Wait` row so clicks between chips do not activate row.
     pub chips_zones: Vec<(Rect, Target)>,
     /// The input line (expanded, an agent only).
     pub input: Rect,
     /// The waiting list's scroll metrics — the wheel and PageUp/Down.
     pub metrics: Option<ScrollMetrics>,
-    /// The body's scrollbar track. The film-strip design draws none,
-    /// so this stays empty; the wheel and PageUp/Down still read it.
+    /// The body's scrollbar track (stays empty; wheel/PageUp/Down still read it).
     pub scrollbar: Rect,
     /// Waiting rows visible at once.
     pub viewport_rows: usize,
-    /// Frames sit before the drawn window.
+    /// Frames or chips sit before the drawn window.
     pub more_left: bool,
-    /// Frames sit after it.
+    /// Frames or chips sit after it.
     pub more_right: bool,
     /// The open detail view's hit map.
     pub view: Option<view::ViewRender>,
@@ -73,7 +66,8 @@ pub(crate) struct HollywoodRender {
     pub cursor: Option<crate::chrome::help::CursorState>,
     /// Whether an animated spinner mark was drawn this frame.
     pub working_drawn: bool,
-    /// Whether the 1-row external bottom drop shadow rendered below `area`.
+    /// Always `false` for the focus-dock layout (no external shadow row).
+    #[cfg(test)]
     pub shadow_drawn: bool,
 }
 
@@ -89,11 +83,7 @@ impl HollywoodRender {
     }
 }
 
-/// Render the bar into the frame. `machines` is every machine's last
-/// good `backlot` document — the frames and the waiting items span
-/// them all while the headline, the cards and the input line stay
-/// this core's. `status` answers each machine's connectivity and
-/// stage liveness; `local` is this core's display name.
+/// Render the bar into `frame`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
@@ -106,9 +96,6 @@ pub(crate) fn render(
     palette: &Palette,
 ) -> HollywoodRender {
     match hollywood.mode {
-        // The collapsed bar is the lot pill in the chrome's own row —
-        // the floating strip is gone; Reader (`CardView`) renders as
-        // a top-level dimmed modal in `draw_overlays` (`R3-M2`).
         LayerMode::Hidden | LayerMode::Collapsed => HollywoodRender::default(),
         LayerMode::Expanded => render_band(
             buf, frame, machines, local, status, hollywood, opts, palette,
@@ -116,9 +103,8 @@ pub(crate) fn render(
     }
 }
 
-/// The expanded band: the plan, the frames or chips, the headline,
-/// the waiting rows' window, the tell line, the hints and the two
-/// sprocket rows, all over `surface_dim`.
+/// The expanded band in top-to-bottom zone order: Title -> WAITING ->
+/// HOLLYWOOD -> STUDIOS -> Hints -> Bottom edge (`▀▀`).
 #[allow(clippy::too_many_arguments)]
 fn render_band(
     buf: &mut Buffer,
@@ -138,17 +124,23 @@ fn render_band(
     let all_frames = rows::frames(machines);
     let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
     let plan = plan::plan(frame, &waits, &band_rows, hollywood, opts);
+
     let selected_wait = hollywood
         .selected
         .as_ref()
         .and_then(|t| waits.iter().position(|w| &w.target() == t));
+    let confirming_wait = hollywood.confirm.as_ref().and_then(|c| match c {
+        Confirm::Finish(key) => {
+            let target = Target::Ready(key.clone());
+            waits.iter().position(|w| w.target() == target)
+        }
+    });
+    let kept_wait = selected_wait.or(confirming_wait);
 
-    // The scroll window: `scroll` picks the first waiting row drawn;
-    // `shown` how many. Keep the selected row inside the window.
     let scroll = hollywood
         .scroll
         .min(waits.len().saturating_sub(plan.shown.max(1)));
-    let scroll = selected_wait.map_or(scroll, |sel| {
+    let scroll = kept_wait.map_or(scroll, |sel| {
         if sel < scroll {
             sel
         } else if sel >= scroll + plan.shown {
@@ -178,8 +170,6 @@ fn render_band(
     if area.is_empty() {
         return hits;
     }
-    // Reset every cell the band covers — pane borders and titles must
-    // not show through its blanks.
     for y in area.y..area.y + area.height {
         for x in area.x..area.x + area.width {
             buf[(x, y)].reset();
@@ -195,33 +185,10 @@ fn render_band(
     let sel_ref = (!opts.suppress_highlights)
         .then_some(hollywood.selected.as_ref())
         .flatten();
-    let studios_focused =
-        sel_ref.is_some_and(|t| matches!(t, Target::Studio(_) | Target::NewStudio | Target::Title));
-    let wait_focused = sel_ref.is_some_and(|t| {
-        matches!(
-            t,
-            Target::Prompt(..)
-                | Target::Role(..)
-                | Target::Tell(..)
-                | Target::Upgrade(..)
-                | Target::Decision(..)
-                | Target::Stage(..)
-                | Target::Card(..)
-                | Target::OutwardCard(..)
-                | Target::Ready(..)
-                | Target::Hollywood
-        )
-    });
-    let hollywood_focused = sel_ref.is_some_and(|t| {
-        matches!(
-            t,
-            Target::Headline
-                | Target::Talk(_)
-                | Target::HollywoodLive
-                | Target::Input
-                | Target::Setup
-        )
-    });
+    let focus_zone = sel_ref.and_then(Section::focus_of);
+    let studios_focused = focus_zone == Some(Section::Studios);
+    let wait_focused = focus_zone == Some(Section::Waiting);
+    let hollywood_focused = focus_zone == Some(Section::Hollywood);
 
     let band_wait_total = band_rows
         .iter()
@@ -232,7 +199,6 @@ fn render_band(
     let now_ms = hollywood.now_ms.unwrap_or_else(crate::update_state::now_ms);
 
     let ctx = BandCtx {
-        frame,
         area,
         machines,
         local,
@@ -257,9 +223,10 @@ fn render_band(
         sel_ref,
     };
 
-    let y = draw_upper(buf, area.y, &ctx, &mut hits);
+    let y = draw_title_row(buf, area.y, &ctx, &mut hits);
     let y = draw_waiting(buf, y, &ctx, &mut hits);
     let y = draw_lower(buf, y, &ctx, &mut hits);
+    let y = draw_studios(buf, y, &ctx, &mut hits);
     draw_footer(buf, y, &ctx, &mut hits);
     hits
 }

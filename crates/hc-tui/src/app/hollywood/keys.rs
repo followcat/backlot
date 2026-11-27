@@ -126,15 +126,15 @@ impl App {
         }
         if matches!(code, KeyCode::Right | KeyCode::Char('l')) && plain {
             match self.hollywood_active_section() {
-                Section::Upper => self.hollywood_frame_move(1),
-                Section::Lower => self.hollywood_chip_move(1),
+                Section::Studios => self.hollywood_frame_move(1),
+                Section::Waiting | Section::Hollywood => self.hollywood_chip_move(1),
             }
             return;
         }
         if matches!(code, KeyCode::Left | KeyCode::Char('h')) && plain {
             match self.hollywood_active_section() {
-                Section::Upper => self.hollywood_frame_move(-1),
-                Section::Lower => self.hollywood_chip_move(-1),
+                Section::Studios => self.hollywood_frame_move(-1),
+                Section::Waiting | Section::Hollywood => self.hollywood_chip_move(-1),
             }
             return;
         }

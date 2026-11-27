@@ -212,37 +212,31 @@ fn the_band_draws_sprockets_title_and_counts() {
     );
     let text = lines(&buf, area).join("\n");
     let elev = palette.elevation();
-    // The band body is `elevation.surface`; dark sprockets sit on `panel_bg`.
-    assert_eq!(buf[(0, 2)].bg, elev.surface);
-    // Sprockets: `▄▄` on the first row, `▀▀` on the last.
-    let top = row_of(&buf, area, 0);
-    assert!(top.contains("▄▄"), "{top}");
-    let bottom = row_of(&buf, area, hits.area.height - 1);
-    assert!(bottom.contains("▀▀"), "{bottom}");
-    assert_eq!(buf[(1, 0)].bg, palette.panel_bg);
-    assert_eq!(buf[(1, hits.area.height - 1)].bg, palette.panel_bg);
-    // The title row: the mark, the agent and the right-hand counts.
-    let title = row_of(&buf, area, 1);
+    // Title sits directly on row 0 (no top perforation), bottom `▀▀` edge on last row.
+    assert_eq!(buf[(0, 0)].bg, elev.surface);
+    let title = row_of(&buf, area, 0);
     assert!(title.contains("✦  H O L L Y W O O D"), "{title}");
     assert!(title.contains("live"), "{title}");
     assert!(title.contains("fake / model-h / high"), "{title}");
     assert!(title.contains("3 studios"), "{title}");
-    assert!(title.contains("2 waiting on you"), "{title}");
-    // The waiting part is peach.
+    assert!(title.contains("2c"), "{title}");
+    // Bucketed wait count (`2c`) is peach.
     let peach: Vec<u16> = (area.x..area.x + area.width)
-        .filter(|x| buf[(*x, 1)].fg == palette.peach)
+        .filter(|x| buf[(*x, 0)].fg == palette.peach)
         .collect();
-    assert!(!peach.is_empty(), "{title}: the waiting count");
-    // The headline, the card rows and the hints follow the frames.
+    assert!(!peach.is_empty(), "{title}: the waiting bucket count");
+    let bottom = row_of(&buf, area, hits.area.height - 1);
+    assert!(bottom.contains("▀▀"), "{bottom}");
+    assert_eq!(buf[(1, hits.area.height - 1)].bg, palette.panel_bg);
+    // Unfocused layout shows headline/wait rows, 1-row studio strip, and hints.
     assert!(text.contains("acme-shop needs a look"), "{text}");
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
+    assert!(text.contains("STUDIOS 3"), "{text}");
+    assert!(!hits.shadow_drawn);
     assert!(
         !text.contains("apply a"),
         "chips belong to the selected row only: {text}"
     );
-    // No row is selected: the footer names the sheet's own keys and
-    // the fixed right block — no row keys, and the old bare
-    // all-keys tier is gone.
     assert!(
         text.contains("i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
@@ -260,7 +254,7 @@ fn an_error_studio_shows_it_in_red() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Studio("acme-shop".into())),
         false,
         &palette,
     );
@@ -278,14 +272,8 @@ fn frames_that_do_not_fit_get_carets() {
     let summary = summary();
     let palette = palettes()[0].clone();
     let area = Rect::new(0, 0, 100, 30);
-    let (buf, hits) = draw(
-        area,
-        Some(&summary),
-        true,
-        &layer(LayerMode::Expanded),
-        false,
-        &palette,
-    );
+    let mut hw = selecting(LayerMode::Expanded, Target::Studio("acme-shop".into()));
+    let (buf, hits) = draw(area, Some(&summary), true, &hw, false, &palette);
     let top_row = hits
         .rows
         .iter()
@@ -296,9 +284,8 @@ fn frames_that_do_not_fit_get_carets() {
     assert!(!top.contains('‹'), "{top}");
     assert!(top.contains('›'), "{top}: more frames right");
     // Moving the window right shows the left caret.
-    let mut scrolled = layer(LayerMode::Expanded);
-    scrolled.frame_scroll = 2;
-    let (buf, _) = draw(area, Some(&summary), true, &scrolled, false, &palette);
+    hw.frame_scroll = 2;
+    let (buf, _) = draw(area, Some(&summary), true, &hw, false, &palette);
     let top = row_of(&buf, area, top_row);
     assert!(top.contains('‹'), "{top}");
 }
@@ -322,8 +309,7 @@ fn the_height_ladder_never_panics_and_keeps_the_frames() {
             assert_eq!(lines(&buf, area).len(), usize::from(height));
         }
     }
-    // At 20 rows the band caps at twelve: the frames are the chip
-    // strip, the unselected detail went first, and `tell` stays.
+    // At 20 rows (cap 12) unfocused layout keeps the 1-row studio chip strip and `tell`.
     let area = Rect::new(0, 0, 160, 20);
     let (buf, hits) = draw(
         area,
@@ -334,15 +320,15 @@ fn the_height_ladder_never_panics_and_keeps_the_frames() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("[1 acme-shop"), "{text}");
+    assert!(text.contains("[acme-shop"), "{text}");
     assert!(text.contains("tell hollywood"), "{text}");
     assert!(hits.area.height <= 12, "{text}");
 }
 
 #[test]
 fn the_frames_fold_into_the_chip_strip_under_pressure() {
-    // 80×24 caps the band at twelve: the 7-row frames fold into the
-    // one-row chips, each with its digit, label and health mark.
+    // Unfocused 80×24 (cap 12): STUDIOS folds into the 1-row chip strip
+    // with `STUDIOS 3`, per-studio bucket counts, and pinned `[+ new]`.
     let summary = summary();
     let palette = palettes()[0].clone();
     let area = Rect::new(0, 0, 80, 24);
@@ -355,9 +341,11 @@ fn the_frames_fold_into_the_chip_strip_under_pressure() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("[1 acme-shop"), "{text}");
-    assert!(text.contains("[2 beta-tools"), "{text}");
-    assert!(text.contains("[+ new n]"), "{text}");
+    assert!(text.contains("STUDIOS 3"), "{text}");
+    assert!(text.contains("[acme-shop ● 1c]"), "{text}");
+    assert!(text.contains("[beta-tools ✓ 1c]"), "{text}");
+    assert!(text.contains("[+ new]"), "{text}");
+    assert!(hits.strip);
     let chips: Vec<Rect> = hits
         .rows
         .iter()
@@ -366,7 +354,6 @@ fn the_frames_fold_into_the_chip_strip_under_pressure() {
         .collect();
     assert!(!chips.is_empty(), "the chips carry the studio hits");
     assert!(chips.iter().all(|r| r.height == 1), "{chips:?}");
-    // `tell` and the waiting rows stay visible through the fold.
     assert!(text.contains("tell hollywood"), "{text}");
     assert!(text.contains("CARD c3"), "{text}");
 }
@@ -388,12 +375,11 @@ fn a_ready_studios_chip_draws_the_ready_mark() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    // acme-shop ready (with its `!2` count after the mark) and
-    // beta-tools finished both read `✓`; gamma-site's ledger error
-    // reads the offline mark instead.
-    assert!(text.contains("[1 acme-shop ✓"), "{text}");
-    assert!(text.contains("[2 beta-tools ✓"), "{text}");
-    assert!(!text.contains("[3 gamma-site ✓"), "{text}");
+    // acme-shop ready (`✓ 1c`) and beta-tools finished (`✓ 1c`) both read `✓`;
+    // gamma-site's ledger error reads `×`.
+    assert!(text.contains("[acme-shop ✓"), "{text}");
+    assert!(text.contains("[beta-tools ✓"), "{text}");
+    assert!(!text.contains("[gamma-site ✓"), "{text}");
 }
 
 // ---------- the footer ----------
@@ -482,7 +468,7 @@ fn the_live_row_draws_under_the_user_line() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Input),
         false,
         &palette,
     );
@@ -520,7 +506,7 @@ fn a_card_line_draws_and_the_idle_row_names_the_missing_answer() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Input),
         false,
         &palette,
     );
@@ -560,7 +546,7 @@ fn an_idle_unanswered_line_draws_the_idle_row() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Input),
         false,
         &palette,
     );
@@ -595,7 +581,7 @@ fn the_newest_report_wraps_and_clamps_at_two_lines() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Input),
         false,
         &palette,
     );
@@ -618,59 +604,71 @@ fn the_newest_report_wraps_and_clamps_at_two_lines() {
     assert!(!rows[user + 1].contains("status?"));
 }
 
-/// A short band gives wraps back oldest-first, then drops unselected details
-/// and older talk before dropping zone rules, frames, or waiting rows.
+/// A focused HOLLYWOOD band gives wraps back oldest-first, then drops
+/// older talk before ever dropping a waiting row.
 #[test]
 fn a_short_band_gives_the_wrap_back_before_dropping_a_wait() {
-    use crate::hollywood::plan::Plan;
-    let base = || Plan {
-        top_sprocket: false,
-        title: true,
-        blank_1: false,
-        studios_rule: false,
-        frames_h: 1,
-        blank_2: false,
-        waiting_rule: false,
-        headline: false,
-        details: vec![false, false],
-        detail_extra: vec![0, 0],
-        shown: 2,
-        hollywood_rule: false,
-        setup_hairline: false,
-        talk: 3,
-        talk_wraps: vec![1, 0, 1],
-        live: false,
-        tail_rows: 1,
-        hints: false,
-        bottom_sprocket: false,
-        shadow: false,
+    let mut value = summary_json();
+    let long = "the producer of acme-shop has stopped at its prompt and will not deliver until you \
+                answer; there is only one of you and the lot is busy, so choose 1 to keep waiting";
+    value["hollywood"]["headline"] = serde_json::Value::Null;
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "hollywood", "text": long },
+        { "seq": 2, "who": "user", "text": "status?" },
+        { "seq": 3, "who": "hollywood", "text": long },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let status: &crate::hollywood::sheet::Status = &stage_up;
+    let (waits, rows) = crate::hollywood::band_rows(&list, status, true);
+    let mut hollywood = layer(LayerMode::Expanded);
+    hollywood.selected = Some(Target::Input);
+    let opts = LayerOpts {
+        agent: true,
+        mobile: true,
+        ..LayerOpts::default()
     };
-    let mut full = base();
-    let full_h = full.height();
-    crate::hollywood::plan::fit(&mut full, full_h, 30, None);
+
+    let full =
+        crate::hollywood::plan::plan(Rect::new(0, 0, 60, 14), &waits, &rows, &hollywood, opts);
+    assert_eq!(full.talk, 3);
     assert_eq!(full.wrap_rows(), 2);
-    assert_eq!(full.shown, 2);
+    assert_eq!(full.shown, waits.len());
 
-    // One row short: oldest wrapped message shrinks 2->1 first, newest keeps wrap.
-    let mut short = base();
-    crate::hollywood::plan::fit(&mut short, full_h - 1, 30, None);
-    assert_eq!(short.talk_wraps, vec![0, 0, 1]);
+    // One row short: oldest wrap shrinks 2->1 first while newest wrap & waits stay.
+    let cap_full = full.height();
+    let short = crate::hollywood::plan::plan(
+        Rect::new(0, 0, 60, cap_full - 1),
+        &waits,
+        &rows,
+        &hollywood,
+        opts,
+    );
     assert_eq!(short.wrap_rows(), 1);
-    assert_eq!(short.shown, 2);
+    assert_eq!(short.talk_wraps.last().copied(), Some(1));
+    assert_eq!(short.shown, waits.len());
 
-    // Two rows short: all wraps gone, both waits and all 3 talk lines stay.
-    let mut one = base();
-    crate::hollywood::plan::fit(&mut one, full_h - 2, 30, None);
-    assert_eq!(one.wrap_rows(), 0);
-    assert_eq!(one.talk, 3);
-    assert_eq!(one.shown, 2);
+    // Tighter heights shed older talk and wraps before any waiting row drops.
+    let shorter = crate::hollywood::plan::plan(
+        Rect::new(0, 0, 60, cap_full - 2),
+        &waits,
+        &rows,
+        &hollywood,
+        opts,
+    );
+    assert!(shorter.talk <= 3 && shorter.wrap_rows() <= 1);
+    assert_eq!(shorter.shown, waits.len());
 
-    // Three rows short: oldest talk line drops before a waiting row drops.
-    let mut dropped = base();
-    crate::hollywood::plan::fit(&mut dropped, full_h - 3, 30, None);
-    assert_eq!(dropped.wrap_rows(), 0);
-    assert_eq!(dropped.talk, 2);
-    assert_eq!(dropped.shown, 2);
+    let tight = crate::hollywood::plan::plan(
+        Rect::new(0, 0, 60, cap_full - 4),
+        &waits,
+        &rows,
+        &hollywood,
+        opts,
+    );
+    assert_eq!(tight.wrap_rows(), 0);
+    assert!(tight.talk < 3);
+    assert_eq!(tight.shown, waits.len());
 }
 
 /// At a narrow 60-col width, a long message wraps up to two lines when
@@ -682,7 +680,7 @@ fn a_mobile_band_wraps_the_newest_line_at_two_rows() {
     let list = machines(Some(&summary));
     let status: &crate::hollywood::sheet::Status = &stage_up;
     let (waits, rows) = crate::hollywood::band_rows(&list, status, true);
-    let hollywood = layer(LayerMode::Expanded);
+    let hollywood = selecting(LayerMode::Expanded, Target::Input);
     let plan = crate::hollywood::plan::plan(
         area,
         &waits,
@@ -723,10 +721,24 @@ fn a_selected_hollywood_prompt_names_its_answers() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("⚠ hollywood asks: backlot --help"), "{text}");
+    assert!(text.contains("⚠ HOLLYWOOD asks: backlot --help"), "{text}");
     assert!(
         text.contains("y/d answer  p peek  i tell  tab ←→ ↑↓ ⏎  m menu  ? help  esc"),
         "{text}"
+    );
+    // Focusing HOLLYWOOD (`Target::HollywoodLive`) shows the live prompt line too.
+    let (lbuf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, Target::HollywoodLive),
+        false,
+        &palette,
+    );
+    let ltext = lines(&lbuf, area).join("\n");
+    assert!(
+        ltext.contains("⚠ hollywood asks: backlot --help"),
+        "{ltext}"
     );
 }
 
@@ -1006,7 +1018,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Studio("acme-shop".into())),
         false,
         &palette,
     );
@@ -1382,7 +1394,7 @@ fn the_new_studio_frame_is_always_last_and_dashed() {
         area,
         Some(&summary),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::NewStudio),
         false,
         &palette,
     );
@@ -1401,7 +1413,7 @@ fn the_new_studio_frame_is_always_last_and_dashed() {
     let top = row_of(&buf, area, new.y);
     assert!(top.contains('┄'), "a dashed edge: {top}");
     assert!(top.contains('╭') && top.contains('╮'), "{top}");
-    assert_eq!(buf[(new.x, new.y)].fg, palette.elevation().border_muted);
+    assert_eq!(buf[(new.x, new.y)].fg, palette.accent);
     assert!(row_of(&buf, area, new.y + 2).contains("+  new studio"));
     assert!(row_of(&buf, area, new.y + 3).contains("repository + cast"));
     let chip = row_of(&buf, area, new.y + 5);
@@ -1438,7 +1450,7 @@ fn a_remote_studios_frame_titles_its_machine() {
         &list,
         Some(crate::project::LOCAL_LABEL),
         &status,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Studio("acme-shop".into())),
         LayerOpts {
             agent: true,
             mobile: false,
@@ -1486,7 +1498,7 @@ fn a_studio_frame_shows_its_next_step() {
         area,
         Some(&reviewing),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Studio("acme-shop".into())),
         false,
         &palette,
     );
@@ -1501,7 +1513,7 @@ fn a_studio_frame_shows_its_next_step() {
         area,
         Some(&calm),
         true,
-        &layer(LayerMode::Expanded),
+        &selecting(LayerMode::Expanded, Target::Studio("acme-shop".into())),
         false,
         &palette,
     );
@@ -2296,8 +2308,7 @@ fn a_studio_needing_upgrade_draws_single_line_in_call_sheet() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("WAITING ON YOU ·"), "{text}");
-    assert!(text.contains("! upgrade"), "{text}");
+    assert!(text.contains("3 studios · !1"), "{text}");
     assert!(text.contains("! UPGRADE"), "{text}");
     assert!(text.contains("upgrade backlot (design.opened)"), "{text}");
 
@@ -2345,7 +2356,7 @@ fn six_studios_ready_recast_200x17_and_100x17_show_every_card_and_match_header_c
         );
         let text = lines(&buf, Rect::new(0, 0, width, hits.area.height)).join("\n");
         assert!(
-            text.contains("6 studios  ·  5 waiting on you"),
+            text.contains("6 studios · 3c · ✓2 ready"),
             "{width}x17 missing matching header count:\n{text}"
         );
         for needle in [
@@ -2490,8 +2501,7 @@ fn decision_and_prompt_on_ready_studio_render_their_own_rows() {
         &palette,
     );
     let text = lines(&buf, Rect::new(0, 0, 140, hits.area.height)).join("\n");
-    assert!(text.contains("3 waiting on you"), "{text}");
-    assert!(text.contains("WAITING ON YOU · 3"), "{text}");
+    assert!(text.contains("3 studios · !1 · ?1 · ✓1 ready"), "{text}");
     let prompt_y = hits
         .rows
         .iter()
@@ -2534,7 +2544,8 @@ fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
     ]);
     let summary: Summary = serde_json::from_value(value).unwrap();
     let palette = palettes()[0].clone();
-    let area = Rect::new(0, 0, 100, 17);
+    // Wait window overflow at 100x17 cap (height 34 => cap 17) keeps `why:` detail, compose, and `▀▀`.
+    let area = Rect::new(0, 0, 100, 34);
     let (buf, hits) = draw(
         area,
         Some(&summary),
@@ -2543,7 +2554,7 @@ fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
         false,
         &palette,
     );
-    assert!(hits.area.height <= 12, "height={} > 12", hits.area.height);
+    assert!(hits.area.height <= 17, "height={} > 17", hits.area.height);
     let bottom = row_of(&buf, area, hits.area.bottom() - 1);
     assert!(
         bottom.contains("▀▀"),
@@ -2552,8 +2563,21 @@ fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
     let text = lines(&buf, Rect::new(0, 0, 100, hits.area.height)).join("\n");
     assert!(text.contains("CARD c7"), "{text}");
     assert!(text.contains("why: seven"), "{text}");
-    assert!(
-        text.contains("/9"),
-        "scroll marker reflects all 9 waits:\n{text}"
+    assert!(text.contains("tell hollywood"), "{text}");
+
+    // And under extreme pressure (frame height 17 => cap 12 with 9 waits), never overflows cap
+    // and always keeps the selected waiting item (`c7`) and compose visible.
+    let tight = Rect::new(0, 0, 100, 17);
+    let (tbuf, thits) = draw(
+        tight,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, Target::Card("c7".into())),
+        false,
+        &palette,
     );
+    assert!(thits.area.height <= 12, "height={} > 12", thits.area.height);
+    let ttext = lines(&tbuf, Rect::new(0, 0, 100, thits.area.height)).join("\n");
+    assert!(ttext.contains("CARD c7"), "{ttext}");
+    assert!(ttext.contains("tell hollywood"), "{ttext}");
 }

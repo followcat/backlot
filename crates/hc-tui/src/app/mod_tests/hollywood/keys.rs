@@ -73,37 +73,17 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // S1: Alt+Y lands in Compose; first `Tab` lands on first waiting item (`c3`) Resting.
+    // S1: Alt+Y lands in Compose (`Section::Hollywood`); screen-order Tab
+    // moves `Hollywood -> Studios -> Waiting (c3) -> Hollywood`.
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
     key(&mut app, hc_vt::Key::Tab);
     assert!(!app.hollywood.editing);
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    // In `Lower`, ↑/↓ walk strictly within the band and clamp at the
-    // top (Headline) without jumping into the studio frames.
-    key(&mut app, hc_vt::Key::Char('k'));
-    assert_eq!(app.hollywood.selected, Some(Target::Headline));
-    key(&mut app, hc_vt::Key::ArrowUp);
-    assert_eq!(
-        app.hollywood.selected,
-        Some(Target::Headline),
-        "up at the top of Lower stays in Lower"
-    );
-    key(&mut app, hc_vt::Key::Char('j'));
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    // ←/→ in Lower step action chips on the selected row rather than
-    // jumping back up to the studio frames (`show ↵` is index 2 -> `apply a` is 0).
-    key(&mut app, hc_vt::Key::Char('h'));
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    assert_eq!(app.hollywood.chip_index, Some(1));
-
-    // `Tab` switches to the upper studio-frame section.
-    key(&mut app, hc_vt::Key::Tab);
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("acme-shop".into()))
     );
-    // → / l move within the frames and clamp at `+ new studio`.
+    // → / l move within STUDIOS frames and clamp at `+ new studio`.
     key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(
         app.hollywood.selected,
@@ -113,22 +93,43 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
     key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
-    // ↓ in `Upper` stays in `Upper` rather than dropping into `Lower`.
+    // ↓ at the bottom of STUDIOS stays on `+ new studio`; ← comes back.
     key(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
-    // ← / h come back.
     key(&mut app, hc_vt::Key::Char('h'));
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("beta-tools".into()))
     );
 
-    // 3-zone ring from `Upper`: `Tab` -> `Compose` -> `Waiting` (`c3`) -> `Upper` (`beta-tools`).
+    // Tab advances `Studios -> Waiting (c3)`, where `←`/`→` step action chips.
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Char('h'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert_eq!(app.hollywood.chip_index, Some(1));
+    // At top of WAITING, ↑ clamps; ↓ walks down through Headline & Input to STUDIOS.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c4".into())));
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(!app.hollywood.editing);
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("beta-tools".into()))
+    );
+
+    // Screen-order ring: `Studios -> Waiting -> Hollywood (Compose) -> Studios`.
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
     key(&mut app, hc_vt::Key::Tab);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
-    key(&mut app, hc_vt::Key::Tab);
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
     key(&mut app, hc_vt::Key::Tab);
     assert_eq!(
         app.hollywood.selected,
@@ -148,22 +149,29 @@ async fn tab_switches_sections_from_compose_while_keeping_draft_and_section_memo
     assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "hi");
 
-    // `Tab` out of `Compose` rests editing, keeps the draft, and hits first Wait (`c3`),
-    // then `Studios` (`Upper`), then back into `Compose`.
+    // Screen-order `Tab` from `Compose`: `Studios -> Waiting (c3) -> Compose (Input)`,
+    // keeping draft intact; `Shift+Tab` reverses `Compose -> Waiting -> Studios -> Compose`.
     key(&mut app, hc_vt::Key::Tab);
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "hi");
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    key(&mut app, hc_vt::Key::Tab);
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("acme-shop".into()))
     );
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(app.hollywood.editing);
 
-    // `Shift+Tab` (`BackTab`) reverses back to `Waiting` (`c3`), then `Compose` (`Input`) without
-    // losing the draft.
+    // `Shift+Tab` (`BackTab`) reverses: `Compose -> Waiting (c3) -> Studios`.
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("acme-shop".into()))
+    );
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
     assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
@@ -194,7 +202,7 @@ async fn lower_section_arrows_walk_hollywood_ask_live_and_input_without_looping(
     // Smart Alt+Y lands straight on the blocking `Wait::Hollywood` (`Resting`).
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
-    // ↓ walks past Talk(8) -> HollywoodLive -> Input and clamps at Input.
+    // ↓ crosses zone boundaries smoothly (`Waiting -> Hollywood -> Studios`) without looping.
     let mut visited = vec![app.hollywood.selected.clone().unwrap()];
     for _ in 0..8 {
         key(&mut app, hc_vt::Key::ArrowDown);
@@ -210,15 +218,16 @@ async fn lower_section_arrows_walk_hollywood_ask_live_and_input_without_looping(
             Target::Talk(8),
             Target::HollywoodLive,
             Target::Input,
+            Target::Studio("acme-shop".into()),
         ]
     );
-    // ↑ walks smoothly to the top of `Lower` (`Headline`) without jumping to `Upper`.
-    for _ in 0..8 {
+    // ↑ walks back up across Input -> Live -> Talk -> Headline -> Waiting without wrapping past top.
+    for _ in 0..10 {
         key(&mut app, hc_vt::Key::ArrowUp);
     }
-    assert_eq!(app.hollywood.selected, Some(Target::Headline));
-    key(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.hollywood.selected, Some(Target::Talk(8)));
 }
 
 #[tokio::test]
@@ -509,15 +518,15 @@ async fn six_studios_recast_cards_keep_selection_tab_cycle_and_waiting_scroll() 
     alt_y(&mut app);
     draw_to(&mut app, 200, 17);
 
-    // Tab cycles Compose -> Waiting (c1372) -> Studios -> Compose.
+    // Tab cycles Hollywood -> Studios -> Waiting (c1372) -> Hollywood.
     assert_eq!(app.hollywood.selected, Some(Target::Input));
-    key(&mut app, hc_vt::Key::Tab);
-    assert_eq!(app.hollywood.selected, Some(Target::Card("c1372".into())));
     key(&mut app, hc_vt::Key::Tab);
     assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
     key(&mut app, hc_vt::Key::Tab);
-    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1372".into())));
     key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    key(&mut app, hc_vt::Key::BackTab);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c1372".into())));
 
     // ↓ walks every card and both READY rows in order; ↑ walks back.
@@ -546,7 +555,8 @@ async fn six_studios_recast_cards_keep_selection_tab_cycle_and_waiting_scroll() 
         &[vec!["card", "apply", "c1374", "--as", "user"]]
     );
 
-    // Waiting scroll: add more cards so items overflow 100x17 and verify PageDown/PageUp + ↓ scroll.
+    // Waiting scroll: add enough cards (13 waits total) to overflow cap=12 at 100x17
+    // and verify PageDown/PageUp + ↓ scroll.
     doc["hollywood"]["cards"] = serde_json::json!([
         { "id": "c1372", "studio": "acme-shop", "action": "recast producer → agy/gemini-3-pro/high", "why": "quota" },
         { "id": "c1373", "studio": "acme-shop", "action": "recast director → agy/gemini-3-pro/high", "why": "quota" },
@@ -554,7 +564,11 @@ async fn six_studios_recast_cards_keep_selection_tab_cycle_and_waiting_scroll() 
         { "id": "c1375", "studio": "gamma-web", "action": "pause t1", "why": "loop" },
         { "id": "c1376", "studio": "delta-ops", "action": "pause t2", "why": "loop" },
         { "id": "c1377", "studio": "eps-ui", "action": "pause t3", "why": "loop" },
-        { "id": "c1378", "studio": "zeta-jobs", "action": "pause t4", "why": "loop" }
+        { "id": "c1378", "studio": "zeta-jobs", "action": "pause t4", "why": "loop" },
+        { "id": "c1379", "studio": "gamma-web", "action": "pause t5", "why": "loop" },
+        { "id": "c1380", "studio": "delta-ops", "action": "pause t6", "why": "loop" },
+        { "id": "c1381", "studio": "eps-ui", "action": "pause t7", "why": "loop" },
+        { "id": "c1382", "studio": "zeta-jobs", "action": "pause t8", "why": "loop" }
     ]);
     app.view.documents_mut().insert(
         doc_key(),
@@ -569,12 +583,12 @@ async fn six_studios_recast_cards_keep_selection_tab_cycle_and_waiting_scroll() 
     app.hollywood_select(Target::Card("c1372".into()));
     draw_to(&mut app, 100, 17);
     let shown = app.hollywood_hits.viewport_rows;
-    assert!(shown < 9, "expected overflow at 100x17, shown={shown}");
+    assert!(shown < 13, "expected overflow at 100x17, shown={shown}");
     key(&mut app, hc_vt::Key::PageDown);
     assert!(app.hollywood.scroll > 0, "PageDown scrolls waiting list");
     key(&mut app, hc_vt::Key::PageUp);
     assert_eq!(app.hollywood.scroll, 0, "PageUp scrolls back to top");
-    for _ in 0..8 {
+    for _ in 0..12 {
         key(&mut app, hc_vt::Key::ArrowDown);
         draw_to(&mut app, 100, 17);
     }
