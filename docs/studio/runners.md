@@ -471,8 +471,9 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16; `tru
   `-c`/`--continue` as a boolean continue-most-recent. `agy models` prints the model ids —
   Gemini families plus orchestrator, claude and gpt-oss rows, the thinking depth in each id.
 - The reference launch is `agy --mode accept-edits --effort high --settings <dir>/.agy-settings.json
-  -i "<prompt>"`. The adapter's argv is that shape with `--model` added; both permission profiles
-  take `accept-edits`, the mode that does the work without stopping for plan or prompt review.
+  -i "<prompt>"`. The adapter's argv is that shape with `--model` added; `standard` and `worktree`
+  take `accept-edits`, while `readonly` passes `--mode plan`, adds mutating `command(git ...)` prefixes
+  to `.agy-settings.json` `permissions.deny`, and blocks file-write tools in `PreToolUse`.
 - The session store is `~/.gemini/antigravity-cli/conversations/<uuid>.db` — one sqlite file per
   conversation whose bytes embed the workspace's `file://` URIs verbatim (percent-encoded when the
   path needs it). On agy 1.5.14+ the db does not always carry the workspace URI: agy keeps
@@ -566,6 +567,24 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16; `tru
   unless `root_cutime+cstime` is included.
 - `work.rs`, `permit.rs`, `caps.rs`, `hook.rs`, and `agy.rs` wire `agy`'s screen states, prompt block,
   `Native` status source, turn-level revision rule, and `.agents/hooks.json` signals + `PreToolUse` guard.
+
+## Read-only profile (`readonly`)
+
+When a role runs under `permission_profile = "readonly"` (such as an `--kind audit` task cast with `backlot cast --readonly`), the stage enforces read-only boundaries in two layers:
+
+1. **Guarantees (ledger, git shims, hooks, and delivery check):** `guard` refuses every git write (`add`, `commit`, `checkout`, `reset`, `clean`, `merge`, `rebase`, `cherry-pick`, `stash`, `push`, `tag`, `branch -d/-D/-m`, unknown subcommands, and `!` aliases) while allowing read-only git inspection; `backlot deliver` on a `readonly`/`audit` task refuses `--commits` and verifies a clean worktree with unmoved `HEAD` across single-repo and workspace members; and `director` merges referencing an audit branch (`backlot/<studio>/<audit>`) are refused.
+2. **Runner-native settings (seatbelt / second layer — NOT OS-level containment):** Each adapter configures native read-only restrictions on top of the guarantees above, with honest limits per CLI:
+
+| Runner | Native `readonly` configuration | Pre-allow changes | Honest limits |
+|---|---|---|---|
+| Claude Code | `--permission-mode plan`; `claude-settings.json` adds `"Edit"`, `"Write"`, `"NotebookEdit"` to `permissions.deny` | Drops `Bash(git add)` and `Bash(git commit)` | Read-only shell prefixes (such as `rg --pre` or `git diff --output=...`) are seatbelt, not an OS sandbox; git writes and worktree dirtiness are stopped by `guard` and `deliver` |
+| Codex | `-s read-only` (keeps `-a on-request`) | None (no allow list) | Codex runs under its native read-only sandbox for workspace files; ledger writes (`backlot deliver --report`) sit outside the worktree under state dir and prompt unless approved |
+| Devin | `--permission-mode auto`; `.devin/config.local.json` adds `"Write(*)"` to `permissions.deny` | Keeps read-only `Exec(...)` allow rules | `--permission-mode auto` only auto-approves read-only tools and `"Write(*)"` denies Devin's write tool; arbitrary shell mutations still depend on `guard` and `deliver` |
+| OpenCode | `OPENCODE_CONFIG_CONTENT` sets `"permission": {"edit": "deny"}` (covers `edit`, `patch`, `write`) | None | Shell commands follow OpenCode defaults; file/git cleanliness at delivery is guaranteed by `guard` and `deliver` |
+| cursor-agent | `--mode plan`; `cli-config.json` sets `"deny": ["Write(*)", "Write(**)"]` | Drops `Shell(git add)` and `Shell(git commit)` | Shell writes not matched by `Write(*)`/`Shell(...)` still hit prompts, `guard`, and `deliver` |
+| cmd | Default mode + `.commandcode/settings.json` `permissions.deny` adds `"Edit"` and `"Write"` (on top of `mcp__*`) | Drops `Shell(git add:*)` and `Shell(git commit:*)` | Deliberately avoids `--permission-mode plan`: `cmd`'s `isPlanSafe` rejects `Shell(backlot)` before allow rules and would block `backlot deliver`. `Edit`/`Write` are denied at Rung 1; shell writes are stopped by `guard` and `deliver` |
+| cline | `--plan` + `.cline/hooks/PreToolUse.sh` removes `editor` branch | Drops `git add` and `git commit` from `allowed` | `--plan` natively disables `Editor` and `ApplyPatch`, and `PreToolUse.sh` cancels `editor` before execution; because `forceLocalBackend` checks `mode === "yolo"`, ensure no conflicting shared Cline Hub daemon overrides local env/hooks |
+| agy | `--mode plan` + `.agy-settings.json` `permissions.deny` adds mutating `command(git ...)` prefixes + `PreToolUse` hook denies file-writing tools | None | Native `command(...)` is prefix-matched (`bash -c` hits `PreToolUse` `guard_shell` and `deliver`), and `PreToolUse` (`backlot hook --runner agy`) denies file-write tools whenever hooks are loaded |
 
 ## Screen patterns
 
