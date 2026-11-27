@@ -61,6 +61,7 @@ mod r3_s4;
 mod r3_s4_b;
 mod reload;
 mod remote_children;
+mod resumed_pane;
 mod reveal_focus;
 mod review_regressions;
 mod server_client;
