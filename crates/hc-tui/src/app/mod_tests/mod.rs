@@ -76,6 +76,7 @@ mod server_studio_stale;
 mod settings_studio;
 mod shared_rpc;
 mod sidebar_edge;
+mod sidebar_marquee;
 mod single_machine_sidebar;
 mod stage_toast;
 mod standby;

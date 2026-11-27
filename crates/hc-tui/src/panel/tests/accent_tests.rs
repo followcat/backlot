@@ -88,7 +88,9 @@ fn assert_border_fg(
         assert_eq!(buf[(rx, y)].fg, expected_fg, "{label} right fg y={y}");
     }
     for x in bx..area.x + area.width {
-        assert_eq!(buf[(x, bot_y)].fg, expected_fg, "{label} bottom x={x}");
+        if buf[(x, bot_y)].symbol() != "▪" {
+            assert_eq!(buf[(x, bot_y)].fg, expected_fg, "{label} bottom x={x}");
+        }
         if matches!(buf[(x, top_y)].symbol(), "─" | "═" | "━") {
             assert_eq!(buf[(x, top_y)].fg, expected_fg, "{label} top dash x={x}");
         }
@@ -145,7 +147,7 @@ fn unfocused_lot_demotes_frame_and_title_while_focused_lot_accents_them() {
     let (acme_top, acme_bot) = block_bounds(&buf, area, "acme-shop");
     let (blog_top, blog_bot) = block_bounds(&buf, area, "blog");
 
-    assert_border_fg(&buf, area, acme_top, acme_bot, elev.gilt, "acme-shop");
+    assert_border_fg(&buf, area, acme_top, acme_bot, elev.bulb_warm, "acme-shop");
     assert_border_fg(&buf, area, blog_top, blog_bot, elev.gilt, "blog");
 
     let top_row: String = (area.x..area.x + area.width)
@@ -229,7 +231,7 @@ fn moving_cursor_moves_accent_frame_and_title_chip_and_all_themes_contrast() {
         // `acme-shop` holds the focused terminal `▸` (` ▸ acme-shop `) capsule:
         // `elev.raised_row` + bold `palette.text` on RGB themes, `BOLD | REVERSED` on 16-color;
         // border stays `border_muted`.
-        assert_border_fg(&buf, area, acme_top, acme_bot, elev.gilt, theme);
+        assert_border_fg(&buf, area, acme_top, acme_bot, elev.bulb_warm, theme);
         for x in 2..=14 {
             let cell = &buf[(x, acme_top)];
             assert_eq!(cell.fg, palette.text, "{theme} capsule fg x={x}");
