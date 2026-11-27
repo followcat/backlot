@@ -132,7 +132,7 @@ fn studio_and_remote_app(
         "updated_ms": 1,
         "backlot_version": "0.4.3",
         "studios": [{
-            "id": "aiflows", "title": "aiflows", "state": "live",
+            "id": "orchard", "title": "orchard", "state": "live",
             "requirement_version": 1, "mode": "standard",
             "open_reviews": 0, "waiting": 0,
             "roles": [
@@ -155,8 +155,8 @@ fn studio_and_remote_app(
     });
 
     let mut terms = vec![
-        spaced_agent("t1", "aiflows"),
-        spaced_agent("t2", "aiflows"),
+        spaced_agent("t1", "orchard"),
+        spaced_agent("t2", "orchard"),
         backlot_stage_terminal("t9"),
     ];
     terms.extend(local_extra_terms);
@@ -228,11 +228,11 @@ async fn ctrl_jk_cycles_local_studio_and_remote_workspaces_excluding_stage() {
     assert_eq!(
         targets,
         vec![
-            (ClientEndpointId::Local, "space:7:aiflows".to_string()),
+            (ClientEndpointId::Local, "space:7:orchard".to_string()),
             (remote.clone(), "space:4:work".to_string()),
         ]
     );
-    app_work.studio.focus = Some(StudioFocus::Studio(StudioKey::local("aiflows")));
+    app_work.studio.focus = Some(StudioFocus::Studio(StudioKey::local("orchard")));
     app_work.on_input(UiEvent::Key(ctrl_j.clone()), 120);
     assert_eq!(
         (
@@ -365,7 +365,7 @@ async fn ctrl_jk_preserves_alt_arrows_tree_focus_compose_and_modals() {
     assert_eq!(app_alt.focused.as_deref(), Some("t1"));
     assert_eq!(
         app_alt.studio.focus,
-        Some(StudioFocus::Role(StudioKey::local("aiflows"), "t1".into()))
+        Some(StudioFocus::Role(StudioKey::local("orchard"), "t1".into()))
     );
     app_alt.on_input(UiEvent::Key(alt_down), 120);
     assert_eq!(app_alt.focused.as_deref(), Some("t2"));
@@ -374,7 +374,7 @@ async fn ctrl_jk_preserves_alt_arrows_tree_focus_compose_and_modals() {
     app_alt.on_input(UiEvent::Key(alt_right), 120);
     assert_eq!(
         app_alt.studio.focus,
-        Some(StudioFocus::Role(StudioKey::local("aiflows"), "t2".into()))
+        Some(StudioFocus::Role(StudioKey::local("orchard"), "t2".into()))
     );
     assert_eq!(app_alt.focused.as_deref(), Some("t2"));
 
@@ -392,7 +392,7 @@ async fn ctrl_jk_preserves_alt_arrows_tree_focus_compose_and_modals() {
 
     // (c) Running dock compose keeps Ctrl+K (kills to EOL) and Ctrl+J.
     let mut app_compose = work_app();
-    let key = StudioKey::local("aiflows");
+    let key = StudioKey::local("orchard");
     app_compose.panel.focused = true;
     app_compose.panel.selected = Some(crate::panel::Target::Input(key.clone()));
     app_compose.panel.editing = true;

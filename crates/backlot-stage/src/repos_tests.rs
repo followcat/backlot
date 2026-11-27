@@ -183,12 +183,12 @@ fn dir_entries_carry_their_member_repositories() {
 #[test]
 fn a_broken_git_mark_lists_as_a_plain_directory() {
     let (_scratch, env, home) = home_env();
-    fs::create_dir_all(home.join("aiflows").join(".git")).unwrap();
+    fs::create_dir_all(home.join("orchard").join(".git")).unwrap();
     repo(&home.join("acme-shop"), true);
     fs::create_dir_all(home.join("mono").join("rotten").join(".git")).unwrap();
 
     let doc = json(&env, &format!("repos --json --from {}", home.display()));
-    assert_eq!(entry(&doc, "aiflows")["kind"], "dir");
+    assert_eq!(entry(&doc, "orchard")["kind"], "dir");
     assert_eq!(entry(&doc, "acme-shop")["kind"], "git_ready");
     assert_eq!(entry(&doc, "mono")["kind"], "dir");
     assert!(entry(&doc, "mono")["members"].is_null());

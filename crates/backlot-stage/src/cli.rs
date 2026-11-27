@@ -27,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "report",
     "ask",
     "tell",
+    "msg",
     "progress",
     "task",
     "cast",
