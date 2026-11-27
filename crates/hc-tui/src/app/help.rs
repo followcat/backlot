@@ -137,12 +137,29 @@ impl App {
     pub(super) fn handle_help_mouse(&mut self, mouse: MouseInput) {
         let contains = |rect: Rect| rect.contains(Position::new(mouse.col, mouse.row));
         match mouse.kind {
-            MouseEventKind::ScrollUp => self.scroll_help(-3),
-            MouseEventKind::ScrollDown => self.scroll_help(3),
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                let delta = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                    -1isize
+                } else {
+                    1isize
+                };
+                if let Some(picker) = self.help_state.picker.as_mut() {
+                    let vis = self.help_hits.picker_rows.len().max(1);
+                    let max_scroll = picker.rows.len().saturating_sub(vis);
+                    picker.scroll = picker.scroll.saturating_add_signed(delta).min(max_scroll);
+                    if picker.selected < picker.scroll {
+                        picker.selected = picker.scroll;
+                    } else if picker.selected >= picker.scroll + vis {
+                        picker.selected = picker.scroll + vis - 1;
+                    }
+                } else {
+                    self.scroll_help(delta * 3);
+                }
+            }
             MouseEventKind::Down(MouseButton::Left) => {
                 if self.help_state.picker.is_some() {
                     // The picker is modal inside the overlay: a row
-                    // runs its target, anything else steps back.
+                    // runs its target, an outside click steps back or closes.
                     let row = self
                         .help_hits
                         .picker_rows
@@ -154,6 +171,16 @@ impl App {
                             picker.selected = pos;
                         }
                         self.help_picker_run();
+                    } else if self
+                        .help_state
+                        .picker
+                        .as_ref()
+                        .is_some_and(|p| p.standalone)
+                    {
+                        if !contains(self.help_hits.picker) {
+                            self.help_state.picker = None;
+                            self.help = false;
+                        }
                     } else {
                         self.help_state.picker = None;
                     }

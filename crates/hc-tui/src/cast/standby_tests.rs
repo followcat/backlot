@@ -64,6 +64,7 @@ fn draw_cast(summary: &Summary, width: u16, height: u16) -> Buffer {
         cursor_target: None,
         remembered_target: None,
         active_chip: None,
+        studio_chrome: false,
     };
     let cfg = ClientShellConfig::from_config(
         &crate::config::Config::default(),
@@ -123,6 +124,7 @@ fn standby_writer_in_cast_shows_runner_model_without_plan_hint() {
         cursor_target: None,
         remembered_target: None,
         active_chip: None,
+        studio_chrome: false,
     };
     let rows_built = cast_rows(&view);
     assert!(rows_built.iter().all(|r| r.lines() == 2));

@@ -182,6 +182,7 @@ impl FocusState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CastTarget {
     Role { studio: StudioKey, role: String },
+    ClosedRoles { studio: StudioKey },
     Shell { studio: StudioKey, terminal: String },
     OthersToggle,
     OtherAgent(String),

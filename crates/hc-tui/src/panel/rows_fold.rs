@@ -12,7 +12,7 @@ use crate::studio::StudioKey;
 
 /// Closed role name tokens in first-seen order (`actor-a×3` when
 /// repeated), plus total closed role count.
-pub(super) fn closed_fold_summary(studio: &StudioSummary) -> (usize, Vec<String>) {
+pub(crate) fn closed_fold_summary(studio: &StudioSummary) -> (usize, Vec<String>) {
     let mut total = 0usize;
     let mut counts: Vec<(&str, usize)> = Vec::new();
     for role in closed_roles(studio) {

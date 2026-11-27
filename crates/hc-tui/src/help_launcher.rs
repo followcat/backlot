@@ -98,6 +98,7 @@ pub(crate) enum PickerAct {
 #[derive(Debug, Clone)]
 pub(crate) struct PickerRow {
     pub label: String,
+    pub dim: Option<String>,
     pub menu: StudioMenu,
     pub act: PickerAct,
 }
@@ -109,4 +110,7 @@ pub(crate) struct HelpPicker {
     pub title: String,
     pub rows: Vec<PickerRow>,
     pub selected: usize,
+    pub scroll: usize,
+    /// True when opened directly from the Cast without the launcher behind it.
+    pub standalone: bool,
 }

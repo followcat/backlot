@@ -86,10 +86,13 @@ async fn the_picker_resets_the_cells_it_covers() {
             title: "Pause task…".into(),
             rows: vec![crate::help_launcher::PickerRow {
                 label: "Pause task t1".into(),
+                dim: None,
                 menu: crate::studio_menu::StudioMenu::lot(),
                 act: crate::help_launcher::PickerAct::Sheet,
             }],
             selected: 0,
+            scroll: 0,
+            standalone: false,
         },
         &mut hits,
         &palette,

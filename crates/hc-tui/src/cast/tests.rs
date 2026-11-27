@@ -106,6 +106,7 @@ fn cast_view<'a>(
         cursor_target: None,
         remembered_target: None,
         active_chip: None,
+        studio_chrome: false,
     }
 }
 
