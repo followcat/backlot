@@ -1013,6 +1013,8 @@ Everything else on the compared surfaces still diffs normally.
   `source = "herdr"` translucent sidebars stay unchanged), keeping only one `accent` focus ring across
   Terminal, Lot, Tree, Cast, and Call Sheet (`--plain` mode is untouched for Herdr parity). Left `machines`
   deduplicates live studio workspaces and shows clickable `? keys` at bottom-left, the center header keeps
-  a bucketed lot pill (`✦ S · !B · ?A · Cc · ✓R ready · alt+y`) with clickable jump targets, and Cast/Lot
+  a bucketed lot pill (`✦ S · !B · ?A · Cc · ✓R ready · alt+y`) with clickable jump targets, the docked
+  Call Sheet follows focus-driven zone expansion (`Title → WAITING → HOLLYWOOD → STUDIOS → Hints → ▀▀`
+  without top perforation or external shadow, keeping unfocused zones at 1 line per item), and Cast/Lot
   unify onto single-line `InlineState` role rows separated by role-group `├──┤` rules (`working <dur>` sublines,
   `actors <live>/<cap>`, and unfocused Lot footer hints are removed).
