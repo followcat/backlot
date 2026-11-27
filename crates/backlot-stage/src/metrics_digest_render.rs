@@ -4,6 +4,8 @@ use std::fmt::Write as _;
 
 use backlot_model::metrics::{DigestReport, StudioDigest};
 
+const DIGEST_ITEM_MAX_COLS: usize = 120;
+
 fn format_reset(reset_at_ms: Option<u64>, now_ms: u64) -> String {
     match reset_at_ms {
         Some(reset) if reset > now_ms => format!(
@@ -17,6 +19,42 @@ fn format_reset(reset_at_ms: Option<u64>, now_ms: u64) -> String {
         ),
         None => "reset unknown".into(),
     }
+}
+
+/// First non-empty line trimmed at its first sentence boundary, with single-space runs.
+fn first_sentence_or_line(raw: &str) -> String {
+    let line = raw
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("");
+    if line.is_empty() {
+        return "-".into();
+    }
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch.is_whitespace() {
+            if !out.ends_with(' ') {
+                out.push(' ');
+            }
+            continue;
+        }
+        out.push(ch);
+        if matches!(ch, '。' | '！' | '？') {
+            break;
+        }
+        if matches!(ch, '.' | '!' | '?') && chars.peek().is_none_or(|c| c.is_whitespace()) {
+            break;
+        }
+    }
+    out.trim().to_string()
+}
+
+fn push_digest_item(out: &mut String, line: &str) {
+    let capped = crate::metrics_render::trunc_width(line.trim_end(), DIGEST_ITEM_MAX_COLS);
+    out.push_str(&capped);
+    out.push('\n');
 }
 
 fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
@@ -33,7 +71,8 @@ fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
         let _ = writeln!(out, "- none");
     } else {
         for f in &s.finished {
-            let _ = writeln!(out, "- `{}`: {} ({})", f.task, f.title, f.status);
+            let title = first_sentence_or_line(&f.title);
+            push_digest_item(out, &format!("- `{}`: {title} ({})", f.task, f.status));
         }
     }
 
@@ -43,10 +82,10 @@ fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
     } else {
         for d in &s.delivered {
             let commits = d.commits.as_deref().unwrap_or("-");
-            let _ = writeln!(
+            let title = first_sentence_or_line(&d.title);
+            push_digest_item(
                 out,
-                "- `{}` d{}: `{commits}` — {}",
-                d.task, d.delivery, d.title
+                &format!("- `{}` d{}: `{commits}` — {title}", d.task, d.delivery),
             );
         }
     }
@@ -56,11 +95,14 @@ fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
         let _ = writeln!(out, "- none");
     } else {
         for r in &s.sent_back {
-            let note = r.note.as_deref().unwrap_or("-");
-            let _ = writeln!(
+            let note = r
+                .note
+                .as_deref()
+                .map(first_sentence_or_line)
+                .unwrap_or_else(|| "-".into());
+            push_digest_item(
                 out,
-                "- `{}` d{} (by {}): {note}",
-                r.task, r.delivery, r.reviewer
+                &format!("- `{}` d{} (by {}): {note}", r.task, r.delivery, r.reviewer),
             );
         }
     }
@@ -70,18 +112,22 @@ fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
         let _ = writeln!(out, "- none");
     } else {
         for b in &s.blocked {
-            let reason = b.reason.as_deref().unwrap_or("-");
-            if b.waits_for.is_empty() {
-                let _ = writeln!(out, "- `{}`: {} ({reason})", b.task, b.title);
+            let title = first_sentence_or_line(&b.title);
+            let reason = b
+                .reason
+                .as_deref()
+                .map(first_sentence_or_line)
+                .unwrap_or_else(|| "-".into());
+            let line = if b.waits_for.is_empty() {
+                format!("- `{}`: {title} ({reason})", b.task)
             } else {
-                let _ = writeln!(
-                    out,
-                    "- `{}`: {} ({reason}; waits on {})",
+                format!(
+                    "- `{}`: {title} ({reason}; waits on {})",
                     b.task,
-                    b.title,
                     b.waits_for.join(", ")
-                );
-            }
+                )
+            };
+            push_digest_item(out, &line);
         }
     }
 
@@ -93,7 +139,12 @@ fn render_studio_digest_md(out: &mut String, s: &StudioDigest, now_ms: u64) {
         let _ = writeln!(out, "- none");
     } else {
         for a in &s.waiting_on_user.attentions {
-            let _ = writeln!(out, "- attention `{}`: {} ({})", a.role, a.reason, a.detail);
+            let reason = first_sentence_or_line(&a.reason);
+            let detail = first_sentence_or_line(&a.detail);
+            push_digest_item(
+                out,
+                &format!("- attention `{}`: {reason} ({detail})", a.role),
+            );
         }
         for q in &s.waiting_on_user.asks {
             let _ = writeln!(out, "- ask from `{}` (#{})", q.role, q.seq);

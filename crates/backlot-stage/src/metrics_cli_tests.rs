@@ -75,7 +75,7 @@ fn write_hevents(dir: &Path, events: &[HollywoodEvent]) {
     fs::write(dir.join("events.jsonl"), out).unwrap();
 }
 
-fn deliv(seq: u64, ts: u64, task: &str, delivery: u32, commits: &str) -> Event {
+pub(super) fn deliv(seq: u64, ts: u64, task: &str, delivery: u32, commits: &str) -> Event {
     let kind = EventKind::TaskDelivered {
         task: task.into(),
         delivery,
@@ -102,7 +102,14 @@ fn chk(seq: u64, ts: u64, task: &str, delivery: u32, exit: i32) -> Event {
     evt(seq, ts, "stage", kind)
 }
 
-fn rev(seq: u64, ts: u64, task: &str, delivery: u32, verdict: Verdict, conclusion: &str) -> Event {
+pub(super) fn rev(
+    seq: u64,
+    ts: u64,
+    task: &str,
+    delivery: u32,
+    verdict: Verdict,
+    conclusion: &str,
+) -> Event {
     let kind = EventKind::TaskReviewed {
         task: task.into(),
         delivery,

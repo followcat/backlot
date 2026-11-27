@@ -37,7 +37,7 @@ struct GuardsCols<'a> {
     pause_t: usize,
 }
 
-fn trunc_width(s: &str, max_width: usize) -> String {
+pub(crate) fn trunc_width(s: &str, max_width: usize) -> String {
     if UnicodeWidthStr::width(s) <= max_width {
         return s.to_string();
     }
