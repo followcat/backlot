@@ -474,7 +474,11 @@ The stage runs a **two-lane inbox** for Hollywood:
   A single notice `≤ 400 B` sends inline; two or more (or longer) send as `messages/digest-<top>.md`.
   Notices rank `stalled`, `failed`, `card`, `prompt`, `attention`, `finished`, `recovered`.
 - **Notice hygiene & passive context.** Closed or `info` attentions (`session id not found`) and
-  `card.applied` emit no wakeups; queued notices coalesce to `≤ 1` per `(studio, role, label)` and
+  `card.applied` emit no wakeups; `stuck` attentions (`stalled`, `rate limited`, `connection error`,
+  `question`, director-handled actor prompts and `agent error`) wait until open past
+  `default_stall_limit_s` (10 minutes) before waking Hollywood (naming how long an overdue actor
+  prompt waited and why), while `needs you` attentions and labelled notices (`finished`, `failed`,
+  `card`, `prompt`, `recovered`) fire at once. Queued notices coalesce to `≤ 1` per `(studio, role, label)` and
   `≤ 1` `recovered` (dropped on a fresh start/close, on outcome, or when a studio finishes).
   `card.done` and accepted reviews never wake an idle Hollywood on their own — they ride along once
   as `(context: …)` on the next delivery.
@@ -537,13 +541,15 @@ was yours. `--as user` in a role terminal is refused — it disagrees with the `
 but a role terminal that unsets `BACKLOT_ROLE` looks like yours, and that is what could run
 `card apply`. What holds in practice is the pair of rules above plus the runner's own permission
 prompt: Hollywood's launch pre-allows exactly `backlot status`, `backlot records`,
-`backlot tell <studio> producer`, `backlot hollywood propose`, `backlot hollywood report`,
-`backlot studio new --dry-run`, and the read-only `backlot --help` / `backlot help`, so anything
-else it types stops at a prompt you see. That prompt is yours: the stage sends a key only for a
-decision you recorded — `y`/`d` on the bar's Hollywood prompt row — and only while the prompt
-that decision answered still shows.
+`backlot tell <studio> producer`, `backlot progress`, `backlot hollywood propose`,
+`backlot hollywood report`, `backlot hollywood withdraw`, `backlot studio new --dry-run`,
+`backlot studio cast set --dry-run`, and on `claude`/`cmd` the read-only `backlot --help` /
+`backlot help`, so anything else it types stops at a prompt you see. That prompt is yours: the
+stage sends a key only for a decision you recorded — `y`/`d` on the bar's Hollywood prompt row —
+and only while the prompt that decision answered still shows.
 
-The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
+The pre-allow list is per-runner: `claude`, `cursor`, `cmd` and `cline` wire it into the launch
+setup.
 `codex` and `opencode` take no command list — there the runner's own permission mode
 (`on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
 the ledger. `devin` takes no argv list either, and — since Hollywood gets none of the shared
