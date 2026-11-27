@@ -354,6 +354,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         PathBuf::from(ctx.studio_dir)
     };
     let add_dir = add_dir.to_string_lossy().into_owned();
+    let additional_dirs = vec![add_dir.clone()];
     argv.extend([
         "-m".into(),
         identity.model.clone(),
@@ -361,7 +362,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "--skip-onboarding".into(),
         "--no-auto-update".into(),
         "--add-dir".into(),
-        add_dir.clone(),
+        add_dir,
     ]);
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt
@@ -383,7 +384,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         prep: Some(Prep::Cmd(CmdPrep {
             settings: Path::new(ctx.cwd).join(".commandcode/settings.json"),
             allow: allow_rules_for(ctx.role, ctx.checks, readonly),
-            additional_dirs: vec![add_dir],
+            additional_dirs,
             global_mcp,
             signals: Path::new(ctx.studio_dir)
                 .join("roles")

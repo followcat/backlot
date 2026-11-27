@@ -160,6 +160,47 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             crate::design_validate::require_signed(studio, state)?;
             Ok(())
         }
+        EventKind::MessageQueued {
+            to,
+            file,
+            purpose: Some(purpose),
+            ..
+        } if purpose == "decision" => {
+            require_studio(state)?;
+            if file.as_deref().is_none_or(|f| f.trim().is_empty()) {
+                return Err(Refusal::InvalidDecision(
+                    "a decision message requires a file".into(),
+                ));
+            }
+            if let Some(task_id) = actor_task(to)
+                && let Some(t) = state.tasks.get(task_id)
+                && t.status.is_terminal()
+            {
+                return Err(Refusal::TellToClosedActor {
+                    role: to.clone(),
+                    task: task_id.to_string(),
+                    status: t.status,
+                });
+            }
+            Ok(())
+        }
+        EventKind::MessageQueued {
+            to,
+            file,
+            purpose: Some(purpose),
+            source_seq,
+        } if purpose == "repo_note" => {
+            require_studio(state)?;
+            if to != "producer"
+                || source_seq.is_some()
+                || file.as_deref().is_none_or(|f| f.trim().is_empty())
+            {
+                return Err(Refusal::InvalidOutward(
+                    "a repo_note message targets producer with a payload file".into(),
+                ));
+            }
+            Ok(())
+        }
         EventKind::MessageQueued { .. } => {
             require_studio(state)?;
             Ok(())

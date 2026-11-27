@@ -216,6 +216,10 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when the role left a `question` dialog
     /// before clearing `dialog closed` after `EPISODE_MIN_MS`.
     pub(crate) q_unblocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → when `agy`'s transient `Signing in...`
+    /// screen was first observed, for the [`crate::handoff::DEFAULT_TIMEOUT_MS`]
+    /// `auth error` fallback.
+    pub(crate) signin_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// `(studio, role)` → when the current idle stretch began — the
     /// nudge pass's clock. In-memory: a restart starts it over.
     pub(crate) idle_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
@@ -455,6 +459,7 @@ impl Stage {
         self.q_unblocked_since
             .borrow_mut()
             .retain(|(s, _), _| keep(s));
+        self.signin_since.borrow_mut().retain(|(s, _), _| keep(s));
         self.idle_since.borrow_mut().retain(|(s, _), _| keep(s));
         self.last_signal.borrow_mut().retain(|(s, _), _| keep(s));
         self.interrupt_track
@@ -509,6 +514,7 @@ impl Stage {
         self.q_unblocked_since
             .borrow_mut()
             .retain(|(s, _), _| s != name);
+        self.signin_since.borrow_mut().retain(|(s, _), _| s != name);
         self.idle_since.borrow_mut().retain(|(s, _), _| s != name);
         self.last_signal.borrow_mut().retain(|(s, _), _| s != name);
         self.interrupt_track
@@ -1035,6 +1041,19 @@ impl Stage {
             }
             hw.handoff = handoff;
             s.hollywood = Some(hw);
+        } else {
+            let hs = self.hstate.borrow();
+            let has_non_outward_cards = hs.open_cards().any(|c| {
+                !matches!(
+                    c.action,
+                    backlot_model::hollywood::CardAction::Outward { .. }
+                )
+            });
+            if has_non_outward_cards {
+                s.hollywood = Some(backlot_model::summary::hollywood_section_with_activity(
+                    &hs, "down", None, None, None, None, None, None,
+                ));
+            }
         }
         self.attach_accounts_to_summary(&mut s, now_ms);
         s
@@ -1075,6 +1094,7 @@ impl Stage {
             unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             q_blocked_since: std::cell::RefCell::new(BTreeMap::new()),
             q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            signin_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
             interrupt_track: std::cell::RefCell::new(BTreeMap::new()),
@@ -1226,6 +1246,7 @@ async fn run_impl(
         unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         q_blocked_since: std::cell::RefCell::new(BTreeMap::new()),
         q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
+        signin_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
         interrupt_track: std::cell::RefCell::new(BTreeMap::new()),

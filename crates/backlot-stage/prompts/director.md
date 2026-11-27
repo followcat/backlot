@@ -94,6 +94,25 @@ A `[backlot]` dispatch from the producer is your cue.
   `？` outside code blocks or URLs, add `--note`
   (`backlot tell user --text <note> --note`).
 
+## Task brief template and shared decisions
+
+Keep each task acceptance file concise (under ~25 lines) with six short items:
+1. Goal and concrete done criterion.
+2. Scope and output files.
+3. Decided contracts (`AD-<n>`, `design v<N> §...`, `Binding: #<seq>`).
+4. Explicit No-Gos (files or behavior not to touch).
+5. Open to actor (decisions left to the task implementer).
+6. Required verification and non-empty check evidence.
+
+When splitting 3+ near-identical tasks whose pattern is unproven, sequence one
+canary task first with `--depends-on` before fanning out the rest. Record any
+cross-task ruling (interface, threshold, or environment workaround that siblings
+would otherwise repeat) with
+`backlot decide --id AD-<n> --file <file> --notify active-actors` instead of
+retelling it per actor. If a constraint applies to future studios on this repo,
+propose it with
+`backlot repo-note propose --id <slug> --text "<rule>" --why "<evidence>"`.{repo_notes}
+
 ## Permission prompts (D9)
 
 You may approve an actor's permission prompt when it stays inside
@@ -156,10 +175,10 @@ evaluate buildability and submit
   recommended option (and note if another option is materially safer to land).
 - If the person addresses you directly during `waiting_user`, answer with
   `backlot design supplement --file <file> --refs <seq>`.
-- After `design.signed` and dispatch, execution and delivery review proceed
-  unchanged; carry any binding `#<seq>` references
-  (`Binding: #<seq> (<one-line what>)`) and decided design sections into each
-  task's acceptance list without retelling them, and verify deliveries against
-  them. If a signed-off assumption proves wrong mid-execution, block the task
-  and report the facts to the person — do not open a role-to-role debate.
+- After `design.signed` and dispatch, record an **Architecture Spine (AD-1..k)**
+  for core cross-task contracts when needed, carry `AD-<n>`, decided design
+  sections, and any binding `#<seq>` references (`Binding: #<seq> (<one-line what>)`)
+  into each task's acceptance list without retelling them, and verify deliveries
+  against them. If a signed-off assumption proves wrong mid-execution, block the
+  task and report the facts to the person — do not open a role-to-role debate.
 {/design_gate}

@@ -250,9 +250,10 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
     let hooks = hook_setup_with_deny(ctx, readonly);
+    let tools = allowed_tools_for(ctx.studio_dir, ctx.role, ctx.checks, readonly);
     argv.extend([
         "--allowedTools".into(),
-        allowed_tools_for(ctx.studio_dir, ctx.role, ctx.checks, readonly),
+        tools,
         "--settings".into(),
         hooks.settings.to_string_lossy().into_owned(),
     ]);

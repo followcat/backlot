@@ -119,7 +119,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | Devin | From the last `●` line above `Approval required` to the end — the command block, the judge's sentence and the picker with its `❭` cursor and scope word | Built from a live 3000.12.32 prompt read; Devin has not yet run as a studio role — only Claude has |
 | OpenCode | none | No approval key is ever sent, so no block is mapped |
 | cursor-agent | From the last `─` rule above the picker's `→ ` option-cursor line to the end — the `$ <command>` or the diff preview, the question, the ` in <path>`/`Add <Verb>(<path>)` target and the options. A diff preview's own `─` rule can open the block; the `Approval N of M` header stays out of it | Shell picker measured on 2026.11.05; file pickers from the S12e run and the fork's `cursor.toml` |
-| cmd | From the last full-width `─` rule above the `❯ 1.` picker to the end — the tool title, the `needs to …` sentence, the command and the picker | Measured on 1.88.5 |
+| cmd | From the last full-width `─` rule above the `❯ 1.` picker (or the `Command Code needs to` / `needs to …` / `make this edit to` / `Do you want to` header when unruled) to the end — covers `Execute Shell Command`, `Tool Permission` (`⚠ Outside the workspace`), and `Create File` dialogs | Measured on 1.88.5 / 1.93 |
 | cline | From the last full-width `─` rule above `Cline needs permission` to the end — the tool name, the `$ <command>` preview and the `[y] Approve   [n] Deny` line | Measured on 3.0.74 (S14a). No key is ever sent for it, so the block is compared for the record only: a prompt under `--yolo` is the user's |
 | agy | Command picker: from `Command` and the full-width `─` rule above `Requesting permission for:` to the end (`Run this command?`, numbered options, `↑/↓ Navigate` footer; `esc to cancel` stays at the bottom). Plan question: from `Question` and the full-width `─` rule above `Question N/M:` to the end (`↑/↓ Navigate · enter Select · esc Skip`) | Measured on 1.5.16 (approval keys stay `none sent`, escalated) |
 | Anything else | none | — |
@@ -565,8 +565,11 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16; `tru
   ~100 jiffies/s (`deepest`: `['sh', '-c', 'while :; do :; done']`, `['sleep', '660']`,
   `['flock', …]`). When a CPU-heavy child exits and is reaped, live descendant `utime+stime` drops
   unless `root_cutime+cstime` is included.
-- `work.rs`, `permit.rs`, `caps.rs`, `hook.rs`, and `agy.rs` wire `agy`'s screen states, prompt block,
-  `Native` status source, turn-level revision rule, and `.agents/hooks.json` signals + `PreToolUse` guard.
+- `work.rs`, `permit.rs`, `caps.rs`, `hook.rs`, `dialog.rs`, `signin.rs`, and `agy.rs` wire `agy`'s
+  screen states, startup `Signing in...` grace (`DEFAULT_TIMEOUT_MS` = 90 s before `auth error`),
+  non-empty composer draft detection (suppressing false `question` / `waiting_for_person` blocks),
+  prompt block, `Native` status source, turn-level revision rule, and `.agents/hooks.json` signals +
+  `PreToolUse` guard.
 
 ## Read-only profile (`readonly`)
 
@@ -598,7 +601,10 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 | Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | **Recognized** — a `done`/`idle`/`waiting` tail is read; wait the parsed reset, then a short retry. Do not change model |
 | cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cmd | `Do you trust the files in this folder?` with `❯ 1. Yes, proceed` | First launch in a non-empty untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
+| cmd | `Tool Permission` (`⚠ Outside the workspace`, `❯ 1. Yes` / `2. No, tell Command Code what to do differently`) or `Create File` (`Do you want to create …?`, `❯ 1. Yes` / `2. Yes, allow all edits this session` / `3. No, tell Command Code what to do differently`) with `↑/↓ navigate · enter select` | Tool/folder/file permission dialog needing approval | **Recognized permission** (`cmd_picker`, never `question`) — actor dialogs route to the director (`needs_user = false`), extracting prompt block & detail (`needs to run` / `Do you want to`); `enter` runs `1.`, `esc` cancels |
 | cline | `Cline needs permission` with `Approve tool call?` and `[y] Approve   [n] Deny` | Auto-approve was switched off by hand — `--yolo` forces it on, so the prompt should never appear | The stage presses nothing: `y` and `n` are both a mode it must not change. The attention stays open for the user |
+| agy | `Welcome to the Antigravity CLI. You are currently not signed in.` + `Signing in...` (also `status: blocked` / `kind: auth`) | Transient startup login check at launch | Read as `Working`; raises no attention during `DEFAULT_TIMEOUT_MS` (90 s), then raises `auth error` (`needs_user = true`) if still stuck and clears `signed in` once finished |
+| agy | Bottom composer box holding non-empty wrapped draft (`> …` between horizontal rules) above/without report prose | Person is already typing a reply at the terminal | `has_bottom_composer` / `has_non_empty_draft` reads `Waiting` (even with `waiting_for_person`); never splits into `question` or cites prose above the rule |
 | agy | `Accessing workspace:` with `Do you trust the contents of this project?` and `> Yes, I trust this folder` | First launch (or `--conversation`) in an untrusted folder when `[stage] answer_trust = false` (1.5.16; 1.5.18 skips via `--settings` `trustedWorkspaces` when on) | Stage writes `trustedWorkspaces` at launch when `answer_trust` is on; when off or seen, cursor starts on `Yes` and the stage leaves it for the user |
 | agy | `Requesting permission for:` / `Run this command?` with `> 1. Yes, run command` | Command needing approval under `request-review`, `strict` or unsandboxed `proceed-in-sandbox` (1.5.16) | `enter` runs once (`1.`); `esc` cancels (`Interrupted`); `4` (`request-review`) or `2` (`strict`) declines. Escalated under D2 |
 | agy | `Question 1/1:` with `> 1.` options and `↑/↓ Navigate · enter Select · esc Skip` | Plan-mode question picker (`--mode plan`, 1.5.16) | `up`/`down` + `enter` selects; `esc` skips. Escalated under D2 |

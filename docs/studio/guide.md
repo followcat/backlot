@@ -401,6 +401,25 @@ backlot msg show 3 --studio acme-shop
 backlot msg show 3 --studio acme-shop --json
 ```
 
+To publish or supersede a shared cross-task architectural decision (`AD-<n>`) and notify live roles
+while keeping `<studio>/decisions/current.md` up to date, `director`, `producer`, or `user` can run
+`backlot decide`; for durable repository conventions that apply across future studios on the same
+repository (bridged through a `RepoNote` card without touching the target repo), use
+`backlot repo-note` (`show` and `remove` are user-only):
+
+```sh
+backlot decide --id AD-1 --file /home/user/ad1.md --notify active-actors --studio acme-shop --as director
+backlot decide --id AD-2 --file /home/user/ad2.md --supersedes AD-1 --notify director --studio acme-shop --as user
+backlot repo-note propose --id build-cmd --text "Run scripts/farm-test.sh before review." --why "seen failing without farm script" --studio acme-shop --as director
+backlot repo-note show --studio acme-shop
+backlot repo-note remove --id build-cmd --studio acme-shop
+```
+
+When approved repo notes exist for the studio's repository, each `director` or `writer` start/resume
+copies them into `<studio_dir>/repo-notes.md` (mode `0400`) and adds a prompt line pointing there.
+The studio file is a disposable snapshot — editing it changes nothing, and the next start rewrites
+it from `<state_dir>/repo-notes/<hash>.md`.
+
 `backlot status` shows the studio's recorded state at any time:
 
 ```sh
@@ -949,6 +968,7 @@ stage can raise:
 | `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen, including a reporting core reading `done`, `idle` or `waiting` — counted separately from `stalled` and rework. A `working` screen is never matched. | Usually nothing: one open attention covers the current `reset_at_ms` window (repeat hits update and raise nothing until a later reset arrives or the role works again, clearing `resumed`), while the stage waits for the reset or falls back to bounded auto-retries when the reset is unknown. An episode that outlives the budget escalates `needs the user` — answer it by hand. A **weekly or monthly** limit raises `needs the user` at once. |
 | `connection error` | A non-working screen — or an `error` status's message — shows `Connection error`, as Devin does when it stops until someone writes to it. A rate limit on the same sample takes precedence. | Usually nothing: the stage sends `continue` after 15 seconds, up to three times, then re-raises `needs the user`. The banner disappearing clears it `resumed`. |
 | `agent error` | The role's terminal reports `error` with no limit text in its message or the screen's fresh tail and no connection-error line — a plain agent error, not a limit. | The stage sends nothing: an actor's is the director's to retry, reword or recast; anyone else's is yours. It clears `status recovered` when the status leaves `error`, `rate limit text observed` if a limit banner shows, or `connection error observed` if the connection-error pass claimed it. |
+| `auth error` | An `agy` terminal stayed on its startup `Signing in...` screen past `handoff::DEFAULT_TIMEOUT_MS` (90 seconds), or a Hollywood handoff candidate failed sign-in / authentication. | Always `needs you`: check login or run `agy` interactively so sign-in can complete. Transient startup `Signing in...` screens stay silent as `working` until the timeout, and clear `signed in` once sign-in finishes. |
 
 A stale open attention — one whose condition no longer holds, such as a stage-restart leftover —
 closes by hand:
@@ -1197,11 +1217,14 @@ default — one per core, overridable with `BACKLOT_STATE_DIR`. A studio named b
 ```
 config.toml                  optional [runner_env.<runner>] env for role terminals
 agent.env                  optional dotenv file merged under it, every runner
+repo-notes/<hash>.md       machine-local `0600` notes per canonical repository (from applied `repo-note` cards)
 studios/acme-shop/
   events.jsonl               the ledger: append-only, the source of truth
   events.lock                the flock every append takes
   req/v<N>.md                requirement versions
   design/                    opening design v<N>.md, frozen v<N>-final.md, and immutable v<N>/r*.md sections
+  decisions/current.md       derived shared `AD-<n>` decisions and history, updated under `events.lock`
+  repo-notes.md              `0400` snapshot of approved repo notes, rewritten on `director`/`writer` start or resume (copy only)
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
   messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges

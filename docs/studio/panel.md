@@ -293,6 +293,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `not a git repository` | needs you | `needs you · <what>` |
 | `work area failed` | needs you | `needs you · <what>` |
 | `over budget` | needs you | `needs you · <what>` |
+| `auth error` | needs you | `needs you · <what>` |
 | `agent error` | stuck | `stuck · <what>` when an actor's goes to the director; `needs you · <what>` when `needs_user` is set (fixed roles) |
 | `owed` | needs you | `needs you · <what>` — the escalated stall |
 | `<runner> prep failed` | needs you | `needs you · <what>` |

@@ -90,6 +90,7 @@ fn fields(
     start: &Start,
     state: &StudioState,
     work: &Path,
+    repo_notes_snapshot: Option<&Path>,
 ) -> BTreeMap<String, String> {
     let req = if state.requirement_version == 0 {
         String::new()
@@ -186,6 +187,13 @@ fn fields(
         ));
         block
     };
+    let repo_notes = match repo_notes_snapshot {
+        Some(snap) => format!(
+            "\n\nRepo notes approved by the person in earlier studios on this repo: read {} before planning.",
+            snap.display()
+        ),
+        None => String::new(),
+    };
     BTreeMap::from([
         ("studio".into(), studio.into()),
         ("studio_dir".into(), dir.to_string_lossy().into_owned()),
@@ -198,6 +206,7 @@ fn fields(
         ("design_gate".into(), design_gate.into()),
         ("design_file".into(), design_file),
         ("permission_profile".into(), profile.into()),
+        ("repo_notes".into(), repo_notes),
         ("work".into(), work),
         ("branch".into(), branch),
         ("checks".into(), checks),
@@ -285,7 +294,19 @@ pub fn prepare(
     let prompts = dir.join("prompts");
     fs::create_dir_all(&prompts)?;
     let work = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
-    let fields = fields(studio, dir, start, state, &work);
+    let repo_notes_snapshot = if matches!(start.kind, RoleKind::Director | RoleKind::Writer) {
+        crate::repo_note::sync_studio_snapshot(dir, &start.repo)?
+    } else {
+        None
+    };
+    let fields = fields(
+        studio,
+        dir,
+        start,
+        state,
+        &work,
+        repo_notes_snapshot.as_deref(),
+    );
     let mut text = render(template(start.kind), &fields);
     // A role whose previous agent ran a different identity is taking
     // the role over: it must read the state it inherits before acting.

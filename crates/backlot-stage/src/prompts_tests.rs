@@ -162,6 +162,74 @@ fn render_fills_every_placeholder() {
         text.contains("`git merge backlot/acme-shop/<task> -m <message>`"),
         "{text}"
     );
+    assert!(
+        !text.contains("Repo notes approved"),
+        "unexpected repo notes notice without approved notes: {text}"
+    );
+
+    // Case 2: when approved repo notes exist for the studio's canonical repo,
+    // `{repo_notes}` renders in `director` and `writer` pointing to
+    // `<studio_dir>/repo-notes.md` (mode 0400), while `producer` and `actor`
+    // stay untouched.
+    let base = tmp();
+    let repo_dir = base.join("shop-repo");
+    fs::create_dir_all(&repo_dir).unwrap();
+    let canon_repo = crate::args_studio::canonical_repo(repo_dir.to_str().unwrap());
+    let notes_dir = base.join("repo-notes");
+    fs::create_dir_all(&notes_dir).unwrap();
+    let notes_path = notes_dir.join(format!(
+        "{}.md",
+        backlot_model::repo_notes::repo_hash_prefix(&canon_repo)
+    ));
+    let notes_body = format!(
+        "# Repo Notes: {canon_repo}\n\n## build-cmd\n<!-- card c1 -->\nRun cargo test --lib.\n"
+    );
+    fs::write(&notes_path, &notes_body).unwrap();
+
+    let sdir = base.join("studios/acme-shop");
+    fs::create_dir_all(&sdir).unwrap();
+    let expected_snapshot = sdir.join("repo-notes.md");
+    let expected_line = format!(
+        "Repo notes approved by the person in earlier studios on this repo: read {} before planning.",
+        expected_snapshot.display()
+    );
+    for (kind, role, task) in [
+        (RoleKind::Producer, "producer", None),
+        (RoleKind::Writer, "writer", None),
+        (RoleKind::Director, "director", None),
+        (RoleKind::Actor, "actor-t1-c1", Some("t1")),
+    ] {
+        let mut st = start(kind, role, task);
+        st.repo = canon_repo.clone();
+        let file = prepare(&sdir, "acme-shop", &st, &state).unwrap();
+        let rendered = fs::read_to_string(&file).unwrap();
+        assert!(
+            !rendered.contains('{'),
+            "{role} left a placeholder: {rendered}"
+        );
+        if matches!(kind, RoleKind::Director | RoleKind::Writer) {
+            assert!(
+                rendered.contains(&expected_line),
+                "{role} misses `{expected_line}`:\n{rendered}"
+            );
+        } else {
+            assert!(
+                !rendered.contains("repo-notes.md"),
+                "{role} unexpectedly includes repo-notes.md:\n{rendered}"
+            );
+        }
+    }
+    assert_eq!(fs::read_to_string(&expected_snapshot).unwrap(), notes_body);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(&expected_snapshot)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o400, "studio repo-notes snapshot must be 0400");
+    }
 }
 
 /// S9g: the actor's Delivering section names each declared check —
@@ -1141,7 +1209,7 @@ fn state_with_gate(design_gate: backlot_model::event::DesignGate) -> StudioState
 #[test]
 fn actor_template_and_render_stay_byte_identical_across_design_gates() {
     let raw = template(RoleKind::Actor);
-    assert_eq!(raw.len(), 3323, "actor.md size must stay byte-identical");
+    assert_eq!(raw.len(), 3521, "actor.md size must stay byte-identical");
     assert!(raw.ends_with("asking to open a PR.\n{/writable}\n"));
     assert!(!raw.contains("design_gate"));
     assert!(!raw.contains("backlot design"));
@@ -1247,13 +1315,13 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Writer,
             "writer",
-            3178usize,
+            3744usize,
             "(`backlot tell user --text <note> --note`).\n",
         ),
         (
             RoleKind::Director,
             "director",
-            7422usize,
+            8380usize,
             "is killed for you.\n",
         ),
     ] {
@@ -1298,6 +1366,7 @@ fn design_gate_off_omits_design_section_byte_identically() {
                 "design_file".into(),
                 dir.join("design/v2.md").to_string_lossy().into_owned(),
             ),
+            ("repo_notes".into(), String::new()),
         ]);
         assert_eq!(
             render(raw, &fields),
@@ -1338,6 +1407,65 @@ fn design_gate_required_pre_requirement_avoids_empty_backticks_and_v0() {
             "{kind:?} misses the design folder: {text}"
         );
     }
+}
+
+#[test]
+fn director_and_writer_prompts_teach_task_brief_template_canary_and_spine() {
+    for (kind, role) in [
+        (RoleKind::Director, "director"),
+        (RoleKind::Writer, "writer"),
+    ] {
+        let raw = template(kind);
+        assert!(
+            raw.contains("## Task brief template"),
+            "{role}.md misses task brief template heading"
+        );
+        for needle in [
+            "Goal",
+            "Scope",
+            "Decided contracts",
+            "Explicit No-Gos",
+            "Open to actor",
+            "Required verification",
+            "--depends-on",
+            "Architecture Spine (AD-1..k)",
+        ] {
+            assert!(raw.contains(needle), "{role}.md misses `{needle}`");
+        }
+        let template_block = raw
+            .split("## Task brief template")
+            .nth(1)
+            .unwrap_or_default()
+            .split("\n\n")
+            .take(2)
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        assert!(
+            template_block.lines().count() <= 25,
+            "{role}.md task brief template exceeds 25 lines:\n{template_block}"
+        );
+    }
+
+    let director = template(RoleKind::Director);
+    assert!(
+        director.contains("`backlot decide --id AD-<n> --file <file> --notify active-actors`"),
+        "director.md misses `backlot decide`"
+    );
+    assert!(
+        director.contains(
+            "`backlot repo-note propose --id <slug> --text \"<rule>\" --why \"<evidence>\"`"
+        ),
+        "director.md misses `backlot repo-note propose`"
+    );
+}
+
+#[test]
+fn actor_prompt_includes_optional_siblings_discoveries_section() {
+    let raw = template(RoleKind::Actor);
+    assert!(
+        raw.contains("## Decisions / Discoveries for siblings"),
+        "actor.md misses optional sibling discoveries guidance"
+    );
 }
 
 #[test]

@@ -64,9 +64,9 @@ pub enum HollywoodCmd {
 pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] \
 [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] \
-[--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>]
+[--title <t>] [--repo <path>] [--id <slug>] [--text <text>] [--cast <f>] [--brief <f>] [--fresh] [--file <f>]
 [--answers <seqs>] --why <line>
-       actions: studio-new | close | reopen | reopen-studio | priority | pause | resume | abandon | recast | restart | cast | setup
+       actions: studio-new | close | reopen | reopen-studio | priority | pause | resume | abandon | recast | restart | cast | setup | repo-note
   backlot hollywood report \"<headline>\" [--body <f>] [--answers <seqs>]
   backlot hollywood withdraw <card> --reason <text>
   backlot hollywood show <seq>
@@ -110,6 +110,8 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     let mut level = None;
     let mut title = None;
     let mut repo = None;
+    let mut entry_id = None;
+    let mut text = None;
     let mut cast = None;
     let mut brief = None;
     let mut runner = None;
@@ -146,6 +148,10 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             _ if eq(&arg, "--title").is_some() => title = eq(&arg, "--title").map(String::from),
             "--repo" => repo = Some(it.value("--repo", U_HOLLYWOOD)?),
             _ if eq(&arg, "--repo").is_some() => repo = eq(&arg, "--repo").map(String::from),
+            "--id" => entry_id = Some(it.value("--id", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--id").is_some() => entry_id = eq(&arg, "--id").map(String::from),
+            "--text" => text = Some(it.value("--text", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--text").is_some() => text = eq(&arg, "--text").map(String::from),
             "--cast" => cast = Some(PathBuf::from(it.value("--cast", U_HOLLYWOOD)?)),
             _ if eq(&arg, "--cast").is_some() => cast = eq(&arg, "--cast").map(PathBuf::from),
             "--brief" => brief = Some(PathBuf::from(it.value("--brief", U_HOLLYWOOD)?)),
@@ -272,6 +278,16 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                 permission_profile: None,
             }
         }
+        "repo-note" => CardAction::RepoNote {
+            studio: common
+                .studio
+                .clone()
+                .unwrap_or_else(|| backlot_model::hollywood::HOLLYWOOD.to_string()),
+            repo: repo_path(&repo.ok_or_else(|| usage("missing --repo", U_HOLLYWOOD))?)?,
+            entry_id: entry_id.ok_or_else(|| usage("missing --id", U_HOLLYWOOD))?,
+            text: text.ok_or_else(|| usage("missing --text", U_HOLLYWOOD))?,
+            source_seq: None,
+        },
         other => return Err(usage(format!("unknown card action '{other}'"), U_HOLLYWOOD)),
     };
     Ok((

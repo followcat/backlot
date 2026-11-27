@@ -245,6 +245,8 @@ pub enum Refusal {
     DesignNotSigned(u32),
     /// Invalid design event payload.
     InvalidDesign(String),
+    /// Invalid decision message payload.
+    InvalidDecision(String),
     /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
     NewerRecords(Vec<String>),
 }
@@ -504,7 +506,8 @@ impl fmt::Display for Refusal {
             Refusal::CastBadMaxActors => write!(f, "max_actors must be at least 1"),
             Refusal::BadProgress(msg)
             | Refusal::InvalidOutward(msg)
-            | Refusal::InvalidDesign(msg) => f.write_str(msg),
+            | Refusal::InvalidDesign(msg)
+            | Refusal::InvalidDecision(msg) => f.write_str(msg),
             Refusal::DesignWrongVersion { current, got } => write!(
                 f,
                 "current requirement version is v{current}, got design event for v{got}"

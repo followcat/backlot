@@ -13,7 +13,20 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Added
 
 - **Read-only audit tasks with clean context (`--kind audit`, `backlot cast --readonly`, `--permission_profile = "readonly"`).** `backlot task new --kind audit` creates non-integrable audit tasks that cannot be depended upon or merged into `integration`; `backlot cast --readonly` lowers any compatible candidate to `permission_profile = "readonly"` at cast time (refusing non-`readonly` casts onto `audit` tasks); `guard` refuses all git writes and audit-branch merges while allowing reads; `backlot deliver --report <file>` accepts report-only deliveries on `readonly`/`audit` tasks only when the worktree is clean and `HEAD` is unmoved (refusing `--commits` and skipping `task.checked`); each runner configures native read-only restrictions (`codex -s read-only`, `claude --permission-mode plan` + deny `Edit`/`Write`/`NotebookEdit`, `opencode` `permission.edit = "deny"`, `cmd` deny `Edit`/`Write`, `cursor --mode plan` + `Write(*)`/`Write(**)`, `agy --mode plan` + git-write denies + `PreToolUse` file-write blocks, `devin --permission-mode auto` + `Write(*)`, `cline --plan` + `PreToolUse.sh` without `editor`); and role prompts plus `docs/studio/{guide,ledger,runners}.md` explain clean audit contexts, selective use, and recording confirmed defects via `backlot finding`.
+
+## 0.4.23 — 2026-11-27
+
+### Added
+
 - **`backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone.** `metrics` lists first-delivery pass rate, send-backs, what waited on you and for how long, rate-limit windows, approvals and refusals, Hollywood notices, and review and task times, per studio or for all (`--json` for scripts). `digest` is a daily report: what finished, was sent back, is blocked or waits on you, plus a table from each design section to its task, commits, checks and verdict. Neither command uses a model or writes anything (`docs/studio/metrics.md`).
+- **A decision reaches every role that needs it.** The director (or producer, or you) records a cross-task ruling once with `backlot decide --id AD-<n> --file <path>`, optionally `--notify active-actors` or named roles, and `--supersedes` an older one. Each role gets it like a tell. `decisions/current.md` lists the current decisions with their ledger number and keeps superseded ones as history; the Reader and wherdr can open it.
+- **Notes about a repository carry over to the next studio on it.** When a director, producer or Hollywood finds a trap in a repo's environment (a path, a proxy, a slow test), it proposes a repo note. You see it as a card and apply it with `a`. Applied notes are kept on this machine only, never in the repo, and the next studio's director and writer are told to read them. Text that looks like a secret is refused. `backlot repo-note show` and `remove` let you look at or drop them.
+- **Shorter, clearer task briefs.** The director and writer prompts now use a six-item brief (goal, scope, decided contracts, no-gos, what's open, checks), try one canary task before fanning out near-identical ones, and start the design with an architecture spine (`AD-1..k`). Actors can add a short "Decisions / Discoveries for siblings" section to their report. Roles pick this up when they next start.
+
+### Fixed
+
+- agy's sign-in page, a Command Code file or folder permission and your own unsent draft no longer show as waiting on you.
+
 ## 0.4.22 — 2026-11-27
 
 ### Changed

@@ -64,7 +64,12 @@ fn region(lines: &[&str], phrase: &str) -> Option<String> {
 pub(crate) fn prompt_detail(runner: &str, screen: &str) -> Option<String> {
     let lines: Vec<&str> = screen.lines().collect();
     if runner == "cmd" {
-        for phrase in ["needs to execute", "needs to run", "make this edit to"] {
+        for phrase in [
+            "needs to execute",
+            "needs to run",
+            "make this edit to",
+            "Do you want to",
+        ] {
             let Some(text) = region(&lines, phrase) else {
                 continue;
             };
