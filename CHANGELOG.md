@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- The Call Sheet compose line always shows whether Enter tells Hollywood or replies to a studio role, and a reply target no longer sticks after you leave Compose, close the sheet, or the question is answered elsewhere; sent replies appear in the sheet's history.
+
 ## 0.4.27 — 2026-11-27
 
 ### Changed

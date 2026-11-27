@@ -57,7 +57,8 @@ pub(crate) fn expanded_extent(
     hollywood: &Hollywood,
     opts: LayerOpts,
 ) -> (u16, u16) {
-    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    let (waits, band_rows) =
+        rows::band_rows_with_echoes(machines, status, opts.agent, &hollywood.reply_echoes);
     let p = plan(frame, &waits, &band_rows, hollywood, opts);
     (p.height(), 0)
 }
@@ -104,8 +105,11 @@ pub(crate) fn plan(
         .iter()
         .map(|e| {
             let text_w = talk::talk_text_width(frame.width, &e.who);
-            let rows =
-                crate::hollywood::reader_wrap::wrap_plain(&e.text, text_w, WRAP_TALK_ROWS as usize);
+            let rows = crate::hollywood::reader_wrap::wrap_plain(
+                &talk::talk_body(e),
+                text_w,
+                WRAP_TALK_ROWS as usize,
+            );
             (rows.len() as u16).saturating_sub(1)
         })
         .collect();

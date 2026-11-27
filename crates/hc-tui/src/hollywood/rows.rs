@@ -204,10 +204,22 @@ pub(crate) const MAX_TALK_ENTRIES: usize = 8;
 /// The band's rows in screen order: WAITING first (absent when calm),
 /// then HOLLYWOOD (fold badge, headline when non-duplicate, newest talk
 /// lines up to 8, live progress row, and the input or setup row).
+#[cfg(test)]
 pub(crate) fn band_rows<'a>(
     machines: &'a [MachineSummary],
     status: &Status<'a>,
     agent: bool,
+) -> (Vec<Wait<'a>>, Vec<Row<'a>>) {
+    band_rows_with_echoes(machines, status, agent, &[])
+}
+
+/// [`band_rows`] plus client-local reply echoes, appended as the
+/// newest conversation rows above Compose.
+pub(crate) fn band_rows_with_echoes<'a>(
+    machines: &'a [MachineSummary],
+    status: &Status<'a>,
+    agent: bool,
+    echoes: &'a [Exchange],
 ) -> (Vec<Wait<'a>>, Vec<Row<'a>>) {
     let mut out: Vec<Row<'a>> = Vec::new();
     let waits = waiting_items(machines, status);
@@ -244,6 +256,7 @@ pub(crate) fn band_rows<'a>(
                 out.push(Row::Live(live));
             }
         }
+        out.extend(echoes.iter().map(Row::Talk));
         out.push(Row::Input);
     } else {
         out.push(Row::Setup);
@@ -261,7 +274,8 @@ pub(crate) fn nav_band_targets(
     hollywood: &super::Hollywood,
     opts: super::LayerOpts,
 ) -> Vec<Target> {
-    let (waits, rows) = band_rows(machines, status, opts.agent);
+    let (waits, rows) =
+        band_rows_with_echoes(machines, status, opts.agent, &hollywood.reply_echoes);
     let mut nav_hw = super::Hollywood::new();
     nav_hw.mode = hollywood.mode;
     nav_hw.confirm = hollywood.confirm.clone();

@@ -15,6 +15,7 @@ mod band_detail;
 mod band_lower;
 mod band_wait;
 mod chips;
+mod compose_chip;
 pub(crate) mod decision;
 mod draw;
 mod draw_chips;
@@ -68,9 +69,12 @@ pub(crate) use reader_meta::{
     role_state_word,
 };
 pub(crate) use reader_wrap::{render_body_lines_with_sections, wrap_plain};
+#[cfg(test)]
+pub(crate) use rows::band_rows;
 pub(crate) use rows::{
-    HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
-    hollywood_reply_max_seq, hollywood_unread_count, local_summary, nav_band_targets, on_set,
+    HollywoodActivity, MAX_TALK_ENTRIES, Target, band_rows_with_echoes, frames, hollywood_activity,
+    hollywood_asking, hollywood_reply_max_seq, hollywood_unread_count, local_summary,
+    nav_band_targets, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
 pub(crate) use view::{CardView, ReaderRenderOpts, render_view_with_opts};
@@ -191,6 +195,10 @@ pub(crate) struct Hollywood {
     /// `Some((studio, role))` while the compose line is an in-place
     /// reply to that role's question instead of a line to Hollywood.
     pub reply_to: Option<(crate::studio::StudioKey, String)>,
+    /// Client-local echo rows for replies sent from this sheet. They
+    /// use high synthetic seqs so ledger rows never share their target.
+    pub reply_echoes: Vec<backlot_model::summary::Exchange>,
+    pub next_reply_echo_seq: u64,
     pub history: crate::chrome::history::ComposeHistory,
     /// A card's "Show me" read — `card show <id>` output in a
     /// read-only box over the layer.
@@ -236,6 +244,8 @@ impl Hollywood {
             input: TextEditor::new("", false),
             editing: false,
             reply_to: None,
+            reply_echoes: Vec::new(),
+            next_reply_echo_seq: u64::MAX - 1_000_000,
             history: Default::default(),
             view: None,
             confirm: None,

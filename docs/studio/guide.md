@@ -631,7 +631,11 @@ The expanded strip, top to bottom:
 - the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
 - below them, with an agent: the newest headline, one row per open card with `apply`,
   `cancel` and `show`, the recent conversation (the newest turn and the one before it, older
-  lines folded into `… <n> earlier · ↵ read`) and the `tell hollywood` line. A card Hollywood
+  lines folded into `… <n> earlier · ↵ read`) and the compose line. Compose always names its
+  recipient first: `hollywood` normally, or `↩ <studio> · <role>` after `r` on a question. That
+  reply target lasts only while you are composing it — leaving Compose, closing the sheet,
+  answering the question elsewhere, or Backspace on an empty line returns it to Hollywood — and
+  the sent reply appears in the conversation as `you → <studio> · <role>`. A card Hollywood
   proposes draws under the person's line as its own reply; the newest Hollywood line wraps to a
   few rows so its end is never cut off. Without one: the `⏎ hollywood setup` line — the setup
   dialog's button.
