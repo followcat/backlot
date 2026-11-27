@@ -235,9 +235,6 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     if let Some(id) = ctx.resume {
         argv.extend(["--resume".into(), id.to_string()]);
     }
-    if readonly {
-        argv.extend(["--mode".into(), "plan".into()]);
-    }
     argv.extend(["--trust".into(), "--model".into(), identity.model.clone()]);
     if let Some(p) = ctx.prompt {
         argv.push(p.into());

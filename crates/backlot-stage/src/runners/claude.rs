@@ -51,9 +51,8 @@ pub const MODELS: &[&str] = &[
 /// `--permission-mode`'s value for the profile.
 fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     match profile {
-        "standard" => Ok("manual"),
+        "standard" | "readonly" => Ok("manual"),
         "worktree" => Ok("acceptEdits"),
-        "readonly" => Ok("plan"),
         other => Err(PlanError::profile(other)),
     }
 }

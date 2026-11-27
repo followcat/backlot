@@ -326,8 +326,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         ),
     })?;
     let thinking = thinking(identity.effort.as_deref())?;
-    let mode_flag = if readonly { "--plan" } else { "--yolo" };
-    let mut argv: Vec<String> = vec!["cline".into(), "-i".into(), mode_flag.into()];
+    let mut argv: Vec<String> = vec!["cline".into(), "-i".into(), "--yolo".into()];
     // The measured resume shape names the id right after the mode flag
     // (S14a section 3).
     if let Some(id) = ctx.resume {

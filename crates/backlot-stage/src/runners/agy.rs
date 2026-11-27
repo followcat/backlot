@@ -427,10 +427,9 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     if let Some(id) = ctx.resume {
         argv.extend(["--conversation".into(), id.to_string()]);
     }
-    let mode = if readonly { "plan" } else { "accept-edits" };
     argv.extend([
         "--mode".into(),
-        mode.into(),
+        "accept-edits".into(),
         "--effort".into(),
         identity.effort.clone().unwrap_or_default(),
         "--model".into(),

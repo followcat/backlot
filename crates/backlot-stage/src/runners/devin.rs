@@ -195,12 +195,11 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     if let Some(id) = ctx.resume {
         argv.extend(["-r".into(), id.to_string()]);
     }
-    let perm_mode = if readonly { "auto" } else { "smart" };
     argv.extend([
         "--model".into(),
         identity.model.clone(),
         "--permission-mode".into(),
-        perm_mode.into(),
+        "smart".into(),
         "--respect-workspace-trust".into(),
         "false".into(),
     ]);

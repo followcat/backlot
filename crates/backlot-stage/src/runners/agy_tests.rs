@@ -48,7 +48,7 @@ fn plan_shapes_the_fresh_launch() {
     let env = BTreeMap::new();
     let mut c = ctx(&env, "/home/user/acme-shop");
     c.prompt = Some("do the thing");
-    for profile in ["standard", "worktree"] {
+    for profile in ["standard", "worktree", "readonly"] {
         let l = plan(
             &ActorIdentity {
                 permission_profile: profile.into(),

@@ -29,8 +29,7 @@ pub const MODELS: &[&str] = &[
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let sandbox = match identity.permission_profile.as_str() {
-        "standard" | "worktree" => "workspace-write",
-        "readonly" => "read-only",
+        "standard" | "worktree" | "readonly" => "workspace-write",
         other => return Err(PlanError::profile(other)),
     };
     let mut argv = vec!["codex".to_string()];
