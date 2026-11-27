@@ -10,6 +10,12 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.31 — 2026-11-28
+
+### Fixed
+
+- **A Cursor role's session is no longer lost when Cursor starts quickly.** If Cursor wrote its chat before the stage recorded the role as started, the stage took that chat for an old one and never recorded the session, so the role could not be resumed in it. For Cursor, the stage now looks back to when the role's terminal was created.
+
 ## 0.4.30 — 2026-11-28
 
 ### Added
