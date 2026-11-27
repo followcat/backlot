@@ -138,10 +138,15 @@ pub(crate) fn sample_hollywood_error(
         }
         let mut pace = rate_pace.take().unwrap_or(RatePace {
             retries: 0,
-            due_ms: now_ms.saturating_add(hit.wait_ms),
+            due_ms: now_ms.saturating_add(hit.retry_wait_ms),
+            reset_at_ms: hit.reset_at_ms,
         });
+        if pace.reset_at_ms.is_none() {
+            pace.reset_at_ms = hit.reset_at_ms;
+        }
         if hit.auto_continue {
-            if now_ms >= pace.due_ms {
+            let deadline = pace.reset_at_ms.unwrap_or(pace.due_ms);
+            if now_ms >= deadline {
                 *rate_pace = None;
                 return (Some(HBlockedKind::OutOfQuota { detail }), None);
             }
@@ -155,7 +160,8 @@ pub(crate) fn sample_hollywood_error(
             }
             ratelimit::Step::Send => {
                 pace.retries += 1;
-                pace.due_ms = now_ms.saturating_add(hit.wait_ms.max(ratelimit::RETRY_MARGIN_MS));
+                pace.due_ms =
+                    now_ms.saturating_add(hit.retry_wait_ms.max(ratelimit::RETRY_MARGIN_MS));
                 *rate_pace = Some(pace);
                 return (
                     Some(HBlockedKind::RateLimited { detail }),

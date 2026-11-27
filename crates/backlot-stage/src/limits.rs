@@ -16,15 +16,6 @@ use crate::daemon::Stage;
 use crate::permit;
 use crate::sample::{Raise, Watched};
 
-fn hhmm_local(ms: u64) -> String {
-    let timestamp = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
-    let mut local: libc::tm = unsafe { std::mem::zeroed() };
-    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
-        return "the reset".into();
-    }
-    format!("{:02}:{:02}", local.tm_hour, local.tm_min)
-}
-
 impl Stage {
     /// The S12d error-taxonomy pass on one fresh sample. A limited
     /// role gets one stage-owned attention while the stage waits
@@ -74,7 +65,10 @@ impl Stage {
                 if self.rate_pace.borrow().contains_key(&pair) {
                     return Ok(());
                 }
-                let until = hhmm_local(now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS);
+                let display_reset_ms = hit
+                    .reset_at_ms
+                    .unwrap_or_else(|| now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS);
+                let until = rl::format_reset_local(display_reset_ms, now_ms);
                 let weekly_choice = rl::weekly_choice_dialog(text);
                 self.raise_attention(
                     Raise {
@@ -106,7 +100,8 @@ impl Stage {
                     pair,
                     rl::RatePace {
                         retries,
-                        due_ms: now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS,
+                        due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
+                        reset_at_ms: hit.reset_at_ms,
                     },
                 );
                 eprintln!(
@@ -134,9 +129,11 @@ impl Stage {
                     .unwrap_or(rl::RatePace {
                         retries: 0,
                         due_ms: now_ms,
+                        reset_at_ms: hit.reset_at_ms,
                     });
                 if hit.auto_continue {
-                    if now_ms >= pace.due_ms {
+                    let deadline = pace.reset_at_ms.unwrap_or(pace.due_ms);
+                    if now_ms >= deadline {
                         self.escalate_rate_limit(
                             dir,
                             attn.seq,
@@ -163,7 +160,8 @@ impl Stage {
                                     pair,
                                     rl::RatePace {
                                         retries: pace.retries + 1,
-                                        due_ms: now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS,
+                                        due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
+                                        reset_at_ms: hit.reset_at_ms.or(pace.reset_at_ms),
                                     },
                                 );
                             }

@@ -65,9 +65,9 @@ pub fn due(attn_ts_ms: u64, now_ms: u64) -> bool {
 pub fn detail(blocker: Blocker, waited_ms: u64, now_ms: u64) -> String {
     let waited = backlot_model::event::age_short(waited_ms);
     match blocker {
-        Blocker::RateLimited(Some(due_ms)) => format!(
+        Blocker::RateLimited(Some(reset_ms)) => format!(
             "the director is rate-limited until {}; waiting {waited}; ",
-            crate::render::hh_mm(due_ms.max(now_ms))
+            crate::ratelimit::format_reset_local(reset_ms.max(now_ms), now_ms)
         ),
         Blocker::RateLimited(None) => {
             format!("the director is rate-limited; waiting {waited}; ")
@@ -109,7 +109,7 @@ impl Stage {
             .rate_pace
             .borrow()
             .get(&(studio.to_string(), "director".to_string()))
-            .map(|p| p.due_ms);
+            .map(|p| p.reset_at_ms.unwrap_or(p.due_ms));
         let Some(blocker) = director_blocker(state, due_ms) else {
             return Ok(false);
         };

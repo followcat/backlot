@@ -45,6 +45,16 @@ pub enum Work {
     Blocked,
 }
 
+/// Quota reset window horizon inferred from a limit banner or parseable reset time.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaWindow {
+    Short,
+    Long,
+    #[default]
+    Unknown,
+}
+
 /// Most studios shown; older finished ones drop off first.
 /// Most studios shown; older finished ones drop off first.
 pub const MAX_STUDIOS: usize = 12;

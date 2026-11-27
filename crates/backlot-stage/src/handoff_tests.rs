@@ -881,3 +881,53 @@ async fn card_action_setup_runs_make_before_break_when_live_and_records_done_or_
     assert_eq!(hs2.cards[&proposed.seq].state, CardState::Done);
     let _ = HandoffRecord::default;
 }
+
+#[test]
+fn hollywood_auto_continue_waits_for_unclamped_reset_before_out_of_quota() {
+    let mut rate_pace = None;
+    let mut conn_pace = None;
+    let screen = "Session limit reached · resets 2:10pm\nContinuing automatically at 2:10pm\n";
+    let term = crate::reconcile::LiveTerminal::default();
+
+    let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    unsafe { libc::localtime_r(&ts, &mut local) };
+    local.tm_hour = 9;
+    local.tm_min = 10;
+    local.tm_sec = 0;
+    local.tm_isdst = -1;
+    let t0 = (unsafe { libc::mktime(&mut local) } as u64) * 1000;
+
+    let (blk0, send0) = crate::handoff_term::sample_hollywood_error(
+        &term,
+        screen,
+        Work::Waiting,
+        &mut rate_pace,
+        &mut conn_pace,
+        t0,
+    );
+    assert!(matches!(blk0, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{blk0:?}");
+    assert_eq!(send0, None);
+
+    // Past the 1 h retry clamp (10:15): still waiting (RateLimited), not OutOfQuota yet.
+    let (blk1, _) = crate::handoff_term::sample_hollywood_error(
+        &term,
+        screen,
+        Work::Waiting,
+        &mut rate_pace,
+        &mut conn_pace,
+        t0 + 65 * 60_000,
+    );
+    assert!(matches!(blk1, Some(crate::handoff::HBlockedKind::RateLimited { .. })), "{blk1:?}");
+
+    // At 14:11 (past true 5h reset): escalates to OutOfQuota.
+    let (blk2, _) = crate::handoff_term::sample_hollywood_error(
+        &term,
+        screen,
+        Work::Waiting,
+        &mut rate_pace,
+        &mut conn_pace,
+        t0 + 5 * 3_600_000 + 60_000,
+    );
+    assert!(matches!(blk2, Some(crate::handoff::HBlockedKind::OutOfQuota { .. })), "{blk2:?}");
+}
