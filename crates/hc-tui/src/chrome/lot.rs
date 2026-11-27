@@ -211,11 +211,7 @@ fn header_spans(
     palette: &Palette,
     studio_chrome: bool,
 ) -> Vec<(String, Style)> {
-    let header_bg = if studio_chrome {
-        palette.elevation().stage_well
-    } else {
-        palette.elevation().surface
-    };
+    let header_bg = pill::deco::header_bg(palette, studio_chrome);
     let capsule = crate::studio::glyphs::studio_capsule_style(palette);
     let text = Style::default().fg(palette.text).bg(header_bg);
     let dim = Style::default().fg(palette.overlay0).bg(header_bg);
@@ -319,11 +315,7 @@ pub(crate) fn render_studio_header(
     if area.is_empty() {
         return;
     }
-    let header_bg = if lot.studio_chrome {
-        palette.elevation().stage_well
-    } else {
-        palette.elevation().surface
-    };
+    let header_bg = pill::deco::header_bg(palette, lot.studio_chrome);
     buf.set_style(area, Style::default().bg(header_bg));
     let pill_w = pill_width(&lot.counts, tier, lot.agent, lot.studio_chrome);
     let name_rows = area.width.saturating_sub(pill_w.saturating_add(1));

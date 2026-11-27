@@ -11,6 +11,20 @@ use super::endpoint_sidebar_row::active_endpoint_label;
 use super::palette::Palette;
 use super::render::{ShellHitMap, ShellRenderState, display_width, put_right_text, put_text};
 
+pub(super) fn edge_style(
+    palette: &Palette,
+    default_edge: ratatui::style::Color,
+    bg: ratatui::style::Color,
+    studio_chrome: bool,
+) -> Style {
+    let elev = palette.elevation();
+    if studio_chrome {
+        elev.gilt_style(bg)
+    } else {
+        Style::default().fg(default_edge).bg(bg)
+    }
+}
+
 pub(super) fn render_machines_header(
     buffer: &mut Buffer,
     workspace_area: Rect,

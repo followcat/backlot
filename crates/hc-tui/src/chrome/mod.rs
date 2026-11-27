@@ -22,8 +22,9 @@ pub(crate) mod help;
 pub(crate) mod help_launcher;
 pub(crate) mod help_picker;
 pub(crate) mod history;
-pub(crate) mod intertitle;
 pub(crate) mod lot;
+#[cfg(test)]
+mod lot_deco_tests;
 pub(crate) mod menu;
 pub mod mobile;
 pub mod mobile_items;

@@ -75,6 +75,31 @@ pub(super) fn apply_deco_clasps(
     out
 }
 
+/// Background fill for the top studio header and breadcrumb row.
+pub(crate) fn header_bg(palette: &Palette, studio_chrome: bool) -> ratatui::style::Color {
+    let elev = palette.elevation();
+    if studio_chrome {
+        elev.stage_well
+    } else {
+        elev.surface
+    }
+}
+
+/// Apply Babylon pill clasps and return the resolved `(segments, width_cap)`.
+pub(super) fn apply_deco_and_cap(
+    segs: Vec<(String, Seg)>,
+    counts: &LotCounts,
+    tier: PillTier,
+    spin: usize,
+    deco: bool,
+) -> (Vec<(String, Seg)>, u16) {
+    if deco {
+        (apply_deco_clasps(segs, counts, spin), deco_cap(tier))
+    } else {
+        (segs, tier.cap())
+    }
+}
+
 /// Foreground/background style for calm pill clasps in Babylon studio mode.
 pub(super) fn calm_clasp_style(palette: &Palette) -> Style {
     palette

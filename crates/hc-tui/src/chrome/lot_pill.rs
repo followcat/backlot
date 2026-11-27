@@ -5,7 +5,7 @@
 //! `elevation.raised_row`.
 
 #[path = "lot_pill_deco.rs"]
-mod deco;
+pub(super) mod deco;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -410,7 +410,7 @@ fn segments(
     }
 }
 
-fn seg_style(seg: Seg, counts: &LotCounts, _deco: bool, palette: &Palette) -> Style {
+fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
     let switch_urgent = deco::is_switch_urgent(counts);
     if counts.blocking > 0 || switch_urgent {
         let base = Style::default()
@@ -455,15 +455,8 @@ fn pill_fit(
 ) -> (Vec<(String, Seg)>, PillTier) {
     let mut tier = tier;
     loop {
-        let mut segs = segments(counts, tier, hollywood, spin);
-        if deco {
-            segs = deco::apply_deco_clasps(segs, counts, spin);
-        }
-        let cap = if deco {
-            deco::deco_cap(tier)
-        } else {
-            tier.cap()
-        };
+        let segs = segments(counts, tier, hollywood, spin);
+        let (segs, cap) = deco::apply_deco_and_cap(segs, counts, tier, spin, deco);
         let width: u16 = segs.iter().map(|(t, _)| display_width(t)).sum();
         if width <= cap {
             return (segs, tier);
@@ -542,12 +535,12 @@ pub(crate) fn render_pill(
             rect.y,
             width,
             &text,
-            seg_style(seg, counts, deco, palette),
+            seg_style(seg, counts, palette),
         );
         x = x.saturating_add(width);
     }
     if x < right {
-        let base = seg_style(Seg::Body, counts, deco, palette);
+        let base = seg_style(Seg::Body, counts, palette);
         buf.set_style(Rect::new(x, rect.y, right - x, 1), base);
     }
     rect

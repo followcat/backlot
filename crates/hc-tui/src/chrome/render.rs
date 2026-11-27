@@ -280,13 +280,8 @@ pub(crate) fn render_sidebar_background(
     palette: &Palette,
     studio_chrome: bool,
 ) {
-    let elev = palette.elevation();
-    let (bg, default_edge) = sidebar_surface_and_edge(palette);
-    let edge_style = if studio_chrome {
-        elev.gilt_style(bg)
-    } else {
-        Style::default().fg(default_edge).bg(bg)
-    };
+    let (bg, edge) = sidebar_surface_and_edge(palette);
+    let edge_style = super::sidebar_deco::edge_style(palette, edge, bg, studio_chrome);
     buffer.set_style(area, Style::default().bg(bg));
     let separator_x = area.right().saturating_sub(1);
     for y in area.y..area.bottom() {
