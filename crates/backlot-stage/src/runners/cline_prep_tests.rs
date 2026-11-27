@@ -40,6 +40,7 @@ fn allowed_commands_per_role() {
         "rg",
         "wc",
         "head",
+        "backlot msg show",
     ];
     let producer: Vec<String> = std::iter::once("backlot".to_string())
         .chain(read_only.iter().map(|r| r.to_string()))

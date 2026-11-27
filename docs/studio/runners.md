@@ -176,7 +176,7 @@ producer's and director's prompts reach the user.
 Per role, on top of the base pair, and only in the argv — nothing is written to any settings file:
 
 - **Every role** gets the shared read-only set — `git status`, `git log`, `git show`, `git diff`,
-  `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`, each bare
+  `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`, each bare
   (`Bash(git log)`) and with arguments (`Bash(git log *)`). These are the forensics a role needs to
   understand a repo, a delivery or its own state, so a `git log` never asks a person (field notes
   1126 §5). `git branch` is never a bare rule — only its two listing forms, which git refuses to
@@ -252,8 +252,8 @@ its executable's basename — so `Shell(backlot)` covers `backlot status`, `Shel
 reaches `git merge …` alone, and there is no starred variant. An existing file keeps every other
 key byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base
 rule is `Shell(backlot)`; **every** role adds the shared read-only set — `git status`, `git log`,
-`git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`
-— an actor also `git add` and `git commit`, the director also `git merge`, and both every declared
+`git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`,
+`backlot msg show` — an actor also `git add` and `git commit`, the director also `git merge`, and both every declared
 check's `run` verbatim. Only `git branch`'s two listing forms are rules; the bare family stays out
 because the matcher's prefix form would also allow `git branch -D`. Nothing broader is written — no `Shell(*)`, no
 `--force`, `--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not
@@ -291,7 +291,7 @@ byte — only the `permissions` value is spliced (the same byte-exact splice as 
 `cli-config.json`). `allow` holds `Shell(...)` rules in the bundle's prefix form — the base
 `Shell(backlot)` covers `backlot status`; **every** role adds the shared read-only set
 (`Shell(git status:*)`, `git log`, `git show`, `git diff`, `git branch --list`,
-`git branch --show-current`, `ls`, `rg`, `wc`, `head`); an actor also `Shell(git add:*)` and
+`git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`); an actor also `Shell(git add:*)` and
 `git commit`, the director also `git merge`, and both every declared check's `run` verbatim as
 `Shell(<run>:*)`. Only `git branch`'s two listing forms are rules — the bare prefix would also
 allow `git branch -D`. Every `&&`/`||`/`;`/pipe subcommand
@@ -369,7 +369,7 @@ Devin takes no argv allow list; `--permission-mode smart` stays the gate. The ro
 read-only set is written instead into the same per-work-area `permissions.allow` (the member the
 file already carries), as one `Exec(<cmd>)` per command in Devin's own rule syntax — `Exec(git
 status)`, `Exec(git log)`, `Exec(git show)`, `Exec(git diff)`, `Exec(git branch --list)`, `Exec(git
-branch --show-current)`, `Exec(ls)`, `Exec(rg)`, `Exec(wc)`, `Exec(head)`. Devin's rules are prefix
+branch --show-current)`, `Exec(ls)`, `Exec(rg)`, `Exec(wc)`, `Exec(head)`, `Exec(backlot msg show)`. Devin's rules are prefix
 matches (`Exec(ls)` permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single entry per
 command is the whole rule — there is no ` *` form and no `Bash(...)`, unlike claude. The splice
 replaces only `allow`; any other `permissions` member (`deny` and the rest) keeps its bytes, and
@@ -395,7 +395,7 @@ mask file for MCP. Both are rewritten at every start and resume.
     a prefix match;
   - allowed: `run_commands` whose every segment is one of the role's rules — `backlot` plus the
     shared read-only set (`git status`, `git log`, `git show`, `git diff`, `git branch --list`,
-    `git branch --show-current`, `ls`, `rg`, `wc`, `head`) for **every** role; an actor's `git add`
+    `git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`) for **every** role; an actor's `git add`
     and `git commit`; the director's `git merge`; each declared check verbatim. Only `git branch`'s
     two listing forms are rules, never the bare family. A command is split on `;`, `&&`, `||`, `|` and a
     decoded newline, and every part must match on its own; `$`, a backtick, a redirection, or `(` `)`
