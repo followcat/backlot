@@ -53,7 +53,8 @@ the pane border mutes with `[unfocused · Esc returns]` and the bottom modebar d
 
 `Ctrl+B t` (`[keys] focus_tree`) opens the sidebar if collapsed and focuses the **machines tree**
 on the current workspace or machine row. `Ctrl+B a` (`[keys] focus_cast`) focuses the **Cast**
-section below it (roles and studio shells of the current studio). Once inside either section, `Tab` /
+section below it (roles and studio shells of the current studio, with an indented
+`runner · model · effort` line under each in-use role). Once inside either section, `Tab` /
 `Shift+Tab` switches between `Tree` and `Cast`, global chords (`Alt+L`, `Alt+Y`, `Alt+PageUp/PageDown`,
 `Alt+Up/Down`, `Ctrl+B y/t/a`) stay live, and `Esc` returns focus to the terminal.
 
@@ -109,26 +110,23 @@ While Lot owns the keys:
 |---|---|
 | `j`/`k`, `↑`/`↓` | Move selection across rows (bounded inside the entered studio; crosses studios at `Studios` level) |
 | `PageUp`/`PageDown` | Scroll |
-| `Tab` / `Shift+Tab` | In `Studios`: jump between studios; in `InsideStudio`: cycle non-empty sections (`Needs You` → `People` → `Tasks` → `Talk` → `Compose`); in `RowActions`: step inline chips (`« chip »`); in empty `Compose`: cycle `producer → cursor role → hollywood` (`Tab` after `/` completes `/verb`) |
+| `Tab` / `Shift+Tab` | Jump to the next / previous non-empty section (`Header` → `People` → `Tasks` → `Exchange` → `›` Input), crossing studios (`InsideStudio` follows the target studio) and wrapping; in `RowActions`: step inline chips (`« chip »`); in empty `Compose`: cycle `producer → cursor role → hollywood` (`Tab` after `/` completes `/verb`) |
 | `←`/`→`, `h`/`l` | On a row with inline chips (`[reply r]`, `[ack x]`, `[switch w]`, `[allow y]`, etc.): step into/across `RowActions`; on a studio header at `Studios` level: `→`/`l` enters the studio, `←`/`h` folds |
 | `Enter` | Execute highlighted chip, enter selected studio, focus a live person's terminal, toggle a fold, or open a card/task |
-| `Space` | Open/close drawer under a person or task; toggle `done`/`closed` fold; fold/unfold studio block |
-| `t` / `r` / `i` | Targeted inline compose (pre-targets selected role or open ask without inserting `/tell <role> ` text into the input buffer); `/` opens slash commands |
+| `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold/unfold a studio block |
+| `t` / `r` / `i` | Targeted inline compose (pre-targets selected role or open ask without inserting `/tell <role> ` text into the input buffer); `/` seeds `/` for commands |
 | `x` / `w` | Acknowledge an open ask on selected person (`x`); open Recast dialog for a quota/error role (`w`) |
-| `Esc` | Unwind one level: `Compose` (resting) → `RowActions` → `InsideStudio` → `Studios` (when ≥ 2 studios exist) → `Terminal` (or close in 1-studio / overlay mode) |
-| `Space` | Open or close the drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold row; fold a studio block |
 | `o` | Reopen a closed resumable person |
 | `v` | Open the Task & Delivery Sheet |
 | `p` | Peek the terminal |
 | `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
 | `s`/`f` | Start the stage / finish the studio |
-| `i` / `/` | Edit the selected studio's `›` line (`Enter` sends and rests; `↑`/`↓` step that studio's `user` history and restore any unsent draft; `Esc` rests keeping the draft) |
 | `m` | The row's context menu — same list a right-click opens |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open this help |
-| `Esc` | While composing on `›`: rest keeping any draft. Otherwise beside the panes: unfocus the dock. As an overlay: close |
+| `Esc` | Unwind one level: `Compose` (resting keeping draft) → `RowActions` → `InsideStudio` → `Studios` (when ≥ 2 studios exist) → `Terminal` (or close in 1-studio / overlay mode) |
 
 Right-click on a dock row selects it and opens the same menu `m` opens on the selection. `Enter` on a studio `✦` / `›` exchange line opens the entry in the Lot Reader.
 While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second

@@ -372,6 +372,7 @@ async fn a_prompt_reaching_for_backlot_vars_is_the_users() {
             reason,
             detail,
             needs_user,
+            ..
         } => {
             assert_eq!(role, "actor-t1-c1");
             assert_eq!(reason, PERMISSION_PROMPT);
@@ -873,6 +874,7 @@ async fn a_plain_error_raises_agent_error_and_sends_nothing() {
             reason,
             detail,
             needs_user,
+            ..
         } => {
             assert_eq!(role, "actor-t1-c1");
             assert_eq!(reason, crate::ratelimit::AGENT_ERROR);
@@ -1088,6 +1090,7 @@ async fn question_dialog_raises_routes_keeps_gate_closed_and_clears() {
             reason,
             detail,
             needs_user,
+            ..
         } => {
             assert_eq!(role, "actor-t1-c1");
             assert_eq!(reason, backlot_model::event::QUESTION);
@@ -1229,6 +1232,8 @@ async fn question_and_outward_action_on_same_role_do_not_clear_each_other() {
                     reason: OUTWARD_ACTION.into(),
                     detail: "git push origin main".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),
@@ -1265,4 +1270,95 @@ async fn question_and_outward_action_on_same_role_do_not_clear_each_other() {
         .map(|a| a.reason.as_str())
         .collect();
     assert_eq!(open_after, vec![OUTWARD_ACTION]);
+}
+
+#[tokio::test]
+async fn five_hour_limit_displays_true_reset_time_and_holds_auto_continue() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let tm = term();
+    let (stage, fake) = stage().await;
+
+    // 09:10 local time on 2024-10-04.
+    let t0 = {
+        let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        unsafe { libc::localtime_r(&ts, &mut local) };
+        local.tm_hour = 9;
+        local.tm_min = 10;
+        local.tm_sec = 0;
+        local.tm_isdst = -1;
+        (unsafe { libc::mktime(&mut local) } as u64) * 1000
+    };
+
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: waiting\n\
+                                   Session limit reached · resets 2:10pm\n\
+                                   Continuing automatically at 2:10pm\n"
+        .into();
+
+    sample(&stage, &dir, &tm, "actor-t1-c1", t0).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { reason, detail, .. } => {
+            assert_eq!(reason, crate::ratelimit::RATE_LIMITED);
+            assert!(
+                detail.contains("waiting until 14:10"),
+                "expected unclamped 14:10 in attention detail, got: {detail}"
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // 65 minutes later (past the 1h retry clamp, 3h55m before 14:10 reset):
+    // auto-continue must wait until the true reset rather than escalating early.
+    sample(&stage, &dir, &tm, "actor-t1-c1", t0 + 65 * 60_000).await;
+    assert!(
+        events(&dir, "attention.escalated").is_empty(),
+        "auto-continue escalated before true 5h reset"
+    );
+}
+
+#[tokio::test]
+async fn rate_limit_attention_raised_records_account_and_reset_at_ms() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let tm = term();
+    let (stage, fake) = stage().await;
+
+    let t0 = {
+        let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        unsafe { libc::localtime_r(&ts, &mut local) };
+        local.tm_hour = 9;
+        local.tm_min = 10;
+        local.tm_sec = 0;
+        local.tm_isdst = -1;
+        (unsafe { libc::mktime(&mut local) } as u64) * 1000
+    };
+
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: waiting\n\
+                                   You've hit your usage limit · resets 2:10pm\n"
+        .into();
+
+    sample(&stage, &dir, &tm, "actor-t1-c1", t0).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            reason,
+            account,
+            reset_at_ms,
+            ..
+        } => {
+            assert_eq!(reason, crate::ratelimit::RATE_LIMITED);
+            assert_eq!(account.as_deref(), Some("fake:default"));
+            assert_eq!(*reset_at_ms, Some(t0 + 5 * 3_600_000));
+        }
+        _ => unreachable!(),
+    }
 }

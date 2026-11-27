@@ -202,6 +202,8 @@ fn raise(dir: &Path, role: &str, reason: &str, needs_user: bool) {
                     reason,
                     detail: format!("screen saved to attention/{seq}.txt"),
                     needs_user,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),
@@ -379,4 +381,70 @@ async fn only_an_actors_unflagged_prompt_is_routed() {
     assert_eq!(open.iter().filter(|a| a.open).count(), 2);
     assert!(open.iter().any(|a| a.role == "director" && !a.needs_user));
     assert!(open.iter().any(|a| a.role == "actor-t1-c1" && a.needs_user));
+}
+
+#[tokio::test]
+async fn rate_limited_director_routes_using_true_reset_time() {
+    let dir = tmp();
+    studio(&dir);
+    let st = stage().await;
+    raise(&dir, "actor-t1-c1", PERMISSION_PROMPT, false);
+    let prompt_ts = open_ts(&dir, "actor-t1-c1");
+
+    // Pick 09:10 local time tomorrow relative to `prompt_ts` so the test
+    // is independent of the current wall-clock hour, while still passing
+    // the route grace (`route_now > prompt_ts + ROUTE_GRACE_MS`).
+    let now = {
+        let ts = ((prompt_ts / 1000) + 86_400) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        unsafe { libc::localtime_r(&ts, &mut local) };
+        local.tm_hour = 9;
+        local.tm_min = 10;
+        local.tm_sec = 0;
+        local.tm_isdst = -1;
+        (unsafe { libc::mktime(&mut local) } as u64) * 1000
+    };
+
+    let term = crate::reconcile::LiveTerminal {
+        address: "director".into(),
+        status: Some(hc_proto::terminal::Status {
+            state: "waiting".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let state = store::load_state(&dir).unwrap();
+    let watched = crate::sample::Watched {
+        dir: &dir,
+        state: &state,
+        role: "director",
+        runner: "claude",
+        term: &term,
+    };
+    st.rate_limit(
+        "acme-shop",
+        &watched,
+        "You've hit your usage limit · resets 2:10pm\n",
+        backlot_model::summary::Work::Waiting,
+        now,
+    )
+    .await
+    .unwrap();
+
+    let state = store::load_state(&dir).unwrap();
+    let route_now = now + ROUTE_GRACE_MS;
+    assert!(
+        st.route_prompts("acme-shop", &dir, &state, route_now)
+            .await
+            .unwrap()
+    );
+    let now_open = attentions(&dir, PERMISSION_PROMPT)
+        .into_iter()
+        .find(|a| a.open)
+        .unwrap();
+    assert!(
+        now_open.detail.contains("14:10"),
+        "expected unclamped 14:10 reset in routed prompt detail, got: {}",
+        now_open.detail
+    );
 }

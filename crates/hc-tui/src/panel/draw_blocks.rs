@@ -92,7 +92,8 @@ pub(super) fn draw_top(
         format!("{} {progress}", health.glyph())
     };
     let marker_w = u16::from(focused_terminal) * 2;
-    let chip_pad = u16::from(selected);
+    let has_pill = selected || focused_terminal;
+    let chip_pad = u16::from(has_pill);
     let interior = rect.width.saturating_sub(4 + chip_pad);
     let entered_w = if entered { 15u16 } else { 0 };
     let full_fits =
@@ -138,17 +139,23 @@ pub(super) fn draw_top(
     // R14: an experimental studio's `exp` badge rides after the
     // label — the label gets the full budget and a dock too narrow
     // for both drops the badge first. Selected blocks wrap `[▸ ]label`
-    // in a bold padded `accent` chip (` ▸ label `).
+    // in a bold padded `accent` chip; an unselected current block (`▸`)
+    // sits in a subtle raised capsule (`elevation.raised_row`, or bold+reverse
+    // on 16-color terminals); other blocks draw bold `palette.text`.
     let id_end = tail_x.saturating_sub(1);
     let id_width = id_end.saturating_sub(rect.x + 2 + marker_w + chip_pad);
     let id_text = label.fit(id_width as usize);
     let drawn = display_width(&id_text) as u16;
-    if selected && id_width > 0 {
-        let chip_style = Style::default()
-            .fg(glyphs::contrast_fg(palette))
-            .bg(palette.accent)
-            .add_modifier(Modifier::BOLD);
-        put_text(buf, rect.x + 1, rect.y, 1, " ", chip_style);
+    if has_pill && id_width > 0 {
+        let pill_style = if selected {
+            Style::default()
+                .fg(glyphs::contrast_fg(palette))
+                .bg(palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            glyphs::studio_capsule_style(palette)
+        };
+        put_text(buf, rect.x + 1, rect.y, 1, " ", pill_style);
         if focused_terminal {
             put_text(
                 buf,
@@ -156,7 +163,7 @@ pub(super) fn draw_top(
                 rect.y,
                 2,
                 &format!("{} ", glyphs::FOCUSED_STUDIO),
-                chip_style,
+                pill_style,
             );
         }
         put_text(
@@ -165,7 +172,7 @@ pub(super) fn draw_top(
             rect.y,
             id_width,
             &id_text,
-            chip_style,
+            pill_style,
         );
         if drawn > 0 {
             put_text(
@@ -174,39 +181,20 @@ pub(super) fn draw_top(
                 rect.y,
                 1,
                 " ",
-                chip_style,
+                pill_style,
             );
         }
-    } else {
-        if focused_terminal && id_end > rect.x + 2 {
-            put_text(
-                buf,
-                rect.x + 2,
-                rect.y,
-                1,
-                glyphs::FOCUSED_STUDIO,
-                Style::default()
-                    .fg(palette.text)
-                    .add_modifier(Modifier::BOLD),
-            );
-        }
-        if id_width > 0 {
-            let title_style = if focused_terminal {
-                Style::default()
-                    .fg(palette.text)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(palette.subtext0)
-            };
-            put_text(
-                buf,
-                rect.x + 2 + marker_w,
-                rect.y,
-                id_width,
-                &id_text,
-                title_style,
-            );
-        }
+    } else if id_width > 0 {
+        put_text(
+            buf,
+            rect.x + 2 + marker_w,
+            rect.y,
+            id_width,
+            &id_text,
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        );
     }
     let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
@@ -519,12 +507,16 @@ pub(super) fn draw_talk(
         if selected {
             style = style.add_modifier(Modifier::BOLD);
         }
+        let display = match line.dropped_reason.as_deref() {
+            Some(reason) => format!("{} (dropped: {reason})", line.text),
+            None => line.text.clone(),
+        };
         put_text(
             buf,
             rect.x + 4,
             rect.y,
             width,
-            &truncate_end(&line.text, width as usize),
+            &truncate_end(&display, width as usize),
             style,
         );
     }

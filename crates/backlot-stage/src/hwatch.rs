@@ -107,16 +107,36 @@ impl Stage {
         let session = role.session_id.clone();
         let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
-        let retry_send = {
+        let model = role.actor.as_ref().map_or("", |a| a.model.as_str());
+        self.record_account_role(HOLLYWOOD, HOLLYWOOD, runner, model);
+        let outcome = {
             let mut rp = self.hrate_pace.borrow_mut();
             let mut cp = self.hconn_pace.borrow_mut();
-            let (err, retry) = crate::handoff_term::sample_hollywood_error(
-                t, &text, work, &mut rp, &mut cp, now_ms,
-            );
-            *self.herror.borrow_mut() = err;
-            retry
+            crate::handoff_term::sample_hollywood_error(t, &text, work, &mut rp, &mut cp, now_ms)
         };
-        if let Some(msg) = retry_send {
+        if let Some(hit) = outcome.quota_hit {
+            let detail = match &outcome.blocked {
+                Some(
+                    crate::handoff::HBlockedKind::RateLimited { detail }
+                    | crate::handoff::HBlockedKind::OutOfQuota { detail },
+                ) => detail.as_str(),
+                _ => "rate limited",
+            };
+            self.record_account_stall(
+                HOLLYWOOD,
+                HOLLYWOOD,
+                runner,
+                model,
+                now_ms,
+                hit.reset_at_ms,
+                hit.window,
+                detail,
+            );
+        } else {
+            self.clear_account_stall_for_role(HOLLYWOOD, HOLLYWOOD);
+        }
+        *self.herror.borrow_mut() = outcome.blocked;
+        if let Some(msg) = outcome.retry_send {
             let _ = self.driver.send(&self.client, &t.address, msg).await;
         }
         let is_q = crate::question::in_episode(runner, work, t.status.as_ref(), &text, None);

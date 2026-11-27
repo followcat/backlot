@@ -12,6 +12,7 @@ mod keys;
 mod layout;
 mod mouse;
 mod reveal;
+mod sections;
 mod select;
 pub(crate) mod sheet;
 mod sheet_nav;

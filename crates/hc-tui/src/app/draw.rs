@@ -76,8 +76,6 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.waiting,
         );
     }
-    let collapsed = app.shell_state.sidebar_collapsed;
-    app.panel.sidebar_collapsed = collapsed;
     let layout = app.chrome_layout(area.width, area.height);
     // U1: studio mode replaces the agents section with the current
     // studio's cast — borrowed views only, every machine's summaries.
@@ -133,12 +131,34 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // `shell_state`/`studio` mutable borrows below.
     let studio_tree = app.studio.active.then(|| app.studio_sidebar_tree());
     let current_studio = app.studio.current.clone();
+    let pane_focus_active = app.focus.workspace == crate::focus::WorkspaceRegion::Terminal
+        && app.focus.modals.is_empty();
+    let single_has_border = app
+        .projection
+        .snapshot
+        .focused_tab_id
+        .as_ref()
+        .and_then(|id| app.projection.layouts.get(id))
+        .and_then(|t| t.root.as_ref())
+        .is_some_and(|r| {
+            app.shell
+                .pane_borders
+                .shows_borders(r.terminals().len() > 1)
+        });
     let lot = (app.studio.lot.pill || app.studio.lot.header.is_some()).then_some(
         crate::chrome::lot::LotFrame {
             counts: app.studio.lot.counts,
             agent: app.has_hollywood_cfg,
             pill: app.studio.lot.pill,
             header: app.studio.lot.header.as_ref(),
+            unfocused_cue: !app.plain
+                && app.studio.active
+                && !pane_focus_active
+                && app.focus.modals.is_empty()
+                && !app.panel_fullscreen_at(area.width)
+                && !single_has_border
+                && !layout.pane_surface.is_empty()
+                && layout.pane_surface.width >= 40,
             cols: app.area.0,
             spin: app.panel.spin,
         },
@@ -157,6 +177,24 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         .then(|| app.studio.focused_studio())
         .flatten()
         .cloned();
+    let lot_selected_studio = (!app.plain && app.panel.open() && app.panel.focused)
+        .then(|| match app.panel.selected.as_ref() {
+            Some(crate::panel::Target::Stage(machine)) => app
+                .studio
+                .current
+                .as_ref()
+                .filter(|k| k.machine.as_deref() == machine.as_deref())
+                .cloned()
+                .or_else(|| {
+                    crate::panel::data::studios(&machines)
+                        .into_iter()
+                        .find(|s| s.machine == machine.as_deref())
+                        .map(|s| s.key())
+                }),
+            Some(target) => target.studio().cloned(),
+            None => None,
+        })
+        .flatten();
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         federated,
@@ -171,7 +209,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_focused_workspace: &mut app.shell_state.reveal_focused_workspace,
         reveal_focused_tab: &mut app.shell_state.reveal_focused_tab,
         reveal_focused_agent: &mut app.shell_state.reveal_focused_agent,
-        sidebar_collapsed: collapsed,
+        sidebar_collapsed: app.shell_state.sidebar_collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
         tab_drag_insert_index: app.tab_drag_index,
         selected_workspace_id: app.navigate_target.as_ref(),
@@ -187,6 +225,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         focused_studio: focused_studio.as_ref(),
         studio_tree: studio_tree.as_ref(),
         current_studio: current_studio.as_ref(),
+        lot_selected_studio: lot_selected_studio.as_ref(),
         reveal_studio_row: &mut app.shell_state.reveal_studio_row,
         reveal_tree_row: &mut app.shell_state.reveal_tree_row,
         tree_cursor: app.tree_focus.as_ref(),
@@ -202,8 +241,6 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         state,
     );
 
-    let pane_focus_active = app.focus.workspace == crate::focus::WorkspaceRegion::Terminal
-        && app.focus.modals.is_empty();
     let pane_infos = pane_infos(app, layout.pane_surface);
     // Resolved before the cache borrow: the border/title lookups read
     // `app` while `border_cache` mutably borrows `shell_state`.

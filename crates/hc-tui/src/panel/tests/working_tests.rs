@@ -39,6 +39,7 @@ fn base_role(work: Work, since_ms: u64) -> RoleSummary {
         restarted_ms: None,
         idle_since_ms: None,
         queue: None,
+        account: None,
     }
 }
 

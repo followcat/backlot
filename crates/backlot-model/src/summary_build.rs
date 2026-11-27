@@ -136,6 +136,7 @@ fn standby_role_summary(state: &StudioState, role: &str) -> Option<RoleSummary> 
         restarted_ms: None,
         idle_since_ms: None,
         queue: None,
+        account: None,
     })
 }
 
@@ -495,6 +496,7 @@ pub(crate) fn role_summary(
         // pure summary leaves it out.
         idle_since_ms: None,
         queue: None,
+        account: None,
     })
 }
 

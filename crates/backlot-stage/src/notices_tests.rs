@@ -222,6 +222,7 @@ fn the_cap_review_owes_the_producer_not_the_actor() {
         source_seq: Some(10),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -246,6 +247,8 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     reason: CANNOT_RESUME.into(),
                     detail: "lost 3 times in 10 minutes".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             (
@@ -255,6 +258,8 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             (
@@ -264,6 +269,8 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             (
@@ -273,6 +280,8 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
         ],
@@ -317,6 +326,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
             source_seq: Some(seq),
             delivered: false,
             dropped: false,
+            dropped_reason: None,
             ts_ms: 0,
             delivered_ms: None,
         });
@@ -343,6 +353,8 @@ fn a_cannot_resume_producer_tells_a_live_director() {
         ts_ms: 0,
         needs_user: false,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     });
     let owed = notices::owed(&state, dir());
     let lost: Vec<_> = owed.iter().filter(|n| n.label == "lost").collect();
@@ -378,6 +390,8 @@ fn a_cannot_resume_producer_tells_a_live_director() {
         ts_ms: 0,
         needs_user: false,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     });
     assert!(
         notices::owed(&state, dir())
@@ -452,6 +466,7 @@ fn a_recovered_resume_owes_the_role_one_notice() {
         source_seq: Some(5),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -683,6 +698,8 @@ fn an_over_budget_raise_notices_director_and_producer() {
                     reason: "over budget".into(),
                     detail: "task t1 is over budget: 3s used of 2s".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
         ],

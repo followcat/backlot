@@ -49,7 +49,9 @@ pub(crate) use work::work_state;
 /// --list -D x` is a usage error, exit 129). A runner's rule syntax
 /// is a prefix match on one plain command, so a `cd x && git log`, a
 /// pipe or `git -C` never matches — the prompts tell the role to run
-/// one plain command at a time.
+/// one plain command at a time. `backlot msg show` is also listed so
+/// every role (including runners like Devin whose allowlist holds only
+/// this set) can open cited messages by seq without prompting.
 pub const READ_ONLY: &[&str] = &[
     "git status",
     "git log",
@@ -61,6 +63,7 @@ pub const READ_ONLY: &[&str] = &[
     "rg",
     "wc",
     "head",
+    "backlot msg show",
 ];
 
 use std::collections::{BTreeMap, BTreeSet};

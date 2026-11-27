@@ -161,7 +161,6 @@ impl App {
             return;
         }
         self.shell_state.sidebar_collapsed = false;
-        self.panel.sidebar_collapsed = false;
         self.nav_leave_overlays();
         if self.mode == crate::app::Mode::Navigate {
             self.mode = crate::app::Mode::Normal;

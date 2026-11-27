@@ -29,6 +29,8 @@ fn raised(seq: u64, role: &str, needs_user: bool) -> Attention {
         ts_ms: 0,
         needs_user,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     }
 }
 
@@ -107,6 +109,7 @@ fn question_notice_body_and_staleness() {
         source_seq: Some(21),
         delivered: false,
         dropped: false,
+        dropped_reason: None,
         ts_ms: 0,
         delivered_ms: None,
     };

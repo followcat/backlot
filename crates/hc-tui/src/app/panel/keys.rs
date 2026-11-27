@@ -132,6 +132,7 @@ impl App {
                     }
                     self.panel_input_complete();
                 }
+                crossterm::event::KeyCode::BackTab | crossterm::event::KeyCode::Tab => {}
                 _ => {
                     if let Some(Target::Input(studio_key)) = self.panel.selected.clone() {
                         let _ = self.panel.draft_mut(&studio_key).handle_key(key);
@@ -144,24 +145,23 @@ impl App {
             code,
             crossterm::event::KeyCode::Tab | crossterm::event::KeyCode::BackTab
         ) && (plain || modifiers == crossterm::event::KeyModifiers::SHIFT)
+            && matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            )
         {
-            let forward = code == crossterm::event::KeyCode::Tab;
+            let forward = code == crossterm::event::KeyCode::Tab
+                && !modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
             match self.focus.workspace.clone() {
-                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Studios) => {
-                    self.panel_studios_tab(forward);
-                }
-                crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(
-                    studio,
-                )) => {
-                    self.panel_section_tab(&studio, forward);
-                }
                 crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
                     studio,
                     ..
                 }) => {
                     self.panel_row_chip_move(&studio, if forward { 1 } else { -1 });
                 }
-                _ => {}
+                _ => {
+                    self.panel_tab_section(forward);
+                }
             }
             return;
         }
@@ -279,7 +279,9 @@ impl App {
                         let machines = self.panel_summaries();
                         let count = crate::panel::data::studios(&machines).len();
                         if count >= 2 {
-                            self.panel.selected = Some(Target::Studio(studio));
+                            if !matches!(self.panel.selected, Some(Target::Block(_))) {
+                                self.panel.selected = Some(Target::Studio(studio));
+                            }
                             self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
                                 crate::focus::LotLevel::Studios,
                             ));

@@ -133,6 +133,7 @@ mod tests {
             source_seq: None,
             delivered: false,
             dropped: false,
+            dropped_reason: None,
             ts_ms: 1_000,
             delivered_ms: None,
         }
@@ -171,6 +172,7 @@ mod tests {
             restarted_ms: None,
             idle_since_ms: None,
             queue: None,
+            account: None,
         }
     }
 
@@ -217,6 +219,8 @@ mod tests {
             ts_ms: 2_000,
             needs_user: true,
             cleared_reason: None,
+            account: None,
+            reset_at_ms: None,
         });
         assert!(role_delivery_blocked(&st, "producer", false));
         let quota = role_queue_status(&st, &rs, Some(Work::Waiting), false, true, 20_000).unwrap();

@@ -194,6 +194,8 @@ impl crate::daemon::Stage {
                     text: &screen.text,
                     needs_user: false,
                     bound: None,
+                    account: None,
+                    reset_at_ms: None,
                 },
                 move |seq| stall_detail(&ev_snap, now_ms, seq),
             )

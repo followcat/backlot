@@ -60,13 +60,13 @@ pub(crate) fn render_cast(
                 .as_ref()
                 .map(|label| label.fit(id_width as usize))
                 .unwrap_or_else(|| studio.studio.id.clone());
-            let header_fg = if view.region_focused {
-                palette.accent
-            } else if view.studio_focused {
-                palette.text
-            } else {
-                palette.overlay0
-            };
+            let header_style = Style::default()
+                .fg(if view.region_focused {
+                    palette.accent
+                } else {
+                    palette.text
+                })
+                .add_modifier(Modifier::BOLD);
             let title_prefix = if view.region_focused { " ▸ " } else { " " };
             put_text(
                 buffer,
@@ -74,14 +74,14 @@ pub(crate) fn render_cast(
                 header.y,
                 header.width,
                 &format!("{title_prefix}{label}"),
-                Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
+                header_style,
             );
             put_right_text(
                 buffer,
                 header,
                 header.y,
                 &format!("{}/{}", view.index + 1, view.total),
-                Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
+                header_style,
             );
         }
         // No studio yet (U2): the header alone — the `others` row is
@@ -112,18 +112,33 @@ pub(crate) fn render_cast(
         *cast_scroll = 0;
         return;
     }
-    if rows
-        .iter()
-        .any(|r| matches!(r, CastRow::ClosedDivider { .. }))
-    {
-        let total: usize = rows.iter().map(|row| row.lines() as usize).sum();
-        if total > body.height as usize {
-            rows.retain(|r| !matches!(r, CastRow::ClosedDivider { .. }));
+    // Under height pressure, drop non-focused roles' runner/model lines
+    // first (keeping the focused role's line longest), then drop even
+    // the focused role's line before scrolling or hiding the divider —
+    // never hiding a role to make room for metadata.
+    let fit_height = body.height as usize;
+    let mut total: usize = rows.iter().map(|row| row.lines() as usize).sum();
+    if total > fit_height {
+        for focus_pass in [false, true] {
+            for row in rows.iter_mut().rev() {
+                if total <= fit_height {
+                    break;
+                }
+                if let CastRow::Person { focused, meta, .. } = row
+                    && *focused == focus_pass
+                    && meta.take().is_some()
+                {
+                    total -= 1;
+                }
+            }
         }
+    }
+    if total > fit_height {
+        rows.retain(|r| !matches!(r, CastRow::ClosedDivider { .. }));
     }
 
     let heights: Vec<u16> = rows.iter().map(|row| row.lines()).collect();
-    // The cast packs its entries: one line per person, two per shell, no gap.
+    // The cast packs its entries: no inter-row gap.
     let gaps = vec![0u16; rows.len().saturating_sub(1)];
     let target = std::mem::take(reveal_focused_agent)
         .then(|| rows.iter().position(|row| row.focused()))
@@ -153,11 +168,15 @@ pub(crate) fn render_cast(
         }
         let rect = Rect::new(body.x, y, content_width, height);
         match row {
-            CastRow::Person { role, focused } => {
+            CastRow::Person {
+                role,
+                focused,
+                meta,
+            } => {
                 if let Some(terminal) = &role.terminal {
                     hits.agents.push((rect, terminal.clone()));
                 }
-                draw_person(buffer, rect, role, *focused, view, palette);
+                draw_person(buffer, rect, role, *focused, meta.as_deref(), view, palette);
                 let is_cursor = view.region_focused
                     && matches!(
                         &view.cursor_target,
@@ -179,10 +198,20 @@ pub(crate) fn render_cast(
                         "▌",
                         Style::default().fg(palette.accent).bg(palette.selection_bg),
                     );
+                    if meta.is_some() && rect.height > 1 {
+                        let meta_rect = Rect::new(rect.x, rect.y + 1, rect.width, 1);
+                        buffer.set_style(
+                            meta_rect,
+                            Style::default()
+                                .fg(palette.subtext0)
+                                .bg(palette.selection_bg),
+                        );
+                    }
                     if let Some(chip_idx) = view.active_chip {
                         let chips = crate::panel::chips::row_chips_for_person(role);
+                        let line1 = Rect::new(rect.x, rect.y, rect.width, 1);
                         crate::panel::chips::draw_row_chips(
-                            buffer, rect, &chips, chip_idx, palette,
+                            buffer, line1, &chips, chip_idx, palette,
                         );
                     }
                 } else if is_remembered {
@@ -272,13 +301,15 @@ pub(crate) fn render_cast(
     }
 }
 
-/// A person's single-line entry: focus bar `▎`, mark, role badge,
-/// priority flag, unified inline state word/age, and truncated detail.
+/// A person's entry: focus bar `▎`, mark, role badge, priority flag,
+/// unified inline state word/age + detail tail on row 1, plus an indented
+/// quiet `runner · model · effort` line on row 2 when room allows.
 fn draw_person(
     buffer: &mut Buffer,
     rect: Rect,
     role: &RoleSummary,
     focused: bool,
+    meta: Option<&str>,
     view: &CastView<'_>,
     palette: &Palette,
 ) {
@@ -300,9 +331,10 @@ fn draw_person(
         .terminal
         .as_deref()
         .and_then(|t| view.titles.get(t).and_then(|v| v.as_deref()));
+    let line1 = Rect::new(rect.x, rect.y, rect.width, 1);
     crate::studio::role_row::render_role_row(
         buffer,
-        rect,
+        line1,
         rect.x + 1,
         rect.x + 3,
         rect.right(),
@@ -312,6 +344,23 @@ fn draw_person(
         title,
         palette,
     );
+    if let Some(meta) = meta
+        && rect.height > 1
+    {
+        let indent = 3u16;
+        let avail = rect.width.saturating_sub(indent);
+        if avail > 0 {
+            let clipped = truncate_end(meta, avail as usize);
+            put_text(
+                buffer,
+                rect.x + indent,
+                rect.y + 1,
+                avail,
+                &clipped,
+                Style::default().fg(palette.subtext0),
+            );
+        }
+    }
 }
 
 /// A shell's two rows, laid out like a person's: a dim `$` (or the

@@ -148,18 +148,22 @@ async fn lot_studios_tab_cycles_urgent_studios_and_arrows_enter_and_fold() {
     assert_eq!(app.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
     assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
 
-    // Tab cycles forward across urgent studios at Studios level; BackTab cycles backward.
+    // Binding Tab rule (#212): Tab from a studio header steps sections inside that studio
+    // (`Header -> People -> ... -> next studio Header`, moving focus into the entered studio),
+    // and Shift+Tab reverses cleanly.
     key(&mut app, hc_vt::Key::Tab);
-    assert_eq!(app.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
     assert_eq!(
-        app.panel.selected.as_ref().and_then(Target::studio),
-        Some(&StudioKey::local("beta-api"))
+        app.focus.workspace,
+        WorkspaceRegion::Lot(LotLevel::InsideStudio("acme-shop".into()))
+    );
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "producer".into()))
     );
     key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
-    assert_eq!(
-        app.panel.selected.as_ref().and_then(Target::studio),
-        Some(&StudioKey::local("acme-shop"))
-    );
+    assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
 
     // ArrowLeft folds unfolded studio without leaving Studios.
     key(&mut app, hc_vt::Key::ArrowLeft);
@@ -217,24 +221,32 @@ async fn lot_inside_studio_bounded_cursor_sections_chips_and_esc() {
         );
     }
 
-    // Tab cycles sections inside acme-shop: NeedsYou -> People -> Tasks -> Talk -> Compose (skipping empty).
-    key(&mut app, hc_vt::Key::Tab);
-    assert_ne!(app.panel.selected, None);
-    let mut seen_compose = false;
+    // Tab cycles sections inside acme-shop (Header -> People -> Tasks -> Talk -> Input)
+    // and then crosses to beta-api's Header, moving InsideStudio focus to beta-api.
     let mut seen_person = false;
     let mut seen_task = false;
     let mut seen_talk = false;
+    let mut seen_compose = false;
+    let mut crossed_beta = false;
     for _ in 0..8 {
         match &app.panel.selected {
-            Some(Target::Person(..)) => seen_person = true,
-            Some(Target::Task(..)) => seen_task = true,
-            Some(Target::Talk(..)) => seen_talk = true,
-            Some(Target::Input(_)) => seen_compose = true,
+            Some(Target::Person(k, ..)) if k.id == "acme-shop" => seen_person = true,
+            Some(Target::Task(k, ..)) if k.id == "acme-shop" => seen_task = true,
+            Some(Target::Talk(k, ..)) if k.id == "acme-shop" => seen_talk = true,
+            Some(Target::Input(k)) if k.id == "acme-shop" => seen_compose = true,
+            Some(Target::Studio(k)) if k.id == "beta-api" => {
+                crossed_beta = true;
+                assert_eq!(
+                    app.focus.workspace,
+                    WorkspaceRegion::Lot(LotLevel::InsideStudio("beta-api".into())),
+                    "crossing to next studio via Tab must move InsideStudio focus into it"
+                );
+            }
             _ => {}
         }
         key(&mut app, hc_vt::Key::Tab);
     }
-    assert!(seen_person && seen_task && seen_talk && seen_compose);
+    assert!(seen_person && seen_task && seen_talk && seen_compose && crossed_beta);
 
     // On producer (open ask), Right enters RowActions cycling inline chips; Enter runs highlighted chip.
     app.panel.selected = Some(Target::Person("acme-shop".into(), "producer".into()));

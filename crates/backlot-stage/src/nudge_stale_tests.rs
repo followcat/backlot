@@ -132,6 +132,8 @@ fn refused(dir: &Path, role: &str) -> backlot_model::Event {
             reason: backlot_model::event::OUTWARD_ACTION.into(),
             detail: "gh issue list -R acme/acme-shop".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     )
 }

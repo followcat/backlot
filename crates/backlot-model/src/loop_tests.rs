@@ -17,6 +17,8 @@ fn permission_flag(role: &str, needs_user: bool) -> EventKind {
         reason: PERMISSION_PROMPT.into(),
         detail: String::new(),
         needs_user,
+        account: None,
+        reset_at_ms: None,
     }
 }
 

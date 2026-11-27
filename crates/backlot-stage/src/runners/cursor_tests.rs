@@ -65,6 +65,7 @@ fn rules_per_role() {
         "Shell(rg)",
         "Shell(wc)",
         "Shell(head)",
+        "Shell(backlot msg show)",
     ];
     let director: Vec<String> = std::iter::once("Shell(backlot)".to_string())
         .chain(read_only.iter().map(|r| r.to_string()))
@@ -391,6 +392,7 @@ fn an_open_root_is_healed_and_reported_once() {
         reason,
         detail,
         needs_user,
+        ..
     } = dir_open_event("director")
     else {
         panic!("dir_open_event is an attention");

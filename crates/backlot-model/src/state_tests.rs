@@ -66,6 +66,8 @@ fn script() -> Vec<Event> {
                 reason: "stalled".into(),
                 detail: "no output".into(),
                 needs_user: false,
+                account: None,
+                reset_at_ms: None,
             },
         ),
         ev(

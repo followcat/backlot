@@ -93,43 +93,6 @@ pub(super) fn render_overlays_and_cursor(
         app.hit_map.tab_scroll_left = Rect::default();
         app.hit_map.tab_scroll_right = Rect::default();
     }
-    let pane_unfocused_single = !app.plain
-        && app.studio.active
-        && app.focus.workspace != crate::focus::WorkspaceRegion::Terminal
-        && app.focus.modals.is_empty()
-        && !app.panel_fullscreen_at(area.width)
-        && !layout.pane_surface.is_empty()
-        && layout.pane_surface.width >= 40;
-    if pane_unfocused_single {
-        let single_has_border = app
-            .projection
-            .snapshot
-            .focused_tab_id
-            .as_ref()
-            .and_then(|id| app.projection.layouts.get(id))
-            .and_then(|t| t.root.as_ref())
-            .is_some_and(|r| {
-                app.shell
-                    .pane_borders
-                    .shows_borders(r.terminals().len() > 1)
-            });
-        if !single_has_border {
-            let tag = "[unfocused · Esc returns]";
-            let w = crate::chrome::text::display_width(tag) as u16;
-            if w + 2 <= layout.pane_surface.width {
-                let x = layout.pane_surface.right().saturating_sub(w + 1);
-                let y = layout.pane_surface.y;
-                crate::chrome::render::put_text(
-                    buf,
-                    x,
-                    y,
-                    w,
-                    tag,
-                    Style::default().fg(app.shell.palette.overlay0),
-                );
-            }
-        }
-    }
     // The studio panel: beside the panes when it fits, else over the
     // whole frame — always under the popup/notice/overlay stack so
     // dialogs and action notices still win. A full-screen panel writes

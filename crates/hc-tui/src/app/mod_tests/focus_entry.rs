@@ -469,3 +469,89 @@ async fn focus_tree_and_focus_cast_config_rebinds_and_click_anywhere_focuses_reg
     click(&mut app, pane_hit.x + 1, pane_hit.y + 1);
     assert_eq!(app.focus.workspace, WorkspaceRegion::Terminal);
 }
+
+#[tokio::test]
+async fn terminal_passthrough_preserves_tab_esc_alt_arrows_and_ctrl_g() {
+    let mut app = two_studio_focus_app(false);
+    assert_eq!(app.focus.workspace, WorkspaceRegion::Terminal);
+    assert!(app.focus.modals.is_empty());
+
+    // Tab, Shift+Tab, Esc, Alt+Left, and Alt+Right must reach the terminal verbatim.
+    for (k, mods) in [
+        (hc_vt::Key::Tab, hc_vt::Mods::NONE),
+        (hc_vt::Key::BackTab, hc_vt::Mods::SHIFT),
+        (hc_vt::Key::Escape, hc_vt::Mods::NONE),
+        (hc_vt::Key::ArrowLeft, hc_vt::Mods::ALT),
+        (hc_vt::Key::ArrowRight, hc_vt::Mods::ALT),
+    ] {
+        let before = app.pane.input_backlog().0;
+        key_mods(&mut app, k, mods);
+        assert!(
+            app.pane.input_backlog().0 > before,
+            "key ({k:?}, {mods:?}) must reach focused terminal in studio mode"
+        );
+    }
+
+    // Outside a studio workspace (or under --plain), Alt+Up/Down also reach the terminal.
+    let mut plain = two_studio_focus_app(false);
+    plain.set_plain(true);
+    for k in [hc_vt::Key::ArrowUp, hc_vt::Key::ArrowDown] {
+        let before = plain.pane.input_backlog().0;
+        key_mods(&mut plain, k, hc_vt::Mods::ALT);
+        assert!(
+            plain.pane.input_backlog().0 > before,
+            "key ({k:?}, ALT) must reach terminal outside studio workspace / --plain"
+        );
+    }
+
+    // Ctrl+G locks keyboard so even Alt+L and Alt+PageDown forward to the terminal until Ctrl+G unlocks.
+    key_mods(&mut app, hc_vt::Key::Char('g'), hc_vt::Mods::CTRL);
+    assert!(app.keyboard_locked);
+    for (k, mods) in [
+        (hc_vt::Key::Char('l'), hc_vt::Mods::ALT),
+        (hc_vt::Key::PageDown, hc_vt::Mods::ALT),
+        (hc_vt::Key::ArrowUp, hc_vt::Mods::ALT),
+    ] {
+        let before = app.pane.input_backlog().0;
+        key_mods(&mut app, k, mods);
+        assert!(
+            app.pane.input_backlog().0 > before,
+            "locked terminal must forward ({k:?}, {mods:?})"
+        );
+    }
+    key_mods(&mut app, hc_vt::Key::Char('g'), hc_vt::Mods::CTRL);
+    assert!(!app.keyboard_locked);
+
+    // Custom Herdr prefix bindings on `t` / `a` must not be swallowed in Terminal focus.
+    app.live.keybinds.toggle_sidebar = crate::config::ActionKeybinds {
+        bindings: vec![
+            crate::config::ResolvedBinding {
+                trigger: crate::config::BindingTrigger::Prefix((
+                    crossterm::event::KeyCode::Char('t'),
+                    crossterm::event::KeyModifiers::NONE,
+                )),
+                label: "prefix+t".into(),
+            },
+            crate::config::ResolvedBinding {
+                trigger: crate::config::BindingTrigger::Prefix((
+                    crossterm::event::KeyCode::Char('a'),
+                    crossterm::event::KeyModifiers::NONE,
+                )),
+                label: "prefix+a".into(),
+            },
+        ],
+    };
+    let collapsed_before = app.shell_state.sidebar_collapsed;
+    press_prefix(&mut app, 't');
+    assert_eq!(app.focus.workspace, WorkspaceRegion::Terminal);
+    assert_eq!(
+        app.shell_state.sidebar_collapsed, !collapsed_before,
+        "custom Herdr prefix+t kept routing to Herdr ToggleSidebar instead of Tree"
+    );
+    press_prefix(&mut app, 'a');
+    assert_eq!(app.focus.workspace, WorkspaceRegion::Terminal);
+    assert_eq!(
+        app.shell_state.sidebar_collapsed, collapsed_before,
+        "custom Herdr prefix+a kept routing to Herdr ToggleSidebar instead of Cast"
+    );
+}

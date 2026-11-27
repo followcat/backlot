@@ -63,7 +63,49 @@ fn fit_pairs(
     }
 }
 
-/// Focused Lot footer hint pairs (max 3 verbful `(key, verb)` pairs).
+/// Fit prioritized `(priority, (key, label))` hints into `width`, first
+/// compacting `tab/⇧tab sec` -> `tab/⇧tab` if tight, then dropping the
+/// lowest-priority item first (rightmost on ties) while keeping display order.
+fn fit_prioritized(
+    items: &[(u8, (&'static str, &'static str))],
+    width: usize,
+) -> Vec<(&'static str, &'static str)> {
+    let raw: Vec<_> = items.iter().map(|(_, p)| *p).collect();
+    if crate::chrome::render::hint_bar_width(&raw) as usize <= width {
+        return raw;
+    }
+    let mut active: Vec<(u8, (&'static str, &'static str))> = items
+        .iter()
+        .map(|&(pri, pair)| {
+            if pair.0 == "tab/⇧tab" && !pair.1.is_empty() {
+                (pri, (pair.0, ""))
+            } else {
+                (pri, pair)
+            }
+        })
+        .collect();
+    loop {
+        let cur: Vec<_> = active.iter().map(|(_, p)| *p).collect();
+        if crate::chrome::render::hint_bar_width(&cur) as usize <= width {
+            return cur;
+        }
+        if active.len() <= 1 {
+            break;
+        }
+        let min_pri = active.iter().map(|(p, _)| *p).min().unwrap_or(0);
+        if let Some(drop_at) = active.iter().rposition(|(p, _)| *p == min_pri) {
+            active.remove(drop_at);
+        }
+    }
+    if width >= 3 {
+        vec![("esc", "")]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Focused Lot footer hint pairs (verbful `(key, verb)` pairs, dropping
+/// least-useful hints first under narrow dock widths).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn focused_hint_pairs(
     selected: Option<&Target>,
@@ -115,9 +157,17 @@ pub(super) fn focused_hint_pairs(
         };
     }
 
-    let raw: [(&'static str, &'static str); 3] = match selected {
-        Some(Target::Input(_)) => [("i", "tell"), ("⏎", "compose"), ("esc", esc_verb)],
-        Some(Target::ReopenProducer(_)) => [("o", "reopen"), ("m", "menu"), ("esc", esc_verb)],
+    const TAB: (u8, (&str, &str)) = (2, ("tab/⇧tab", "sec"));
+    let items: Vec<(u8, (&'static str, &'static str))> = match selected {
+        Some(Target::Input(_)) => vec![(3, ("i/⏎", "compose")), TAB, (3, ("esc", esc_verb))],
+        Some(Target::ReopenProducer(_)) => {
+            vec![
+                (3, ("o", "reopen")),
+                TAB,
+                (1, ("m", "menu")),
+                (3, ("esc", esc_verb)),
+            ]
+        }
         Some(Target::Talk(key, seq)) => {
             let has_file = super::data::studio(machines, key).is_some_and(|st| {
                 st.studio
@@ -126,9 +176,19 @@ pub(super) fn focused_hint_pairs(
                     .any(|e| e.seq == *seq && e.file.is_some())
             });
             if has_file {
-                [("⏎", "read"), ("i", "tell"), ("m", "menu")]
+                vec![
+                    (3, ("⏎", "read")),
+                    (2, ("i", "tell")),
+                    TAB,
+                    (1, ("m", "menu")),
+                ]
             } else {
-                [("i", "tell"), ("m", "menu"), ("esc", esc_verb)]
+                vec![
+                    (3, ("i", "tell")),
+                    TAB,
+                    (1, ("m", "menu")),
+                    (3, ("esc", esc_verb)),
+                ]
             }
         }
         Some(Target::Person(key, role_name)) => {
@@ -136,23 +196,70 @@ pub(super) fn focused_hint_pairs(
                 .and_then(|st| st.studio.roles.iter().find(|r| r.role == *role_name));
             let state = role.map(|r| r.state.as_str());
             if state == Some("closed") {
-                [("o", "reopen"), ("i", "tell"), ("m", "menu")]
+                vec![
+                    (3, ("o", "reopen")),
+                    (2, ("i", "tell")),
+                    TAB,
+                    (1, ("m", "menu")),
+                ]
             } else if state == Some("standby") {
-                [("v", "sheet"), ("i", "tell"), ("m", "menu")]
+                vec![
+                    (3, ("v", "sheet")),
+                    (2, ("i", "tell")),
+                    TAB,
+                    (1, ("m", "menu")),
+                ]
             } else if role.is_some_and(|r| r.asks.as_ref().is_some_and(|a| !a.is_empty())) {
-                [("r", "reply"), ("←→", "chip"), ("esc", esc_verb)]
+                vec![
+                    (3, ("r", "reply")),
+                    (2, ("←→", "chip")),
+                    TAB,
+                    (1, ("esc", esc_verb)),
+                ]
             } else if role.is_some_and(|r| r.attention_seq.is_some() && r.can_answer_prompt) {
-                [("y/d", "decide"), ("←→", "chip"), ("esc", esc_verb)]
+                vec![
+                    (3, ("y/d", "decide")),
+                    (2, ("←→", "chip")),
+                    TAB,
+                    (1, ("esc", esc_verb)),
+                ]
             } else if entered && role.is_some_and(|r| r.terminal.is_some()) {
-                [("⏎", "open"), ("←→", "chip"), ("esc", esc_verb)]
+                vec![
+                    (3, ("⏎", "open")),
+                    (2, ("←→", "chip")),
+                    TAB,
+                    (1, ("esc", esc_verb)),
+                ]
             } else if role.is_some_and(|r| r.terminal.is_some()) {
-                [("⏎", "open"), ("p", "peek"), ("m", "menu")]
+                vec![
+                    (3, ("⏎", "open")),
+                    (2, ("p", "peek")),
+                    TAB,
+                    (1, ("m", "menu")),
+                ]
             } else {
-                [("⏎", "open"), ("m", "menu"), ("esc", esc_verb)]
+                vec![
+                    (3, ("⏎", "open")),
+                    TAB,
+                    (1, ("m", "menu")),
+                    (3, ("esc", esc_verb)),
+                ]
             }
         }
-        Some(Target::Task(..)) => [("v", "sheet"), ("+-", "pri"), ("i", "tell")],
-        Some(Target::OutwardCard(..)) => [("a/y", "apply"), ("x/d", "cancel"), ("⏎", "show")],
+        Some(Target::Task(..)) => {
+            vec![
+                (3, ("v", "sheet")),
+                (2, ("+-", "pri")),
+                TAB,
+                (1, ("i", "tell")),
+            ]
+        }
+        Some(Target::OutwardCard(..)) => vec![
+            (3, ("a/y", "apply")),
+            (3, ("x/d", "cancel")),
+            (2, ("⏎", "show")),
+            (1, ("tab/⇧tab", "sec")),
+        ],
         Some(Target::Design(key)) => {
             match super::data::studio(machines, key)
                 .and_then(|st| super::draw_design::active_design(st.studio))
@@ -161,28 +268,73 @@ pub(super) fn focused_hint_pairs(
                     if d.suggest_skip
                         || d.phase == backlot_model::design::DesignPhase::SuggestSkip =>
                 {
-                    [("r", "discuss"), ("o", "read"), ("a", "skip")]
+                    vec![
+                        (3, ("r", "discuss")),
+                        (2, ("o", "read")),
+                        (3, ("a", "skip")),
+                        (1, ("tab/⇧tab", "sec")),
+                    ]
                 }
-                Some(d) if d.waiting_user || d.phase.is_waiting_user() => {
-                    [("r", "reply"), ("o", "read"), ("a", "sign")]
-                }
-                _ => [("o", "read"), ("m", "menu"), ("esc", esc_verb)],
+                Some(d) if d.waiting_user || d.phase.is_waiting_user() => vec![
+                    (3, ("r", "reply")),
+                    (2, ("o", "read")),
+                    (3, ("a", "sign")),
+                    (1, ("tab/⇧tab", "sec")),
+                ],
+                _ => vec![
+                    (3, ("o", "read")),
+                    TAB,
+                    (1, ("m", "menu")),
+                    (3, ("esc", esc_verb)),
+                ],
             }
         }
-        Some(Target::Studio(_)) => [
-            ("⏎/→", if entered { "studio" } else { "enter" }),
-            ("Tab", "urgent"),
-            ("esc", esc_verb),
-        ],
+        Some(Target::Studio(_)) => {
+            vec![
+                (3, ("⏎/→", if entered { "studio" } else { "enter" })),
+                TAB,
+                (1, ("m", "menu")),
+                (3, ("esc", esc_verb)),
+            ]
+        }
         Some(Target::Block(_) | Target::Strip(_)) => {
-            [("⏎", "expand"), ("m", "menu"), ("esc", esc_verb)]
+            vec![
+                (3, ("⏎", "expand")),
+                TAB,
+                (1, ("m", "menu")),
+                (3, ("esc", esc_verb)),
+            ]
         }
         Some(Target::Fold(_) | Target::ClosedFold(_)) => {
-            [("⏎", "open"), ("i", "tell"), ("esc", esc_verb)]
+            vec![
+                (3, ("⏎", "open")),
+                (2, ("i", "tell")),
+                TAB,
+                (3, ("esc", esc_verb)),
+            ]
         }
-        Some(Target::Stage(_)) => [("s", "start"), ("m", "menu"), ("esc", esc_verb)],
-        Some(Target::Setup) => [("⏎", "setup"), ("?", "keys"), ("esc", esc_verb)],
-        _ => [("↑↓", "move"), ("m", "menu"), ("esc", esc_verb)],
+        Some(Target::Stage(_)) => {
+            vec![
+                (3, ("s", "start")),
+                TAB,
+                (1, ("m", "menu")),
+                (3, ("esc", esc_verb)),
+            ]
+        }
+        Some(Target::Setup) => {
+            vec![
+                (3, ("⏎", "setup")),
+                TAB,
+                (1, ("?", "keys")),
+                (3, ("esc", esc_verb)),
+            ]
+        }
+        _ => vec![
+            (3, ("↑↓", "move")),
+            (1, ("tab/⇧tab", "sec")),
+            (2, ("m", "menu")),
+            (3, ("esc", esc_verb)),
+        ],
     };
-    fit_pairs(&raw, width)
+    fit_prioritized(&items, width)
 }

@@ -392,6 +392,15 @@ has moved on is dropped instead of sent — the ledger keeps the drop (`message.
 `backlot status` counts it under `messages:` — but a `tell` is a person's words and always goes.
 In the ledger you are the role `user`, so person-facing commands take `--as user`.
 
+`backlot msg show <seq> [--json]` reads one recorded message, ask (with its answer when resolved),
+design note, supplement, sign-off, report, or finding of the studio by its ledger `seq` — who sent
+it, to whom, when, its kind, and its full body — strictly scoped to the caller's own studio:
+
+```sh
+backlot msg show 3 --studio acme-shop
+backlot msg show 3 --studio acme-shop --json
+```
+
 `backlot status` shows the studio's recorded state at any time:
 
 ```sh
@@ -531,16 +540,19 @@ attention, and one row per active or blocked role.
 
 Panel keys use one unified focus grammar across levels (`Studios → InsideStudio → RowActions /
 Compose`): `j`/`k` or `↑`/`↓` move the selection (bounded within the studio once entered), `Tab` /
-`Shift+Tab` jumps sections (`Needs You → People → Tasks → Talk → Compose`) or steps action chips in
-`RowActions`, `←`/`→` steps into and across inline chips (`« chip »`) or folds at studio headers,
-`Enter` enters a studio / executes a chip / focuses a live person's terminal, `Space` opens a drawer
-or folds a studio, `v` opens the Task & Delivery Sheet, `p` peeks, `y`/`d` answer a user-owned
-prompt, `t`/`i` (and `r` on open asks) start targeted inline compose without seeding `/tell <role> `,
-`x` acknowledges an open ask, `w` recasts a quota/error role, `+`/`-` raise/lower a task's priority,
-`s`/`f` start the stage/finish the studio, `c` switches collapsed/expanded, `q` closes, `?` opens
-help, and `Esc` unwinds one level (`Compose` / `RowActions` → `InsideStudio` → `Studios` when ≥ 2
-studios exist → `Terminal` or close over an overlay). Prefix chords (`Ctrl+B y/t/a`) and direct
-`Alt+L` / `Alt+Y` / `Alt+arrows` chords switch between regions cleanly without trapping.
+`Shift+Tab` jump across block sections (`header → people → tasks → exchange → ›` input) and wrap
+into the next studio (`InsideStudio` follows the target studio), or step action chips in
+`RowActions` (while composing, `Tab` cycles the tell target on an empty buffer and completes
+`/verbs` on `/…`), `←`/`→` steps into and across inline chips (`« chip »`) or folds at studio
+headers, `Enter` enters a studio / executes a chip / focuses a live person's terminal, `Space` opens
+a drawer or folds a studio, `v` opens the Task & Delivery Sheet, `p` peeks, `y`/`d` answer a
+user-owned prompt, `t`/`i` (and `r` on open asks) start targeted inline compose without seeding
+`/tell <role> `, `x` acknowledges an open ask, `w` recasts a quota/error role, `+`/`-` raise/lower a
+task's priority, `s`/`f` start the stage/finish the studio, `c` switches collapsed/expanded, `q`
+closes, `?` opens help, and `Esc` unwinds one level (`Compose` / `RowActions` → `InsideStudio` →
+`Studios` when ≥ 2 studios exist → `Terminal` or close over an overlay). Prefix chords (`Ctrl+B
+y/t/a`) and direct `Alt+L` / `Alt+Y` / `Alt+arrows` chords switch between regions cleanly without
+trapping.
 
 ## Hollywood above the studios
 
@@ -699,8 +711,8 @@ in the state directory.
   routed to you after a one-minute grace (see below).
 
 Read-only commands do not prompt at all: `git status`, `git log`, `git show`, `git diff`,
-`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc` and `head` are pre-allowed for
-every role on every runner that has an allow list (`runners.md` says which). One plain command per
+`git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head` and `backlot msg show`
+are pre-allowed for every role on every runner that has an allow list (`runners.md` says which). One plain command per
 shell call: a `cd x && git log`, a pipe or `git -C` does not match the rule and prompts.
 
 **A prompt the director cannot answer reaches you with the reason.** An actor's prompt is the

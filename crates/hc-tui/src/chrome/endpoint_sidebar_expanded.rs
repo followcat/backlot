@@ -375,6 +375,10 @@ pub(crate) fn render_expanded(
                 }
                 let rect = Rect::new(body.x, y, content_width, height);
                 let name_row = Rect::new(rect.x, rect.y, rect.width, 1);
+                let lot_marked = !is_cursor
+                    && state.lot_selected_studio.is_some_and(|key| {
+                        endpoint_is_machine(&endpoint.endpoint_id, key.machine.as_deref())
+                    });
                 let collapsed = state.collapsed_endpoints.contains(&endpoint.endpoint_id);
                 let marker = if collapsed { "▸" } else { "▾" };
                 let status_badge = super::endpoint_sidebar_row::render_endpoint_row(
@@ -386,7 +390,7 @@ pub(crate) fn render_expanded(
                     state.machine_diagnostics,
                     palette,
                 );
-                if let Some(line) = state
+                let has_machine_line = if let Some(line) = state
                     .machine_lines
                     .and_then(|lines| lines.get(&endpoint.endpoint_id))
                     && rect.height > 1
@@ -395,8 +399,19 @@ pub(crate) fn render_expanded(
                         buffer,
                         Rect::new(rect.x, rect.y + 1, rect.width, 1),
                         line,
+                        lot_marked,
                         palette,
                     );
+                    true
+                } else {
+                    false
+                };
+                if lot_marked {
+                    let bar_style = Style::default().fg(palette.accent);
+                    put_text(buffer, rect.x, rect.y, 1, "▎", bar_style);
+                    if has_machine_line {
+                        put_text(buffer, rect.x, rect.y + 1, 1, "▎", bar_style);
+                    }
                 }
                 hits.machines.push(MachineHit {
                     rect,
@@ -411,7 +426,8 @@ pub(crate) fn render_expanded(
                 });
                 if is_cursor {
                     paint_tree_cursor(buffer, rect, palette);
-                } else if !state.tree_focused
+                } else if !lot_marked
+                    && !state.tree_focused
                     && state.tree_remembered.is_some()
                     && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
                     && !rect.is_empty()

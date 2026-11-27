@@ -448,3 +448,144 @@ async fn home_end_move_the_sheet_or_the_lines_cursor() {
     assert_eq!(app.hollywood.input.as_str(), "xabcy");
     assert_eq!(app.hollywood.selected, Some(Target::Input));
 }
+
+#[tokio::test]
+async fn six_studios_recast_cards_keep_selection_tab_cycle_and_waiting_scroll() {
+    let mut app = app_with_hollywood();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    let mut doc = summary_json();
+    doc["studios"] = serde_json::json!([
+        {
+            "id": "acme-shop", "title": "Acme shop", "state": "live",
+            "requirement_version": 2, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 12, "tasks_total": 13, "ready_to_finish": true, "waiting": 0,
+            "roles": [{ "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" }]
+        },
+        {
+            "id": "beta-api", "title": "Beta api", "state": "live",
+            "requirement_version": 1, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 13, "tasks_total": 13, "ready_to_finish": true, "waiting": 0,
+            "roles": [{ "role": "producer", "name": "producer", "terminal": "t2", "state": "live", "work": "waiting" }]
+        },
+        {
+            "id": "gamma-web", "title": "Gamma web", "state": "live",
+            "requirement_version": 1, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 1, "tasks_total": 4, "waiting": 0,
+            "roles": []
+        },
+        {
+            "id": "delta-ops", "title": "Delta ops", "state": "live",
+            "requirement_version": 1, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 2, "tasks_total": 4, "waiting": 0,
+            "roles": []
+        },
+        {
+            "id": "eps-ui", "title": "Eps ui", "state": "live",
+            "requirement_version": 1, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 0, "tasks_total": 2, "waiting": 0,
+            "roles": []
+        },
+        {
+            "id": "zeta-jobs", "title": "Zeta jobs", "state": "live",
+            "requirement_version": 1, "mode": "standard", "open_reviews": 0,
+            "tasks_done": 1, "tasks_total": 2, "waiting": 0,
+            "roles": []
+        }
+    ]);
+    doc["hollywood"]["cards"] = serde_json::json!([
+        { "id": "c1372", "studio": "acme-shop", "action": "recast producer → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1373", "studio": "acme-shop", "action": "recast director → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1374", "studio": "acme-shop", "action": "recast writer → agy/gemini-3-pro/high", "why": "quota" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc.clone(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (200, 17);
+    alt_y(&mut app);
+    draw_to(&mut app, 200, 17);
+
+    // Tab cycles Compose -> Waiting (c1372) -> Studios -> Compose.
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1372".into())));
+    key(&mut app, hc_vt::Key::Tab);
+    assert!(matches!(app.hollywood.selected, Some(Target::Studio(_))));
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1372".into())));
+
+    // ↓ walks every card and both READY rows in order; ↑ walks back.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1373".into())));
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1374".into())));
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Ready(crate::studio::StudioKey::local("acme-shop")))
+    );
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Ready(crate::studio::StudioKey::local("beta-api")))
+    );
+    key(&mut app, hc_vt::Key::ArrowUp);
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1374".into())));
+
+    // Applying c1374 directly from the Call Sheet targets c1374.
+    key(&mut app, hc_vt::Key::Char('a'));
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["card", "apply", "c1374", "--as", "user"]]
+    );
+
+    // Waiting scroll: add more cards so items overflow 100x17 and verify PageDown/PageUp + ↓ scroll.
+    doc["hollywood"]["cards"] = serde_json::json!([
+        { "id": "c1372", "studio": "acme-shop", "action": "recast producer → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1373", "studio": "acme-shop", "action": "recast director → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1374", "studio": "acme-shop", "action": "recast writer → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1375", "studio": "gamma-web", "action": "pause t1", "why": "loop" },
+        { "id": "c1376", "studio": "delta-ops", "action": "pause t2", "why": "loop" },
+        { "id": "c1377", "studio": "eps-ui", "action": "pause t3", "why": "loop" },
+        { "id": "c1378", "studio": "zeta-jobs", "action": "pause t4", "why": "loop" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (100, 17);
+    app.hollywood_select(Target::Card("c1372".into()));
+    draw_to(&mut app, 100, 17);
+    let shown = app.hollywood_hits.viewport_rows;
+    assert!(shown < 9, "expected overflow at 100x17, shown={shown}");
+    key(&mut app, hc_vt::Key::PageDown);
+    assert!(app.hollywood.scroll > 0, "PageDown scrolls waiting list");
+    key(&mut app, hc_vt::Key::PageUp);
+    assert_eq!(app.hollywood.scroll, 0, "PageUp scrolls back to top");
+    for _ in 0..8 {
+        key(&mut app, hc_vt::Key::ArrowDown);
+        draw_to(&mut app, 100, 17);
+    }
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Ready(crate::studio::StudioKey::local("beta-api")))
+    );
+    assert!(
+        app.hollywood.scroll > 0,
+        "moving to bottom waiting row scrolls window"
+    );
+}

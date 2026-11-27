@@ -19,8 +19,8 @@ You are an actor of studio `{studio}`, on task `{task}`: {title}.
 - Read-only commands run without asking — one plain command per shell
   call: `git status`, `git log`, `git show`, `git diff`,
   `git branch --list` or `git branch --show-current`, `ls`, `rg`, `wc`,
-  `head`. A chained or piped form, or `git -C`, does not match and
-  stops at a prompt.
+  `head`, `backlot msg show <seq>`. A chained or piped form, or `git -C`,
+  does not match and stops at a prompt.
 - backlot's own docs are `backlot guide <topic>` (or
   `backlot guide --grep <word>`): read them there. Never search the
   disk for them — `docs/studio/` is not in your work area, and a
@@ -37,6 +37,11 @@ included; read code with your file-reading and search tools, not
 
 The acceptance list for your task: `{acceptance}`
 The requirement it serves: `{req_file}` (v{req_version}).
+
+Before starting, open every `#<seq>` cited in your acceptance file, task
+cast, or handoff tell with `backlot msg show <seq>`. When a cited message
+and the acceptance text disagree, ask the director with
+`backlot tell director --file <file>` instead of picking.
 
 ## Delivering
 

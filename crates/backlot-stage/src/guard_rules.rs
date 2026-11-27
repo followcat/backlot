@@ -183,23 +183,36 @@ fn gh_api_is_write(args: &[String]) -> bool {
 
 fn classify_gh(args: &[String]) -> Option<(&'static str, bool)> {
     const ROOT_VALUE_FLAGS: &[&str] = &["-R", "--repo", "--hostname"];
+    if args
+        .iter()
+        .take_while(|a| a.as_str() != "--")
+        .any(|a| a == "--help" || a == "-h")
+    {
+        return None;
+    }
     let (_, sub) = next_positional(args, ROOT_VALUE_FLAGS)?;
     let idx = args.iter().position(|a| a == sub)?;
+    let rest = &args[idx + 1..];
+    let action = next_positional(rest, ROOT_VALUE_FLAGS).map(|(_, a)| a);
     match sub {
-        "pr" => {
-            let rest = &args[idx + 1..];
-            match next_positional(rest, ROOT_VALUE_FLAGS).map(|(_, a)| a) {
-                Some("create") => Some(("gh pr create", true)),
-                Some("view" | "list" | "status" | "diff" | "checks") => None,
-                None if rest.iter().any(|a| a == "--help" || a == "-h") => None,
-                _ => Some(("gh write", false)),
-            }
+        "pr" => match action {
+            Some("create") => Some(("gh pr create", true)),
+            Some("view" | "list" | "status" | "diff" | "checks") => None,
+            _ => Some(("gh write", false)),
+        },
+        "repo" | "release" | "gist" => match action {
+            Some("view" | "list") => None,
+            _ => Some(("gh write", false)),
+        },
+        "issue" => match action {
+            Some("view" | "list" | "status") => None,
+            _ => Some(("gh write", false)),
+        },
+        "secret" => Some(("gh write", false)),
+        "workflow" => {
+            matches!(action, Some("run" | "enable" | "disable")).then_some(("gh write", false))
         }
-        "release" | "repo" | "issue" | "gist" | "secret" => Some(("gh write", false)),
-        "workflow" => next_positional(&args[idx + 1..], ROOT_VALUE_FLAGS)
-            .is_some_and(|(_, action)| action == "run")
-            .then_some(("gh write", false)),
-        "api" => gh_api_is_write(&args[idx + 1..]).then_some(("gh write", false)),
+        "api" => gh_api_is_write(rest).then_some(("gh write", false)),
         _ => None,
     }
 }

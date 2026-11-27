@@ -140,11 +140,7 @@ impl App {
             popup_pending: None,
             command_overlay: None,
             peek: None,
-            panel: {
-                let mut p = crate::panel::Panel::new();
-                p.sidebar_collapsed = sidebar_collapsed;
-                p
-            },
+            panel: crate::panel::Panel::new(),
             panel_config: crate::panel::PanelConfig::default(),
             panel_config_path: std::path::PathBuf::new(),
             panel_key_combo: crate::config::parse_key_combo("y"),

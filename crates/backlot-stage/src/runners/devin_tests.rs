@@ -206,6 +206,7 @@ fn the_read_only_set_lands_in_permissions_allow() {
         "Exec(rg)",
         "Exec(wc)",
         "Exec(head)",
+        "Exec(backlot msg show)",
     ] {
         assert!(
             listed.iter().any(|r| r.as_str() == Some(want)),

@@ -282,7 +282,13 @@ pub(crate) fn backlot_help_groups(
                 ),
                 (
                     format!("{} t", crate::config::format_prefix_combos(prefixes)),
-                    Cow::Borrowed("focus the left tree (esc back, ↑↓ move, ⏎ act, m menu)")
+                    Cow::Borrowed(
+                        "focus the left tree (tab cast, esc back, ↑↓ move, ⏎ act, m menu)",
+                    ) as Cow<'static, str>,
+                ),
+                (
+                    format!("{} a", crate::config::format_prefix_combos(prefixes)),
+                    Cow::Borrowed("focus left cast (tab tree, ←→ chips, t/r tell, esc back)")
                         as Cow<'static, str>,
                 ),
             ],
@@ -330,6 +336,7 @@ pub(crate) fn backlot_help_groups(
             "studio dock (open)",
             vec![
                 entry("↑↓ j k / home end", "move · ⏎ open · focus · read"),
+                entry("tab / ⇧tab", "next · previous section"),
                 entry("i / /", "compose on › · ↑↓ history · ⏎ send → rest"),
                 entry("o / p / v", "reopen closed · peek · task sheet"),
                 entry("space / c", "drawer · fold / collapse"),

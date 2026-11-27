@@ -1,5 +1,5 @@
 //! 200x44 and 100x40 studio-mode layout matrix verification: sidebar
-//! deduplication & `? keys`, compact Lot rows, `CalmSummary` expansion,
+//! deduplication & `? keys`, compact Lot rows, unfolded live roles,
 //! 1-line inline Cast/Lot role rows with CJK truncation, bucketed pill
 //! colors/jumps, `Alt+Y` landing, `HeaderKind::Role`, footers, and 19 themes.
 
@@ -264,7 +264,10 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     assert!(!app.hit_map.sidebar_help.is_empty());
     assert!(sidebar_rows.last().unwrap().contains("? keys"));
     assert!(sidebar_rows.last().unwrap().contains('«'));
-    assert!(!sidebar_text.contains("gemini-4-neon"));
+    assert!(
+        sidebar_text.contains("gemini-4-neon"),
+        "cast displays open roles' runner/model line: {sidebar_text}"
+    );
 
     let top_center: String = (layout.sidebar.right()..layout.pane_surface.right())
         .map(|x| buf[(x, layout.tab_bar.y)].symbol())
@@ -293,7 +296,11 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     assert!(lot_rows[0].contains("alt+l focus") && !lot_rows[0].contains("alt+y"));
     assert!(!lot_text.contains("actors ") && !lot_text.contains("gemini-4-neon"));
     assert!(lot_text.contains("idle") && lot_text.contains("standby"));
-    assert!(!lot_text.contains('Ⓓ'));
+    assert!(
+        lot_text.contains('Ⓓ') && lot_text.contains('Ⓦ'),
+        "idle/standby roles render individually in expanded block: {lot_text}"
+    );
+    assert!(!lot_text.contains("2 idle"), "{lot_text}");
     for compact in [
         "gamma-web",
         "delta-ops",
@@ -479,11 +486,24 @@ async fn studio_chrome_all_19_bundled_themes_and_plain_herdr_matrix() {
             elev.surface,
             "{name}"
         );
-        assert_eq!(
-            buf[(layout.tab_bar.x, layout.tab_bar.y)].bg,
-            elev.surface,
-            "{name}"
-        );
+        if elev.is_terminal_16 {
+            assert!(
+                buf[(layout.tab_bar.x, layout.tab_bar.y)]
+                    .modifier
+                    .contains(ratatui::style::Modifier::REVERSED | ratatui::style::Modifier::BOLD),
+                "{name}"
+            );
+        } else {
+            assert_eq!(
+                buf[(layout.tab_bar.x, layout.tab_bar.y)].bg,
+                elev.raised_row,
+                "{name}"
+            );
+        }
+        let sep_x = (layout.tab_bar.x..layout.tab_bar.right())
+            .find(|&x| buf[(x, layout.tab_bar.y)].symbol() == "›")
+            .unwrap_or_else(|| panic!("missing › in tab_bar for {name}"));
+        assert_eq!(buf[(sep_x, layout.tab_bar.y)].bg, elev.surface, "{name}");
         let lot = app.panel_hits.area;
         assert_eq!(
             buf[(lot.x + 1, lot.bottom() - 1)].bg,

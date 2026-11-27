@@ -126,7 +126,6 @@ fn sample_studio_doc() -> serde_json::Value {
 async fn t_and_r_on_role_or_ask_prefill_target_without_slash_text() {
     let mut app = base_tell_app(true, sample_studio_doc());
     app.shell_state.sidebar_collapsed = true;
-    app.panel.sidebar_collapsed = true;
     let (recorded, run) = runner();
     app.set_panel_runner(run);
 
@@ -275,7 +274,6 @@ async fn empty_compose_tab_cycles_producer_cursor_role_hollywood_and_keeps_slash
 async fn t_in_cast_opens_lot_compose_for_selected_role() {
     let mut app = base_tell_app(true, sample_studio_doc());
     app.shell_state.sidebar_collapsed = false;
-    app.panel.sidebar_collapsed = false;
 
     prefix_key(&mut app, 'a');
     assert_eq!(app.focus.workspace, WorkspaceRegion::Cast);
@@ -317,7 +315,6 @@ async fn talk_row_renders_sending_queued_reasons_delivered_age_and_thinking() {
     let render_with = |stage_live: bool, doc: serde_json::Value, start_in_flight: bool| {
         let mut app = base_tell_app(stage_live, doc);
         app.shell_state.sidebar_collapsed = true;
-        app.panel.sidebar_collapsed = true;
         app.panel.drag_width = Some(48);
         alt_l(&mut app);
         if start_in_flight {

@@ -441,10 +441,13 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_seq: Option<u64>,
     pub delivered: bool,
-    /// `message.dropped` landed: a queued notice skipped at send time
-    /// because its source no longer stood — never pending again.
+    /// `message.dropped` landed: a queued message skipped at send time
+    /// — never pending again.
     #[serde(default, skip_serializing_if = "crate::event::is_false")]
     pub dropped: bool,
+    /// Reason recorded by `message.dropped`, omitted until dropped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dropped_reason: Option<String>,
     /// The `message.queued` event's time — the obligation it can
     /// create owes from then.
     #[serde(default)]
@@ -497,6 +500,12 @@ pub struct Attention {
     /// records carry no field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleared_reason: Option<String>,
+    /// Implicit/resolved quota account when `reason == "rate limited"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// Unclamped reset epoch ms when known on `reason == "rate limited"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_at_ms: Option<u64>,
 }
 
 /// A recorded `role.approval` — a permission-prompt decision.

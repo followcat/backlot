@@ -175,7 +175,6 @@ fn studio_header_draws_role_badge_color_and_degrades_runner_model_effort() {
         key: Some(StudioKey::local("beta-api")),
         studio: "beta-api".into(),
         machine: None,
-        studio_focused: false,
         kind: HeaderKind::Role {
             role_key: "producer".into(),
             name: "producer".into(),
@@ -192,6 +191,7 @@ fn studio_header_draws_role_badge_color_and_degrades_runner_model_effort() {
         agent: true,
         pill: true,
         header: Some(&header),
+        unfocused_cue: false,
         cols: 120,
         spin: 0,
     };
@@ -250,4 +250,83 @@ fn studio_header_draws_role_badge_color_and_degrades_runner_model_effort() {
     let ttext = row_text(&tbuf, tight);
     assert!(ttext.contains("agy"), "{ttext:?}");
     assert!(!ttext.contains("gemini-4-neon"), "{ttext:?}");
+}
+
+#[test]
+fn studio_header_paints_raised_row_capsule_with_terminal_16_fallback_and_wide_cjk() {
+    use ratatui::style::Modifier;
+    let counts = LotCounts {
+        studios: 1,
+        ..LotCounts::default()
+    };
+    let make_header = |name: &str| StudioHeader {
+        key: Some(StudioKey::local(name)),
+        studio: name.into(),
+        machine: None,
+        kind: HeaderKind::Role {
+            role_key: "producer".into(),
+            name: "producer".into(),
+            task: None,
+            mark: Some(Person::Idle),
+            priority: None,
+            runner: None,
+            model: None,
+            effort: None,
+        },
+    };
+    // RGB theme (`backlot`): `elev.raised_row` + bold `palette.text`, 1-cell padded capsule + hit.
+    let header = make_header("beta-api");
+    let frame = LotFrame {
+        counts,
+        agent: false,
+        pill: true,
+        header: Some(&header),
+        unfocused_cue: false,
+        cols: 80,
+        spin: 0,
+    };
+    let pal = Palette::backlot();
+    let elev = pal.elevation();
+    let area = Rect::new(0, 0, 60, 1);
+    let mut buf = Buffer::empty(area);
+    let mut hits = ShellHitMap::default();
+    render_studio_header(&mut buf, area, &frame, PillTier::Wide, &pal, &mut hits);
+    assert_eq!(hits.studio_header, Rect::new(0, 0, 10, 1));
+    for x in 0..10u16 {
+        assert_eq!(buf[(x, 0)].bg, elev.raised_row, "capsule bg x={x}");
+        assert_eq!(buf[(x, 0)].fg, pal.text, "capsule fg x={x}");
+        assert!(buf[(x, 0)].modifier.contains(Modifier::BOLD));
+    }
+    assert_ne!(buf[(10, 0)].bg, elev.raised_row);
+
+    // 16-color terminal fallback: BOLD + REVERSED.
+    let term_pal = Palette::terminal();
+    let mut tbuf = Buffer::empty(area);
+    let mut thits = ShellHitMap::default();
+    render_studio_header(
+        &mut tbuf,
+        area,
+        &frame,
+        PillTier::Wide,
+        &term_pal,
+        &mut thits,
+    );
+    for x in 0..10u16 {
+        assert!(tbuf[(x, 0)].modifier.contains(Modifier::BOLD));
+        assert!(tbuf[(x, 0)].modifier.contains(Modifier::REVERSED));
+    }
+
+    // CJK wide studio name: full display width + 2 pad cells covered by capsule and hit rect.
+    let cjk = make_header("中文工作");
+    let cframe = LotFrame {
+        header: Some(&cjk),
+        ..frame
+    };
+    let mut cbuf = Buffer::empty(area);
+    let mut chits = ShellHitMap::default();
+    render_studio_header(&mut cbuf, area, &cframe, PillTier::Wide, &pal, &mut chits);
+    assert_eq!(chits.studio_header, Rect::new(0, 0, 10, 1));
+    assert_eq!(cbuf[(0, 0)].bg, elev.raised_row);
+    assert_eq!(cbuf[(9, 0)].bg, elev.raised_row);
+    assert_eq!(cbuf[(10, 0)].symbol(), "›");
 }

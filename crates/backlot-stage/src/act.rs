@@ -285,6 +285,8 @@ impl Stage {
                             reason: reason.into(),
                             detail,
                             needs_user: true,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -311,6 +313,8 @@ impl Stage {
                                 "{rel} is tracked in git; backlot left it untouched so existing evidence remains in use"
                             ),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -367,6 +371,8 @@ impl Stage {
                             reason: reasons::LAUNCH_REFUSED.into(),
                             detail: format!("terminal.run: {e}"),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -397,9 +403,14 @@ impl Stage {
         let state_dir = Path::new(&self.state_dir);
         let core_path = state_dir.join("config.toml");
         let core_text = read_config(&core_path)?;
-        let user_path = config::config_path(&self.env_vars);
+        let host = self.effective_host_env();
+        let user_path = config::config_path(&host);
         let user_text = read_config(&user_path)?;
-        config::runner_env_layered(state_dir, &core_text, &user_text, runner)
+        let home = host
+            .get("HOME")
+            .map(Path::new)
+            .unwrap_or_else(|| Path::new("/"));
+        config::runner_env_layered_home(state_dir, &core_text, &user_text, runner, home)
     }
 
     /// `<program> --version`'s first line, asked once per launch
@@ -453,6 +464,8 @@ impl Stage {
                             reason: reason.clone(),
                             detail: detail.clone(),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -582,6 +595,8 @@ impl Stage {
                                     reason: reason.into(),
                                     detail,
                                     needs_user: false,
+                                    account: None,
+                                    reset_at_ms: None,
                                 },
                             )?;
                         }
@@ -642,6 +657,8 @@ impl Stage {
                                     reason: e.reason.into(),
                                     detail: e.detail,
                                     needs_user: false,
+                                    account: None,
+                                    reset_at_ms: None,
                                 },
                             )?;
                         }

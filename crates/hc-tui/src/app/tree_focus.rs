@@ -56,7 +56,6 @@ impl App {
             return;
         }
         self.shell_state.sidebar_collapsed = false;
-        self.panel.sidebar_collapsed = false;
         // Entering the tree hands it the keys from any other owner: a
         // focused dock, the expanded Call Sheet, Navigate mode, the
         // opening page — the same releases the studio keys run.

@@ -2,6 +2,9 @@
 //! directory, the append-only ledger store, the `backlot` studio
 //! commands and the stage process that schedules role terminals.
 
+mod accounts;
+mod accounts_store;
+mod accounts_summary;
 mod act;
 pub mod args;
 mod args_card;
@@ -51,6 +54,7 @@ mod guard_git_probe;
 mod guard_git_push;
 mod guard_git_push_opts;
 mod guard_prep;
+mod guard_probes;
 mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
@@ -77,6 +81,7 @@ mod hnotice;
 mod hnotice_stale;
 pub mod hook;
 mod hrender;
+mod hrender_accounts;
 mod hsetup;
 mod hstage;
 mod hswitch_verbs;
@@ -95,6 +100,8 @@ mod liveness_diff;
 mod liveness_probe;
 mod liveness_work;
 mod migrate;
+mod msg_show;
+mod msg_show_fmt;
 mod notices;
 mod nudge;
 mod paths;
@@ -135,6 +142,7 @@ mod server_service;
 mod service;
 pub mod signals;
 mod stage;
+mod stage_accounts;
 mod stagelog;
 mod stale;
 mod stall;
@@ -198,6 +206,8 @@ mod cli_suggest_tests;
 mod cli_testkit;
 #[cfg(test)]
 mod cli_tests;
+#[cfg(test)]
+mod closed_actor_mail_tests;
 #[cfg(test)]
 mod daemon_tests;
 #[cfg(test)]
@@ -320,6 +330,10 @@ mod loop_cmd_tests;
 #[cfg(test)]
 mod migrate_tests;
 #[cfg(test)]
+mod msg_show_extra_tests;
+#[cfg(test)]
+mod msg_show_tests;
+#[cfg(test)]
 mod notices_tests;
 #[cfg(test)]
 mod nudge_tests;
@@ -351,6 +365,8 @@ mod range_tests;
 mod recast_cmd_tests;
 #[cfg(test)]
 mod recast_standby_tests;
+#[cfg(test)]
+mod refused_noise_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]

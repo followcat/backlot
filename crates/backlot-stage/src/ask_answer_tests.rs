@@ -315,6 +315,8 @@ fn runner_prompt_hook_facts_come_from_caps_and_session_availability() {
             reason: reasons::HOOKS_UNAVAILABLE.into(),
             detail: "tracked".into(),
             needs_user: true,
+            account: None,
+            reset_at_ms: None,
         },
     )]);
     assert!(!prompt_hook_active(
@@ -393,6 +395,8 @@ async fn agy_pre_invocation_and_hooks_unavailable_fallback() {
             reason: reasons::HOOKS_UNAVAILABLE.into(),
             detail: "tracked".into(),
             needs_user: true,
+            account: None,
+            reset_at_ms: None,
         },
     );
     let ask2 = queue_ask(&dir, "director", "which port?");

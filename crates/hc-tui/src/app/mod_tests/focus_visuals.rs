@@ -202,7 +202,6 @@ async fn narrow_overlay_focus_visuals_100x40() {
     let mut app = visual_app();
     app.area = (100, 40);
     app.shell_state.sidebar_collapsed = true;
-    app.panel.sidebar_collapsed = true;
 
     alt_l(&mut app);
     assert_eq!(
@@ -225,5 +224,65 @@ async fn narrow_overlay_focus_visuals_100x40() {
     assert!(
         screen.contains("entered studio"),
         "narrow Lot overlay displays entered-studio header cue:\n{screen}"
+    );
+}
+
+#[tokio::test]
+async fn borderless_single_pane_preserves_first_row_text_while_lot_is_focused() {
+    let mut app = visual_app();
+    let mut requests = super::pane_cache::with_openers(&mut app);
+    app.area = (200, 44);
+    app.focus_pane("t1".into());
+    let view = app.view.clone();
+    app.pane.on_view(&view);
+    let (mut core, params) = super::pane_cache::next_attach(&mut app, &mut requests).await;
+    // Focus Lot (InsideStudio) on this single borderless pane:
+    // terminal row 0 must remain intact; `[unfocused · Esc returns]` moves to top bar.
+    alt_l(&mut app);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::Lot(LotLevel::InsideStudio("acme-shop".into()))
+    );
+    let layout = app.chrome_layout(200, 44);
+    let mut term = crate::sidebar::fixture::term(&params.terminal);
+    term.cols = layout.pane_surface.width;
+    term.rows = layout.pane_surface.height;
+    core.serve_attach(crate::testcore::attach_result(
+        1,
+        serde_json::to_value(term).unwrap(),
+        true,
+    ))
+    .await;
+    app.pane
+        .allocated(layout.pane_surface.width, layout.pane_surface.height);
+
+    let inner_w = usize::from(layout.pane_surface.width.saturating_sub(2).max(40));
+    let marker = "FIRST-ROW-RIGHT-KEEP";
+    let pad = inner_w.saturating_sub(marker.len());
+    let first_row_payload = format!("\x1b[?9001l{}{marker}", "A".repeat(pad));
+    core.send_stream(1, hc_proto::frame::Kind::Data, first_row_payload.as_bytes())
+        .await;
+    super::pane_cache::drive_until(&mut app, |app| app.pane.has_fresh_paint()).await;
+
+    let backend = draw_to(&mut app, 200, 44);
+    assert!(app.pane.notice().is_none());
+    let buf = backend.buffer();
+    let pane_row_0: String = (layout.pane_surface.x..layout.pane_surface.right())
+        .map(|x| buf[(x, layout.pane_surface.y)].symbol())
+        .collect();
+    assert!(
+        pane_row_0.contains(marker),
+        "borderless pane row 0 must keep agent text intact: {pane_row_0:?}"
+    );
+    assert!(
+        !pane_row_0.contains("[unfocused"),
+        "borderless pane row 0 must never be overwritten by unfocused tag: {pane_row_0:?}"
+    );
+    let top_bar: String = (layout.tab_bar.x..layout.tab_bar.right())
+        .map(|x| buf[(x, layout.tab_bar.y)].symbol())
+        .collect();
+    assert!(
+        top_bar.contains("[unfocused · Esc returns]"),
+        "top studio bar carries unfocused cue cleanly when room permits: {top_bar:?}"
     );
 }

@@ -16,7 +16,6 @@ use ratatui::layout::Rect;
 fn panel(mode: PanelMode) -> Panel {
     Panel {
         mode,
-        sidebar_collapsed: true,
         ..Panel::new()
     }
 }
@@ -145,7 +144,7 @@ fn expanded_block_displays_every_active_design_phase_and_agrees_with_heights() {
         };
         let block_rows_count = r.len() - 1; // subtract Title row
         assert_eq!(
-            block_height(studio_ref, &p, Some(&cur), false, false, false),
+            block_height(studio_ref, &p, false, false, false),
             block_rows_count,
             "phase {phase}: block_height must match emitted rows"
         );

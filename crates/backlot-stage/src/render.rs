@@ -23,7 +23,7 @@ fn actor_short(a: &ActorIdentity) -> String {
     format!("{s}/{}", a.permission_profile)
 }
 
-fn fmt_ms(ms: u64) -> String {
+pub(crate) fn fmt_ms(ms: u64) -> String {
     let s = ms / 1000;
     if s >= 3600 {
         format!("{}h{}m", s / 3600, s % 3600 / 60)
@@ -274,6 +274,12 @@ pub fn status(
     let writer = state
         .fixed_identity("writer")
         .unwrap_or(&studio.roles.writer);
+    let role_who = |role: &str, cfg: &ActorIdentity| -> String {
+        match crate::hrender_accounts::role_account_badge(name, role, &live.accounts) {
+            Some(badge) => format!("{} [{badge}]", actor_short(cfg)),
+            None => actor_short(cfg),
+        }
+    };
     for (role, cfg, role_state) in [
         ("producer", producer, state.roles.get("producer")),
         ("director", director, state.roles.get("director")),
@@ -307,7 +313,7 @@ pub fn status(
         let _ = writeln!(
             out,
             "    {role:<9} {} ({life}){doing}{}",
-            actor_short(cfg),
+            role_who(role, cfg),
             suffix(role)
         );
     }
@@ -324,7 +330,7 @@ pub fn status(
             out,
             "    {:<9} {} ({}){}",
             w.role,
-            actor_short(&w.actor),
+            role_who(&w.role, &w.actor),
             why.waiting_text(),
             suffix(&w.role),
         );
@@ -371,7 +377,7 @@ pub fn status(
                 let _ = writeln!(
                     out,
                     "    {role:<9} {} ({life}){doing}{}",
-                    actor_short(&a),
+                    role_who(role, &a),
                     suffix(role)
                 );
             }
@@ -402,7 +408,7 @@ pub fn status(
                 let _ = writeln!(
                     out,
                     "    {role:<9} {} ({live}) — last turn failed: {error}",
-                    actor_short(&a)
+                    role_who(role, &a)
                 );
             }
             None => {
@@ -469,6 +475,15 @@ pub fn status(
             let _ = write!(out, ", {dropped} dropped");
         }
         let _ = writeln!(out);
+        for m in state.messages.iter().filter(|m| m.dropped) {
+            let reason = m.dropped_reason.as_deref().unwrap_or("dropped");
+            let file = m.file.as_deref().unwrap_or("-");
+            let _ = writeln!(
+                out,
+                "    #{} {} → {} (dropped: {reason}) {file}",
+                m.seq, m.from, m.to
+            );
+        }
     }
     if !state.reports.is_empty() {
         let _ = writeln!(out, "  reports:");
@@ -504,6 +519,11 @@ pub fn status(
     if !state.corrections.is_empty() {
         let _ = writeln!(out, "  corrections: {}", state.corrections.len());
     }
+    out.push_str(&crate::hrender_accounts::studio_accounts_footer(
+        name,
+        &live.accounts,
+        now_ms,
+    ));
     out
 }
 

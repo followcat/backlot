@@ -395,19 +395,33 @@ impl App {
         }
         // W1b: `Ctrl+B t` (`[keys] focus_tree`) focuses the left machines tree.
         if self.prefix.armed() && self.tree_focus_press(&press) {
-            self.prefix.reset();
-            self.prefix.swallow(&press);
-            self.tree_focus_enter();
-            self.sync_focus();
-            return None;
+            let matched = crate::input::terminal_key_of(&press);
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.tree_focus_enter();
+                self.sync_focus();
+                return None;
+            }
         }
         // `Ctrl+B a` (`[keys] focus_cast`) focuses the left Cast section.
         if self.prefix.armed() && self.cast_focus_press(&press) {
-            self.prefix.reset();
-            self.prefix.swallow(&press);
-            self.cast_focus_enter();
-            self.sync_focus();
-            return None;
+            let matched = crate::input::terminal_key_of(&press);
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.cast_focus_enter();
+                self.sync_focus();
+                return None;
+            }
         }
         if !self.prefix.armed() && self.tree_focus_direct_press(&press) {
             self.prefix.reset();

@@ -350,7 +350,7 @@ impl Stage {
             .messages
             .iter()
             .filter(|m| !m.delivered && !m.dropped && !in_flight.contains(&m.seq))
-            .filter_map(|m| stale::stale_reason(state, m).map(|r| (m.seq, r)))
+            .filter_map(|m| stale::drop_reason(studio, state, live, m).map(|r| (m.seq, r)))
             .collect();
         for (seq, reason) in &dropped {
             record(
