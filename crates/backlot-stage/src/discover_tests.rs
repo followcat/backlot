@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::discover::{ExecCall, Look, find_session, real_exec, runner_version};
 use crate::test_support::TestDir;
+use crate::watch::discovery_floor_ms;
 
 const CWD: &str = "/home/user/acme-shop";
 
@@ -375,6 +376,38 @@ fn cursor_finds_its_chat() {
         "/home/user/other",
     );
     assert_eq!(find(&BTreeSet::new(), 1).as_deref(), Some(u2));
+}
+
+/// A cursor chat can be written after its terminal exists but before
+/// the stage appends `role.started`; discovery still finds it from
+/// the terminal's creation floor, while the ledger time alone rejects it.
+#[test]
+fn cursor_chat_written_before_role_started_uses_the_terminal_floor() {
+    let home = tmp("cursor-race-home");
+    let role_dir = tmp("cursor-race-rd");
+    let uuid = "11111111-2222-4333-8333-555555555555";
+    cursor_chat(&role_dir, "hash-a", uuid, 200, CWD);
+    let find = |started: u64| {
+        find_session(
+            "cursor",
+            &[],
+            CWD,
+            started,
+            &BTreeSet::new(),
+            &Look {
+                home: &home,
+                role_dir: &role_dir,
+                pid: None,
+            },
+            &no_exec,
+        )
+    };
+    assert_eq!(find(300), None);
+    assert_eq!(
+        find(discovery_floor_ms("cursor", 300, 100)).as_deref(),
+        Some(uuid)
+    );
+    assert_eq!(discovery_floor_ms("codex", 300, 100), 300);
 }
 
 /// A fake `~/.commandcode/projects/<slug>/<uuid>.jsonl` whose first

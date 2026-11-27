@@ -234,6 +234,24 @@ pub(crate) fn discovery_age(role_since_ms: u64, stage_started_ms: u64, now_ms: u
     now_ms.saturating_sub(role_since_ms.max(stage_started_ms))
 }
 
+/// The oldest timestamp a post-launch runner's own session may carry.
+/// `role.started` lands only after `terminal.run` answers, while the
+/// program may already have written its session file by then. Cursor's
+/// chats are inside the role's isolated tree, so the terminal's own
+/// creation time is the tight safe floor there; other runners scan
+/// shared home-directory state and keep the ledger time.
+pub(crate) fn discovery_floor_ms(
+    runner: &str,
+    role_since_ms: u64,
+    terminal_created_ms: u64,
+) -> u64 {
+    if runner == "cursor" {
+        terminal_created_ms
+    } else {
+        role_since_ms
+    }
+}
+
 /// Whether this tick looks for a still session-less role's id — the
 /// whole rule in one place: the age floored at this stage's start,
 /// then the five-second throttle and the hard stop. Every still
@@ -431,7 +449,7 @@ impl Stage {
                     &actor.runner,
                     &term.argv,
                     &cwd,
-                    role.since_ms,
+                    discovery_floor_ms(&actor.runner, role.since_ms, term.created_ms),
                     &taken,
                     &look,
                     &*self.exec,
