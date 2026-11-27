@@ -10,6 +10,16 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **Rate-limit reset time no longer truncates to 1 hour in displays, routing, or auto-continue (`ratelimit`, `limits`, `route`, `handoff_term`).** Separated the 1-hour auto-retry pacing cap (`MAX_WAIT_MS`) from the unclamped absolute `reset_at_ms: Option<u64>` and `QuotaWindow` (`Short | Long | Unknown`), added calendar date+time parsing for weekday and month/day weekly/UTC reset banners (`resets Mon 9am`, `Your weekly limit resets Monday at 9:00 AM.`, `resets Nov 21, 4pm`, `resets Nov 30 at 12:00 UTC`), formatted `waiting until HH:MM` (or `Mon HH:MM` when > 24 h away) using `reset_at_ms`, and made `Continuing automatically` wait until the true reset time before escalating.
+
+### Added
+
+- **Zero-config implicit per-runner `AccountId` derivation (`accounts`).** Derived canonical non-secret `<runner>:<label>` identifiers (`<runner>:default`, `<runner>:<dir-tag>` with collision-free 6-hex SHA-256 suffix of canonical directory paths, `<runner>:env-token` without inspecting or hashing secret values, `opencode:<provider>` from `<provider>/<model>`, and `cursor:default` ignoring per-role `CURSOR_CONFIG_DIR` isolation), strictly enforcing no credential-file reads and no secret logging/hashing.
+- **Persistent account state under `<state_dir>/accounts.json` (`accounts_store`, `stage_accounts`).** Added atomic (`0600` temp+rename) persistence under schema `"backlot-accounts/1"` tracking roles seen across studios + Hollywood, active stalls, `last_stall_ms`, true `reset_at_ms`, `window`, and `stalled_by`, tolerating missing or corrupt files and automatically clearing `stalled` when `now_ms >= reset_at_ms`, all stalled roles clear/recover, or manual `backlot attention clear <seq>` runs while retaining `last_stall_ms` and prior `reset_at_ms`.
+- **Additive account fields in ledger, summary, `live.json`, and `backlot status` (`backlot-model`, `backlot-stage`).** Added optional `account` and `reset_at_ms` on `EventKind::AttentionRaised` (populated only on `rate limited`), `AccountSummary` / `AccountRoleSummary` / `QuotaWindow` in `backlot-model`, `accounts` on `Summary` (`backlot/1`) and `Live` (`live.json`), `account` on `RoleSummary` and `HollywoodSummary`, and `accounts:` reporting + `[<account>]` badges across `backlot status`, `backlot status --all`, and `backlot status --all --json` with local ledger+config fallback when `live.json` is absent or predates `accounts` (`docs/studio/limits.md`, `docs/studio/ledger.md`, `docs/studio/requests.md`, `docs/studio/server.md`).
+
 ## 0.4.20 — 2026-11-27
 
 ### Added
