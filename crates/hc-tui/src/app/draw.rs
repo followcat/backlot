@@ -150,6 +150,24 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         .then(|| app.studio.focused_studio())
         .flatten()
         .cloned();
+    let lot_selected_studio = (!app.plain && app.panel.open() && app.panel.focused)
+        .then(|| match app.panel.selected.as_ref() {
+            Some(crate::panel::Target::Stage(machine)) => app
+                .studio
+                .current
+                .as_ref()
+                .filter(|k| k.machine.as_deref() == machine.as_deref())
+                .cloned()
+                .or_else(|| {
+                    crate::panel::data::studios(&machines)
+                        .into_iter()
+                        .find(|s| s.machine == machine.as_deref())
+                        .map(|s| s.key())
+                }),
+            Some(target) => target.studio().cloned(),
+            None => None,
+        })
+        .flatten();
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         federated,
@@ -180,6 +198,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         focused_studio: focused_studio.as_ref(),
         studio_tree: studio_tree.as_ref(),
         current_studio: current_studio.as_ref(),
+        lot_selected_studio: lot_selected_studio.as_ref(),
         reveal_studio_row: &mut app.shell_state.reveal_studio_row,
         reveal_tree_row: &mut app.shell_state.reveal_tree_row,
         tree_cursor: app.tree_focus.as_ref(),

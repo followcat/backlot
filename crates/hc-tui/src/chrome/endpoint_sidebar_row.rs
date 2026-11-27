@@ -90,17 +90,21 @@ pub(super) fn render_machine_line(
     buffer: &mut Buffer,
     rect: Rect,
     line: &MachineLine,
+    emphasized: bool,
     palette: &Palette,
 ) {
     if rect.is_empty() {
         return;
     }
     let dim = Style::default().fg(palette.overlay0);
-    let text_style = match line.tone {
+    let mut text_style = match line.tone {
         MachineTone::Normal => Style::default().fg(palette.text),
         MachineTone::Accent => Style::default().fg(palette.accent),
         MachineTone::Dim => dim,
     };
+    if emphasized {
+        text_style = text_style.add_modifier(Modifier::BOLD);
+    }
     let indent = 3u16;
     let inner = rect.width.saturating_sub(indent);
     if inner == 0 {
@@ -176,10 +180,10 @@ mod tests {
             stage_ok: None,
         };
         let mut buf = Buffer::empty(Rect::new(0, 0, 26, 1));
-        render_machine_line(&mut buf, Rect::new(0, 0, 26, 1), &line, &palette);
+        render_machine_line(&mut buf, Rect::new(0, 0, 26, 1), &line, false, &palette);
         assert_eq!(row_text(&buf, 26), "   hc 0.1.0 backlot 0.2.4");
         let mut buf = Buffer::empty(Rect::new(0, 0, 17, 1));
-        render_machine_line(&mut buf, Rect::new(0, 0, 17, 1), &line, &palette);
+        render_machine_line(&mut buf, Rect::new(0, 0, 17, 1), &line, false, &palette);
         assert_eq!(row_text(&buf, 17), "   backlot 0.2.4");
     }
 
@@ -193,7 +197,12 @@ mod tests {
             stage_ok: Some(true),
         };
         let mut buf = Buffer::empty(Rect::new(0, 0, 25, 1));
-        render_machine_line(&mut buf, Rect::new(0, 0, 25, 1), &line, &palette);
+        render_machine_line(&mut buf, Rect::new(0, 0, 25, 1), &line, false, &palette);
         assert_eq!(row_text(&buf, 25), "   backlot 0.4.12 · ● ok");
+        assert!(!buf[(3, 0)].modifier.contains(Modifier::BOLD));
+
+        let mut ebuf = Buffer::empty(Rect::new(0, 0, 25, 1));
+        render_machine_line(&mut ebuf, Rect::new(0, 0, 25, 1), &line, true, &palette);
+        assert!(ebuf[(3, 0)].modifier.contains(Modifier::BOLD));
     }
 }
