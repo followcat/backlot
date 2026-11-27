@@ -4,8 +4,9 @@
 //! CIE lightness `L*`, and WCAG contrast ratio.
 
 use ratatui::buffer::Cell;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Modifier};
 
+use super::elevation_deco::{TERMINAL_DECO, clamp_max_contrast, derive_deco, guard_fg};
 use super::palette::Palette;
 
 /// Derived surface & depth levels for rendering chrome, overlays, and dim/shadow.
@@ -43,9 +44,9 @@ impl Elevation {
                 dim_bg: None,
                 shadow: None,
                 border_muted: palette.overlay0,
-                gilt: Color::Yellow,
-                stage_well: Color::Reset,
-                bulb_warm: Color::Yellow,
+                gilt: TERMINAL_DECO.gilt,
+                stage_well: TERMINAL_DECO.stage_well,
+                bulb_warm: TERMINAL_DECO.bulb_warm,
                 muted_surface: palette.overlay0,
                 muted_overlay: palette.overlay0,
                 muted_raised: palette.overlay0,
@@ -120,23 +121,15 @@ impl Elevation {
             )
         };
 
-        let stage_well_rgb = if is_dark {
-            panel_bg
-        } else {
-            move_lstar(surface_rgb, surface0, text, 4.0, false)
-        };
-        let gilt_t = if is_dark { 0.40 } else { 0.50 };
-        let gilt_accent = guard_fg(mix(surface_rgb, accent, gilt_t), surface_rgb, accent, 2.65);
-        let gilt_guarded = guard_fg(gilt_accent, surface_rgb, text, 2.65);
-        let gilt_rgb = clamp_max_contrast(gilt_guarded, surface_rgb, 3.20);
-        let bulb_pole = if is_dark { (255, 255, 255) } else { (0, 0, 0) };
-        let bulb_yellow = guard_fg(
-            mix(stage_well_rgb, yellow, 0.62),
-            stage_well_rgb,
+        let deco = derive_deco(
+            is_dark,
+            panel_bg,
+            surface_rgb,
+            surface0,
+            text,
+            accent,
             yellow,
-            4.5,
         );
-        let bulb_warm_rgb = guard_fg(bulb_yellow, stage_well_rgb, bulb_pole, 4.5);
 
         let muted_surface = guard_fg(overlay0, surface_rgb, text, 3.0);
         let muted_overlay = guard_fg(overlay0, overlay_rgb, text, 3.0);
@@ -152,24 +145,14 @@ impl Elevation {
             dim_bg: Some(to_color(dim_bg_rgb)),
             shadow: Some(to_color(shadow_rgb)),
             border_muted: to_color(border_muted_rgb),
-            gilt: to_color(gilt_rgb),
-            stage_well: to_color(stage_well_rgb),
-            bulb_warm: to_color(bulb_warm_rgb),
+            gilt: deco.gilt,
+            stage_well: deco.stage_well,
+            bulb_warm: deco.bulb_warm,
             muted_surface: to_color(muted_surface),
             muted_overlay: to_color(muted_overlay),
             muted_raised: to_color(muted_raised),
             is_dark,
             is_terminal_16: false,
-        }
-    }
-
-    /// Foreground gilt style on `bg`, adding `DIM` on 16-color terminals.
-    pub(crate) fn gilt_style(&self, bg: Color) -> Style {
-        let style = Style::default().fg(self.gilt).bg(bg);
-        if self.is_terminal_16 {
-            style.add_modifier(Modifier::DIM)
-        } else {
-            style
         }
     }
 
@@ -251,7 +234,7 @@ fn strip_backdrop_bits(cell: &mut Cell) {
 }
 
 #[inline]
-fn to_color((r, g, b): (u8, u8, u8)) -> Color {
+pub(super) fn to_color((r, g, b): (u8, u8, u8)) -> Color {
     Color::Rgb(r, g, b)
 }
 
@@ -294,7 +277,7 @@ pub(crate) fn contrast_ratio(a: (u8, u8, u8), b: (u8, u8, u8)) -> f64 {
 }
 
 #[inline]
-fn mix(a: (u8, u8, u8), b: (u8, u8, u8), t: f64) -> (u8, u8, u8) {
+pub(super) fn mix(a: (u8, u8, u8), b: (u8, u8, u8), t: f64) -> (u8, u8, u8) {
     let t = t.clamp(0.0, 1.0);
     let blend = |x: u8, y: u8| -> u8 {
         ((1.0 - t) * f64::from(x) + t * f64::from(y))
@@ -325,7 +308,7 @@ fn reach_target(from: (u8, u8, u8), to: (u8, u8, u8), target_l: f64, up: bool) -
     mix(from, to, hi)
 }
 
-fn move_lstar(
+pub(super) fn move_lstar(
     base: (u8, u8, u8),
     guide: (u8, u8, u8),
     fallback: (u8, u8, u8),
@@ -384,43 +367,4 @@ fn pick_raised_light(
     }
     let guide = selection_bg.unwrap_or(surface0);
     move_lstar(surface, guide, text, 5.5, false)
-}
-
-fn guard_fg(
-    candidate: (u8, u8, u8),
-    bg: (u8, u8, u8),
-    target: (u8, u8, u8),
-    min_cr: f64,
-) -> (u8, u8, u8) {
-    if contrast_ratio(candidate, bg) >= min_cr {
-        return candidate;
-    }
-    let mut lo = 0.0_f64;
-    let mut hi = 1.0_f64;
-    for _ in 0..24 {
-        let mid = 0.5 * (lo + hi);
-        if contrast_ratio(mix(candidate, target, mid), bg) >= min_cr {
-            hi = mid;
-        } else {
-            lo = mid;
-        }
-    }
-    mix(candidate, target, hi)
-}
-
-fn clamp_max_contrast(candidate: (u8, u8, u8), bg: (u8, u8, u8), max_cr: f64) -> (u8, u8, u8) {
-    if contrast_ratio(candidate, bg) <= max_cr {
-        return candidate;
-    }
-    let mut lo = 0.0_f64;
-    let mut hi = 1.0_f64;
-    for _ in 0..24 {
-        let mid = 0.5 * (lo + hi);
-        if contrast_ratio(mix(candidate, bg, mid), bg) > max_cr {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    mix(candidate, bg, hi)
 }
