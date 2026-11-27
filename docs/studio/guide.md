@@ -944,6 +944,29 @@ Each task stays pinned to the version it was dispatched under, so unfinished tas
 automatically: the director is told which tasks are behind and chooses per task to continue,
 pause or redo, and the producer tells you what is affected.
 
+## Halting new dispatches
+
+When a base branch, requirement, or signed-off design assumption turns out wrong mid-run and
+casting new tasks would waste work, any studio role (`producer`, `director`, `writer`, or an actor
+key `actor-<task>-c<n>`, not bare `actor` or `hollywood`) or you (`user`) can freeze new dispatches:
+
+```sh
+backlot halt --reason "wrong base commit" --studio acme-shop --as user
+```
+
+- `halt` records `studio.halted` and blocks new `task.cast` and `dispatch` events until resumed,
+  without killing or pausing already-running tasks (`deliver`, `review`, `progress`, `tell`, and
+  `ask` all continue).
+- Halting is not a substitute for telling the person what failed and what decision is needed.
+- On the Call Sheet the studio row shows a red `! HALTED` mark (`Enter` opens the show view with
+  who halted and why); `backlot status` shows a `halted:` line.
+- Only `director`, `producer`, or `user` can lift the stop (`--false-positive` marks false alarms
+  for `backlot metrics`):
+
+```sh
+backlot resume --note "rebased onto fixed base" --studio acme-shop --as user
+```
+
 ## What needs attention
 
 Open attention shows in the panel's attention line and in `backlot status`. Every reason the
@@ -955,6 +978,8 @@ stage can raise:
 | `outward action` | An outward-action guard layer stopped a role from running a blocked outward command, or queued a cardable push/PR action. | Informational (`needs_user: false`): the role was told to `backlot ask` if it still needs the command, so nothing waits on you and it never counts as "needs you". For a carded push or `gh pr create` (or a request sent with `backlot ask --run [--why <r>] -- <cmd>`) apply (`a`/`y`), cancel (`x`/`d`), or inspect (`s`/Enter `card show`) the open card in the Call Sheet or Studio Dock (works with or without `[hollywood]`). A hard-refused command cannot run via a card — run it outside backlot yourself if wanted. Either way an open `outward action` attention clears (`role moved on`) as soon as the role writes anything else to the ledger after it, or the stage delivers it new work (`outward` completion notices report push/PR results back to the role). |
 | `question` | A role's screen has sat on a non-permission question or unrecognised dialog picker for two seconds (`agy` `kind: "question"`, a recognised question picker, or D2's generic picker rule). | An actor's notices its task reviewer; `director` and `writer` notice `producer`; `producer` and Hollywood wait for you (`needs you`). The saved screen is under `attention/<seq>.txt`; it clears `dialog closed` after two seconds out of the dialog. |
 | `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a producer's stall also tells a live director, and `backlot status` leads with a `producer alert:` line. A changed screen or a newer signal clears the attention. |
+| `looping` | The same role hit five or more non-probe guard refusals (`role.refused`) with the same `(rule, command)` within a ten-minute sliding window (`#209` probes excluded). | Classified `stuck` (`needs_user: false`); routed once per window to the role's reviewer (actor to director/reviewer, fixed role to producer) so they can redirect the role without stopping the studio. |
+| `no progress` | A non-readonly coding actor (`bugfix`, `feature`, `fix`, `refactor`, `impl`, `docs`, `tooling`, `infra`, `site`, `migration`, `test`) accumulated `2 × stall_limit_s` (20 minutes default) of active `running` time — excluding `permission prompt`, `rate limited`, `question`, and `blocked` waits — with no `WorkArea` file or commit change. | Low-noise `info` alert (`needs_user: false`) sent once per unchanged stretch to the director; non-coding tasks (`train`, `analysis`, `verification`, `audit`) and `readonly` actors never trigger it, and a file change, commit, or task delivery clears it. |
 | `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — a live director is told only so it does not wait, and `backlot status` shows a `producer alert:` line. There is no automatic way on for a fixed role; only you (or Hollywood) can intervene. |
 | `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`, `cline`) gave no session id within its discovery window — 60 seconds, 240 for `cmd`, whose session file lands late. | The role still runs and the stage keeps looking for up to ten minutes; a role past the default window but inside its runner's logs a warning only. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
 | `folder trust refused` | Claude Code's first-use folder-trust dialog showed up in a role's first minute — but outside the role's own work area, and the stage answers only inside the bound repo or its worktrees. | The dialog waits for you in the role's terminal. Answer it by hand if the folder is right; if it is not, close the role and check the bound path. Nothing clears the attention automatically — `backlot attention clear <seq>` once you have handled the dialog. A dialog inside the work area never raises this: the stage answers it and records a `stage.answered` event in the ledger, bookkeeping that names the key it pressed and never feeds the attention list. |
