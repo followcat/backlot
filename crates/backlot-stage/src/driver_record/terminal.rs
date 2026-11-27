@@ -170,6 +170,7 @@ async fn a_delivery_send_issues_one_terminal_send() {
                     actor: Some(actor()),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

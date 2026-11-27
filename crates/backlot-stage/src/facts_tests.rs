@@ -156,6 +156,7 @@ fn a_role_line_carries_its_live_work_state() {
             actor: Some(actor),
             session_id: Some("s-1".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&events);
@@ -216,6 +217,7 @@ fn a_stopped_stage_says_live_state_unknown() {
             }),
             session_id: Some("s-1".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&events);
@@ -255,6 +257,7 @@ fn a_role_idle_at_its_prompt_reads_idle_minutes() {
             }),
             session_id: Some("s-1".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     let state = replay(&events);

@@ -74,6 +74,7 @@ impl App {
                 self.focus_studio(&key);
                 self.hollywood_leave();
             }
+            Some(Target::Halted(key)) => self.hollywood_halted_show(&key),
             Some(Target::Decision(key)) => {
                 if self
                     .waiting_design(&key)
@@ -167,6 +168,41 @@ impl App {
                 });
             }
         }
+    }
+
+    /// `↵` on `Target::Halted`: open a read-only `CardView` showing who halted,
+    /// since when, and the full reason.
+    pub(super) fn hollywood_halted_show(&mut self, key: &StudioKey) {
+        let machines = self.panel_summaries();
+        let Some(found) = crate::panel::data::studio(&machines, key) else {
+            return;
+        };
+        let Some(halted) = &found.studio.halted else {
+            return;
+        };
+        let age = backlot_model::event::age_short(
+            crate::update_state::now_ms().saturating_sub(halted.since),
+        );
+        let body = format!(
+            "Studio `{}` is halted.\n\n- halted by: `{}`\n- since: {age} ago\n- reason: {}\n\nRunning tasks continue. New dispatches (`backlot cast`) are refused until resumed with `backlot resume [--note <text>] [--false-positive]`.",
+            found.studio.id, halted.by, halted.reason,
+        );
+        let meta = hollywood::ReaderMeta {
+            studio: Some(found.studio.id.clone()),
+            machine: key.machine.clone(),
+            from: Some(halted.by.clone()),
+            ts_ms: Some(halted.since),
+            ..Default::default()
+        };
+        self.hollywood.view = Some(hollywood::CardView {
+            card: None,
+            title: format!("{} · HALTED", found.studio.id),
+            lines: body.lines().map(str::to_string).collect(),
+            raw_body: body,
+            scroll: 0,
+            meta,
+            ..hollywood::CardView::default()
+        });
     }
 
     /// A prompt's `open ↵`: focus the role's terminal — already

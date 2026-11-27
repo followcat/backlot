@@ -114,6 +114,7 @@ impl Section {
             | Target::Role(..)
             | Target::Tell(_)
             | Target::Upgrade(_)
+            | Target::Halted(_)
             | Target::Decision(_)
             | Target::Stage(..)
             | Target::Card(_)

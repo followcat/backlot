@@ -41,6 +41,8 @@ pub(crate) enum Target {
     Tell(StudioKey),
     /// A studio whose ledger holds unknown event kinds from a newer backlot.
     Upgrade(StudioKey),
+    /// A studio explicitly halted (`studio.halted`) — 1-line row, Enter opens show view.
+    Halted(StudioKey),
     /// A studio waiting for user opening-design review, reply, or sign-off.
     Decision(StudioKey),
     /// A machine whose stage is down (`offline == false`) or that is
@@ -77,6 +79,7 @@ impl Target {
             | Target::Role(k, _)
             | Target::Tell(k)
             | Target::Upgrade(k)
+            | Target::Halted(k)
             | Target::Decision(k)
             | Target::OutwardCard(k, _)
             | Target::Ready(k) => Some(k),
@@ -184,6 +187,7 @@ pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &
         Wait::Prompt(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Role(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Upgrade(item) => Some((item.machine, item.studio.id.as_str())),
+        Wait::Halted(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Decision(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::NoRequirement(item) => Some((item.machine, item.studio.id.as_str())),
         Wait::Outward(item) => Some((item.machine, item.studio.id.as_str())),

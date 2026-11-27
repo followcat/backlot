@@ -1304,8 +1304,8 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Producer,
             "producer",
-            5505usize,
-            "merely to send them there.\n",
+            6049usize,
+            "`--false-positive` when the stop was a false alarm).\n",
         ),
         (
             RoleKind::Writer,
@@ -1316,8 +1316,8 @@ fn design_gate_off_omits_design_section_byte_identically() {
         (
             RoleKind::Director,
             "director",
-            8380usize,
-            "is killed for you.\n",
+            8960usize,
+            "`--false-positive` if the alarm was false).\n",
         ),
     ] {
         let raw = template(kind);

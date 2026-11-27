@@ -702,7 +702,59 @@ pub struct StudioState {
     /// Signed design records retained from prior requirement versions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub design_history: BTreeMap<u32, crate::design::DesignState>,
+    /// Active line stop from `studio.halted`, cleared by `studio.resumed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub halted: Option<HaltRecord>,
+    /// Chronological halt/resume episodes for metrics and audit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub halts: Vec<HaltEpisode>,
+    /// Non-probe and probe `role.refused` records rebuilt on replay.
+    #[serde(skip)]
+    pub role_refusals: Vec<RoleRefusalRecord>,
+    /// `attention.seq` -> clear timestamp (`ts_ms`) rebuilt on replay.
+    #[serde(skip)]
+    pub attention_cleared_ms: BTreeMap<u64, u64>,
     pub last_seq: u64,
+}
+
+/// Active explicit line stop (`studio.halted`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HaltRecord {
+    pub seq: u64,
+    pub by: String,
+    pub reason: String,
+    pub since_ms: u64,
+}
+
+/// One halt/resume cycle stored on [`StudioState::halts`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HaltEpisode {
+    pub halted_seq: u64,
+    pub by: String,
+    pub reason: String,
+    pub since_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub false_positive: bool,
+}
+
+/// Compact reduced record for one `role.refused` ledger event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleRefusalRecord {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub role: String,
+    pub command: String,
+    pub rule: Option<String>,
+    pub disposition: RefusalDisposition,
+    pub is_probe: bool,
 }
 
 /// One carded outward command request (`role.refused` with `Card` or `outward.requested`).

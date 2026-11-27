@@ -416,6 +416,7 @@ fn studio_finished_drops_every_notice() {
             actor: Some(actor("a")),
             session_id: Some("sess-d".into()),
             reason: None,
+            prompt_hash: None,
         },
     ));
     held.push(ev(

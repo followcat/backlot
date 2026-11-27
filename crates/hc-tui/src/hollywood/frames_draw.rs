@@ -246,6 +246,14 @@ fn draw_what_row(
     let (what, colour) = match studio.error.as_deref() {
         Some(error) => (error, palette.red),
         None if studio.needs_upgrade => ("upgrade backlot", palette.peach),
+        None if studio.halted.is_some() => (
+            studio
+                .halted
+                .as_ref()
+                .map(|h| h.reason.as_str())
+                .unwrap_or("halted"),
+            palette.red,
+        ),
         None => (
             on_set(studio)
                 .and_then(|r| {
@@ -339,6 +347,9 @@ pub(crate) fn studio_line<'a>(
     }
     if studio.needs_upgrade {
         return ("!", "upgrade", palette.peach);
+    }
+    if studio.halted.is_some() {
+        return ("!", "HALTED", palette.red);
     }
     if conn == Conn::Offline {
         return ("×", "offline", palette.red);

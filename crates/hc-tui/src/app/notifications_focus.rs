@@ -100,6 +100,7 @@ impl App {
             Target::Ready(key)
             | Target::Tell(key)
             | Target::Upgrade(key)
+            | Target::Halted(key)
             | Target::Decision(key) => self.focus_studio(&key),
             Target::Stage(machine, offline) => {
                 self.studio_notify_stage(&machine, offline);

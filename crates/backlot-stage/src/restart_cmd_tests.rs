@@ -29,6 +29,7 @@ fn start_role(env: &Env, role: &str, terminal: &str, session: &str) {
                     actor: Some(actor),
                     session_id: Some(session.into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

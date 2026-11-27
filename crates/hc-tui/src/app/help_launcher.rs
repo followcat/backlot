@@ -168,6 +168,12 @@ impl App {
                     glyph: "!",
                     launch: Launch::Surface(Surface::CallSheet),
                 }),
+                Wait::Halted(item) => rows.push(HelpRow {
+                    label: format!("Studio halted · {}", item.studio.id),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "!",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
                 Wait::Card(card) => {
                     let menu = StudioMenu::card(&card.id);
                     rows.push(HelpRow {

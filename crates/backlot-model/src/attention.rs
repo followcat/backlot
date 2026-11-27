@@ -71,12 +71,18 @@ impl AttentionClass {
             | "over budget"
             | "owed"
             | "auth error" => AttentionClass::NeedsYou,
-            "permission prompt" | "agent error" | "stalled" | "rate limited"
-            | "connection error" | "question" => AttentionClass::Stuck,
+            "permission prompt"
+            | "agent error"
+            | "stalled"
+            | "rate limited"
+            | "connection error"
+            | "question"
+            | crate::event::LOOPING => AttentionClass::Stuck,
             "session id not found"
             | "inherited XDG_CONFIG_HOME"
             | "cursor dir was open"
-            | "hooks unavailable" => AttentionClass::Info,
+            | "hooks unavailable"
+            | crate::event::NO_PROGRESS => AttentionClass::Info,
             r if r.ends_with(" prep failed") => AttentionClass::NeedsYou,
             _ => AttentionClass::NeedsYou,
         }

@@ -64,7 +64,7 @@ prints `already at ledger v1`.
 |---|---|
 | `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks` (with optional `expect`, `min_matches`, `origin`), optional `task_budget_s`, `[limits]` runner caps, `max_actors`, `design_gate` |
 | `studio.cast` | the same cast fields `studio.created` holds — roles, candidates, rework cap, timings, `check_env`, declared `checks`, `task_budget_s`, `[limits]`, `max_actors`, `design_gate`, push knobs — plus the optional `card`. The newest `studio.cast` (or `studio.created`) is the settings the stage uses; earlier events keep what they recorded. The binding (`repo`, `members`, `no_git`, `mode`) and `push.remotes` are not cast and never change. A fixed role whose identity moves is also recorded as a `role.recast`, appended first. |
-| `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
+| `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason, optional `prompt_hash` on `role.started` (SHA-256 hex of rendered start prompt) |
 | `role.reopen` / `role.release` | role |
 | `role.restart` | role, `fresh`, optional reason |
 | `role.session` | role, session ID |
@@ -72,6 +72,8 @@ prints `already at ledger v1`.
 | `role.approval` | role, decision (`allow` or `deny`) |
 | `studio.finished` | reason |
 | `studio.reopened` | reason, optional `card` — `user` only; clears the finished marker so recasts, cast changes and new tasks work again |
+| `studio.halted` | `reason` — any studio role (`producer`, `director`, `writer`, `actor-<task>-c<n>`) or `user`; freezes new `task.cast` / `dispatch` without killing or pausing running tasks |
+| `studio.resumed` | optional `note`, optional `false_positive` (`bool`, omitted when false) — `director`, `producer`, or `user` only; clears the active halt |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
@@ -322,6 +324,16 @@ closes the active requirement version as `approved` (from `waiting_user`, freezi
 `design/v<version>-final.md`) or `skipped` (from `suggest_skip` or `waiting_user`, creating no
 `-final.md`). A new `req.version` resets any unsigned active `design` to `idle` and preserves
 signed versions in `design_history`.
+
+`studio.halted` records an explicit line stop (`by.role`, `reason`) from any studio role (`producer`,
+`director`, `writer`, or `actor-<task>-c<n>`, not bare `actor` or `hollywood`) or `user`;
+`state.halted` freezes new `task.cast` and `dispatch` appends while keeping running tasks (`task.delivered`,
+`task.reviewed`, `role.progress`, `tell`, and `ask`) active and untouched. Only `director`,
+`producer`, or `user` can append `studio.resumed` (`note`, `false_positive`). Per-role liveness also
+raises `looping` (`stuck`, `needs_user: false`, `>= 5` identical non-probe guard refusals within 10
+minutes, routed to the reviewer once per window) and `no progress` (`info`, `needs_user: false`,
+`2 × stall_limit_s` of active non-readonly coding work minus wait periods without `WorkArea` changes
+or new commits, sent once per stretch to the director).
 
 ## Hollywood's ledger
 

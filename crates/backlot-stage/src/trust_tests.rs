@@ -178,6 +178,7 @@ fn seeded(dir: &Path) {
                     actor: None,
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

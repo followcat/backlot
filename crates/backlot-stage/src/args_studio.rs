@@ -561,6 +561,61 @@ pub(crate) fn common_only(
     Ok((std::mem::take(common), cmd))
 }
 
+/// `backlot halt --reason <text>`: any studio role or `user` can halt the line.
+pub(crate) fn halt(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut reason = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_HALT)));
+        }
+        if common_flag(it, common, &arg, U_HALT)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--reason" => reason = Some(it.value("--reason", U_HALT)?),
+            _ if eq(&arg, "--reason").is_some() => reason = eq(&arg, "--reason").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_HALT)),
+        }
+    }
+    let reason = reason.ok_or_else(|| usage("missing --reason", U_HALT))?;
+    if reason.trim().is_empty() {
+        return Err(usage("--reason must not be empty", U_HALT));
+    }
+    Ok((std::mem::take(common), Cmd::Halt { reason }))
+}
+
+/// `backlot resume [--note <text>] [--false-positive]`.
+pub(crate) fn resume(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut note = None;
+    let mut false_positive = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_RESUME)));
+        }
+        if common_flag(it, common, &arg, U_RESUME)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--note" => note = Some(it.value("--note", U_RESUME)?),
+            _ if eq(&arg, "--note").is_some() => note = eq(&arg, "--note").map(String::from),
+            "--false-positive" => false_positive = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_RESUME)),
+        }
+    }
+    if let Some(n) = &note
+        && n.trim().is_empty()
+    {
+        return Err(usage("--note must not be empty", U_RESUME));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Resume {
+            note,
+            false_positive,
+        },
+    ))
+}
+
 /// `stage watch`: common flags plus an optional `--target` and
 /// `--restart`.
 pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {

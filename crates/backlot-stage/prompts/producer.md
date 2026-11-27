@@ -108,6 +108,17 @@ Finishing is the person's alone: never run `backlot studio finish`,
 not even when the user says yes here. Once you have reported ready,
 the READY row already tells them that; do not repeat instructions
 merely to send them there.
+
+## Halting new dispatches
+
+- When a base assumption, dependency, or design is wrong and casting further
+  tasks would waste work, freeze new dispatches with
+  `backlot halt --reason <text>` — running tasks keep going undisturbed.
+- Halting is not a substitute for telling the person: write directly to them
+  with `backlot tell user --text <note> --note` explaining what happened and what
+  you need from them.
+- Once resolved, lift the halt with `backlot resume --note <text>` (or add
+  `--false-positive` when the stop was a false alarm).
 {#design_gate}
 
 ## Opening design discussion (`design_gate = {design_gate}`)

@@ -877,3 +877,44 @@ async fn enter_closes_read_only_reader_and_noops_on_actionable_card() {
     key(&mut app, hc_vt::Key::Enter);
     assert!(app.hollywood.view.is_none());
 }
+
+#[tokio::test]
+async fn enter_on_halted_studio_row_opens_show_view_with_who_and_reason() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 30);
+    alt_y(&mut app);
+    let doc_k = crate::panel::data::key();
+    let mut doc = app.view.documents.get(&doc_k).unwrap().value.clone();
+    doc["studios"][0]["halted"] = serde_json::json!({
+        "by": "producer",
+        "reason": "wrong base branch",
+        "since": 1_000,
+    });
+    doc["hollywood"]["cards"] = serde_json::json!([]);
+    app.view.documents_mut().insert(
+        doc_k,
+        hc_proto::watch::Document {
+            value: doc,
+            ..hc_proto::watch::Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+
+    app.hollywood_select(Target::Halted(crate::studio::StudioKey::local("acme-shop")));
+    key(&mut app, hc_vt::Key::Enter);
+    let view = app
+        .hollywood
+        .view
+        .as_ref()
+        .expect("Enter on HALTED row must open CardView");
+    assert!(view.card.is_none());
+    assert!(view.raw_body.contains("producer"), "{}", view.raw_body);
+    assert!(
+        view.raw_body.contains("wrong base branch"),
+        "{}",
+        view.raw_body
+    );
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
+}

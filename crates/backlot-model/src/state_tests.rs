@@ -299,6 +299,7 @@ fn started(role: &str, terminal: &str, session: &str) -> EventKind {
         actor: Some(actor("a")),
         session_id: Some(session.into()),
         reason: None,
+        prompt_hash: None,
     }
 }
 
@@ -358,6 +359,7 @@ fn role_session_sets_the_session_id() {
             actor: Some(actor("a")),
             session_id: None,
             reason: None,
+            prompt_hash: None,
         },
     ));
     log.push(ev(

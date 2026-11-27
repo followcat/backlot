@@ -38,6 +38,7 @@ fn studio(scratch: &Scratch, env: &Env) -> PathBuf {
                     }),
                     session_id: Some("sess-p1".into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

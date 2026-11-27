@@ -196,6 +196,7 @@ async fn stage_pauses_read_only_for_unknown_studio_marks_summary_and_runs_others
                     actor: Some(actor()),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

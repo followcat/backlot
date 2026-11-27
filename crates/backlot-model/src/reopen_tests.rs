@@ -13,6 +13,7 @@ fn started(role: &str, terminal: &str, session: &str) -> EventKind {
         actor: Some(actor("a")),
         session_id: Some(session.into()),
         reason: None,
+        prompt_hash: None,
     }
 }
 
@@ -106,6 +107,7 @@ fn reopen_refusals() {
                     actor: Some(actor("d")),
                     session_id: None,
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             (

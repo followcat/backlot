@@ -143,9 +143,11 @@ pub(super) fn target_is_focused(app: &super::App, target: &Target) -> bool {
             app.hollywood.expanded()
                 && app.hollywood.selected == Some(Target::OutwardCard(key.clone(), id.clone()))
         }
-        Target::Ready(key) | Target::Tell(key) | Target::Upgrade(key) | Target::Decision(key) => {
-            app.studio.current.as_ref() == Some(key) && focused_in(key)
-        }
+        Target::Ready(key)
+        | Target::Tell(key)
+        | Target::Upgrade(key)
+        | Target::Halted(key)
+        | Target::Decision(key) => app.studio.current.as_ref() == Some(key) && focused_in(key),
         Target::Stage(machine, false) => {
             app.panel.focused
                 && app.panel.selected == Some(crate::panel::Target::Stage(machine.clone()))

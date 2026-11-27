@@ -169,6 +169,7 @@ pub(super) fn setup_studio(
                     actor: Some(actor(runner)),
                     session_id: Some("s-prod".into()),
                     reason: None,
+                    prompt_hash: None,
                 },
             ),
             files: Vec::new(),

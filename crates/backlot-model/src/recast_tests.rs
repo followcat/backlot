@@ -49,6 +49,7 @@ fn a_recast_changes_the_fixed_identity_and_leaves_the_past_alone() {
                 actor: Some(actor("dir")),
                 session_id: Some("s1".into()),
                 reason: None,
+                prompt_hash: None,
             },
         ),
     );
@@ -282,6 +283,7 @@ fn a_start_under_a_new_identity_clears_the_old_session() {
                 actor: Some(actor("dir")),
                 session_id: Some("s-old".into()),
                 reason: None,
+                prompt_hash: None,
             },
         ),
     );
@@ -296,6 +298,7 @@ fn a_start_under_a_new_identity_clears_the_old_session() {
                 actor: Some(cmd("d")),
                 session_id: None,
                 reason: None,
+                prompt_hash: None,
             },
         ),
     );

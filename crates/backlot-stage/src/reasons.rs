@@ -25,7 +25,7 @@ pub use crate::runners::{CONFIG_MALFORMED, PROFILE_NOT_SUPPORTED, RUNNER_NOT_SUP
 pub(crate) use crate::watch::{SESSION_NOT_FOUND, TRUST_REFUSED};
 #[cfg(test)]
 pub use backlot_model::event::{
-    CANNOT_RESUME, OUTWARD_ACTION, PERMISSION_PROMPT, QUESTION, STALLED,
+    CANNOT_RESUME, LOOPING, NO_PROGRESS, OUTWARD_ACTION, PERMISSION_PROMPT, QUESTION, STALLED,
 };
 
 /// `terminal.run` refused the role's launch; the stage retries it.
@@ -49,6 +49,8 @@ pub const ALL: &[&str] = &[
     OUTWARD_ACTION,
     QUESTION,
     STALLED,
+    LOOPING,
+    NO_PROGRESS,
     CANNOT_RESUME,
     SESSION_NOT_FOUND,
     TRUST_REFUSED,
