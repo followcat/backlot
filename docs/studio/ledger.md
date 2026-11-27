@@ -10,6 +10,8 @@ requirement, and what happened when it was reviewed.
 ```
 $XDG_STATE_HOME/backlot/<core id>/
   config.toml
+  live.json           fresh per-role work samples and aggregated accounts summary
+  accounts.json       persistent quota-stall state (`backlot-accounts/1`) across restarts
   studios/<studio>/
     events.jsonl      append-only log, the source of truth
     events.lock       flock for appends
@@ -80,7 +82,7 @@ prints `already at ledger v1`.
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq`; `delivered` carries the target seq |
 | `message.dropped` | target seq, reason — `stage` only |
 | `report.sent` | from, to, node, file |
-| `attention.raised` / `attention.escalated` / `attention.cleared` | role, reason, detail, `needs_user`; `escalated` carries the target attention seq and replacement detail — `stage` only |
+| `attention.raised` / `attention.escalated` / `attention.cleared` | role, reason, detail, `needs_user`; `attention.raised` carries optional `account` and `reset_at_ms` when `reason == "rate limited"`; `escalated` carries the target attention seq and replacement detail — `stage` only |
 | `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
 | `ask.answered` / `ask.acknowledged` | role, target ask seq — `stage` / `user` only |
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |

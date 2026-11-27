@@ -409,6 +409,8 @@ fn a_stage_written_event_does_not_answer_the_role() {
             reason: "session id not found".into(),
             detail: "still looking".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     ));
     let state = replay(&events);

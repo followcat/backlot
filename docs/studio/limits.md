@@ -177,22 +177,45 @@ re-raise one `stall_limit_s` later.
   reads a reporting core's fresh screen tail when it is not `working`: Devin's rate limit
   (`done` with `Reached free model rate limit … reset in 54 minutes`) and its
   `Connection error` stop, and Claude Code's measured `hit your limit` / `session limit` /
-  `weekly limit` / `monthly limit` screens. A short limit waits the parsed reset and sends
-  `continue` three times before escalating; a weekly or monthly quota escalates
-  `needs the user` at once instead of burning those retries. The parser accepts Claude's local
-  12-hour reset clock (`resets 12:10pm`) as well as relative waits and Devin's UTC absolute form.
-  A runner that explicitly says `Continuing automatically at 12:10pm` is left alone: it is never
-  the person's merely because a retry count elapsed, and escalates only when that reset has passed
-  without the limit lifting. Escalation uses `attention.escalated` on the same attention, so one
-  stall raises one attention and Hollywood is told once. Claude's weekly-limit four-choice dialog
-  is recognized as a limit, never as a question the stage may answer; its detail says options 1–2
-  wait while 3–4 cost money. A connection error gets the same bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
-  merely be printed — and a banner deeper than the last 12 non-blank lines is scrollback, not
-  evidence. What is not verified: none of these paths has met a real agent since they were
-  written. The unit and fake-core tests cover the detection and retry cycles; Devin's,
-  Claude's and every other runner's exact live wording beyond the captured lines waits for a
-  real run. A rate limit or connection error in an ordinary frozen screen still reaches its
-  reviewer as a `stalled` once the taxonomy's words are absent.
+  `weekly limit` / `monthly limit` screens. Auto-retry delays still clamp at 1 h
+  (`MAX_WAIT_MS`), while the true parsed `reset_at_ms` and `window` (`short`, `long`,
+  `unknown`) stay unclamped across `waiting until HH:MM` (or `Mon HH:MM` when > 24 h away),
+  director rate-limit routing, and `Continuing automatically` tracking (which escalates only
+  past the true parsed reset rather than at +1 h). The parser handles Claude's local 12-hour
+  clocks (`resets 2:10pm`), weekday+time banners (`resets Mon 9am`, `Your weekly limit resets
+  Monday at 9:00 AM.`), month+day+time banners (`resets Nov 21, 4pm`, `resets Nov 30 at 12:00 UTC`),
+  Devin's `at HH:MM UTC`, and relative waits; uncertain reset lines keep `reset_at_ms: None`.
+  A short limit waits the parsed retry cadence and sends `continue` three times before escalating;
+  a weekly or monthly quota escalates `needs the user` at once instead of burning those retries.
+  Escalation uses `attention.escalated` on the same attention, so one stall raises one attention
+  and Hollywood is told once. Claude's weekly-limit four-choice dialog is recognized as a limit,
+  never as a question the stage may answer; its detail says options 1–2 wait while 3–4 cost
+  money. A connection error gets the same bounded treatment on a 15-second wait. A `working`
+  terminal is never matched — the words may merely be printed — and a banner deeper than the last
+  12 non-blank lines is scrollback, not evidence. What is not verified: none of these paths has
+  met a real agent since they were written. The unit and fake-core tests cover the detection and
+  retry cycles; Devin's, Claude's and every other runner's exact live wording beyond the captured
+  lines waits for a real run. A rate limit or connection error in an ordinary frozen screen still
+  reaches its reviewer as a `stalled` once the taxonomy's words are absent.
+- **Per-account quota aggregation is derived from non-secret metadata only and persisted under
+  `<state_dir>/accounts.json`.** Without reading any credential files
+  (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.config/cursor/auth.json`,
+  `~/.config/devin/config.json`, `~/.cline/data/settings/providers.json`) and without logging,
+  persisting, or hashing secret environment values, each role derives a zero-config
+  `<runner>:<label>` id: `<runner>:default` at standard paths, `<runner>:<dir-tag>` on explicit
+  directory overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_CONFIG_HOME`, or overridden
+  `HOME`, disambiguating colliding basenames by a 6-hex SHA-256 suffix of the canonical
+  non-secret path), `<runner>:env-token` when token env keys are present, `opencode:<provider>`
+  from `<provider>/<model>`, and `cursor:default` ignoring Cursor's per-role `CURSOR_CONFIG_DIR`
+  isolation (since `auth.json` is shared across roles). `<state_dir>/accounts.json`
+  (`schema: "backlot-accounts/1"`) atomically tracks roles seen (across open studios and
+  Hollywood), active quota stalls, true `reset_at_ms`, `last_stall_ms`, and `window` across stage
+  restarts, tolerating missing or corrupt files cleanly; `stalled` clears when `now_ms >= reset_at_ms`,
+  when all stalled roles clear/recover, or on manual `backlot attention clear <seq>`, keeping
+  `last_stall_ms` and prior `reset_at_ms` intact. `backlot status`, `backlot status --all`, and
+  `backlot status --all --json` render shared account membership, active/working counts, last
+  stall, and reset time, falling back locally to ledgers, config, and `accounts.json` when
+  `live.json` is absent or predates `accounts`.
 - **Stall detection tracks six evidence sources on one clock, with local-only OS probes.**
   Hook signals, activity revisions (for `revision_stalls` runners), per-runner normalised screens,
   local process trees (descendants of `term.pid`, `cutime+cstime`, and root CPU/I/O strictly

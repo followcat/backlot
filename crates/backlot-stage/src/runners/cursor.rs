@@ -296,6 +296,8 @@ pub(crate) fn dir_open_event(role: &str) -> EventKind {
         reason: CURSOR_DIR_OPEN.into(),
         detail: format!("roles/{role}/cursor"),
         needs_user: false,
+        account: None,
+        reset_at_ms: None,
     }
 }
 

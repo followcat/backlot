@@ -214,6 +214,8 @@ pub(crate) fn record_verdict(
                     reason: OUTWARD_ACTION.into(),
                     detail,
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),

@@ -228,6 +228,8 @@ fn attention_is_deduped_per_role_and_reason() {
         ts_ms: 0,
         needs_user: false,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     });
     assert!(attention_open(&state, "producer", "launch refused"));
     assert!(!attention_open(&state, "director", "launch refused"));
@@ -315,6 +317,8 @@ fn work_area_cleared_events_clears_matching_open_attention() {
                 ts_ms: 0,
                 needs_user: false,
                 cleared_reason: None,
+                account: None,
+                reset_at_ms: None,
             },
             Attention {
                 seq: 4,
@@ -325,6 +329,8 @@ fn work_area_cleared_events_clears_matching_open_attention() {
                 ts_ms: 0,
                 needs_user: false,
                 cleared_reason: None,
+                account: None,
+                reset_at_ms: None,
             },
             Attention {
                 seq: 5,
@@ -335,6 +341,8 @@ fn work_area_cleared_events_clears_matching_open_attention() {
                 ts_ms: 0,
                 needs_user: false,
                 cleared_reason: None,
+                account: None,
+                reset_at_ms: None,
             },
         ],
         ..StudioState::default()

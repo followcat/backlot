@@ -31,6 +31,8 @@ fn raise(env: &Env, role: &str, reason: &str) {
                     reason,
                     detail: "screen text".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),

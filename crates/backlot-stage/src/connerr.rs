@@ -116,6 +116,8 @@ impl Stage {
                         text,
                         needs_user: false,
                         bound: None,
+                        account: None,
+                        reset_at_ms: None,
                     },
                     move |seq| {
                         format!("connection error; auto-retry after 15s; screen saved to attention/{seq}.txt")

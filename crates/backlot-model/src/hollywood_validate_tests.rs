@@ -334,6 +334,8 @@ fn hollywood_only_tells_the_producer() {
             reason: "x".into(),
             detail: String::new(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
         EventKind::StudioFinished {
             reason: "done".into(),

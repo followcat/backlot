@@ -500,6 +500,12 @@ pub struct Attention {
     /// records carry no field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleared_reason: Option<String>,
+    /// Implicit/resolved quota account when `reason == "rate limited"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// Unclamped reset epoch ms when known on `reason == "rate limited"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_at_ms: Option<u64>,
 }
 
 /// A recorded `role.approval` — a permission-prompt decision.

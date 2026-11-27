@@ -86,6 +86,8 @@ fn fallback_hard_gate_refuses_design_next_until_note_and_skips_tainted_turns() {
                             reason: reasons::HOOKS_UNAVAILABLE.into(),
                             detail: "missing".into(),
                             needs_user: true,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     ),
                     files: Vec::new(),

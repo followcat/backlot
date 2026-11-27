@@ -44,6 +44,8 @@ fn studio_at_prompt(scratch: &Scratch, role: &str, flagged: bool) {
                     reason: PERMISSION_PROMPT.into(),
                     detail: "needs the user; screen saved to attention/5.txt".into(),
                     needs_user: flagged,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
         ],

@@ -89,6 +89,7 @@ fn seed_live_stage_and_hollywood(base: &Path, live_hollywood: bool) {
                 running: None,
                 idle_since_ms: None,
             }],
+            accounts: Vec::new(),
         },
     )
     .unwrap();

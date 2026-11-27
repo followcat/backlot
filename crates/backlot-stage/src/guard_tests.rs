@@ -285,6 +285,8 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
             reason: OUTWARD_ACTION.into(),
             detail: "gh pr merge 42".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         }
     );
 
@@ -433,6 +435,8 @@ fn a_refusal_is_info_and_permission_prompts_stay_the_users() {
                     reason: backlot_model::event::PERMISSION_PROMPT.into(),
                     detail: "bash: rm -rf build; needs the user".into(),
                     needs_user: true,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),

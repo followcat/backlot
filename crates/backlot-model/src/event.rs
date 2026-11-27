@@ -658,6 +658,14 @@ pub enum EventKind {
         /// the attention is the user's. Absent on old logs.
         #[serde(default, skip_serializing_if = "is_false")]
         needs_user: bool,
+        /// Canonical `<runner>:<label>` account when `reason == "rate limited"`.
+        /// Absent on older logs and non-rate-limit attentions.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
+        /// Unclamped epoch ms when the quota is expected to reset, when known
+        /// on `reason == "rate limited"`. Absent on older logs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reset_at_ms: Option<u64>,
     },
     /// `attention.escalated`: the same open attention becomes the
     /// person's — one stall keeps one attention rather than a close

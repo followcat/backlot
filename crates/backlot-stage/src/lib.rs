@@ -2,6 +2,9 @@
 //! directory, the append-only ledger store, the `backlot` studio
 //! commands and the stage process that schedules role terminals.
 
+mod accounts;
+mod accounts_store;
+mod accounts_summary;
 mod act;
 pub mod args;
 mod args_card;
@@ -78,6 +81,7 @@ mod hnotice;
 mod hnotice_stale;
 pub mod hook;
 mod hrender;
+mod hrender_accounts;
 mod hsetup;
 mod hstage;
 mod hswitch_verbs;
@@ -137,6 +141,7 @@ mod server_service;
 mod service;
 pub mod signals;
 mod stage;
+mod stage_accounts;
 mod stagelog;
 mod stale;
 mod stall;

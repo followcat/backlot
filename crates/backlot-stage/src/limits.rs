@@ -16,15 +16,6 @@ use crate::daemon::Stage;
 use crate::permit;
 use crate::sample::{Raise, Watched};
 
-fn hhmm_local(ms: u64) -> String {
-    let timestamp = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
-    let mut local: libc::tm = unsafe { std::mem::zeroed() };
-    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
-        return "the reset".into();
-    }
-    format!("{:02}:{:02}", local.tm_hour, local.tm_min)
-}
-
 impl Stage {
     /// The S12d error-taxonomy pass on one fresh sample. A limited
     /// role gets one stage-owned attention while the stage waits
@@ -56,6 +47,7 @@ impl Stage {
         let open = state
             .open_attention()
             .find(|a| a.role == role && a.reason == rl::RATE_LIMITED);
+        let model = crate::stage_accounts::studio_role_model(state, role);
         match (limited, open) {
             (None, Some(attn)) => {
                 record(
@@ -66,16 +58,34 @@ impl Stage {
                     },
                 )?;
                 self.rate_pace.borrow_mut().remove(&pair);
+                self.clear_account_stall_for_role(studio, role);
             }
             (None, None) => {
                 self.rate_pace.borrow_mut().remove(&pair);
+                self.clear_account_stall_for_role(studio, role);
             }
             (Some(hit), None) => {
                 if self.rate_pace.borrow().contains_key(&pair) {
                     return Ok(());
                 }
-                let until = hhmm_local(now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS);
+                let display_reset_ms = hit
+                    .reset_at_ms
+                    .unwrap_or_else(|| now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS);
+                let until = rl::format_reset_local(display_reset_ms, now_ms);
                 let weekly_choice = rl::weekly_choice_dialog(text);
+                let acct = self.derive_role_account(w.runner, model);
+                let acct_detail = if hit.escalate_now {
+                    if let Some(reset) = hit.reset_at_ms {
+                        format!(
+                            "weekly/monthly limit; resets {}",
+                            rl::format_reset_local(reset, now_ms)
+                        )
+                    } else {
+                        "weekly or monthly limit exhausted".into()
+                    }
+                } else {
+                    format!("waiting until {until}")
+                };
                 self.raise_attention(
                     Raise {
                         dir,
@@ -84,6 +94,8 @@ impl Stage {
                         text,
                         needs_user: hit.escalate_now,
                         bound: None,
+                        account: Some(acct.id),
+                        reset_at_ms: hit.reset_at_ms,
                     },
                     move |seq| {
                         if hit.escalate_now {
@@ -98,6 +110,16 @@ impl Stage {
                     },
                 )
                 .await?;
+                self.record_account_stall(
+                    studio,
+                    role,
+                    w.runner,
+                    model,
+                    now_ms,
+                    hit.reset_at_ms,
+                    hit.window,
+                    &acct_detail,
+                );
                 // The sentinel: a long quota spends the budget at
                 // once, so a cleared attention never re-raises while
                 // the banner holds.
@@ -106,7 +128,8 @@ impl Stage {
                     pair,
                     rl::RatePace {
                         retries,
-                        due_ms: now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS,
+                        due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
+                        reset_at_ms: hit.reset_at_ms,
                     },
                 );
                 eprintln!(
@@ -119,6 +142,16 @@ impl Stage {
                 );
             }
             (Some(hit), Some(attn)) => {
+                self.record_account_stall(
+                    studio,
+                    role,
+                    w.runner,
+                    model,
+                    now_ms,
+                    hit.reset_at_ms,
+                    hit.window,
+                    "",
+                );
                 if attn.needs_user {
                     return Ok(());
                 }
@@ -134,9 +167,11 @@ impl Stage {
                     .unwrap_or(rl::RatePace {
                         retries: 0,
                         due_ms: now_ms,
+                        reset_at_ms: hit.reset_at_ms,
                     });
                 if hit.auto_continue {
-                    if now_ms >= pace.due_ms {
+                    let deadline = pace.reset_at_ms.unwrap_or(pace.due_ms);
+                    if now_ms >= deadline {
                         self.escalate_rate_limit(
                             dir,
                             attn.seq,
@@ -163,7 +198,8 @@ impl Stage {
                                     pair,
                                     rl::RatePace {
                                         retries: pace.retries + 1,
-                                        due_ms: now_ms + hit.wait_ms + rl::RETRY_MARGIN_MS,
+                                        due_ms: now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS,
+                                        reset_at_ms: hit.reset_at_ms.or(pace.reset_at_ms),
                                     },
                                 );
                             }
@@ -244,6 +280,8 @@ impl Stage {
                         text,
                         needs_user: user_owned,
                         bound: None,
+                        account: None,
+                        reset_at_ms: None,
                     },
                     move |seq| {
                         if user_owned {

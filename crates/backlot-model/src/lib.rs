@@ -68,6 +68,8 @@ pub mod testkit;
 pub mod migrate;
 
 #[cfg(test)]
+mod account_summary_tests;
+#[cfg(test)]
 mod budget_tests;
 #[cfg(test)]
 mod cap_tests;

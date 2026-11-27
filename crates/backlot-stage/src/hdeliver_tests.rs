@@ -135,6 +135,8 @@ fn attention(seq: u64, role: &str, needs_user: bool) -> Attention {
         ts_ms: 0,
         needs_user,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     }
 }
 

@@ -296,6 +296,8 @@ async fn unknown_action_approve_outward_and_prompt_attention_refusals() {
                         reason: reason.into(),
                         detail: "confirm".into(),
                         needs_user: true,
+                        account: None,
+                        reset_at_ms: None,
                     },
                 ),
                 files: Vec::new(),

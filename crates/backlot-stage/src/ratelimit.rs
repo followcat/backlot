@@ -9,9 +9,19 @@
 //! `error` with no limit text observed is [`AGENT_ERROR`], never
 //! an auto-`continue` — observed, never assumed.
 
-use backlot_model::summary::Work;
+use backlot_model::summary::{QuotaWindow, Work};
 
 use crate::reconcile::LiveTerminal;
+
+#[path = "ratelimit_parse.rs"]
+mod parse;
+
+pub(crate) use parse::format_reset_local;
+#[cfg(test)]
+pub(crate) use parse::parse_wait;
+
+/// Maximum delay between auto-retry probes (clamped retry cadence only).
+pub(crate) const MAX_WAIT_MS: u64 = 3_600_000;
 
 /// The rate-limit attention reason.
 pub const RATE_LIMITED: &str = "rate limited";
@@ -57,8 +67,12 @@ const LONG_LIMIT_WORDS: &[&str] = &["weekly limit", "monthly limit"];
 /// One observed limit and what the stage should do about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LimitHit {
-    /// The wait the reset line asked for, in milliseconds.
-    pub wait_ms: u64,
+    /// Clamped delay for the stage's next auto-retry probe (capped at 1 h).
+    pub retry_wait_ms: u64,
+    /// Unclamped absolute Unix epoch ms of the parsed reset time, when known.
+    pub reset_at_ms: Option<u64>,
+    /// Classified quota horizon (`Short | Long | Unknown`).
+    pub window: QuotaWindow,
     /// The text names a weekly or monthly quota: raise it for a
     /// person at once instead of auto-`continue`ing.
     pub escalate_now: bool,
@@ -82,18 +96,8 @@ pub(crate) fn errored(term: &LiveTerminal) -> bool {
     term.status.as_ref().is_some_and(|s| s.state == "error")
 }
 
-/// Whether the terminal is rate limited now — and how long the
-/// wait should be before a `continue`. Observed, never assumed:
-/// a reporting core's `error` counts only when limit text shows —
-/// in `status.msg`, else in the screen's fresh tail. A reporting
-/// core in a non-working state (`done`, `idle`, `waiting`) is read
-/// like a silent core: its screen's fresh tail is the evidence.
-/// A `working` terminal is never limited — its limit words are text
-/// the agent printed (fixture output, an edit to this file), not a
-/// state it is in. A silent core's non-working screen is the same
-/// fallback. A bare `error` is [`AGENT_ERROR`]'s attention instead.
-/// `None` — not limited. `now_ms` is the injected epoch ms the
-/// `at HH:MM UTC` parses against.
+/// Whether the terminal is rate limited now — and both its clamped retry delay
+/// and unclamped reset timestamp when parsed.
 pub(crate) fn limited(
     term: &LiveTerminal,
     screen: &str,
@@ -108,33 +112,75 @@ pub(crate) fn limited(
         if status.state == "error" {
             let msg = status.msg.to_lowercase();
             if limit_text(&msg) {
-                let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
+                let delta =
+                    parse::parse_wait(&msg, now_ms).or_else(|| parse_screen_delta(screen, now_ms));
+                let escalates = long_limit(&msg) || long_limit(tail);
                 return Some(LimitHit {
-                    wait_ms: wait.clamp(RETRY_MARGIN_MS, 3_600_000),
-                    escalate_now: long_limit(&msg) || long_limit(tail),
+                    retry_wait_ms: delta
+                        .unwrap_or(DEFAULT_WAIT_MS)
+                        .clamp(RETRY_MARGIN_MS, MAX_WAIT_MS),
+                    reset_at_ms: delta.map(|d| now_ms.saturating_add(d)),
+                    window: classify_window(escalates, &[&msg, tail], delta),
+                    escalate_now: escalates,
                     auto_continue: auto_continue(tail),
                 });
             }
             if limit_text(tail) {
-                return Some(hit(tail, reset_ms(screen, now_ms)));
+                return Some(hit_screen(tail, screen, now_ms));
             }
             return None;
         }
     }
     if work != Work::Working && limit_text(tail) {
-        return Some(hit(tail, reset_ms(screen, now_ms)));
+        return Some(hit_screen(tail, screen, now_ms));
     }
     None
 }
 
-/// One limit hit: the wait plus whether the evidence names a
-/// weekly or monthly quota.
-fn hit(text: &str, wait_ms: u64) -> LimitHit {
+fn hit_screen(tail: &str, screen: &str, now_ms: u64) -> LimitHit {
+    let delta = parse_screen_delta(screen, now_ms);
+    let escalates = long_limit(tail);
     LimitHit {
-        wait_ms,
-        escalate_now: long_limit(text),
+        retry_wait_ms: delta
+            .unwrap_or(DEFAULT_WAIT_MS)
+            .clamp(RETRY_MARGIN_MS, MAX_WAIT_MS),
+        reset_at_ms: delta.map(|d| now_ms.saturating_add(d)),
+        window: classify_window(escalates, &[tail], delta),
+        escalate_now: escalates,
+        auto_continue: auto_continue(tail),
+    }
+}
+
+#[cfg(test)]
+fn hit(text: &str, delta_ms: Option<u64>, now_ms: u64) -> LimitHit {
+    let escalates = long_limit(text);
+    LimitHit {
+        retry_wait_ms: delta_ms
+            .unwrap_or(DEFAULT_WAIT_MS)
+            .clamp(RETRY_MARGIN_MS, MAX_WAIT_MS),
+        reset_at_ms: delta_ms.map(|d| now_ms.saturating_add(d)),
+        window: classify_window(escalates, &[text], delta_ms),
+        escalate_now: escalates,
         auto_continue: auto_continue(text),
     }
+}
+
+fn classify_window(escalates: bool, texts: &[&str], delta: Option<u64>) -> QuotaWindow {
+    if escalates || delta.is_some_and(|d| d > parse::LONG_WINDOW_MS) {
+        return QuotaWindow::Long;
+    }
+    if delta.is_some() || texts.iter().any(|t| short_limit_hint(t)) {
+        return QuotaWindow::Short;
+    }
+    QuotaWindow::Unknown
+}
+
+fn short_limit_hint(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("session limit")
+        || lower.contains("5-hour")
+        || lower.contains("5 hour")
+        || lower.contains("5h ")
 }
 
 /// Whether the runner says it continues by itself after the reset.
@@ -189,20 +235,19 @@ fn limit_text(screen: &str) -> bool {
         || CLINE_LIMIT_WORDS.iter().any(|w| lower.contains(w))
 }
 
-/// The wait a reset line asks for. The LAST limit line owns the
-/// answer — screens keep earlier banners in scrollback (t30 showed
-/// 54/53/51-minute banners stacked), and a stale banner's clause
-/// must never win. Inside that region the absolute `at HH:MM UTC`
-/// is preferred over the `in <n>`/`after <n>` relatives — Devin
-/// prints both, and the clock is the fresher fact when they
-/// disagree. No parse → the default minute; above an hour clamps
-/// to it — the retry loop is not a parking spot.
-fn reset_ms(text: &str, now_ms: u64) -> u64 {
+/// Unclamped parsed wait delta from the freshest limit line on `text`.
+fn parse_screen_delta(text: &str, now_ms: u64) -> Option<u64> {
     let lower = text.to_lowercase();
     let region = last_limit_line(&lower).unwrap_or(&lower);
-    parse_wait(region, now_ms)
+    parse::parse_wait(region, now_ms)
+}
+
+/// Clamped auto-retry wait (for tests exercising the default/clamp fallback).
+#[cfg(test)]
+fn reset_ms(text: &str, now_ms: u64) -> u64 {
+    parse_screen_delta(text, now_ms)
         .unwrap_or(DEFAULT_WAIT_MS)
-        .clamp(RETRY_MARGIN_MS, 3_600_000)
+        .clamp(RETRY_MARGIN_MS, MAX_WAIT_MS)
 }
 
 /// The text from its last limit line on — the freshest banner's
@@ -219,161 +264,13 @@ fn last_limit_line(text: &str) -> Option<&str> {
     found.map(|at| &text[at..])
 }
 
-/// The wait one region asks for: `at HH:MM UTC` first, then the
-/// relative forms.
-fn parse_wait(text: &str, now_ms: u64) -> Option<u64> {
-    parse_at(text, now_ms)
-        .or_else(|| parse_local_ampm(text, now_ms))
-        .or_else(|| parse_in(text))
-}
-
-/// Claude's local `12:10pm`/`1:05am` reset clock → ms until it next
-/// strikes. Compared in local wall-clock time, so no timezone table is needed.
-fn parse_local_ampm(text: &str, now_ms: u64) -> Option<u64> {
-    let lower = text.to_lowercase();
-    for needle in ["resets ", "continuing automatically at "] {
-        let Some(at) = lower.find(needle) else {
-            continue;
-        };
-        let tail = lower[at + needle.len()..].trim_start();
-        let clock = (|| {
-            let (hh, tail) = front_digits(tail, 1, 2)?;
-            let tail = tail.strip_prefix(':')?;
-            let (mm, tail) = front_digits(tail, 2, 2)?;
-            let pm = if tail.starts_with("pm") {
-                true
-            } else if tail.starts_with("am") {
-                false
-            } else {
-                return None;
-            };
-            ((1..=12).contains(&hh) && mm <= 59).then_some((hh, mm, pm))
-        })();
-        let Some((hh, mm, pm)) = clock else {
-            continue;
-        };
-        let hour = (hh % 12) + u64::from(pm) * 12;
-        let timestamp = (now_ms / 1000).min(i64::MAX as u64) as libc::time_t;
-        let mut local: libc::tm = unsafe { std::mem::zeroed() };
-        if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
-            return None;
-        }
-        let now = (local.tm_hour as u64) * 3_600_000
-            + (local.tm_min as u64) * 60_000
-            + (local.tm_sec as u64) * 1000;
-        let target = hour * 3_600_000 + mm * 60_000;
-        return Some((target + 86_400_000 - now) % 86_400_000);
-    }
-    None
-}
-
-/// The first `at HH:MM UTC` in the region → ms until that clock
-/// next strikes. The `at` is word-bounded (`status` is not a
-/// match) and the UTC word is required — a bare `at HH:MM` could
-/// be local time and parses nothing.
-fn parse_at(text: &str, now_ms: u64) -> Option<u64> {
-    let mut from = 0;
-    while let Some(at) = text[from..].find("at") {
-        let at = from + at;
-        let bounded = text[..at]
-            .chars()
-            .next_back()
-            .is_none_or(|c| !c.is_ascii_alphanumeric())
-            && text[at + 2..]
-                .chars()
-                .next()
-                .is_some_and(|c| !c.is_ascii_alphanumeric());
-        if bounded && let Some(ms) = clock_wait(&text[at + 2..], now_ms) {
-            return Some(ms);
-        }
-        from = at + 2;
-    }
-    None
-}
-
-/// ` HH:MM UTC` at the front of `s` — one or two hour digits, a
-/// colon, two minute digits, the UTC word — → ms until that clock
-/// next strikes against the injected `now_ms`.
-fn clock_wait(s: &str, now_ms: u64) -> Option<u64> {
-    let s = s.trim_start();
-    let (hh, s) = front_digits(s, 1, 2)?;
-    let s = s.strip_prefix(':')?;
-    let (mm, s) = front_digits(s, 2, 2)?;
-    let s = s.trim_start();
-    let utc = s.strip_prefix("utc")?;
-    if utc
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_alphanumeric())
-    {
-        return None;
-    }
-    if hh > 23 || mm > 59 {
-        return None;
-    }
-    let day_ms = 86_400_000;
-    let target = hh * 3_600_000 + mm * 60_000;
-    Some((target + day_ms - now_ms % day_ms) % day_ms)
-}
-
-/// `in <n> <unit>` or `after <n> <unit>` → ms. The unit is a word
-/// (`s`/`sec`/`seconds`, `m`/`min`/`minutes`, `h`/`hr`/`hours`, …)
-/// after optional space, matched whole — `5 months` parses nothing.
-/// A failed occurrence advances past its anchor, never by a fixed
-/// byte — the old `continue` spun on the same `rest` forever, and
-/// `&tail[1..]` panicked off a char boundary.
-fn parse_in(text: &str) -> Option<u64> {
-    for anchor in [" in ", " after "] {
-        let mut rest = text;
-        while let Some(at) = rest.find(anchor) {
-            let tail = &rest[at + anchor.len()..];
-            if let Some(ms) = rel_wait(tail) {
-                return Some(ms);
-            }
-            rest = tail;
-        }
-    }
-    None
-}
-
-/// `<n><ws?><unit-word>` at the front of `tail` → ms.
-fn rel_wait(tail: &str) -> Option<u64> {
-    let (n, rest) = front_digits(tail, 1, 20)?;
-    let word: String = rest
-        .trim_start()
-        .chars()
-        .take_while(|c| c.is_ascii_alphabetic())
-        .collect();
-    let mult = match word.as_str() {
-        "s" | "sec" | "secs" | "second" | "seconds" => 1_000,
-        "m" | "min" | "mins" | "minute" | "minutes" => 60_000,
-        "h" | "hr" | "hrs" | "hour" | "hours" => 3_600_000,
-        _ => return None,
-    };
-    Some(n.saturating_mul(mult))
-}
-
-/// `min..=max` leading ascii digits → `(value, rest)`; an overflow
-/// saturates, and the clamp keeps the loop unparked anyway.
-fn front_digits(s: &str, min: usize, max: usize) -> Option<(u64, &str)> {
-    let width = s
-        .chars()
-        .take(max)
-        .take_while(|c| c.is_ascii_digit())
-        .count();
-    if width < min {
-        return None;
-    }
-    let (digits, rest) = s.split_at(width);
-    Some((digits.parse().unwrap_or(u64::MAX), rest))
-}
-
-/// One role's retry exchange: `continue`s already sent and when
-/// the next is due.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// One role's retry exchange: `continue`s already sent, when the next
+/// probe is due (clamped at 1 h), and the unclamped reset time if known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RatePace {
     pub retries: u8,
     pub due_ms: u64,
+    pub reset_at_ms: Option<u64>,
 }
 
 /// What one sample of a still-limited role should do — pure so
