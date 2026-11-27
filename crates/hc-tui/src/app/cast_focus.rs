@@ -6,8 +6,7 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::app::input::TerminalKey;
-use crate::focus::{CastTarget, LotLevel, TellTarget, WorkspaceRegion};
-use crate::panel::Target as PanelTarget;
+use crate::focus::{CastTarget, TellTarget, WorkspaceRegion};
 use crate::studio::{self, StudioKey};
 
 use super::App;
@@ -414,13 +413,7 @@ impl App {
             },
         };
         self.panel.mode = crate::panel::PanelMode::Expanded;
-        self.panel.collapsed_blocks.remove(&key);
-        self.panel.selected = Some(PanelTarget::Input(key.clone()));
-        self.panel.editing = true;
-        self.panel.finish_confirm = None;
-        self.panel.reset_history_nav();
-        self.set_workspace_focus(WorkspaceRegion::Lot(LotLevel::Compose { studio: key, target }));
-        self.panel_reveal_selected();
+        self.enter_lot_compose(&key, target);
     }
 
     fn cast_peek(&mut self) {

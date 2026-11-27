@@ -20,6 +20,7 @@ mod floats;
 mod floats_lifecycle;
 mod focus_entry;
 mod focus_grammar;
+mod focus_lot_tell;
 mod focus_visuals;
 mod help;
 mod help_launcher;

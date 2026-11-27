@@ -343,6 +343,7 @@ pub(super) fn draw_input(
     buf: &mut Buffer,
     rect: Rect,
     draft: &crate::chrome::text_editor::TextEditor,
+    target_label: &str,
     selected: bool,
     composing: bool,
     cue: Option<(&str, ratatui::style::Color)>,
@@ -409,12 +410,13 @@ pub(super) fn draw_input(
             Style::default().fg(palette.text).bg(field_bg),
         );
         if draft.as_str().is_empty() && width > 0 {
+            let ph = format!("tell {target_label} · / actions");
             put_text(
                 buf,
                 text.x,
                 text.y,
                 width,
-                &truncate_end("tell producer · / actions", width as usize),
+                &truncate_end(&ph, width as usize),
                 Style::default()
                     .fg(ph_fg)
                     .bg(field_bg)
@@ -423,12 +425,13 @@ pub(super) fn draw_input(
         }
         cursor
     } else if draft.as_str().is_empty() {
+        let ph = format!("tell {target_label} · / actions");
         put_text(
             buf,
             text.x,
             text.y,
             width,
-            &truncate_end("tell producer · / actions", width as usize),
+            &truncate_end(&ph, width as usize),
             Style::default()
                 .fg(ph_fg)
                 .bg(field_bg)

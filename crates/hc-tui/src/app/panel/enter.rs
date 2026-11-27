@@ -81,6 +81,15 @@ impl App {
         target: crate::focus::TellTarget,
     ) {
         self.panel.collapsed_blocks.remove(studio);
+        let cursor_role = match self.panel.selected.as_ref() {
+            Some(Target::Person(s, r)) if s == studio => Some(r.clone()),
+            _ => match &target {
+                crate::focus::TellTarget::Role(r) if r != "producer" => Some(r.clone()),
+                _ => self.panel.compose_cursor_role.clone(),
+            },
+        };
+        self.panel.compose_cursor_role = cursor_role;
+        self.panel.tell_target = target.clone();
         self.panel.selected = Some(Target::Input(studio.clone()));
         self.panel.editing = true;
         self.panel.finish_confirm = None;

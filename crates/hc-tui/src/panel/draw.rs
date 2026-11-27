@@ -560,6 +560,19 @@ pub(crate) fn render(
             Row::Talk { studio, line } => {
                 draw_talk(buf, rect, line, paints, frame_of(&studio.key()), palette);
             }
+            Row::TalkStatus { studio, line } => {
+                hits.working_drawn |= super::talk_status::draw_talk_status(
+                    buf,
+                    rect,
+                    *studio,
+                    line,
+                    stage_running(studio.machine),
+                    pending,
+                    frame_of(&studio.key()),
+                    palette,
+                    now_ms,
+                );
+            }
             Row::InputDivider { studio } => {
                 let edge = frame_of(&studio.key());
                 let rule = Style::default().fg(elev.border_muted).bg(elev.surface);
@@ -579,12 +592,21 @@ pub(crate) fn render(
                 }
             }
             Row::Input { studio } => {
-                let producer_mark = crate::action::mark::role(&studio.key(), "producer");
+                let target_label = if paints {
+                    panel.tell_target.as_str()
+                } else {
+                    "producer"
+                };
+                let target_mark = if target_label == "hollywood" {
+                    crate::action::mark::hollywood()
+                } else {
+                    crate::action::mark::role(&studio.key(), target_label)
+                };
                 let tell_in_flight = pending
-                    .pending_label(&producer_mark)
+                    .pending_label(&target_mark)
                     .is_some_and(|l| l.starts_with("telling "));
-                let producer_working = studio.studio.roles.iter().any(|r| {
-                    r.role == "producer"
+                let role_working = studio.studio.roles.iter().any(|r| {
+                    r.role == target_label
                         && r.state == "live"
                         && r.work == Some(backlot_model::summary::Work::Working)
                 });
@@ -593,9 +615,16 @@ pub(crate) fn render(
                     .exchange
                     .last()
                     .is_some_and(|e| e.who == "user");
-                let cue = if studio.studio.pending_tell || tell_in_flight {
+                let cue = if studio.studio.pending_tell
+                    || studio
+                        .studio
+                        .roles
+                        .iter()
+                        .any(|r| r.role == target_label && r.queue.is_some())
+                    || tell_in_flight
+                {
                     Some(("queued", palette.peach))
-                } else if awaiting_reply && producer_working {
+                } else if awaiting_reply && role_working {
                     Some(("thinking", palette.accent))
                 } else {
                     None
@@ -617,6 +646,7 @@ pub(crate) fn render(
                     buf,
                     rect,
                     draft,
+                    target_label,
                     paints,
                     composing,
                     cue,
@@ -719,6 +749,7 @@ pub(crate) fn render(
                     | Row::ClosedFold { .. }
                     | Row::Drawer { .. }
                     | Row::Talk { .. }
+                    | Row::TalkStatus { .. }
                     | Row::InputDivider { .. }
                     | Row::Input { .. }
                     | Row::ReopenProducer { .. }

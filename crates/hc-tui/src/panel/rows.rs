@@ -228,6 +228,12 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         line: &'a StudioExchange,
     },
+    /// Delivery status line (`… sending…`, `… queued · <reason>`,
+    /// `✓ delivered · <age>`, `⠶ thinking…`) directly under the newest user tell.
+    TalkStatus {
+        studio: StudioRef<'a>,
+        line: &'a StudioExchange,
+    },
     /// The `├──┤` rule separating open roles/tasks/talk from the studio's
     /// `›` compose field.
     InputDivider {
@@ -320,6 +326,7 @@ impl Row<'_> {
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::ClosedFold { studio, .. } => Target::ClosedFold(studio.key()),
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
+            Row::TalkStatus { .. } => Target::None,
             Row::Input { studio } => Target::Input(studio.key()),
             Row::ReopenProducer { studio } => Target::ReopenProducer(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
@@ -356,6 +363,7 @@ impl Row<'_> {
             | Row::ClosedFold { studio, .. }
             | Row::Drawer { studio, .. }
             | Row::Talk { studio, .. }
+            | Row::TalkStatus { studio, .. }
             | Row::InputDivider { studio }
             | Row::Input { studio }
             | Row::ReopenProducer { studio }
@@ -515,9 +523,19 @@ fn block_rows<'a>(
     }
     if talk_limit > 0 {
         let ex = &studio.studio.exchange;
-        let skip = ex.len().saturating_sub(talk_limit);
+        let last_user = ex.last().filter(|l| l.who == "user");
+        let show_status = last_user.is_some() && talk_limit >= 2;
+        let turns = if show_status {
+            talk_limit.saturating_sub(1)
+        } else {
+            talk_limit
+        };
+        let skip = ex.len().saturating_sub(turns);
         for line in &ex[skip..] {
             out.push(Row::Talk { studio, line });
+        }
+        if show_status && let Some(line) = last_user {
+            out.push(Row::TalkStatus { studio, line });
         }
     }
     // The `›` tell/command line closes the block — the studio's own

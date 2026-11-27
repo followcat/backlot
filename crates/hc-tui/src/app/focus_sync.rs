@@ -73,7 +73,7 @@ impl App {
         {
             return LotLevel::Compose {
                 studio: studio.clone(),
-                target: TellTarget::default(),
+                target: self.panel.tell_target.clone(),
             };
         }
         if let WorkspaceRegion::Lot(LotLevel::RowActions { studio, chip }) = &self.focus.workspace
@@ -159,7 +159,7 @@ impl App {
                     .unwrap_or_else(|| StudioKey::local(""));
                 self.focus.workspace = WorkspaceRegion::Lot(LotLevel::Compose {
                     studio,
-                    target: TellTarget::default(),
+                    target: self.panel.tell_target.clone(),
                 });
             } else if !self.panel.editing && !self.panel.lot_studios_browse {
                 self.focus.workspace = WorkspaceRegion::Lot(self.derived_lot_level());
@@ -237,6 +237,12 @@ impl App {
             WorkspaceRegion::Lot(level) => {
                 self.panel.focused = true;
                 self.panel.editing = matches!(level, LotLevel::Compose { .. });
+                if let LotLevel::Compose { target, .. } = level {
+                    self.panel.tell_target = target.clone();
+                } else if matches!(level, LotLevel::Studios) {
+                    self.panel.tell_target = TellTarget::default();
+                    self.panel.compose_cursor_role = None;
+                }
             }
             WorkspaceRegion::CallSheet(_) => {
                 self.hollywood.mode = LayerMode::Expanded;

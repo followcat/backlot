@@ -125,9 +125,16 @@ async fn i_on_a_person_seeds_their_tell() {
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     key(&mut app, hc_vt::Key::Char('i'));
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert_eq!(draft(&app, "acme-shop"), "/tell actor-alice ");
-    // The press named its target — finishing the line sends
-    // `tell actor-alice` without touching the dialog.
+    assert_eq!(
+        app.focus.workspace,
+        crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::Compose {
+            studio: "acme-shop".into(),
+            target: crate::focus::TellTarget::Role("actor-alice".into()),
+        })
+    );
+    assert_eq!(draft(&app, "acme-shop"), "");
+    // The press pre-targeted `actor-alice` — finishing the line sends
+    // `tell actor-alice` without cluttering the input buffer.
     for ch in "ship it".chars() {
         key(&mut app, hc_vt::Key::Char(ch));
     }

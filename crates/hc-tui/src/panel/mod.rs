@@ -22,6 +22,7 @@ mod row_lines;
 mod rows;
 mod rows_fit;
 mod rows_fold;
+mod talk_status;
 mod update;
 
 pub(crate) use config::{
@@ -133,6 +134,10 @@ pub(crate) struct Panel {
     /// True while navigating across studios at `LotLevel::Studios` so cursoring
     /// onto another studio's rows does not eagerly promote into `InsideStudio`.
     pub lot_studios_browse: bool,
+    /// Recipient when `LotLevel::Compose` is active (`producer`, role, or `hollywood`).
+    pub tell_target: crate::focus::TellTarget,
+    /// Role under the cursor when entering Compose, used by empty `Tab` cycling.
+    pub compose_cursor_role: Option<String>,
 }
 
 #[cfg(test)]
@@ -171,6 +176,8 @@ impl Panel {
             entered_studio: None,
             active_chip: None,
             lot_studios_browse: false,
+            tell_target: crate::focus::TellTarget::default(),
+            compose_cursor_role: None,
         }
     }
 
