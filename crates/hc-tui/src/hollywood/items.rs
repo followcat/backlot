@@ -299,6 +299,37 @@ pub(crate) fn live_head(live: &Live<'_>) -> (String, &'static str) {
     }
 }
 
+fn role_badge_label(role: &str) -> Option<String> {
+    let badge = crate::studio::glyphs::RoleBadge::of_role(role)?;
+    Some(match badge {
+        crate::studio::glyphs::RoleBadge::Actor => {
+            let tail = backlot_model::state::actor_task(role)
+                .or_else(|| role.strip_prefix("actor-"))
+                .filter(|s| !s.is_empty());
+            match tail {
+                Some(tail) => format!("{} {tail}", badge.glyph()),
+                None => badge.glyph().to_string(),
+            }
+        }
+        _ => badge.glyph().to_string(),
+    })
+}
+
+fn format_card_action(action: &str) -> String {
+    for verb in ["recast ", "restart ", "close ", "reopen "] {
+        if let Some(rest) = action.strip_prefix(verb) {
+            let split = rest
+                .find(|c: char| c.is_whitespace() || c == ':' || c == '→')
+                .unwrap_or(rest.len());
+            let (role, tail) = rest.split_at(split);
+            if let Some(badge) = role_badge_label(role) {
+                return format!("{verb}{badge}{tail}");
+            }
+        }
+    }
+    action.to_string()
+}
+
 fn first_sentence(text: &str) -> &str {
     let end = text
         .char_indices()
@@ -319,6 +350,7 @@ fn ask_age(studio: &backlot_model::summary::StudioSummary, role: &str) -> Option
 }
 
 /// Whether any waiting item demands the user's direct attention (red urgency).
+#[cfg(test)]
 pub(crate) fn any_user_urgent(waits: &[Wait<'_>]) -> bool {
     waits.iter().any(|w| {
         matches!(w, Wait::Prompt(_) | Wait::Stage(_))
@@ -554,7 +586,7 @@ pub(crate) fn wait_parts(wait: &Wait<'_>, local: &str, multi: bool) -> WaitParts
             verb: format!("CARD {}", card.id),
             gap: "  ",
             studio: card.studio.clone(),
-            rest: format!(" · {}", card.action),
+            rest: format!(" · {}", format_card_action(&card.action)),
         },
         Wait::Outward(item) => {
             let machine = machine_label(item.machine, local, multi);

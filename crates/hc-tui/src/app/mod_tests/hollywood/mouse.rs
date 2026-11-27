@@ -22,8 +22,8 @@ async fn a_click_on_the_lot_pill_expands_the_layer() {
 
 #[tokio::test]
 async fn a_card_row_click_acts_like_enter() {
-    // S5 §2: a row click selects the row and runs its Enter — a
-    // card's Enter is the "Show me" view.
+    // Clicking a card row selects & focuses it; clicking its `show ↵` chip
+    // runs `card show`.
     let mut app = app_with_hollywood();
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
@@ -43,6 +43,20 @@ async fn a_card_row_click_acts_like_enter() {
         rect.y,
     ));
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert!(recorded.lock().unwrap().is_empty());
+    draw_to(&mut app, 120, 24);
+    let (chip_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, k)| matches!(t, Target::Card(id) if id == "c3") && *k == '\r')
+        .cloned()
+        .expect("c3 show chip");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        chip_rect.x + 1,
+        chip_rect.y,
+    ));
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "show", "c3", "--as", "user"]]
@@ -436,7 +450,7 @@ async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
     app.set_hollywood_runner(runner);
     app.area = (120, 44);
     app.hollywood.mode = LayerMode::Expanded;
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood.selected = Some(Target::Hollywood);
     draw_to(&mut app, 120, 44);
 
     let (row_rect, _) = app
@@ -575,4 +589,85 @@ async fn lot_pill_segments_jump_to_clicked_bucket_and_alt_y_lands_on_blocking() 
         ))
     );
     assert!(!app.hollywood.editing);
+}
+
+#[tokio::test]
+async fn clicking_recast_card_rows_and_chips_on_ready_studio_targets_each_card() {
+    let mut app = app_with_hollywood();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    let mut doc = summary_json();
+    doc["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    doc["studios"][0]["tasks_done"] = serde_json::json!(12);
+    doc["studios"][0]["tasks_total"] = serde_json::json!(13);
+    doc["hollywood"]["cards"] = serde_json::json!([
+        { "id": "c1372", "studio": "acme-shop", "action": "recast producer → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1373", "studio": "acme-shop", "action": "recast director → agy/gemini-3-pro/high", "why": "quota" },
+        { "id": "c1374", "studio": "acme-shop", "action": "recast writer → agy/gemini-3-pro/high", "why": "quota" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (200, 17);
+    app.hollywood.mode = LayerMode::Expanded;
+    draw_to(&mut app, 200, 17);
+
+    let (c1373_rect, _) = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Card(id) if id == "c1373"))
+        .cloned()
+        .expect("c1373 hit");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        c1373_rect.x + 4,
+        c1373_rect.y,
+    ));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c1373".into())));
+    assert!(recorded.lock().unwrap().is_empty());
+    draw_to(&mut app, 200, 17);
+    let (show_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, k)| matches!(t, Target::Card(id) if id == "c1373") && *k == '\r')
+        .cloned()
+        .expect("c1373 show chip");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        show_rect.x + 1,
+        show_rect.y,
+    ));
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["card", "show", "c1373", "--as", "user"]]
+    );
+
+    // Close the CardView and click the `apply a` chip on `c1374`.
+    app.hollywood.view = None;
+    app.hollywood.selected = Some(Target::Card("c1374".into()));
+    draw_to(&mut app, 200, 17);
+    let (chip_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, k)| matches!(t, Target::Card(id) if id == "c1374") && *k == 'a')
+        .cloned()
+        .expect("c1374 apply chip");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        chip_rect.x + 1,
+        chip_rect.y,
+    ));
+    assert_eq!(
+        recorded.lock().unwrap().last().unwrap().as_slice(),
+        &["card", "apply", "c1374", "--as", "user"]
+    );
 }

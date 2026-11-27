@@ -192,7 +192,6 @@ fn height_functions_agree_with_emitted_rows() {
                         let expected = block_height(
                             *studio,
                             &p,
-                            None,
                             owed(*studio),
                             p.accepted_open(&key),
                             p.closed_open(&key),

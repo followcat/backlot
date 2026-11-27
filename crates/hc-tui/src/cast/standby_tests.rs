@@ -93,7 +93,7 @@ fn row_text(buf: &Buffer, area: Rect, y: u16) -> String {
 }
 
 #[test]
-fn standby_writer_in_cast_renders_single_line_without_runner_or_plan_hint() {
+fn standby_writer_in_cast_shows_runner_model_without_plan_hint() {
     let summary = summary_with_standby("standby", "live");
     let palette = Palette::from_name("catppuccin").unwrap();
     let view = CastView {
@@ -117,7 +117,7 @@ fn standby_writer_in_cast_renders_single_line_without_runner_or_plan_hint() {
         server_stopped: false,
     };
     let rows_built = cast_rows(&view);
-    assert!(rows_built.iter().all(|r| r.lines() == 1));
+    assert!(rows_built.iter().all(|r| r.lines() == 2));
     let order: Vec<&str> = rows_built
         .into_iter()
         .filter_map(|r| match r {
@@ -141,6 +141,7 @@ fn standby_writer_in_cast_renders_single_line_without_runner_or_plan_hint() {
     assert!(row.contains("standby"), "{:?}", row);
     let st_x = row[..row.find("standby").unwrap()].chars().count() as u16;
     assert_eq!(buf[(st_x, y)].fg, palette.overlay0);
+    assert!(rows[y as usize + 1].contains("claude · claude-sonnet-4-5"));
     assert!(
         !rows
             .iter()

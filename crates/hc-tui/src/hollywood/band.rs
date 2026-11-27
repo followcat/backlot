@@ -1,11 +1,6 @@
-//! The band under the frames: row dispatch and the single-line
-//! headline/calm painters. Every cell names its own background — the
-//! band floats over the panes.
-//!
-//! Waiting items live in `band_wait.rs` and `band_detail.rs`; the
-//! lower-band rows (`live`, `tell hollywood`, `setup`) live in
-//! `band_lower.rs`. The rows are drawn at rects the height ladder
-//! chose in `draw`.
+//! The band under the title: row dispatch across WAITING and
+//! HOLLYWOOD rows (`Wait`, `Headline`, `Talk`, `Live`, `Input`, `Setup`).
+//! Every cell names its own background — the band floats over panes.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -22,13 +17,18 @@ use crate::chrome::text::truncate_end;
 /// The space the band keeps at each side.
 pub(crate) const MARGIN: u16 = 2;
 
-/// Draw one band row across `rect`. `selected` lights the row and
-/// its primary chip; `detail` draws the item's second line (which
-/// `rect.height` already counts); `mobile` folds every row's chips
-/// to `[k]` — the labels matter more than the chip words at these
-/// widths.
+/// Extra display context for row dispatch (`WAITING` gutter, fallback
+/// scroll counter, inline folded-turn count on unfocused talk rows).
+#[derive(Clone, Copy, Default)]
+pub(super) struct RowExtras {
+    pub wait_focused: bool,
+    pub wait_scroll_badge: Option<(usize, usize, usize)>,
+    pub talk_earlier: usize,
+}
+
+/// Draw one band row across `rect` and record its hit rect.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_row(
+pub(super) fn draw_row(
     buf: &mut Buffer,
     rect: Rect,
     row: &Row<'_>,
@@ -40,6 +40,7 @@ pub(crate) fn draw_row(
     suppress_highlights: bool,
     activity: HollywoodActivity,
     now_ms: u64,
+    extras: RowExtras,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -69,17 +70,19 @@ pub(crate) fn draw_row(
         }
         Row::Wait(i) => {
             let detail = rect.height > 1;
+            let zone_focused = extras.wait_focused && !suppress_highlights;
             super::band_wait::draw_wait(
                 buf,
                 Rect::new(rect.x, rect.y, rect.width, 1),
                 rect.height,
                 &waits[*i],
-                waits,
                 hollywood,
                 local,
                 multi,
                 mobile,
                 selected,
+                zone_focused,
+                extras.wait_scroll_badge,
                 palette,
                 hits,
             );
@@ -90,27 +93,24 @@ pub(crate) fn draw_row(
                     &waits[*i],
                     hollywood,
                     selected,
+                    zone_focused,
                     palette,
                 );
             }
         }
-        Row::Calm { studios } => {
-            let base = Style::default().bg(elev.surface);
-            put_text(buf, rect.x + MARGIN, rect.y, 1, "✓", base.fg(palette.teal));
-            let text = format!(" nothing waiting on you across {studios} studios");
-            put_text(
+        Row::Fold { .. } => {}
+        Row::Talk(line) => {
+            super::talk::draw_talk(
                 buf,
-                rect.x + MARGIN + 1,
-                rect.y,
-                rect.width.saturating_sub(MARGIN + 1),
-                &truncate_end(&text, rect.width as usize),
-                base.fg(elev.muted_surface),
+                rect,
+                line,
+                selected,
+                now_ms,
+                extras.talk_earlier,
+                palette,
+                hits,
             );
         }
-        Row::Talk(line) => {
-            super::talk::draw_talk(buf, rect, line, selected, now_ms, palette);
-        }
-        Row::Fold { .. } => {}
         Row::Live(live) => super::band_lower::draw_live(buf, rect, live, selected, palette),
         Row::Input => {
             let handoff_active = waits.iter().any(|w| match w {

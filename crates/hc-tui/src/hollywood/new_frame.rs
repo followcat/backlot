@@ -63,14 +63,41 @@ pub(crate) fn draw_new(buf: &mut Buffer, rect: Rect, selected: bool, palette: &P
     );
     put_text(buf, rect.x + rect.width - 1, bottom, 1, "╯", edge);
 
-    // Centred: the title, the cast note and the key chip.
+    // Centred content adapted for 7-, 5-, and 3-row frame heights.
     let inner = rect.width.saturating_sub(2);
     let centre = |text: &str| rect.x + 1 + inner.saturating_sub(text.chars().count() as u16) / 2;
+    let chip_bg = if selected || elev.is_dark {
+        palette.surface0
+    } else {
+        elev.surface
+    };
+    if rect.height < 5 {
+        let compact = if inner >= 15 {
+            "+ new studio  n"
+        } else {
+            "+ new studio"
+        };
+        let label = truncate_end(compact, inner as usize);
+        put_text(
+            buf,
+            centre(&label),
+            rect.y + 1,
+            label.chars().count() as u16,
+            &label,
+            on(palette.accent, bg).add_modifier(Modifier::BOLD),
+        );
+        return;
+    }
+    let (title_y, note_y, chip_y) = if rect.height >= 7 {
+        (rect.y + 2, rect.y + 3, rect.y + 5)
+    } else {
+        (rect.y + 1, rect.y + 2, rect.y + 3)
+    };
     let title = truncate_end("+  new studio", inner as usize);
     put_text(
         buf,
         centre(&title),
-        rect.y + 2,
+        title_y,
         title.chars().count() as u16,
         &title,
         on(palette.accent, bg).add_modifier(Modifier::BOLD),
@@ -79,21 +106,16 @@ pub(crate) fn draw_new(buf: &mut Buffer, rect: Rect, selected: bool, palette: &P
     put_text(
         buf,
         centre(&note),
-        rect.y + 3,
+        note_y,
         note.chars().count() as u16,
         &note,
         on(elev.muted_surface, bg),
     );
     if inner >= 3 {
-        let chip_bg = if selected || elev.is_dark {
-            palette.surface0
-        } else {
-            elev.surface
-        };
         put_text(
             buf,
             centre(" n "),
-            rect.y + 5,
+            chip_y,
             3,
             " n ",
             on(palette.accent, chip_bg).add_modifier(Modifier::BOLD),

@@ -59,7 +59,8 @@ pub(crate) enum Target {
     /// Enter focuses `bl-hollywood`. Kept distinct from `Hollywood`
     /// so `Wait::Hollywood` and `Row::Live` never share selection.
     HollywoodLive,
-    /// The calm row — shown, not actionable.
+    /// Legacy calm target retained for notification-focus compatibility.
+    #[cfg_attr(not(test), allow(dead_code))]
     Calm,
     /// The input line — `i`/Enter opens it for editing.
     Input,
@@ -129,9 +130,6 @@ pub(crate) enum Row<'a> {
     Headline(&'a str),
     /// A waiting item — an index into the sheet's `waits`.
     Wait(usize),
-    /// `✓ nothing waiting on you across <S> studios` — the calm row,
-    /// shown only while the needs-you list is empty.
-    Calm { studios: usize },
     /// A line of the user's exchange with Hollywood — the dialog's
     /// half drawn above the input (D21).
     Talk(&'a Exchange),
@@ -157,15 +155,13 @@ impl Row<'_> {
             Row::Fold { newest, .. } => Target::Talk(*newest),
             Row::Live(_) => Target::HollywoodLive,
             Row::Wait(i) => waits[*i].target(),
-            Row::Calm { .. } => Target::Calm,
             Row::Input => Target::Input,
             Row::Setup => Target::Setup,
         }
     }
 }
 
-/// The studio a waiting row belongs to, for the Call Sheet's
-/// one-row-per-studio projection. Hollywood cards are local rows.
+/// The studio a waiting row belongs to. Hollywood and stage rows have none.
 pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &'a str)> {
     match wait {
         Wait::Prompt(item) => Some((item.machine, item.studio.id.as_str())),
@@ -180,93 +176,43 @@ pub(crate) fn wait_studio_key<'a>(wait: &Wait<'a>) -> Option<(Option<&'a str>, &
     }
 }
 
-/// How many rows folded into this row's `+n`: the studio's other
-/// waiting decisions. Reports never enter this list at all.
-pub(crate) fn group_extra(waits: &[Wait<'_>], wait: &Wait<'_>) -> usize {
-    let Some(key) = wait_studio_key(wait) else {
-        return 0;
-    };
-    waits
-        .iter()
-        .filter(|w| wait_studio_key(w) == Some(key))
-        .count()
-        .saturating_sub(1)
-}
+/// Maximum number of newest exchange entries kept by `band_rows` for
+/// the focused HOLLYWOOD zone (up to 8 talk lines; older entries fold).
+pub(crate) const MAX_TALK_ENTRIES: usize = 8;
 
-/// One row index per studio: the first (most urgent) item leads, except
-/// that READY always leads its studio and absorbs that studio's asks.
-fn band_wait_indexes(waits: &[Wait<'_>]) -> Vec<usize> {
-    let mut indexes = Vec::new();
-    let mut slots = std::collections::BTreeMap::new();
-    for (i, wait) in waits.iter().enumerate() {
-        let Some((machine, studio)) = wait_studio_key(wait) else {
-            indexes.push(i);
-            continue;
-        };
-        let key = (machine.map(str::to_string), studio.to_string());
-        match slots.get(&key).copied() {
-            None => {
-                slots.insert(key, indexes.len());
-                indexes.push(i);
-            }
-            Some(slot) => {
-                let lead = &waits[indexes[slot]];
-                if matches!(wait, Wait::Ready(_)) && !matches!(lead, Wait::Ready(_)) {
-                    indexes[slot] = i;
-                }
-            }
-        }
-    }
-    indexes
-}
-
-/// The band's rows in draw order: the headline (with an agent), the
-/// waiting items — or the calm row — then the input line, or the
-/// setup line without an agent. The waits list is what `Row::Wait`
-/// indexes and what scroll/detail bookkeeping numbers.
+/// The band's rows in screen order: WAITING first (absent when calm),
+/// then HOLLYWOOD (fold badge, headline when non-duplicate, newest talk
+/// lines up to 8, live progress row, and the input or setup row).
 pub(crate) fn band_rows<'a>(
     machines: &'a [MachineSummary],
     status: &Status<'a>,
     agent: bool,
 ) -> (Vec<Wait<'a>>, Vec<Row<'a>>) {
     let mut out: Vec<Row<'a>> = Vec::new();
-    let summary = local_summary(machines);
-    if agent
-        && let Some(hw) = summary.and_then(|s| s.hollywood.as_ref())
-        && let Some(headline) = hw.headline.as_deref()
-    {
-        // R3-M1: the newest exchange line already prints this
-        // headline — drawing both doubles the report in one band.
-        let newest_reply = hw.exchange.iter().rev().find(|e| e.who == "hollywood");
-        let duplicated = newest_reply
-            .is_some_and(|e| hw.headline_seq == Some(e.seq) || e.text.trim() == headline.trim());
-        if !duplicated {
-            out.push(Row::Headline(headline));
-        }
-    }
     let waits = waiting_items(machines, status);
-    if waits.is_empty() {
-        out.push(Row::Calm {
-            studios: crate::panel::data::studio_count(machines),
-        });
-    } else {
-        out.extend(band_wait_indexes(&waits).into_iter().map(Row::Wait));
-    }
-    // The dialog's visible half: the newest turn and the turn before
-    // it, oldest first, right above the input they continue into.
-    // Older lines fold into one dim row. Hollywood's live row follows
-    // the newest `user ›` line while that line has no reply after it.
+    out.extend((0..waits.len()).map(Row::Wait));
+    let summary = local_summary(machines);
     if agent {
-        let talk = summary
-            .and_then(|s| s.hollywood.as_ref())
-            .map(|h| h.exchange.as_slice())
-            .unwrap_or(&[]);
+        let hw = summary.and_then(|s| s.hollywood.as_ref());
+        let talk = hw.map(|h| h.exchange.as_slice()).unwrap_or(&[]);
         let start = visible_start(talk);
         if start > 0 {
             out.push(Row::Fold {
                 count: start,
                 newest: talk[start - 1].seq,
             });
+        }
+        if let Some(headline) = hw.and_then(|h| h.headline.as_deref()) {
+            // R3-M1: the newest exchange line already prints this
+            // headline — drawing both doubles the report in one band.
+            let newest_reply =
+                hw.and_then(|h| h.exchange.iter().rev().find(|e| e.who == "hollywood"));
+            let duplicated = newest_reply.is_some_and(|e| {
+                hw.and_then(|h| h.headline_seq) == Some(e.seq) || e.text.trim() == headline.trim()
+            });
+            if !duplicated {
+                out.push(Row::Headline(headline));
+            }
         }
         let live = hollywood_live(machines);
         for (i, line) in talk.iter().enumerate().skip(start) {
@@ -277,25 +223,95 @@ pub(crate) fn band_rows<'a>(
                 out.push(Row::Live(live));
             }
         }
+        out.push(Row::Input);
+    } else {
+        out.push(Row::Setup);
     }
-    out.push(if agent { Row::Input } else { Row::Setup });
     (waits, out)
 }
 
-/// The index the talk window starts at: a turn is a `user ›` line and
-/// everything after it up to the next one, and the newest turn plus
-/// the turn before it stay; with no user line the newest two lines.
-pub(crate) fn visible_start(talk: &[Exchange]) -> usize {
-    let users: Vec<usize> = talk
+/// Draw-aware vertical navigation stops across WAITING + HOLLYWOOD
+/// for `↑`/`↓` movement so focus crosses zone boundaries cleanly without
+/// landing on folded-off talk rows.
+pub(crate) fn nav_band_targets(
+    frame: ratatui::layout::Rect,
+    machines: &[MachineSummary],
+    status: &Status<'_>,
+    hollywood: &super::Hollywood,
+    opts: super::LayerOpts,
+) -> Vec<Target> {
+    let (waits, rows) = band_rows(machines, status, opts.agent);
+    let mut nav_hw = super::Hollywood::new();
+    nav_hw.mode = hollywood.mode;
+    nav_hw.confirm = hollywood.confirm.clone();
+    nav_hw.selected = hollywood.selected.clone();
+    let plan = super::plan::plan(frame, &waits, &rows, &nav_hw, opts);
+    let talk_total = rows.iter().filter(|r| matches!(r, Row::Talk(_))).count();
+    let shown_talks = (plan.talk as usize).min(talk_total);
+    let skipped_talks = talk_total.saturating_sub(shown_talks);
+    let talk_entries: Vec<&Exchange> = rows
         .iter()
-        .enumerate()
-        .filter(|(_, e)| e.who == "user")
-        .map(|(i, _)| i)
+        .filter_map(|r| match r {
+            Row::Talk(e) => Some(*e),
+            _ => None,
+        })
         .collect();
-    match users.len() {
-        0 => talk.len().saturating_sub(2),
-        n => users[n.saturating_sub(2)],
+    let model_fold = rows.iter().find_map(|r| match r {
+        Row::Fold { count, newest } => Some((*count, *newest)),
+        _ => None,
+    });
+    let fold_target = if plan.hollywood_rule && (skipped_talks > 0 || model_fold.is_some()) {
+        if skipped_talks > 0 {
+            Some(Target::Talk(talk_entries[skipped_talks - 1].seq))
+        } else {
+            model_fold.map(|(_, newest)| Target::Talk(newest))
+        }
+    } else {
+        None
+    };
+
+    let mut out = Vec::new();
+    let mut talk_seen = 0usize;
+    let mut emitted_fold = false;
+    for row in &rows {
+        match row {
+            Row::Wait(i) => out.push(waits[*i].target()),
+            Row::Fold { .. } => {
+                if !emitted_fold && let Some(t) = fold_target.clone() {
+                    out.push(t);
+                    emitted_fold = true;
+                }
+            }
+            Row::Headline(_) if plan.headline => {
+                if !emitted_fold && let Some(t) = fold_target.clone() {
+                    out.push(t);
+                    emitted_fold = true;
+                }
+                out.push(Target::Headline);
+            }
+            Row::Talk(line) => {
+                if !emitted_fold && let Some(t) = fold_target.clone() {
+                    out.push(t);
+                    emitted_fold = true;
+                }
+                let idx = talk_seen;
+                talk_seen += 1;
+                if idx >= skipped_talks {
+                    out.push(Target::Talk(line.seq));
+                }
+            }
+            Row::Live(_) if plan.live => out.push(Target::HollywoodLive),
+            Row::Input | Row::Setup => out.push(row.target(&waits)),
+            _ => {}
+        }
     }
+    out
+}
+
+/// The index the kept talk window starts at: at most `MAX_TALK_ENTRIES`
+/// newest lines; earlier ones fold behind the HOLLYWOOD rule / `N earlier`.
+pub(crate) fn visible_start(talk: &[Exchange]) -> usize {
+    talk.len().saturating_sub(MAX_TALK_ENTRIES)
 }
 
 /// The live row and the exchange index it follows: the newest `user ›`

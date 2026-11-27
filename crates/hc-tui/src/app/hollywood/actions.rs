@@ -361,6 +361,10 @@ impl App {
             (Some(Target::Studio(key)), KeyCode::Char('f'))
                 if self.hollywood_studio_ready(&key) =>
             {
+                let band = self.hollywood_nav_band();
+                if let Some(idx) = band.iter().position(|t| t == &Target::Ready(key.clone())) {
+                    self.hollywood_reveal_card(&band, idx);
+                }
                 self.hollywood.confirm = Some(Confirm::Finish(key));
             }
             _ => return false,

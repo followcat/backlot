@@ -159,7 +159,7 @@ fn surface_differs_from_terminal_background_across_all_19_bundled_themes() {
 }
 
 #[test]
-fn busy_callsheet_200x44_and_100x40_preserve_zones_frames_wait_talk_compose_and_shadow() {
+fn busy_callsheet_200x44_and_100x40_preserve_focus_dock_zones_without_shadow() {
     let now_ms = 1_000_000;
     let summary = busy_summary(now_ms);
     let palette = Palette::backlot();
@@ -173,23 +173,23 @@ fn busy_callsheet_200x44_and_100x40_preserve_zones_frames_wait_talk_compose_and_
     hw.active_studio = Some(StudioKey::local("beta-api"));
     hw.now_ms = Some(now_ms);
 
-    // 200x44: cap = 22, all zones fit including 7-row frames, 2 waiting rows (selected keeps detail),
-    // HOLLYWOOD rule with folded earlier turns badge, wrapped CJK/EN exchange, compose, hints, and shadow at y=22.
     let area_wide = Rect::new(0, 0, 200, 44);
     let list = machines(Some(&summary));
     let opts = LayerOpts {
         agent: true,
         mobile: false,
         suppress_highlights: false,
-        no_shadow: false,
+        no_shadow: true,
     };
+
+    // 1. WAITING focused at 200x44: col-0 `▌` down the zone, single unfocused talk line + strip, zero shadow.
     let (h_wide, sh_wide) = expanded_extent(area_wide, &list, &stage_up, &hw, opts);
     assert_eq!(
         h_wide,
         expanded_height(area_wide, &list, &stage_up, &hw, opts)
     );
     assert!(h_wide <= 22, "200x44 cap <= 22, got {h_wide}");
-    assert_eq!(sh_wide, 1, "external bottom shadow enabled at height 44");
+    assert_eq!(sh_wide, 0, "external shadow always disabled in focus dock");
 
     let mut buf_w = Buffer::empty(area_wide);
     let hits_w = render(
@@ -202,24 +202,18 @@ fn busy_callsheet_200x44_and_100x40_preserve_zones_frames_wait_talk_compose_and_
         opts,
         &palette,
     );
-    assert!(hits_w.shadow_drawn);
-    assert_eq!(buf_w[(10, hits_w.area.bottom())].bg, elev.shadow.unwrap());
-
+    assert!(!hits_w.shadow_drawn);
     let text_w = lines(&buf_w, area_wide).join("\n");
-    assert!(text_w.contains("STUDIOS · 4"), "{text_w}");
+    assert!(!text_w.contains("STUDIOS ·"), "{text_w}");
+    assert!(!text_w.contains("WAITING ON YOU"), "{text_w}");
+    assert!(text_w.contains("STUDIOS 4"), "{text_w}");
     assert!(
-        text_w.contains("▸ beta-api"),
-        "active main-pane marker: {text_w}"
+        text_w.contains("[▸beta-api"),
+        "active strip chip:\n{text_w}"
     );
-    assert!(text_w.contains("WAITING ON YOU · 2"), "{text_w}");
-    assert!(text_w.contains("HOLLYWOOD"), "{text_w}");
-    assert!(text_w.contains("earlier · ↵ read"), "{text_w}");
-    assert!(text_w.contains("✦ hollywood"), "{text_w}");
-    assert!(text_w.contains("› you"), "{text_w}");
+    assert!(text_w.contains("earlier"), "inline fold badge:\n{text_w}");
     assert!(text_w.contains("tell hollywood…"), "{text_w}");
 
-    // Waiting row col 2 has persistent `▎`, selected row also has `▌▸` on `raised_row`,
-    // and unselected CARD row still has col-2 `▎`.
     let prompt_y = hits_w
         .rows
         .iter()
@@ -239,63 +233,86 @@ fn busy_callsheet_200x44_and_100x40_preserve_zones_frames_wait_talk_compose_and_
     assert_eq!(buf_w[(2, prompt_y)].symbol(), "▎");
     assert_eq!(buf_w[(2, prompt_y)].fg, palette.red);
     assert_eq!(buf_w[(2, prompt_y)].bg, elev.raised_row);
-    assert_eq!(buf_w[(0, card_y)].symbol(), " ");
+    // Col-0 zone gutter spans unselected waits inside focused WAITING too.
+    assert_eq!(buf_w[(0, card_y)].symbol(), "▌");
+    assert_eq!(buf_w[(0, card_y)].fg, palette.accent);
     assert_eq!(buf_w[(2, card_y)].symbol(), "▎");
     assert_eq!(buf_w[(2, card_y)].fg, palette.accent);
     assert_eq!(buf_w[(2, card_y)].bg, elev.surface);
 
-    // 100x40: cap = 20, 7-row frames survive ahead of older talk lines, CJK wraps/clamps <= 2 lines with `…`.
+    // 2. HOLLYWOOD focused at 100x40 (or 100x26 when folding >6 lines): `── HOLLYWOOD ──` rule + CJK wrap/clamp.
+    let area_fold = Rect::new(0, 0, 100, 26);
+    let mut hw_talk = Hollywood::new();
+    hw_talk.mode = LayerMode::Expanded;
+    hw_talk.selected = Some(Target::Input);
+    hw_talk.active_studio = Some(StudioKey::local("beta-api"));
+    hw_talk.now_ms = Some(now_ms);
+    let (h_fold, sh_fold) = expanded_extent(area_fold, &list, &stage_up, &hw_talk, opts);
+    assert!(h_fold <= 13, "100x26 cap <= 13, got {h_fold}");
+    assert_eq!(sh_fold, 0);
+    let mut buf_fold = Buffer::empty(area_fold);
+    render(
+        &mut buf_fold,
+        area_fold,
+        &list,
+        Some("local"),
+        &stage_up,
+        &hw_talk,
+        opts,
+        &palette,
+    );
+    let text_fold = lines(&buf_fold, area_fold).join("\n");
+    assert!(text_fold.contains("── HOLLYWOOD"), "{text_fold}");
+    assert!(text_fold.contains("earlier · ↵ read"), "{text_fold}");
+    assert!(
+        text_fold.contains('…'),
+        "2-line CJK clamp adds ellipsis:\n{text_fold}"
+    );
+    assert!(text_fold.contains("tell hollywood…"), "{text_fold}");
+
+    // 3. STUDIOS focused at 100x40: centered perforation + 7-row frames + `▸ beta-api` active mark.
     let area_100 = Rect::new(0, 0, 100, 40);
-    let (h_100, sh_100) = expanded_extent(area_100, &list, &stage_up, &hw, opts);
-    assert!(h_100 <= 20, "100x40 cap <= 20, got {h_100}");
-    assert_eq!(sh_100, 1);
-    let mut buf_100 = Buffer::empty(area_100);
-    let hits_100 = render(
-        &mut buf_100,
+    let mut hw_studios = Hollywood::new();
+    hw_studios.mode = LayerMode::Expanded;
+    hw_studios.selected = Some(Target::Studio(StudioKey::local("acme-shop")));
+    hw_studios.active_studio = Some(StudioKey::local("beta-api"));
+    hw_studios.now_ms = Some(now_ms);
+    let mut buf_st = Buffer::empty(area_100);
+    let hits_st = render(
+        &mut buf_st,
         area_100,
         &list,
         Some("local"),
         &stage_up,
-        &hw,
+        &hw_studios,
         opts,
         &palette,
     );
-    let frame_rect = hits_100
+    let frame_rect = hits_st
         .rows
         .iter()
         .find(|(_, t)| matches!(t, Target::Studio(_)))
         .unwrap()
         .0;
-    assert_eq!(frame_rect.height, 7, "7-row frames preserved at 100x40");
-    let text_100 = lines(&buf_100, area_100).join("\n");
-    assert!(text_100.contains("earlier · ↵ read"), "{text_100}");
-    assert!(
-        text_100.contains('…'),
-        "2-line CJK clamp adds ellipsis:\n{text_100}"
+    assert_eq!(
+        frame_rect.height, 7,
+        "7-row frames preserved at 100x40 when STUDIOS focused"
     );
-    assert!(text_100.contains("tell hollywood…"), "{text_100}");
+    let text_st = lines(&buf_st, area_100).join("\n");
+    assert!(
+        text_st.contains("▸ beta-api"),
+        "active mark on studio frame:\n{text_st}"
+    );
 
     if std::env::var_os("CALLSHEET_ZONES_DUMP").is_some() {
-        eprintln!("=== AFTER 200x44 ===");
         eprintln!(
             "{}",
             dump_annotated(
                 &buf_w,
                 area_wide,
                 &palette,
-                hits_w.area.bottom() + 1,
+                hits_w.area.height,
                 hits_w.input.y
-            )
-        );
-        eprintln!("=== AFTER 100x40 ===");
-        eprintln!(
-            "{}",
-            dump_annotated(
-                &buf_100,
-                area_100,
-                &palette,
-                hits_100.area.bottom() + 1,
-                hits_100.input.y
             )
         );
     }
@@ -352,7 +369,7 @@ fn dump_annotated(buf: &Buffer, area: Rect, palette: &Palette, rows: u16, input_
 }
 
 #[test]
-fn waiting_rule_omits_when_calm_and_shows_scroll_range_without_overlapping_compose() {
+fn waiting_omits_when_calm_and_shows_scroll_range_without_overlapping_compose() {
     let mut summary = busy_summary(1_000_000);
     summary.studios[0].roles[0].attention_user = false;
     summary.studios[0].roles[0].attention = None;
@@ -364,30 +381,14 @@ fn waiting_rule_omits_when_calm_and_shows_scroll_range_without_overlapping_compo
     let text = lines(&buf, area).join("\n");
     assert!(
         !text.contains("WAITING ON YOU"),
-        "calm sheet drops waiting rule:\n{text}"
+        "focus dock removes WAITING ON YOU rule:\n{text}"
     );
     assert!(
-        text.contains("✓ nothing waiting on you across 4 studios"),
-        "{text}"
+        !text.contains("nothing waiting on you"),
+        "calm sheet omits calm filler row:\n{text}"
     );
 
-    // 1. Direct `WAITING ON YOU` rule renders `<top>–<bot>/<total>` when scroll_range is active.
-    let mut rule_buf = Buffer::empty(Rect::new(0, 0, 120, 1));
-    crate::hollywood::zone::draw_waiting_rule(
-        &mut rule_buf,
-        Rect::new(0, 0, 120, 1),
-        0,
-        7,
-        true,
-        false,
-        Some((1, 4)),
-        &palette,
-    );
-    let rule_line = row_text(&rule_buf, Rect::new(0, 0, 120, 1), 0);
-    assert!(rule_line.contains("WAITING ON YOU · 7"), "{rule_line}");
-    assert!(rule_line.contains("1–4/7"), "{rule_line}");
-
-    // 2. Overflowing distinct studios across short height places `<top>–<bot>/<total>` in title/hints, never on compose.
+    // Overflowing distinct studios across short height places `<top>–<bot>/<total>` on title/first wait, never on compose.
     let mut overflow_val = serde_json::to_value(busy_summary(1_000_000)).unwrap();
     let extra_studios = [
         "beta-api",
@@ -400,6 +401,9 @@ fn waiting_rule_omits_when_calm_and_shows_scroll_range_without_overlapping_compo
         "iota-bus",
         "kappa-mq",
         "lambda-s3",
+        "mu-cache",
+        "nu-queue",
+        "xi-cron",
     ];
     overflow_val["hollywood"]["cards"] = serde_json::json!(
         extra_studios
@@ -415,15 +419,27 @@ fn waiting_rule_omits_when_calm_and_shows_scroll_range_without_overlapping_compo
             .collect::<Vec<_>>()
     );
     let overflow: Summary = serde_json::from_value(overflow_val).unwrap();
+    // 14 total waits at h=22 (cap=12): title shed, `1–11/14` shown on first wait row.
     let short_area = Rect::new(0, 0, 120, 22);
     let (obuf, ohits) = draw(short_area, Some(&overflow), true, &hw, false, &palette);
     let otext = lines(&obuf, short_area).join("\n");
-    assert!(otext.contains("/11"), "scroll range rendered:\n{otext}");
+    assert!(otext.contains("/14"), "scroll range rendered:\n{otext}");
     let compose_line = row_text(&obuf, short_area, ohits.input.y);
     assert!(
-        !compose_line.contains("/11"),
+        !compose_line.contains("/14"),
         "compose line must stay clean: {compose_line:?}"
     );
+    // 14 total waits at h=26 (cap=13): title stays and carries `1–8/14` (or similar).
+    let med_area = Rect::new(0, 0, 120, 26);
+    let (mbuf, mhits) = draw(med_area, Some(&overflow), true, &hw, false, &palette);
+    let title_line = row_text(&mbuf, med_area, mhits.title.y);
+    let mtext = lines(&mbuf, med_area).join("\n");
+    if mhits.viewport_rows < 14 {
+        assert!(
+            title_line.contains("/14") || mtext.contains("/14"),
+            "title or wait carries scroll range:\n{mtext}"
+        );
+    }
 }
 
 #[test]
@@ -451,20 +467,37 @@ fn compose_keeps_italic_placeholder_while_editing_empty_and_selection_highlights
     let cur = ehits.cursor.expect("editing cursor");
     assert_eq!((cur.x, cur.y), (fx + 4, fy));
 
-    // 2. Selecting folded target highlights `▸ <k> earlier · ↵ read` on `HOLLYWOOD` rule with `raised_row`.
+    // 2. Selecting folded target when 9 turns exist highlights `▸ <k> earlier · ↵ read` on `── HOLLYWOOD ──`.
+    let mut folded_sum = summary.clone();
+    let extra: Vec<_> = (1..=9)
+        .map(|i| {
+            serde_json::json!({
+                "seq": i,
+                "ts_ms": now_ms - 60_000,
+                "who": if i % 2 == 1 { "user" } else { "hollywood" },
+                "text": format!("turn {i}"),
+            })
+        })
+        .collect();
+    folded_sum = serde_json::from_value({
+        let mut v = serde_json::to_value(&folded_sum).unwrap();
+        v["hollywood"]["exchange"] = serde_json::Value::Array(extra);
+        v
+    })
+    .unwrap();
     let mut fold_hw = layer(LayerMode::Expanded);
-    fold_hw.selected = Some(Target::Talk(2));
+    fold_hw.selected = Some(Target::Talk(1));
     fold_hw.now_ms = Some(now_ms);
-    let (fbuf, fhits) = draw(area, Some(&summary), true, &fold_hw, false, &palette);
+    let (fbuf, fhits) = draw(area, Some(&folded_sum), true, &fold_hw, false, &palette);
     let fold_rect = fhits
         .rows
         .iter()
-        .find(|(_, t)| *t == Target::Talk(2))
+        .find(|(_, t)| *t == Target::Talk(1))
         .expect("fold badge hit")
         .0;
     let fold_row = row_text(&fbuf, area, fold_rect.y);
     assert!(fold_row.contains("HOLLYWOOD"), "{fold_row}");
-    assert!(fold_row.contains("▸ 2 earlier · ↵ read"), "{fold_row}");
+    assert!(fold_row.contains("▸ 1 earlier · ↵ read"), "{fold_row}");
     assert_eq!(fbuf[(fold_rect.x + 1, fold_rect.y)].fg, palette.accent);
     assert_eq!(fbuf[(fold_rect.x + 1, fold_rect.y)].bg, elev.raised_row);
 

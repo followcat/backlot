@@ -120,9 +120,7 @@ async fn m_on_title_opens_menu_to_switch_hollywood_agent_via_unified_picker() {
     alt_y(&mut app);
     draw_to(&mut app, 120, 30);
     key(&mut app, hc_vt::Key::Escape);
-    key(&mut app, hc_vt::Key::Tab);
-    key(&mut app, hc_vt::Key::Tab);
-    key(&mut app, hc_vt::Key::ArrowUp);
+    app.hollywood_select(Target::Title);
     assert_eq!(app.hollywood.selected, Some(Target::Title));
     key(&mut app, hc_vt::Key::Char('m'));
     assert!(app.menu.is_some(), "`m` on Title opens the title menu");

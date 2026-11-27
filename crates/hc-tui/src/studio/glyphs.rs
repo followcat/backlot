@@ -383,6 +383,23 @@ pub(crate) fn contrast_fg(palette: &Palette) -> Color {
     }
 }
 
+/// Style for the 1-cell-padded current-studio capsule (` <id> ` / ` ▸ <id> `):
+/// bold `palette.text` on `elevation.raised_row` for RGB themes, falling back
+/// to bold + reverse on 16-color terminals where background fills drop.
+pub(crate) fn studio_capsule_style(palette: &Palette) -> Style {
+    let elev = palette.elevation();
+    if elev.is_terminal_16 {
+        Style::default()
+            .fg(palette.text)
+            .add_modifier(Modifier::BOLD | Modifier::REVERSED)
+    } else {
+        Style::default()
+            .fg(palette.text)
+            .bg(elev.raised_row)
+            .add_modifier(Modifier::BOLD)
+    }
+}
+
 /// The selected-row style: `selection_bg` + `text` `BOLD`, or
 /// `REVERSED` when the theme leaves `selection_bg` unset (terminal
 /// theme).

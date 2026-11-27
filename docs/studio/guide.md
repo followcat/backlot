@@ -544,7 +544,7 @@ The title line counts the studios (`lot · 2`). `stage stopped` means no live
 16-column strip shows each studio's health, a short `id·machine` label and progress or
 attention, and one row per active or blocked role.
 
-Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` focuses a
+Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Tab`/`Shift+Tab` jump across block sections (header, people, tasks, exchange, `›` input) and wrap between studios, `Enter` focuses a
 live person's terminal (a closed person reopens a resumable or fixed seat through the action
 tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens the Task &
 Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
