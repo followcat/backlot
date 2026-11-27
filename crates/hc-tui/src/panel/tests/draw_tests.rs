@@ -166,11 +166,11 @@ fn borders_are_honest_about_focus() {
     assert_eq!(buf[(area.x, top_y)].symbol(), "│");
     assert_eq!(buf[corner].fg, palette().accent);
     assert_eq!(buf[(area.x + 1, top_y)].symbol(), "╔");
-    // Unfocused, the resting corner (`╭`) and `gilt` frame return without `▌`.
+    // Unfocused, the resting corner (`╭`) and `bulb_warm` marquee frame return without `▌` for the current studio.
     let mut unfocused = panel(PanelMode::Expanded);
     unfocused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
-    assert_eq!(buf[corner].fg, palette().elevation().gilt);
+    assert_eq!(buf[corner].fg, palette().elevation().bulb_warm);
     assert_eq!(buf[(area.x + 1, top_y)].symbol(), "╭");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");

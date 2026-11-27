@@ -350,12 +350,17 @@ pub(crate) fn render_expanded(
                     });
                 let collapsed = state.collapsed_endpoints.contains(&endpoint.endpoint_id);
                 let marker = if collapsed { "▸" } else { "▾" };
+                let current_machine = config.studio_chrome
+                    && state.current_studio.is_some_and(|key| {
+                        endpoint_is_machine(&endpoint.endpoint_id, key.machine.as_deref())
+                    });
                 let status_badge = super::endpoint_sidebar_row::render_endpoint_row(
                     buffer,
                     name_row,
                     marker,
                     endpoint,
                     collapsed && &endpoint.endpoint_id == state.active_endpoint_id,
+                    current_machine,
                     state.machine_diagnostics,
                     palette,
                 );
