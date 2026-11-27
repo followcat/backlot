@@ -71,7 +71,7 @@ RowActions | Compose)`, or `CallSheet`):
 | `Space` | Open or close the three-line drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold line; on a studio header, fold/unfold the whole block |
 | `o` | On an opening-design row: open `design/v<N>.md` (`backlot report show --file …`) in the `Design` Reader (prepended with `Signing off also activates N check(s):` while unsigned and proposed checks exist). Otherwise: reopen a closed resumable person (`backlot reopen … --as user`) |
 | `r` | On an opening-design row or studio awaiting user design reply: focus the studio's `›` producer tell line (or run `backlot design open` when `SuggestSkip`) |
-| `a` | On an opening-design row (or inside its `Enter` show view): open the confirm modal (`sign off` — mentioning `+N check(s)` activation when proposed — vs `skip` + frozen file) and send `backlot design sign [--skip]` on confirm |
+| `a` | On an opening-design row (or inside its `Enter` show view or Design Reader): when proposed checks exist, opens a 3-choice modal listing every check verbatim (`name`, wrapped `run`, `timeout_s`, `expect`) with choices to sign + activate checks, sign without checks (`--no-checks`), or cancel; otherwise opens the confirm modal (`sign off` vs `skip` + frozen file). |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
 | `p` | Peek the person's terminal |
 | `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
