@@ -102,6 +102,8 @@ fn attention(seq: u64, role: &str, reason: &str) -> Event {
             reason: reason.into(),
             detail: "d".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     )
 }

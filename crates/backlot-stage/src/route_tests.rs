@@ -202,6 +202,8 @@ fn raise(dir: &Path, role: &str, reason: &str, needs_user: bool) {
                     reason,
                     detail: format!("screen saved to attention/{seq}.txt"),
                     needs_user,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
             files: Vec::new(),

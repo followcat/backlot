@@ -73,6 +73,7 @@ impl Stage {
                     .unwrap_or_else(|| now_ms + hit.retry_wait_ms + rl::RETRY_MARGIN_MS);
                 let until = rl::format_reset_local(display_reset_ms, now_ms);
                 let weekly_choice = rl::weekly_choice_dialog(text);
+                let acct = self.derive_role_account(w.runner, model);
                 let acct_detail = if hit.escalate_now {
                     if let Some(reset) = hit.reset_at_ms {
                         format!(
@@ -93,6 +94,8 @@ impl Stage {
                         text,
                         needs_user: hit.escalate_now,
                         bound: None,
+                        account: Some(acct.id),
+                        reset_at_ms: hit.reset_at_ms,
                     },
                     move |seq| {
                         if hit.escalate_now {
@@ -277,6 +280,8 @@ impl Stage {
                         text,
                         needs_user: user_owned,
                         bound: None,
+                        account: None,
+                        reset_at_ms: None,
                     },
                     move |seq| {
                         if user_owned {

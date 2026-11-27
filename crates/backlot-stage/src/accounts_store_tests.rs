@@ -221,7 +221,10 @@ fn stalled_clears_by_reset_time_recovery_and_retains_last_stall() {
     // Clearing only one role keeps account stalled until the last role recovers.
     assert!(file.clear_role_stall("acme-shop/actor-t2-c1"));
     assert!(file.accounts["claude:default"].stalled);
-    assert_eq!(file.accounts["claude:default"].stalled_by, vec!["hollywood"]);
+    assert_eq!(
+        file.accounts["claude:default"].stalled_by,
+        vec!["hollywood"]
+    );
 
     assert!(file.clear_role_stall("hollywood"));
     let entry = &file.accounts["claude:default"];
@@ -313,7 +316,10 @@ async fn stage_restart_and_manual_attention_clear_sync_accounts_json() {
     st2.sync_accounts_at(t0 + 65 * 60_000);
     let (disk2, _) = load(&base);
     assert!(disk2.accounts["claude:default"].stalled);
-    assert_eq!(disk2.accounts["claude:default"].reset_at_ms, Some(expected_reset));
+    assert_eq!(
+        disk2.accounts["claude:default"].reset_at_ms,
+        Some(expected_reset)
+    );
 
     // Manual `attention clear <seq>` clears the persisted stall too.
     let seq = store::load_state(&dir)
@@ -333,5 +339,92 @@ async fn stage_restart_and_manual_attention_clear_sync_accounts_json() {
     let (disk3, _) = load(&base);
     assert!(!disk3.accounts["claude:default"].stalled);
     assert_eq!(disk3.accounts["claude:default"].last_stall_ms, Some(t0));
-    assert_eq!(disk3.accounts["claude:default"].reset_at_ms, Some(expected_reset));
+    assert_eq!(
+        disk3.accounts["claude:default"].reset_at_ms,
+        Some(expected_reset)
+    );
+}
+
+#[tokio::test]
+async fn summary_view_populates_shared_accounts_and_role_fields() {
+    let base = TestDir::new("backlot-accounts-summary");
+    let dir_a = studio_dir_with_started_role(&base, "acme-shop", "actor-t1-c1", "claude");
+    let _dir_b = studio_dir_with_started_role(&base, "acme-web", "actor-t2-c1", "claude");
+
+    let mut stage = dummy_stage(&base).await;
+    *stage.hcfg.borrow_mut() = Some(crate::config::HollywoodCfg {
+        runner: "claude".into(),
+        model: "opus-5-5".into(),
+        effort: None,
+        key: None,
+        default_cast: None,
+    });
+    stage
+        .work
+        .borrow_mut()
+        .insert(("acme-web".into(), "actor-t2-c1".into()), backlot_model::summary::Work::Working);
+
+    let t0 = {
+        let ts = ((86_400_000u64 * 20_000) / 1000) as libc::time_t;
+        let mut local: libc::tm = unsafe { std::mem::zeroed() };
+        unsafe { libc::localtime_r(&ts, &mut local) };
+        local.tm_hour = 9;
+        local.tm_min = 10;
+        local.tm_sec = 0;
+        local.tm_isdst = -1;
+        (unsafe { libc::mktime(&mut local) } as u64) * 1000
+    };
+
+    let term = LiveTerminal {
+        address: "t1".into(),
+        status: Some(hc_proto::terminal::Status {
+            state: "waiting".into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let state_a = store::load_state(&dir_a).unwrap();
+    let watched = Watched {
+        dir: &dir_a,
+        state: &state_a,
+        role: "actor-t1-c1",
+        runner: "claude",
+        term: &term,
+    };
+    stage
+        .rate_limit(
+            "acme-shop",
+            &watched,
+            "You've hit your usage limit · resets 2:10pm\n",
+            backlot_model::summary::Work::Waiting,
+            t0,
+        )
+        .await
+        .unwrap();
+
+    stage.sync_accounts_at(t0);
+    let summary = stage.summary_view_at(&std::collections::BTreeMap::new(), t0);
+
+    // Hollywood & studio roles carry `account: Some("claude:default")`.
+    assert_eq!(
+        summary.hollywood.as_ref().and_then(|h| h.account.as_deref()),
+        Some("claude:default")
+    );
+    let shop = summary.studios.iter().find(|s| s.id == "acme-shop").unwrap();
+    let shop_actor = shop.roles.iter().find(|r| r.role == "actor-t1-c1").unwrap();
+    assert_eq!(shop_actor.account.as_deref(), Some("claude:default"));
+
+    // Aggregated `Summary.accounts` lists claude:default with stalled + active counts + shared roles.
+    let acct = summary
+        .accounts
+        .iter()
+        .find(|a| a.id == "claude:default")
+        .expect("summary.accounts must include claude:default");
+    assert!(acct.stalled);
+    assert_eq!(acct.reset_at_ms, Some(t0 + 5 * 3_600_000));
+    assert_eq!(acct.active, 2); // actor-t1-c1 + actor-t2-c1 live
+    assert_eq!(acct.working, 1); // acme-web/actor-t2-c1 working
+    assert!(acct.roles.iter().any(|r| r.studio == "hollywood" && r.role == "hollywood"));
+    assert!(acct.roles.iter().any(|r| r.studio == "acme-shop" && r.role == "actor-t1-c1" && r.stalled));
+    assert!(acct.roles.iter().any(|r| r.studio == "acme-web" && r.role == "actor-t2-c1" && r.working));
 }

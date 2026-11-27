@@ -391,6 +391,7 @@ fn an_open_root_is_healed_and_reported_once() {
         reason,
         detail,
         needs_user,
+        ..
     } = dir_open_event("director")
     else {
         panic!("dir_open_event is an attention");

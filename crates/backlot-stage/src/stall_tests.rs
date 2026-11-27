@@ -149,6 +149,8 @@ fn open_stall_is_one_reason_open() {
             ts_ms: 0,
             needs_user: false,
             cleared_reason: None,
+            account: None,
+            reset_at_ms: None,
         });
     }
     assert_eq!(stall::open_stall(&state, "writer").unwrap().seq, 3);
@@ -167,6 +169,8 @@ fn raised(seq: u64, role: &str) -> Attention {
         ts_ms: 0,
         needs_user: false,
         cleared_reason: None,
+        account: None,
+        reset_at_ms: None,
     }
 }
 

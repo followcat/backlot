@@ -183,6 +183,8 @@ fn a_user_owned_prompt_marks_the_attention_line() {
                 reason: crate::event::PERMISSION_PROMPT.into(),
                 detail: String::new(),
                 needs_user,
+                account: None,
+                reset_at_ms: None,
             },
         )
     };
@@ -291,6 +293,8 @@ fn counters_follow_the_ledger() {
                     reason: "permission".into(),
                     detail: "wants to write".into(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             ),
         ],
@@ -887,6 +891,8 @@ fn attention_user_marks_the_users_prompts() {
                 reason: crate::event::PERMISSION_PROMPT.into(),
                 detail: String::new(),
                 needs_user,
+                account: None,
+                reset_at_ms: None,
             },
         )
     };
@@ -1074,6 +1080,8 @@ fn attention_seq_and_detail_follow_the_open_attention() {
             reason: crate::event::PERMISSION_PROMPT.into(),
             detail,
             needs_user: true,
+            account: None,
+            reset_at_ms: None,
         },
     };
     let state = state_with(

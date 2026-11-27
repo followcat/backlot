@@ -172,6 +172,8 @@ impl Stage {
                 text,
                 needs_user: true,
                 bound: None,
+                account: None,
+                reset_at_ms: None,
             },
             move |seq| format!("{why}screen saved to attention/{seq}.txt"),
         )

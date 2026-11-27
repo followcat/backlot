@@ -285,6 +285,8 @@ impl Stage {
                             reason: reason.into(),
                             detail,
                             needs_user: true,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -311,6 +313,8 @@ impl Stage {
                                 "{rel} is tracked in git; backlot left it untouched so existing evidence remains in use"
                             ),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -367,6 +371,8 @@ impl Stage {
                             reason: reasons::LAUNCH_REFUSED.into(),
                             detail: format!("terminal.run: {e}"),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -458,6 +464,8 @@ impl Stage {
                             reason: reason.clone(),
                             detail: detail.clone(),
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                 }
@@ -587,6 +595,8 @@ impl Stage {
                                     reason: reason.into(),
                                     detail,
                                     needs_user: false,
+                                    account: None,
+                                    reset_at_ms: None,
                                 },
                             )?;
                         }
@@ -647,6 +657,8 @@ impl Stage {
                                     reason: e.reason.into(),
                                     detail: e.detail,
                                     needs_user: false,
+                                    account: None,
+                                    reset_at_ms: None,
                                 },
                             )?;
                         }

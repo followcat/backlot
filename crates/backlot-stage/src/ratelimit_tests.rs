@@ -334,17 +334,16 @@ fn recognizes_the_weekly_limit_paid_choice_dialog() {
 #[test]
 fn date_and_time_weekly_banners_parse_unclamped() {
     // NOON = day 20_000 = 2024-10-04 12:00:00 UTC -> Nov 30 2024 is +57 days.
-    let utc = parse_wait("resets Nov 30 at 12:00 UTC", NOON)
-        .expect("Nov 30 at 12:00 UTC should parse");
+    let utc =
+        parse_wait("resets Nov 30 at 12:00 UTC", NOON).expect("Nov 30 at 12:00 UTC should parse");
     assert_eq!(utc, 57 * 86_400_000);
 
-    let weekly_mon = parse_wait("resets Mon 9am", NOON)
-        .expect("weekday + 12h clock should parse");
+    let weekly_mon = parse_wait("resets Mon 9am", NOON).expect("weekday + 12h clock should parse");
     assert!(weekly_mon > 86_400_000, "{weekly_mon}");
 
     let fixture = include_str!("../tests/fixtures/claude/weekly-limit.txt");
-    let from_fixture = parse_wait(fixture, NOON)
-        .expect("weekly-limit fixture 'Monday at 9:00 AM' should parse");
+    let from_fixture =
+        parse_wait(fixture, NOON).expect("weekly-limit fixture 'Monday at 9:00 AM' should parse");
     assert!(from_fixture > 86_400_000, "{from_fixture}");
 
     let nov21 = parse_wait("You've hit your weekly limit · resets Nov 21, 4pm", NOON)

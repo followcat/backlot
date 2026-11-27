@@ -34,6 +34,8 @@ fn attention(role: &str, reason: &str) -> EventKind {
         reason: reason.into(),
         detail: "the screen".into(),
         needs_user: false,
+        account: None,
+        reset_at_ms: None,
     }
 }
 

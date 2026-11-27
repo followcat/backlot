@@ -70,6 +70,8 @@ fn a_producer_alert_leads_the_status_block() {
             reason: "stalled".into(),
             detail: "screen unchanged for 600s".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     ));
     let out = status(
@@ -103,6 +105,8 @@ fn a_producer_alert_leads_the_status_block() {
             reason: "cannot resume".into(),
             detail: "no session id to resume".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     ));
     let out = status(

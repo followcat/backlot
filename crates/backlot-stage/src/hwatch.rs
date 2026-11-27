@@ -112,9 +112,7 @@ impl Stage {
         let outcome = {
             let mut rp = self.hrate_pace.borrow_mut();
             let mut cp = self.hconn_pace.borrow_mut();
-            crate::handoff_term::sample_hollywood_error(
-                t, &text, work, &mut rp, &mut cp, now_ms,
-            )
+            crate::handoff_term::sample_hollywood_error(t, &text, work, &mut rp, &mut cp, now_ms)
         };
         if let Some(hit) = outcome.quota_hit {
             let detail = match &outcome.blocked {

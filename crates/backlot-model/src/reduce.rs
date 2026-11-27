@@ -629,6 +629,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             reason,
             detail,
             needs_user,
+            account,
+            reset_at_ms,
         } => {
             state.attention.push(Attention {
                 seq,
@@ -639,6 +641,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
                 needs_user: *needs_user,
                 cleared_reason: None,
+                account: account.clone(),
+                reset_at_ms: *reset_at_ms,
             });
             state
                 .targets

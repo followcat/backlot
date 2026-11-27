@@ -321,6 +321,74 @@ pub struct RoleSummary {
     /// `waiting`. Documents an older stage wrote have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_since_ms: Option<u64>,
+    /// Derived `<runner>:<label>` account identifier when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+}
+
+/// Shared non-secret account quota & concurrency view (PR 1: counts + stall state).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountSummary {
+    /// Canonical non-secret id, e.g. `"claude:default"`, `"opencode:cline-pass"`.
+    pub id: String,
+    pub runner: String,
+    /// Non-secret origin hint: `"default"`, `"config-dir (~/.claude-work)"`, `"env-token"`, `"provider (...)"`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
+    /// Roles currently occupying a live terminal on this account.
+    pub active: u32,
+    /// Subset of `active` whose terminal is currently mid-turn (`Work::Working`).
+    pub working: u32,
+    /// Optional configured max active cap (`None` when unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_active: Option<u32>,
+    /// Remaining slots (`max_active - active`), `None` when unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room: Option<u32>,
+    /// Number of wanted roles currently queued waiting on this account cap.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub queued: u32,
+    /// True while the account is currently in a quota stall.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stalled: bool,
+    /// Epoch ms of the most recent quota stall seen on any role sharing this account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_stall_ms: Option<u64>,
+    /// Unclamped epoch ms when the quota is expected to reset (if known).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_at_ms: Option<u64>,
+    /// Window horizon hint (`"short"`, `"long"`, `"unknown"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<QuotaWindow>,
+    /// Every role (across open studios and Hollywood) assigned to this account.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<AccountRoleSummary>,
+}
+
+/// Per-role membership inside [`AccountSummary`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccountRoleSummary {
+    /// Studio id, or `"hollywood"` for the overseer.
+    pub studio: String,
+    /// Role key (`"producer"`, `"director"`, `"writer"`, `"actor-t1-c1"`, or `"hollywood"`).
+    pub role: String,
+    pub model: String,
+    /// True if the role currently has a live terminal.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub active: bool,
+    /// True if currently in `Work::Working`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub working: bool,
+    /// True if currently held waiting on an account cap.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub held: bool,
+    /// True if this specific role triggered/holds an open rate-limit stall.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub stalled: bool,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 /// A live role idle at its prompt this long reads `idle <n>m` rather
@@ -342,6 +410,9 @@ pub struct Summary {
     pub updated_ms: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub studios: Vec<StudioSummary>,
+    /// Derived per-account quota and membership rollup across studios + Hollywood.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<AccountSummary>,
     /// Hollywood's section — absent before it is configured; older
     /// documents without it still parse.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -649,6 +720,7 @@ pub fn summary_with_running(
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
                 restarted_ms: None,
                 idle_since_ms: None,
+                account: None,
             });
         }
         let studio_snippets: BTreeMap<u64, String> = snippets
@@ -745,6 +817,7 @@ pub fn summary_with_running(
         schema: SUMMARY_SCHEMA.into(),
         updated_ms,
         studios: out,
+        accounts: Vec::new(),
         hollywood: None,
         backlot_version: None,
         backlot_build: None,

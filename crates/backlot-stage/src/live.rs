@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use backlot_model::summary::{RoleRunning, Summary, Work};
+use backlot_model::summary::{AccountSummary, RoleRunning, Summary, Work};
 use serde::{Deserialize, Serialize};
 
 /// The file name under the state base.
@@ -59,6 +59,8 @@ pub struct Live {
     pub updated_ms: u64,
     #[serde(default)]
     pub roles: Vec<LiveRole>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<AccountSummary>,
 }
 
 /// The file under `base`.
@@ -102,7 +104,11 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
             idle_since_ms: None,
         });
     }
-    Live { updated_ms, roles }
+    Live {
+        updated_ms,
+        roles,
+        accounts: summary.accounts.clone(),
+    }
 }
 
 /// Write the facts atomically: a temp sibling renamed into place, so a
@@ -126,12 +132,13 @@ pub enum Write {
 }
 
 /// Whether to write this tick. The file is written whenever the roles'
-/// facts change, and otherwise on a [`HEARTBEAT_MS`] cadence so a
+/// or accounts' facts change, and otherwise on a [`HEARTBEAT_MS`] cadence so a
 /// stopped stage's file ages past [`STALE_MS`] and readers know it is
 /// stale — never on every tick, which would make the age meaningless.
 /// `written` is the last file's `updated_ms`, or `None` before the first.
 pub fn due(facts: &Live, written: Option<&Live>, now_ms: u64) -> Write {
-    let changed = written.is_none_or(|last| last.roles != facts.roles);
+    let changed = written
+        .is_none_or(|last| last.roles != facts.roles || last.accounts != facts.accounts);
     let heartbeat =
         written.is_none_or(|last| now_ms.saturating_sub(last.updated_ms) >= HEARTBEAT_MS);
     if changed || heartbeat {
@@ -200,6 +207,8 @@ pub struct LiveView {
     /// The idle-stretch start per `(studio, role)` while the role waits
     /// at its prompt — the nudge pass's clock, for `idle <n>m`.
     pub idle: BTreeMap<(String, String), u64>,
+    /// Aggregated account summaries (from `live.json` when available).
+    pub accounts: Vec<AccountSummary>,
     /// A fresh file exists — the stage is running.
     pub running: bool,
 }
@@ -212,6 +221,7 @@ impl LiveView {
                 work: work_map(&live),
                 running_cmds: running_map(&live),
                 idle: idle_map(&live),
+                accounts: live.accounts,
                 running: true,
             },
             None => LiveView::default(),

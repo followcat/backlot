@@ -159,6 +159,8 @@ fn an_actor_records_only_its_own_delivery_block_and_messages() {
                 reason: PERMISSION_PROMPT.into(),
                 detail: String::new(),
                 needs_user: false,
+                account: None,
+                reset_at_ms: None,
             },
             "the stage",
         ),
@@ -402,6 +404,8 @@ fn the_other_roles_keep_what_they_had() {
                     reason: PERMISSION_PROMPT.into(),
                     detail: String::new(),
                     needs_user: false,
+                    account: None,
+                    reset_at_ms: None,
                 },
             )
         ),

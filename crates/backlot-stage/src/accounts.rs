@@ -262,7 +262,11 @@ fn sanitize_label(raw: &str) -> String {
     while truncated.ends_with(['-', '_']) {
         truncated.pop();
     }
-    if truncated.is_empty() || !truncated.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+    if truncated.is_empty()
+        || !truncated
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
     {
         return String::new();
     }

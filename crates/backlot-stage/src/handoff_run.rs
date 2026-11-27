@@ -152,6 +152,7 @@ impl Stage {
             work: self.work.borrow().clone(),
             running_cmds: BTreeMap::new(),
             idle: self.idle_since.borrow().clone(),
+            accounts: Vec::new(),
             running: now_ms > 0,
         };
         let brief = {

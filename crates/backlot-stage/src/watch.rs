@@ -334,6 +334,8 @@ pub(crate) fn session_event(
             wait_ms / 1000
         ),
         needs_user: false,
+        account: None,
+        reset_at_ms: None,
     }]
 }
 
@@ -534,6 +536,8 @@ impl Stage {
                                  the stage does not answer there"
                             .into(),
                         needs_user: true,
+                        account: None,
+                        reset_at_ms: None,
                     },
                 )?;
             }

@@ -410,6 +410,8 @@ impl Stage {
                             reason: reasons::OWED.into(),
                             detail,
                             needs_user: false,
+                            account: None,
+                            reset_at_ms: None,
                         },
                     )?;
                     crate::stagelog::stage_log!("{role} still owes a step — escalated");

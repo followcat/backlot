@@ -39,6 +39,8 @@ pub(crate) struct Raise<'a> {
     pub text: &'a str,
     pub needs_user: bool,
     pub bound: Option<String>,
+    pub account: Option<String>,
+    pub reset_at_ms: Option<u64>,
 }
 
 impl Stage {
@@ -177,6 +179,8 @@ impl Stage {
         let pending_bound = bound_scratch.clone();
         let needs_user = raise.needs_user;
         let reason = raise.reason;
+        let account = raise.account;
+        let reset_at_ms = raise.reset_at_ms;
         let result = store::append(dir, move |_, seq| {
             let mut files = vec![crate::store::PendingFile {
                 src: pending_scratch,
@@ -198,6 +202,8 @@ impl Stage {
                         reason: reason.into(),
                         detail: detail(seq),
                         needs_user,
+                        account: account.clone(),
+                        reset_at_ms,
                     },
                 ),
                 files,

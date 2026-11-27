@@ -987,6 +987,7 @@ impl Stage {
             hw.handoff = handoff;
             s.hollywood = Some(hw);
         }
+        self.attach_accounts_to_summary(&mut s, now_ms);
         s
     }
 }

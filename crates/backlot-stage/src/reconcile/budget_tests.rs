@@ -46,6 +46,8 @@ fn raised(seq: u64, role: &str) -> Event {
             reason: "over budget".into(),
             detail: "task t1 is over budget: 3s used of 2s".into(),
             needs_user: false,
+            account: None,
+            reset_at_ms: None,
         },
     )
 }

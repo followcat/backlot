@@ -327,14 +327,12 @@ fn next_weekday_delta(target_wday: i32, clock: ClockSpec, now_ms: u64) -> Option
         let days = (now_ms / DAY_MS) as i64;
         let cur_wday = (days + 4).rem_euclid(7) as i32;
         let mut ahead = (target_wday - cur_wday).rem_euclid(7) as i64;
-        let mut target_ms = ((days + ahead) as u64) * DAY_MS
-            + clock.hour24 * 3_600_000
-            + clock.minute * 60_000;
+        let mut target_ms =
+            ((days + ahead) as u64) * DAY_MS + clock.hour24 * 3_600_000 + clock.minute * 60_000;
         if target_ms < now_ms {
             ahead += 7;
-            target_ms = ((days + ahead) as u64) * DAY_MS
-                + clock.hour24 * 3_600_000
-                + clock.minute * 60_000;
+            target_ms =
+                ((days + ahead) as u64) * DAY_MS + clock.hour24 * 3_600_000 + clock.minute * 60_000;
         }
         return Some(target_ms.saturating_sub(now_ms));
     }
@@ -371,9 +369,8 @@ fn next_month_day_delta(month: u32, day: u32, clock: ClockSpec, now_ms: u64) -> 
             if days < 0 {
                 continue;
             }
-            let target_ms = (days as u64) * DAY_MS
-                + clock.hour24 * 3_600_000
-                + clock.minute * 60_000;
+            let target_ms =
+                (days as u64) * DAY_MS + clock.hour24 * 3_600_000 + clock.minute * 60_000;
             if target_ms >= now_ms {
                 return Some(target_ms.saturating_sub(now_ms));
             }
@@ -445,7 +442,13 @@ fn days_in_month(y: i64, m: u32) -> u32 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 => if is_leap_year(y) { 29 } else { 28 },
+        2 => {
+            if is_leap_year(y) {
+                29
+            } else {
+                28
+            }
+        }
         _ => 0,
     }
 }

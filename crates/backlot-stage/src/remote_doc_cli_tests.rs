@@ -429,6 +429,7 @@ fn remote_hollywood_switch_cancel_and_status_travel_over_doc_queue() {
         &crate::live::Live {
             updated_ms: crate::live::now_ms(),
             roles: Vec::new(),
+            accounts: Vec::new(),
         },
     )
     .unwrap();
