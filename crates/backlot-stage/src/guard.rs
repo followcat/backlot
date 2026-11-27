@@ -161,6 +161,11 @@ pub(crate) fn record_verdict(
     if !sdir.join("events.jsonl").is_file() {
         return Ok(());
     }
+    if disposition == RefusalDisposition::Refused
+        && crate::guard_probes::is_suppressed_probe_refusal(env, argv, rule)
+    {
+        return crate::guard_probes::record_suppressed_probe(&sdir).map(|_| ());
+    }
 
     let task = env.get("BACKLOT_TASK").map(String::from);
     let session = env.get("HC_TERMINAL_ID").map(String::from);

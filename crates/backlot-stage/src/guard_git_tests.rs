@@ -606,11 +606,12 @@ fn custom_push_in_cast_toml_and_agy_hook_classification() {
         GuardVerdict::Card { .. }
     ));
 
-    // agy settings omit static git push / gh pr deny rules.
+    // agy settings omit static git push and gh command deny rules (hook + shim enforce writes).
     let settings = String::from_utf8(agy::settings_content(None, None).unwrap()).unwrap();
     assert!(!settings.contains("command(git push)"), "{settings}");
     assert!(!settings.contains("command(gh pr)"), "{settings}");
-    assert!(settings.contains("command(gh release)"), "{settings}");
+    assert!(!settings.contains("command(gh repo)"), "{settings}");
+    assert!(settings.contains("command(hc update)"), "{settings}");
 
     // agy hook classifies recorded feature push -> allow, protected -> deny (Card, no attention), force -> deny (Refused + attention).
     let sig = gs.scratch.files.join("agy-signals.jsonl");

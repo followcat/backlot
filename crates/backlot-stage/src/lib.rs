@@ -51,6 +51,7 @@ mod guard_git_probe;
 mod guard_git_push;
 mod guard_git_push_opts;
 mod guard_prep;
+mod guard_probes;
 mod guard_rules;
 mod guard_shell;
 mod guard_shell_lex;
@@ -350,6 +351,8 @@ mod range_tests;
 mod recast_cmd_tests;
 #[cfg(test)]
 mod recast_standby_tests;
+#[cfg(test)]
+mod refused_noise_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]

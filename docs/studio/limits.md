@@ -377,17 +377,23 @@ re-raise one `stall_limit_s` later.
 - **The outward-action guard stops agent mistakes; it is not a sandbox.** Shims and
   `GIT_CONFIG_*` hooks catch accidental outward writes (`git push`, `gh` writes, `hc`
   updates/machine/server-stop, `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm publish`,
-  `cargo publish`), not a determined escape: invoking an absolute binary path (for example
+  `cargo publish`), while allowing read-only `gh` (`pr`/`repo`/`issue`/`release`/`gist` reads,
+  `--help`), `git` metadata (`--version`/`--help`), layout-only `git rev-parse`, and studio-wide
+  read-only `git` queries (`work/*`, bound repo, members); noisy read-only git probe refusals
+  without explicit outside-reach options suppress `role.refused`/`outward action` in favor of a
+  `stage.log` counter. It is not a determined-escape sandbox: invoking an absolute binary path (for example
   `/usr/bin/git` or `/usr/bin/gh`) or clearing `PATH` / `GIT_CONFIG_*` bypasses the shims and
   hook directory; when `agy`'s `.agents/hooks.json` is active inside a role env (`BACKLOT_*`), its
   `PreToolUse` hook intercepts `run_command` (including `bash -c` and chained commands) before
-  `.agy-settings.json` `permissions.deny`, records `role.refused` and `outward action`, and returns
+  `.agy-settings.json` `permissions.deny`, records `role.refused` and `outward action` (except on
+  suppressed read-only git probe refusals), and returns
   `refused by backlot: …` (outside a role env, `PreToolUse` always answers allow, and the
   `PreToolUse` shell fallback answers `{"decision":"allow"}` if the recorded `backlot` binary is
   missing or exits nonzero). In a not-yet-trusted work area, `agy` loads the work-area hooks only
   after the trust dialog is answered, so the turn that started before it runs without the hook guard;
   the shims (`roles/<role>/bin` and `GIT_CONFIG_*` git hook) and `.agy-settings.json`
-  `permissions.deny` still apply on that turn (direct prefix denials stop inside `agy` without
+  `permissions.deny` (which omits coarse `gh` prefixes so read-only `gh` queries work while the `gh`
+  shim blocks writes) still apply on that turn (direct prefix denials stop inside `agy` without
   reaching a shim or appending `role.refused`, as do skipped/tracked `hooks unavailable` cases);
   `claude-settings.json` stays hooks-only and relies on the shims and git hook;
   `cmd` and `devin` signal hooks run as lifecycle hooks rather than a command guard (relying on

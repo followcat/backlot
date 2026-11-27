@@ -96,10 +96,6 @@ pub struct AgyPrep {
 /// (`command(<prefix>)`, no trailing ` *` — measured in agy 1.5.16) as
 /// defence in depth ahead of the outward-action shims (D3).
 pub(crate) const DENY_PREFIXES: &[&str] = &[
-    "gh release",
-    "gh repo",
-    "gh issue",
-    "gh api",
     "hc update",
     "hc machine",
     "hc server stop",

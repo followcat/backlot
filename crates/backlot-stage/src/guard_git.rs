@@ -73,7 +73,11 @@ fn probe_repo_remotes(repo_dir: &Path, recorded_repo: Option<String>) -> Vec<Rec
     out
 }
 
-fn allowed_roots(ctx: &GitContext<'_>, eff_cwd: &Path) -> (Vec<PathBuf>, Vec<PathBuf>, bool) {
+fn allowed_roots(
+    ctx: &GitContext<'_>,
+    eff_cwd: &Path,
+    read_only: bool,
+) -> (Vec<PathBuf>, Vec<PathBuf>, bool) {
     let mut work_roots = Vec::new();
     let mut git_roots = Vec::new();
     let enforce_work = match ctx.work_area {
@@ -95,6 +99,9 @@ fn allowed_roots(ctx: &GitContext<'_>, eff_cwd: &Path) -> (Vec<PathBuf>, Vec<Pat
                     git_roots.push(cmn);
                 }
             }
+            if read_only {
+                crate::guard_probes::add_studio_read_roots(ctx, &mut work_roots, &mut git_roots);
+            }
             true
         }
         _ if ctx.role_dir.is_some() => {
@@ -103,6 +110,9 @@ fn allowed_roots(ctx: &GitContext<'_>, eff_cwd: &Path) -> (Vec<PathBuf>, Vec<Pat
             git_roots.push(ncwd);
             if let Some(cmn) = common_dir_of(eff_cwd, ctx.env, ctx.role_dir) {
                 git_roots.push(cmn);
+            }
+            if read_only {
+                crate::guard_probes::add_studio_read_roots(ctx, &mut work_roots, &mut git_roots);
             }
             false
         }
@@ -143,7 +153,8 @@ fn check_containment(
     parsed: &GitParsed,
     eff_cwd: &Path,
 ) -> Result<(), String> {
-    let (work_roots, git_roots, enforce_cwd) = allowed_roots(ctx, eff_cwd);
+    let read_only = crate::guard_probes::is_read_only_git_cmd(parsed);
+    let (work_roots, git_roots, enforce_cwd) = allowed_roots(ctx, eff_cwd, read_only);
     check_git_config_env(ctx.env, eff_cwd, ctx.role_dir, &work_roots)?;
     if work_roots.is_empty() {
         return Ok(());
@@ -184,6 +195,11 @@ fn check_containment(
 /// Fast path check for non-push `git` invocations: no ledger I/O when `true`.
 pub(crate) fn is_fast_path(args: &[String], ctx: &GitContext<'_>) -> bool {
     let parsed = parse_git_invocation(args);
+    if crate::guard_probes::is_benign_git_meta(args, &parsed, ctx.env)
+        || crate::guard_probes::is_benign_rev_parse_probe(&parsed, ctx)
+    {
+        return true;
+    }
     if parsed.exec_path_override
         || parsed.unknown_global_opt.is_some()
         || parsed
@@ -238,6 +254,16 @@ pub(crate) fn classify_git(
 
     loop {
         let parsed = parse_git_invocation(&cur_args);
+        if depth == 0
+            && (crate::guard_probes::is_benign_git_meta(&cur_args, &parsed, ctx.env)
+                || crate::guard_probes::is_benign_rev_parse_probe(&parsed, ctx))
+        {
+            return (
+                GuardVerdict::Allow,
+                with_git_prefix(&cur_args),
+                ctx.cwd.to_path_buf(),
+            );
+        }
         let eff = effective_cwd(ctx.cwd, &parsed.c_dirs);
         let pre_err = check_containment(ctx, &parsed, &eff)
             .err()
