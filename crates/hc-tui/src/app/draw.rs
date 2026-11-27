@@ -108,8 +108,8 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     });
     if let Some(view) = cast.as_mut() {
         view.studio_focused = studio_focused;
-        view.region_focused =
-            app.focus.workspace == crate::focus::WorkspaceRegion::Cast && app.focus.modals.is_empty();
+        view.region_focused = app.focus.workspace == crate::focus::WorkspaceRegion::Cast
+            && app.focus.modals.is_empty();
         view.cursor_target = app.cast_focus.clone();
         view.remembered_target = app.cast_remembered.clone();
         view.active_chip = app.cast_chip;

@@ -126,9 +126,7 @@ impl App {
             self.panel.mode = PanelMode::Expanded;
             self.panel.focused = true;
             self.panel_select_first();
-            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
-                self.derived_lot_level(),
-            ));
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(self.derived_lot_level()));
             return;
         }
         // Full-screen owns the keys: the chord closes on the first
@@ -142,9 +140,7 @@ impl App {
         if self.panel.selected.is_none() {
             self.panel_select_first();
         }
-        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
-            self.derived_lot_level(),
-        ));
+        self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(self.derived_lot_level()));
     }
 
     /// Whether `key` is the configured `focus_lot` binding (`alt+l`
@@ -251,7 +247,10 @@ impl App {
                 }
             }
             WorkspaceRegion::Cast => {
-                if let Some(key) = self.cast_studio_key().or_else(|| self.studio.current.clone()) {
+                if let Some(key) = self
+                    .cast_studio_key()
+                    .or_else(|| self.studio.current.clone())
+                {
                     self.enter_studio_in_lot(&key);
                 } else {
                     self.enter_studios_level();
@@ -277,10 +276,7 @@ impl App {
         self.panel.selected_row = None;
         self.panel.drawer = None;
         self.panel_anim_deadline = None;
-        if matches!(
-            self.focus.workspace,
-            crate::focus::WorkspaceRegion::Lot(_)
-        ) {
+        if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Lot(_)) {
             self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
         }
     }
@@ -294,10 +290,7 @@ impl App {
             self.panel_close();
         } else {
             self.panel.focused = false;
-            if matches!(
-                self.focus.workspace,
-                crate::focus::WorkspaceRegion::Lot(_)
-            ) {
+            if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Lot(_)) {
                 self.set_workspace_focus(crate::focus::WorkspaceRegion::Terminal);
             }
         }

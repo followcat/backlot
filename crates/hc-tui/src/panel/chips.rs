@@ -334,7 +334,10 @@ pub(crate) fn draw_row_chips(
         if used + w <= avail {
             used += w;
             if i < idx {
-                parts.insert(parts.len().saturating_sub(1), (format!("[{}] ", chip.label), dim_style));
+                parts.insert(
+                    parts.len().saturating_sub(1),
+                    (format!("[{}] ", chip.label), dim_style),
+                );
             } else {
                 parts.push((text, dim_style));
             }

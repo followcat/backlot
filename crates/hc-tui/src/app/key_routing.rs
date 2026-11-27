@@ -357,8 +357,10 @@ impl App {
         // every other key.
         if self.prefix.armed() && self.panel_key_press(&press) {
             let matched = crate::input::terminal_key_of(&press);
-            if !matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Terminal)
-                || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            if !matches!(
+                self.focus.workspace,
+                crate::focus::WorkspaceRegion::Terminal
+            ) || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
             {
                 self.prefix.reset();
                 self.prefix.swallow(&press);
@@ -503,10 +505,8 @@ impl App {
             self.sync_focus();
             return None;
         }
-        if matches!(
-            self.focus.workspace,
-            crate::focus::WorkspaceRegion::Lot(_)
-        ) || self.panel_focused()
+        if matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Lot(_))
+            || self.panel_focused()
         {
             self.handle_panel_key(&press);
             self.sync_focus();

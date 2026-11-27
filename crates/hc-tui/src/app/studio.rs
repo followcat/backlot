@@ -258,7 +258,9 @@ impl App {
                 let in_studio_lot = matches!(
                     self.focus.workspace,
                     crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(_))
-                        | crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions { .. })
+                        | crate::focus::WorkspaceRegion::Lot(
+                            crate::focus::LotLevel::RowActions { .. }
+                        )
                 );
                 if !dock_owns && !tree_owns && !cast_owns && !sheet_owns {
                     self.nav_leave_overlays();

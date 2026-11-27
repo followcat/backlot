@@ -162,7 +162,10 @@ async fn a_studio_switch_collapses_the_call_sheet() {
     assert_eq!(app.focused.as_deref(), Some("t7"));
     // Part 1 §1.2.6: while resting in CallSheet, Alt+PageDown keeps CallSheet
     // open and syncs its frame selection to the switched studio behind it.
-    assert!(app.hollywood.expanded(), "CallSheet remains open in resting mode");
+    assert!(
+        app.hollywood.expanded(),
+        "CallSheet remains open in resting mode"
+    );
     assert_eq!(
         app.hollywood.selected,
         Some(crate::hollywood::Target::Studio("night-owl".into()))

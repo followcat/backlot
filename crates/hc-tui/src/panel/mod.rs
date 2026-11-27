@@ -6,8 +6,8 @@
 //! to herdr: no columns are reserved, no keys are consumed and no
 //! timer is armed.
 
-mod config;
 pub(crate) mod chips;
+mod config;
 pub(crate) mod data;
 mod draw;
 mod draw_blocks;

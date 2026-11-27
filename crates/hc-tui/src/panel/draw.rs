@@ -178,7 +178,14 @@ pub(crate) fn render(
     let hint_w = hint.as_deref().map_or(0, display_width) as u16;
     if entered_focus && title.width >= 8 {
         let cap_end = title.x + title.width - 1;
-        put_text(buf, cap_end, title.y, 1, "┓", Style::default().fg(palette.accent));
+        put_text(
+            buf,
+            cap_end,
+            title.y,
+            1,
+            "┓",
+            Style::default().fg(palette.accent),
+        );
         let fill_start = title.x + (display_width(&title_text) as u16).min(title.width);
         let fill_end = cap_end.saturating_sub(hint_w + u16::from(hint_w > 0));
         if fill_end > fill_start {
@@ -446,7 +453,14 @@ pub(crate) fn render(
             Row::BlockBottom(studio) => {
                 let entered = lot_focused && panel.entered_studio.as_ref() == Some(&studio.key());
                 let edge = frame_of(&studio.key());
-                put_text(buf, rect.x, rect.y, 1, if entered { "┗" } else { "╰" }, edge);
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    1,
+                    if entered { "┗" } else { "╰" },
+                    edge,
+                );
                 put_text(
                     buf,
                     rect.x + 1,

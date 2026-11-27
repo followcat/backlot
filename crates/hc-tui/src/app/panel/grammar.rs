@@ -89,7 +89,8 @@ impl App {
         } else {
             for _ in 0..delta.unsigned_abs() {
                 let next = if delta > 0 {
-                    (index + 1..=hi).find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
+                    (index + 1..=hi)
+                        .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
                 } else {
                     (lo..index)
                         .rev()
@@ -191,9 +192,7 @@ impl App {
         let cur_bucket = self.panel.selected.as_ref().map_or(0, section_of);
         let cur_idx = sections
             .iter()
-            .position(|s| {
-                self.panel.selected.as_ref() == Some(s) || section_of(s) >= cur_bucket
-            })
+            .position(|s| self.panel.selected.as_ref() == Some(s) || section_of(s) >= cur_bucket)
             .unwrap_or(0) as isize;
         let step = if forward { 1 } else { -1 };
         let next_idx = (cur_idx + step).rem_euclid(sections.len() as isize) as usize;
@@ -290,7 +289,9 @@ impl App {
             return;
         };
         if let Some(target) = self.ask_target(&key, &role_name) {
-            self.run_action(crate::studio_cmds::ask_acknowledge(&key, &role_name, target));
+            self.run_action(crate::studio_cmds::ask_acknowledge(
+                &key, &role_name, target,
+            ));
         }
     }
 

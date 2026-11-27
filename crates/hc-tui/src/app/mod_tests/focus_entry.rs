@@ -183,7 +183,10 @@ async fn alt_l_enters_current_studio_and_second_press_starts_compose() {
         WorkspaceRegion::Lot(LotLevel::InsideStudio(StudioKey::local("acme-shop")))
     );
     key(&mut app2, hc_vt::Key::Escape);
-    assert_eq!(app2.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
+    assert_eq!(
+        app2.focus.workspace,
+        WorkspaceRegion::Lot(LotLevel::Studios)
+    );
     key(&mut app2, hc_vt::Key::Escape);
     assert_eq!(app2.focus.workspace, WorkspaceRegion::Terminal);
 }
@@ -250,7 +253,9 @@ async fn tree_cast_and_call_sheet_do_not_swallow_global_region_chords() {
 
     // 2. From CallSheet (even resting on a frame): Alt+L collapses Call Sheet and enters that frame's studio!
     app.hollywood.editing = false;
-    app.hollywood.selected = Some(crate::hollywood::Target::Studio(StudioKey::local("beta-api")));
+    app.hollywood.selected = Some(crate::hollywood::Target::Studio(StudioKey::local(
+        "beta-api",
+    )));
     app.focus.workspace = WorkspaceRegion::CallSheet(CallSheetZone::Studios);
     key_mods(&mut app, hc_vt::Key::Char('l'), hc_vt::Mods::ALT);
     assert!(!app.hollywood.expanded());
@@ -401,7 +406,11 @@ async fn single_click_on_unfocused_lot_person_switches_pane_and_keeps_lot_focus(
         .expect("producer row hit in Lot");
     click(&mut app, rect.x + 2, rect.y);
 
-    assert_eq!(app.focused.as_deref(), Some("t1"), "main pane switched to t1");
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t1"),
+        "main pane switched to t1"
+    );
     assert!(app.panel.focused, "focus stays in Lot");
     assert_eq!(
         app.focus.workspace,
@@ -427,7 +436,11 @@ async fn focus_tree_and_focus_cast_config_rebinds_and_click_anywhere_focuses_reg
     let path = dir.join("config.toml");
 
     // Rebind focus_cast = "alt+a" and focus_tree = "alt+t"
-    std::fs::write(&path, "[keys]\nfocus_cast = \"alt+a\"\nfocus_tree = \"alt+t\"\n").unwrap();
+    std::fs::write(
+        &path,
+        "[keys]\nfocus_cast = \"alt+a\"\nfocus_tree = \"alt+t\"\n",
+    )
+    .unwrap();
     let (config, notice) = crate::panel::load(&path);
     assert!(notice.is_none(), "{notice:?}");
     app.set_panel_config(config, notice, &path);
@@ -456,4 +469,3 @@ async fn focus_tree_and_focus_cast_config_rebinds_and_click_anywhere_focuses_reg
     click(&mut app, pane_hit.x + 1, pane_hit.y + 1);
     assert_eq!(app.focus.workspace, WorkspaceRegion::Terminal);
 }
-

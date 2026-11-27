@@ -214,9 +214,7 @@ impl App {
         let press = key.input.action == hc_vt::Action::Press;
         match code {
             KeyCode::Esc if press => self.cast_focus_leave(),
-            KeyCode::Tab | KeyCode::BackTab
-                if plain || modifiers == KeyModifiers::SHIFT =>
-            {
+            KeyCode::Tab | KeyCode::BackTab if plain || modifiers == KeyModifiers::SHIFT => {
                 self.tree_focus_enter();
             }
             KeyCode::Up | KeyCode::Char('k') if plain => self.cast_move(-1),
@@ -355,9 +353,15 @@ impl App {
                     self.cast_focus_leave();
                     self.focus_pane(term);
                 } else if r.state == "closed" {
-                    self.show_notice("Person closed", &format!("{} is closed — press o to reopen", r.name));
+                    self.show_notice(
+                        "Person closed",
+                        &format!("{} is closed — press o to reopen", r.name),
+                    );
                 } else if r.state == "standby" {
-                    self.show_notice("Terminal unavailable", &crate::studio::standby_unavailable(&r));
+                    self.show_notice(
+                        "Terminal unavailable",
+                        &crate::studio::standby_unavailable(&r),
+                    );
                 }
             }
             CastTarget::Shell { terminal, .. } => {
@@ -390,7 +394,10 @@ impl App {
                     && let Some(r) = st.studio.roles.iter().find(|r| r.role == role)
                 {
                     let offline = !self.machine_reachable(st.machine);
-                    self.open_studio_menu(crate::studio_menu::StudioMenu::role(&studio, r, offline), point);
+                    self.open_studio_menu(
+                        crate::studio_menu::StudioMenu::role(&studio, r, offline),
+                        point,
+                    );
                 }
             }
             Some(CastTarget::Shell { studio, .. }) => {

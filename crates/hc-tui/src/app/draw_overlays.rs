@@ -108,7 +108,11 @@ pub(super) fn render_overlays_and_cursor(
             .as_ref()
             .and_then(|id| app.projection.layouts.get(id))
             .and_then(|t| t.root.as_ref())
-            .is_some_and(|r| app.shell.pane_borders.shows_borders(r.terminals().len() > 1));
+            .is_some_and(|r| {
+                app.shell
+                    .pane_borders
+                    .shows_borders(r.terminals().len() > 1)
+            });
         if !single_has_border {
             let tag = "[unfocused · Esc returns]";
             let w = crate::chrome::text::display_width(tag) as u16;

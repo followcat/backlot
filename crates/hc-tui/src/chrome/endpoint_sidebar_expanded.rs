@@ -244,9 +244,7 @@ pub(crate) fn render_expanded(
         workspace_area.y,
         workspace_area.width,
         header_title,
-        Style::default()
-            .fg(header_fg)
-            .add_modifier(Modifier::BOLD),
+        Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
     );
     // The version badge shares the header row, right-aligned a cell
     // short of the divider column and never touching `machines`.
@@ -418,7 +416,14 @@ pub(crate) fn render_expanded(
                     && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
                     && !rect.is_empty()
                 {
-                    put_text(buffer, rect.x, rect.y, 1, "·", Style::default().fg(palette.overlay0));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y
                     .saturating_add(height)
@@ -515,7 +520,14 @@ pub(crate) fn render_expanded(
                     && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
                     && !rect.is_empty()
                 {
-                    put_text(buffer, rect.x, rect.y, 1, "·", Style::default().fg(palette.overlay0));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y
                     .saturating_add(height)
@@ -543,7 +555,14 @@ pub(crate) fn render_expanded(
                     && identities.get(row_index).and_then(|o| o.as_ref()) == state.tree_remembered
                     && !rect.is_empty()
                 {
-                    put_text(buffer, rect.x, rect.y, 1, "·", Style::default().fg(palette.overlay0));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
                 y = y.saturating_add(1);
             }
@@ -558,11 +577,7 @@ pub(crate) fn render_expanded(
     let footer_y = workspace_area.bottom().saturating_sub(1);
     if state.tree_focused && workspace_area.height > 1 {
         let hint = crate::chrome::text::fit_hints(
-            &[
-                "↑↓ ←→ Tab ↵ m n Esc",
-                "↑↓ Tab ↵ n Esc",
-                "Esc back",
-            ],
+            &["↑↓ ←→ Tab ↵ m n Esc", "↑↓ Tab ↵ n Esc", "Esc back"],
             workspace_area.width.saturating_sub(1) as usize,
         );
         put_text(

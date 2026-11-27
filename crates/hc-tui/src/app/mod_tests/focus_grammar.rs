@@ -145,10 +145,7 @@ fn grammar_app(two_studios: bool, with_tasks_and_talk: bool) -> App {
 async fn lot_studios_tab_cycles_urgent_studios_and_arrows_enter_and_fold() {
     let mut app = grammar_app(true, false);
     prefix_key(&mut app, 'y');
-    assert_eq!(
-        app.focus.workspace,
-        WorkspaceRegion::Lot(LotLevel::Studios)
-    );
+    assert_eq!(app.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
     assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
 
     // Tab cycles forward across urgent studios at Studios level; BackTab cycles backward.
@@ -189,7 +186,10 @@ async fn lot_studios_tab_cycles_urgent_studios_and_arrows_enter_and_fold() {
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
     key(&mut app, hc_vt::Key::Char('n'));
-    assert!(app.new_studio.is_some(), "`n` in Lot(Studios) opens NewStudio");
+    assert!(
+        app.new_studio.is_some(),
+        "`n` in Lot(Studios) opens NewStudio"
+    );
 }
 
 #[tokio::test]
@@ -349,7 +349,10 @@ async fn cast_chips_tell_and_action_shortcuts() {
     prefix_key(&mut app, 'a');
     assert_eq!(app.focus.workspace, WorkspaceRegion::Cast);
     key(&mut app, hc_vt::Key::ArrowRight);
-    assert!(app.cast_chip().is_some(), "Right activates Cast inline chip");
+    assert!(
+        app.cast_chip().is_some(),
+        "Right activates Cast inline chip"
+    );
     key(&mut app, hc_vt::Key::Char('y'));
     assert!(
         !recorded.lock().unwrap().is_empty(),
@@ -372,13 +375,14 @@ async fn modal_grammar_fixes_across_sheet_update_wizard_dialogs_and_menu() {
     // 2. UpdateCard: PageUp scrolls without Ctrl, and Tab cycles buttons for Enter.
     let mut upd = app_with(&["t1"]);
     upd.update_latest = Some("9.9.9".into());
-    upd.update_state.releases = vec![
-        CachedRelease {
-            version: "9.9.9".into(),
-            date: "2026-11-20".into(),
-            body: (0..30).map(|i| format!("- Item {i}")).collect::<Vec<_>>().join("\n"),
-        },
-    ];
+    upd.update_state.releases = vec![CachedRelease {
+        version: "9.9.9".into(),
+        date: "2026-11-20".into(),
+        body: (0..30)
+            .map(|i| format!("- Item {i}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }];
     upd.open_update();
     draw_to(&mut upd, 80, 24);
     key(&mut upd, hc_vt::Key::Char('G'));

@@ -270,10 +270,7 @@ pub(crate) fn backlot_help_groups(
                 entry(chord(panel_tail), "studio dock"),
                 (
                     studio_key(panel.keys.focus_lot),
-                    Cow::Owned(format!(
-                        "focus / enter lot{}",
-                        shadow(panel.keys.focus_lot)
-                    )),
+                    Cow::Owned(format!("focus / enter lot{}", shadow(panel.keys.focus_lot))),
                 ),
                 (
                     sheet.label(&crate::config::format_prefix_combos(prefixes)),

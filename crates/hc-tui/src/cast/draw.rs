@@ -181,10 +181,19 @@ pub(crate) fn render_cast(
                     );
                     if let Some(chip_idx) = view.active_chip {
                         let chips = crate::panel::chips::row_chips_for_person(role);
-                        crate::panel::chips::draw_row_chips(buffer, rect, &chips, chip_idx, palette);
+                        crate::panel::chips::draw_row_chips(
+                            buffer, rect, &chips, chip_idx, palette,
+                        );
                     }
                 } else if is_remembered {
-                    put_text(buffer, rect.x, rect.y, 1, "·", Style::default().fg(palette.overlay0));
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "·",
+                        Style::default().fg(palette.overlay0),
+                    );
                 }
             }
             CastRow::ClosedDivider { count } => {

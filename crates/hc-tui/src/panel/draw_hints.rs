@@ -91,7 +91,11 @@ pub(super) fn focused_hint_pairs(
     }
     if row_actions {
         return fit_pairs(
-            &[("←→", "chip"), ("⏎", "run"), ("esc", if pane_refuses { "close" } else { "row" })],
+            &[
+                ("←→", "chip"),
+                ("⏎", "run"),
+                ("esc", if pane_refuses { "close" } else { "row" }),
+            ],
             width,
         );
     }

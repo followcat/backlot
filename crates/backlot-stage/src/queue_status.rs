@@ -204,8 +204,7 @@ mod tests {
         assert_eq!(down.reason, QueueReason::Down);
 
         // Prompt when Blocked or attention_user.
-        let prompt =
-            role_queue_status(&st, &rs, Some(Work::Blocked), false, true, 20_000).unwrap();
+        let prompt = role_queue_status(&st, &rs, Some(Work::Blocked), false, true, 20_000).unwrap();
         assert_eq!(prompt.reason, QueueReason::Prompt);
 
         // Escalated quota -> OutOfQuota and delivery blocked.

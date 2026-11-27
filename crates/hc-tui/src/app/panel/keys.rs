@@ -265,16 +265,17 @@ impl App {
             KeyCode::Esc => {
                 self.panel.finish_confirm = None;
                 match self.focus.workspace.clone() {
-                    crate::focus::WorkspaceRegion::Lot(
-                        crate::focus::LotLevel::RowActions { studio, .. },
-                    ) => {
+                    crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::RowActions {
+                        studio,
+                        ..
+                    }) => {
                         self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
                             crate::focus::LotLevel::InsideStudio(studio),
                         ));
                     }
-                    crate::focus::WorkspaceRegion::Lot(
-                        crate::focus::LotLevel::InsideStudio(studio),
-                    ) => {
+                    crate::focus::WorkspaceRegion::Lot(crate::focus::LotLevel::InsideStudio(
+                        studio,
+                    )) => {
                         let machines = self.panel_summaries();
                         let count = crate::panel::data::studios(&machines).len();
                         if count >= 2 {
@@ -352,11 +353,7 @@ impl App {
                 if self.panel.finish_confirm.is_some() {
                     self.panel.finish_confirm = None;
                 } else {
-                    let machine = self
-                        .studio
-                        .current
-                        .as_ref()
-                        .and_then(|k| k.machine.clone());
+                    let machine = self.studio.current.as_ref().and_then(|k| k.machine.clone());
                     self.new_studio_open(machine);
                 }
             }

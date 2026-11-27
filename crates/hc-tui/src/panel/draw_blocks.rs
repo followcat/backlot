@@ -95,10 +95,9 @@ pub(super) fn draw_top(
     let chip_pad = u16::from(selected);
     let interior = rect.width.saturating_sub(4 + chip_pad);
     let entered_w = if entered { 15u16 } else { 0 };
-    let full_fits = display_width(&label.full) as u16
-        + display_width(&full_tail) as u16
-        + entered_w
-        <= interior.saturating_sub(marker_w);
+    let full_fits =
+        display_width(&label.full) as u16 + display_width(&full_tail) as u16 + entered_w
+            <= interior.saturating_sub(marker_w);
     let tail = if full_fits {
         full_tail
     } else if waiting == 0 {

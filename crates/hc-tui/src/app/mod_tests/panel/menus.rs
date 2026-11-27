@@ -368,10 +368,7 @@ async fn esc_on_a_cast_menu_restores_cast_focus_then_esc_returns_to_pane() {
     assert!(studio_menu_open(&app), "`m` in Cast reopens role menu");
     key(&mut app, hc_vt::Key::Escape);
     key(&mut app, hc_vt::Key::Escape);
-    assert_eq!(
-        app.focus.workspace,
-        crate::focus::WorkspaceRegion::Terminal
-    );
+    assert_eq!(app.focus.workspace, crate::focus::WorkspaceRegion::Terminal);
     let before = backlog(&app);
     key(&mut app, hc_vt::Key::Char('m'));
     assert_eq!(

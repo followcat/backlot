@@ -77,11 +77,7 @@ pub(super) fn resolve(
         return ("… sending…".to_owned(), palette.accent, false, true);
     }
 
-    let role = studio
-        .studio
-        .roles
-        .iter()
-        .find(|r| r.role == target_role);
+    let role = studio.studio.roles.iter().find(|r| r.role == target_role);
     let has_queue = studio.studio.pending_tell || role.and_then(|r| r.queue.as_ref()).is_some();
 
     if has_queue {
@@ -117,12 +113,7 @@ pub(super) fn resolve(
         return ("⠶ thinking…".to_owned(), palette.accent, false, true);
     }
 
-    (
-        deliver_age(line.ts_ms, now_ms),
-        palette.green,
-        false,
-        false,
-    )
+    (deliver_age(line.ts_ms, now_ms), palette.green, false, false)
 }
 
 #[allow(clippy::too_many_arguments)]

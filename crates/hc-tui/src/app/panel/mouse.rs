@@ -25,16 +25,11 @@ impl App {
         let point = (mouse.col, mouse.row);
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                let was_focused = matches!(
-                    self.focus.workspace,
-                    crate::focus::WorkspaceRegion::Lot(_)
-                ) || self.panel.focused;
+                let was_focused =
+                    matches!(self.focus.workspace, crate::focus::WorkspaceRegion::Lot(_))
+                        || self.panel.focused;
                 self.panel.focused = true;
-                let right_level = match self
-                    .focus
-                    .workspace
-                    .clone()
-                {
+                let right_level = match self.focus.workspace.clone() {
                     crate::focus::WorkspaceRegion::Lot(l) => l,
                     _ => self.derived_lot_level(),
                 };
@@ -109,7 +104,11 @@ impl App {
                                 let machines = self.panel_summaries();
                                 if let Some(role) = crate::panel::data::studio(&machines, key)
                                     .and_then(|s| {
-                                        s.studio.roles.iter().find(|r| r.role == *role_name).cloned()
+                                        s.studio
+                                            .roles
+                                            .iter()
+                                            .find(|r| r.role == *role_name)
+                                            .cloned()
                                     })
                                 {
                                     self.studio.current = Some(key.clone());
@@ -151,14 +150,12 @@ impl App {
                             other => {
                                 if !was_focused {
                                     let level = match other.studio() {
-                                        Some(k) => {
-                                            crate::focus::LotLevel::InsideStudio(k.clone())
-                                        }
+                                        Some(k) => crate::focus::LotLevel::InsideStudio(k.clone()),
                                         None => crate::focus::LotLevel::Studios,
                                     };
-                                    self.set_workspace_focus(
-                                        crate::focus::WorkspaceRegion::Lot(level),
-                                    );
+                                    self.set_workspace_focus(crate::focus::WorkspaceRegion::Lot(
+                                        level,
+                                    ));
                                     self.panel_reveal_selected();
                                 } else {
                                     self.panel_reveal_selected();
@@ -174,11 +171,7 @@ impl App {
                 // the left press does — the menu's Esc must hand them
                 // back to the dock, not the focused terminal (S3 R2).
                 self.panel.focused = true;
-                let right_level = match self
-                    .focus
-                    .workspace
-                    .clone()
-                {
+                let right_level = match self.focus.workspace.clone() {
                     crate::focus::WorkspaceRegion::Lot(l) => l,
                     _ => self.derived_lot_level(),
                 };

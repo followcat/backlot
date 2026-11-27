@@ -321,9 +321,11 @@ async fn talk_row_renders_sending_queued_reasons_delivered_age_and_thinking() {
         app.panel.drag_width = Some(48);
         alt_l(&mut app);
         if start_in_flight {
-            let _ = app
-                .actions
-                .start(crate::studio_cmds::tell(&StudioKey::local("acme-shop"), "producer", "hi"));
+            let _ = app.actions.start(crate::studio_cmds::tell(
+                &StudioKey::local("acme-shop"),
+                "producer",
+                "hi",
+            ));
         }
         let buf = draw_to(&mut app, 180, 38);
         let _ = mark::role(&StudioKey::local("acme-shop"), "producer");
@@ -359,7 +361,10 @@ async fn talk_row_renders_sending_queued_reasons_delivered_age_and_thinking() {
     });
     let prompt = render_with(true, prompt_doc, false);
     assert!(
-        prompt.contains("queued") && prompt.contains("prompt") && prompt.contains("[y]") && prompt.contains("[p]"),
+        prompt.contains("queued")
+            && prompt.contains("prompt")
+            && prompt.contains("[y]")
+            && prompt.contains("[p]"),
         "prompt queued reason:\n{prompt}"
     );
 
@@ -418,9 +423,12 @@ async fn talk_row_renders_sending_queued_reasons_delivered_age_and_thinking() {
 
     // 9. Receiver replied -> delivery cue clears cleanly
     let mut replied_doc = sample_studio_doc();
-    replied_doc["exchange"].as_array_mut().unwrap().push(serde_json::json!({
-        "seq": 11, "who": "producer", "to": "user", "text": "Switched to v2 schema."
-    }));
+    replied_doc["exchange"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "seq": 11, "who": "producer", "to": "user", "text": "Switched to v2 schema."
+        }));
     let replied = render_with(true, replied_doc, false);
     assert!(!replied.contains("queued"), "{replied}");
     assert!(!replied.contains("delivered"), "{replied}");

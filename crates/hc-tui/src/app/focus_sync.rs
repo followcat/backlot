@@ -173,7 +173,10 @@ impl App {
     /// Pre-key focus sync: reconciles external surface/modal/editing latches without
     /// promoting an active `LotLevel::Studios` session into `InsideStudio` before a key runs.
     pub(crate) fn sync_focus_before_key(&mut self) {
-        let was_studios = matches!(self.focus.workspace, WorkspaceRegion::Lot(LotLevel::Studios));
+        let was_studios = matches!(
+            self.focus.workspace,
+            WorkspaceRegion::Lot(LotLevel::Studios)
+        );
         self.sync_focus();
         if was_studios
             && self.panel.focused
