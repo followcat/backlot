@@ -20,12 +20,14 @@ pub(super) fn active_endpoint_label<'a>(state: &'a ShellRenderState<'_>) -> &'a 
         .map_or("Local", |endpoint| endpoint.label.as_str())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_endpoint_row(
     buffer: &mut Buffer,
     rect: Rect,
     marker: &str,
     endpoint: &ClientShellEndpoint,
     highlighted: bool,
+    current_machine: bool,
     auth: &MachineDiagnostics,
     palette: &Palette,
 ) -> Rect {
@@ -51,22 +53,52 @@ pub(super) fn render_endpoint_row(
         format!("{glyph} {state}")
     };
     let signal_width = display_width(&signal).min(rect.width);
-    put_text(
-        buffer,
-        rect.x,
-        rect.y,
-        rect.width.saturating_sub(signal_width.saturating_add(1)),
-        &format!(" {marker} {}", endpoint.label),
-        Style::default()
-            .fg(
-                if matches!(endpoint.status, ClientEndpointStatus::Disabled) {
-                    palette.overlay0
-                } else {
-                    palette.text
-                },
-            )
-            .add_modifier(Modifier::BOLD),
-    );
+    let left_avail = rect.width.saturating_sub(signal_width.saturating_add(1));
+    let base_style = Style::default()
+        .fg(
+            if matches!(endpoint.status, ClientEndpointStatus::Disabled) {
+                palette.overlay0
+            } else {
+                palette.text
+            },
+        )
+        .add_modifier(Modifier::BOLD);
+    if current_machine {
+        let prefix = format!(" {marker} ");
+        let prefix_w = display_width(&prefix).min(left_avail);
+        put_text(buffer, rect.x, rect.y, prefix_w, &prefix, base_style);
+        let name_x = rect.x.saturating_add(prefix_w);
+        let name_avail = left_avail.saturating_sub(prefix_w);
+        if name_avail > 0 {
+            let accent_bold = Style::default()
+                .fg(palette.accent)
+                .add_modifier(Modifier::BOLD);
+            let name_w = display_width(&endpoint.label);
+            if name_w.saturating_add(2) <= name_avail {
+                put_text(buffer, name_x, rect.y, name_w, &endpoint.label, accent_bold);
+                put_text(
+                    buffer,
+                    name_x.saturating_add(name_w),
+                    rect.y,
+                    2,
+                    " ✦",
+                    Style::default().fg(palette.accent),
+                );
+            } else {
+                let fitted = super::text::truncate_end(&endpoint.label, usize::from(name_avail));
+                put_text(buffer, name_x, rect.y, name_avail, &fitted, accent_bold);
+            }
+        }
+    } else {
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            left_avail,
+            &format!(" {marker} {}", endpoint.label),
+            base_style,
+        );
+    }
     put_right_text(
         buffer,
         rect,
