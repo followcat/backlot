@@ -117,7 +117,8 @@ fn render_band(
     let multi = spans_machines(machines);
     let local_label = local.unwrap_or("Local");
     let all_frames = rows::frames(machines);
-    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    let (waits, band_rows) =
+        rows::band_rows_with_echoes(machines, status, opts.agent, &hollywood.reply_echoes);
     let plan = plan::plan(frame, &waits, &band_rows, hollywood, opts);
 
     let selected_wait = hollywood

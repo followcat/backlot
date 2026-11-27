@@ -473,12 +473,12 @@ fn compose_keeps_italic_placeholder_while_editing_empty_and_selection_highlights
     let fy = ehits.input.y;
     assert_eq!(ebuf[(fx, fy)].symbol(), "╡");
     assert_eq!(ebuf[(fx, fy)].fg, palette.accent);
-    assert_eq!(ebuf[(fx + 4, fy)].symbol(), "t");
-    assert_eq!(ebuf[(fx + 4, fy)].fg, elev.muted_raised);
-    assert_eq!(ebuf[(fx + 4, fy)].bg, elev.raised_field);
-    assert!(ebuf[(fx + 4, fy)].modifier.contains(Modifier::ITALIC));
+    assert_eq!(ebuf[(fx + 16, fy)].symbol(), "t");
+    assert_eq!(ebuf[(fx + 16, fy)].fg, elev.muted_raised);
+    assert_eq!(ebuf[(fx + 16, fy)].bg, elev.raised_field);
+    assert!(ebuf[(fx + 16, fy)].modifier.contains(Modifier::ITALIC));
     let cur = ehits.cursor.expect("editing cursor");
-    assert_eq!((cur.x, cur.y), (fx + 4, fy));
+    assert_eq!((cur.x, cur.y), (fx + 16, fy));
 
     // 2. Selecting folded target when 9 turns exist highlights `▸ <k> earlier · ↵ read` on `── HOLLYWOOD ──`.
     let mut folded_sum = summary.clone();

@@ -192,7 +192,8 @@ pub(crate) fn reveal_frame_scroll(
     let Some(frame_idx) = all_frames.iter().position(|f| &f.target() == sel) else {
         return hollywood.frame_scroll;
     };
-    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    let (waits, band_rows) =
+        rows::band_rows_with_echoes(machines, status, opts.agent, &hollywood.reply_echoes);
     let p = plan::plan(frame, &waits, &band_rows, hollywood, opts);
     let studios_n = all_frames
         .iter()

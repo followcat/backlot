@@ -16,6 +16,7 @@ mod reader_actions;
 mod reader_compose;
 pub(crate) mod reader_meta_from;
 mod reader_nav;
+mod reply;
 mod view;
 
 use std::path::Path;
@@ -131,6 +132,7 @@ impl App {
             self.hollywood_key = None;
             self.hollywood.mode = LayerMode::Hidden;
             self.hollywood.editing = false;
+            self.hollywood.clear_reply();
             self.hollywood.view = None;
         } else if self.hollywood_key.is_none() {
             self.hollywood_key = Some(CallSheetKeys {
@@ -171,7 +173,12 @@ impl App {
     pub(super) fn hollywood_band(&self) -> Vec<Target> {
         let machines = self.panel_summaries();
         let status = hollywood::status_of(&self.view);
-        let (waits, rows) = hollywood::band_rows(&machines, &status, self.has_hollywood_cfg);
+        let (waits, rows) = hollywood::band_rows_with_echoes(
+            &machines,
+            &status,
+            self.has_hollywood_cfg,
+            &self.hollywood.reply_echoes,
+        );
         rows.iter().map(|r| r.target(&waits)).collect()
     }
 

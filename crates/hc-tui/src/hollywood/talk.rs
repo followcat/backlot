@@ -28,6 +28,19 @@ pub(crate) fn talk_text_width(width: u16, _who: &str) -> usize {
     width.saturating_sub(MARGIN + speaker_cols(width) + 2 + RIGHT_SLOT_W + MARGIN) as usize
 }
 
+/// The body a talk row draws. A Call Sheet reply names its target in
+/// the body (`you` stays the speaker), so it cannot read as a line to Hollywood.
+pub(crate) fn talk_body(line: &Exchange) -> std::borrow::Cow<'_, str> {
+    if line.who == "user" && line.kind.as_deref() == Some("callsheet-reply") {
+        return std::borrow::Cow::Owned(format!(
+            "→ {}  {}",
+            line.to.as_deref().unwrap_or("studio"),
+            line.text
+        ));
+    }
+    std::borrow::Cow::Borrowed(line.text.as_str())
+}
+
 /// Draw one exchange row: fixed speaker column (`✦ hollywood` / `› you`
 /// / `· <who>`), body wrapped up to `rect.height.clamp(1, 2)` lines, and
 /// right-aligned age (plus `· <earlier> earlier` when folded inline) or
@@ -135,6 +148,7 @@ pub(crate) fn draw_talk(
     if body_w == 0 {
         return;
     }
+    let body = talk_body(line);
     let height = rect.height.clamp(1, 2);
     if height == 1 {
         put_text(
@@ -142,12 +156,12 @@ pub(crate) fn draw_talk(
             body_x,
             rect.y,
             body_w,
-            &truncate_end(&line.text, body_w as usize),
+            &truncate_end(&body, body_w as usize),
             text_style,
         );
         return;
     }
-    for (i, row) in wrap_plain(&line.text, body_w as usize, height as usize)
+    for (i, row) in wrap_plain(&body, body_w as usize, height as usize)
         .into_iter()
         .enumerate()
     {

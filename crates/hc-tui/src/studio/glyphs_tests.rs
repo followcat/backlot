@@ -71,7 +71,7 @@ fn every_glyph_is_single_width() {
     }
     // Every ornament glyph outside Box/Block elements must be strictly narrow
     // (`width == Some(1)` and `East_Asian_Width == N` via `width_cjk == Some(1)`).
-    for ch in ['✦', '‹', '›', '▪', '◉', '▸', '▾', '◌', '✓', '⏎', '↵'] {
+    for ch in ['✦', '‹', '›', '▪', '◉', '▸', '▾', '◌', '✓', '⏎', '↵', '↩'] {
         assert_eq!(
             UnicodeWidthChar::width(ch),
             Some(1),
