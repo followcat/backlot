@@ -98,6 +98,9 @@ pub(crate) enum PickerAct {
 #[derive(Debug, Clone)]
 pub(crate) struct PickerRow {
     pub label: String,
+    /// A trailing title the painter cuts with `…` when space runs out,
+    /// keeping `label` (its aligned id and name columns) whole.
+    pub title: Option<String>,
     pub dim: Option<String>,
     pub menu: StudioMenu,
     pub act: PickerAct,

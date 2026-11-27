@@ -6,11 +6,59 @@
 
 use super::App;
 use super::help_launcher::help_place;
+use crate::chrome::text::display_width;
 use crate::focus::CastTarget;
 use crate::help_launcher::{HelpPicker, Pick, PickerAct, PickerRow};
 use crate::panel::data;
 use crate::studio::StudioKey;
 use crate::studio_menu::{StudioAct, StudioMenu};
+
+/// Pad `text` with trailing spaces to `width` display cells (it is never
+/// truncated: the caller pads to the widest value it measured).
+fn pad_col(text: &str, width: usize) -> String {
+    let mut out = text.to_owned();
+    for _ in display_width(text)..width {
+        out.push(' ');
+    }
+    out
+}
+
+/// One reopen pick before its id and name columns are padded.
+struct ReopenPick {
+    id: String,
+    name: String,
+    title: Option<String>,
+    dim: Option<String>,
+    menu: StudioMenu,
+}
+
+/// Turn closed-role picks into rows whose id and name columns share one
+/// display width across the whole list, so names and titles start in the
+/// same cell on every row (`t1` and `t10` alike, and names of different
+/// lengths). A taskless pick gets a blank id column; the title rides
+/// `PickerRow::title` so the painter cuts only it.
+fn align_columns(picks: Vec<ReopenPick>) -> Vec<PickerRow> {
+    let id_w = picks
+        .iter()
+        .map(|p| display_width(&p.id))
+        .max()
+        .unwrap_or(0);
+    let name_w = picks
+        .iter()
+        .map(|p| display_width(&p.name))
+        .max()
+        .unwrap_or(0);
+    picks
+        .into_iter()
+        .map(|p| PickerRow {
+            label: format!("{}  {}  ", pad_col(&p.id, id_w), pad_col(&p.name, name_w)),
+            title: p.title,
+            dim: p.dim,
+            menu: p.menu,
+            act: PickerAct::Act(StudioAct::Reopen),
+        })
+        .collect()
+}
 
 /// Compare two task ids with embedded numbers sorted numerically (`t1 < t2 < … < t10 < t16`).
 fn cmp_task_id_numeric(a: &str, b: &str) -> std::cmp::Ordering {
@@ -72,6 +120,7 @@ impl App {
                             .machine
                             .clone()
                             .unwrap_or_else(|| "Local (this machine)".to_owned()),
+                        title: None,
                         dim: None,
                         menu,
                         act: PickerAct::NewStudio,
@@ -84,6 +133,7 @@ impl App {
                     let key = s.key();
                     PickerRow {
                         label: format!("{} · {}", s.studio.id, s.machine.unwrap_or(local)),
+                        title: None,
                         dim: None,
                         menu: StudioMenu::studio(
                             &key,
@@ -107,6 +157,7 @@ impl App {
                             crate::studio::glyphs::Task::of(t.status).glyph(),
                             help_place(&key, local, multi)
                         ),
+                        title: None,
                         dim: None,
                         menu: StudioMenu::task(&key, t, offline),
                         act: PickerAct::Sheet,
@@ -131,6 +182,7 @@ impl App {
                                         t.id,
                                         help_place(&key, local, multi)
                                     ),
+                                    title: None,
                                     dim: None,
                                     menu: menu.clone(),
                                     act: PickerAct::Act(i.act),
@@ -161,6 +213,7 @@ impl App {
                                         i.label.trim_end_matches(" (o)"),
                                         help_place(&key, local, multi)
                                     ),
+                                    title: None,
                                     dim: None,
                                     menu,
                                     act: PickerAct::Act(StudioAct::Reopen),
@@ -198,7 +251,7 @@ impl App {
                 (None, None) => a.name.cmp(&b.name).then_with(|| a.role.cmp(&b.role)),
             }
         });
-        closed
+        let picks: Vec<ReopenPick> = closed
             .into_iter()
             .filter_map(|r| {
                 let menu = StudioMenu::role(key, r, offline);
@@ -207,31 +260,25 @@ impl App {
                     .into_iter()
                     .find(|i| i.act == StudioAct::Reopen)
                     .map(|i| i.dim)?;
-                let tid = r.task.as_deref().filter(|t| !t.is_empty());
-                let label = match tid {
-                    Some(tid) => {
-                        let title = s
-                            .studio
-                            .tasks
-                            .iter()
-                            .find(|t| t.id == tid)
-                            .map(|t| t.title.trim())
-                            .filter(|t| !t.is_empty());
-                        match title {
-                            Some(title) => format!("{tid}  {}  {title}", r.name),
-                            None => format!("{tid}  {}", r.name),
-                        }
-                    }
-                    None => r.name.clone(),
-                };
-                Some(PickerRow {
-                    label,
+                let id = r.task.as_deref().filter(|t| !t.is_empty());
+                let title = id.and_then(|tid| {
+                    s.studio
+                        .tasks
+                        .iter()
+                        .find(|t| t.id == tid)
+                        .map(|t| t.title.trim())
+                        .filter(|t| !t.is_empty())
+                });
+                Some(ReopenPick {
+                    id: id.unwrap_or_default().to_owned(),
+                    name: r.name.clone(),
+                    title: title.map(str::to_owned),
                     dim,
                     menu,
-                    act: PickerAct::Act(StudioAct::Reopen),
                 })
             })
-            .collect()
+            .collect();
+        align_columns(picks)
     }
 
     /// Open the standalone reopen picker for one studio's closed roles.

@@ -16,12 +16,95 @@ async fn picker_orders_tasks_numerically_and_scopes_to_one_studio() {
     let (mut app, _) = closed_line_app();
     app.open_cast_reopen_picker(&StudioKey::local("acme-shop"));
     let picker = app.help_state.picker.as_ref().expect("picker");
-    let labels: Vec<&str> = picker.rows.iter().map(|r| r.label.as_str()).collect();
-    assert_eq!(labels.len(), 16);
-    assert!(labels[0].starts_with("t1  actor-a  "), "{:?}", labels[0]);
-    assert!(labels[1].starts_with("t2  actor-a  "), "{:?}", labels[1]);
-    assert!(labels[9].starts_with("t10  actor-a  "), "{:?}", labels[9]);
-    assert!(labels[15].starts_with("t16  actor-a  "), "{:?}", labels[15]);
+    let ids: Vec<&str> = picker
+        .rows
+        .iter()
+        .map(|r| r.label.split_whitespace().next().unwrap_or(""))
+        .collect();
+    let expected: Vec<String> = (1..=16).map(|n| format!("t{n}")).collect();
+    assert_eq!(ids, expected);
+    assert!(
+        picker.rows[0].label.starts_with("t1   actor-a"),
+        "{:?}",
+        picker.rows[0].label
+    );
+    assert_eq!(
+        picker.rows[0].title.as_deref(),
+        Some("Implement user authentication and long title clipping check")
+    );
+}
+
+#[tokio::test]
+async fn picker_pads_task_and_name_columns_to_one_display_width() {
+    // `t1`/`t10` (2 and 3 cells) and names of different lengths must leave the
+    // name and title columns at the same cell on every row.
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    let mut stage = crate::sidebar::fixture::term("t9");
+    stage.name = Some("backlot-stage".into());
+    stage.state = "live".into();
+    let terminals: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .cloned()
+        .chain([stage])
+        .collect();
+    app.view.inventory_mut().replace(2, terminals);
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: None,
+            name: "backlot".into(),
+        },
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 1,
+                "studios": [{
+                    "id": "acme-shop",
+                    "title": "Acme shop",
+                    "state": "live",
+                    "requirement_version": 1,
+                    "mode": "standard",
+                    "open_reviews": 0,
+                    "waiting": 0,
+                    "roles": [
+                        { "role": "actor-1", "name": "actor-a", "state": "closed", "resumable": true, "task": "t1" },
+                        { "role": "actor-10", "name": "bob", "state": "closed", "resumable": true, "task": "t10" }
+                    ],
+                    "tasks": [
+                        { "id": "t1", "title": "First", "status": "accepted", "priority": "normal", "requirement_version": 1, "rework_rounds": 0, "rework_cap": 3 },
+                        { "id": "t10", "title": "Tenth", "status": "accepted", "priority": "normal", "requirement_version": 1, "rework_rounds": 0, "rework_cap": 3 }
+                    ]
+                }]
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app.panel.mode = PanelMode::Closed;
+    app.area = (120, 30);
+
+    app.open_cast_reopen_picker(&StudioKey::local("acme-shop"));
+    let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
+    // Anchor on the titles, which appear only on the picker's own rows.
+    let row_with = |title: &str| -> &str {
+        text.lines()
+            .find(|l| l.contains(title))
+            .unwrap_or_else(|| panic!("row {title:?} in:\n{text}"))
+    };
+    // Compare display columns: `▸` is three bytes, so byte offsets lie.
+    let col = |line: &str, needle: &str| {
+        crate::chrome::text::display_width(&line[..line.find(needle).expect(needle)])
+    };
+    let (t1, t10) = (row_with("First"), row_with("Tenth"));
+    assert_eq!(col(t1, "actor-a"), col(t10, "bob"), "{t1}\n{t10}");
+    assert_eq!(col(t1, "First"), col(t10, "Tenth"), "{t1}\n{t10}");
+    // The id and the name are never cut; only the title is.
+    assert!(t1.contains("t1") && t10.contains("t10"), "{t1}\n{t10}");
 }
 
 #[tokio::test]
@@ -91,15 +174,21 @@ async fn taskless_closed_roles_go_last_by_name_and_offline_dims_without_reopen()
 
     app.open_cast_reopen_picker(&remote_key);
     let picker = app.help_state.picker.as_ref().expect("remote picker");
-    let labels: Vec<&str> = picker.rows.iter().map(|r| r.label.as_str()).collect();
+    let rows: Vec<(&str, Option<&str>)> = picker
+        .rows
+        .iter()
+        .map(|r| (r.label.trim(), r.title.as_deref()))
+        .collect();
     assert_eq!(
-        labels,
+        rows,
         vec![
-            "t2  actor-b  Second",
-            "t10  actor-a  Tenth",
-            "director",
-            "writer",
-        ]
+            ("t2   actor-b", Some("Second")),
+            ("t10  actor-a", Some("Tenth")),
+            ("director", None),
+            ("writer", None),
+        ],
+        "{:?}",
+        picker.rows.iter().map(|r| &r.label).collect::<Vec<_>>()
     );
     assert!(
         picker
@@ -112,7 +201,8 @@ async fn taskless_closed_roles_go_last_by_name_and_offline_dims_without_reopen()
 
     let backend = draw_to(&mut app, 120, 30);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("t2  actor-b  Second"), "{text}");
+    assert!(text.contains("t2   actor-b"), "{text}");
+    assert!(text.contains("Second"), "{text}");
     assert!(text.contains("unreachable"), "{text}");
 
     // Enter on dimmed row closes without dispatching reopen.
@@ -149,7 +239,7 @@ async fn picker_truncates_cjk_titles_scrolls_overflow_and_supports_row_or_outsid
     let buf = draw_to(&mut app, 120, 14);
     let text = screen_lines(&buf).join("\n");
     assert!(text.contains("reopen a closed role"), "{text}");
-    assert!(text.contains("t1  actor-a"), "{text}");
+    assert!(text.contains("t1   actor-a"), "{text}");
     assert!(
         !text.contains("Actions & Keybinds"),
         "standalone picker skips launcher:\n{text}"
@@ -159,7 +249,7 @@ async fn picker_truncates_cjk_titles_scrolls_overflow_and_supports_row_or_outsid
     assert_eq!(buf.buffer()[(p_rect.right() - 1, first_y)].symbol(), "│");
     assert!(
         text.lines()
-            .any(|l| l.contains("t1  actor-a") && l.contains('…')),
+            .any(|l| l.contains("t1   actor-a") && l.contains('…')),
         "{text}"
     );
 

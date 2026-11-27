@@ -206,11 +206,17 @@ async fn cast_click_enter_and_o_open_numeric_studio_picker_without_attaching() {
         "scoped strictly to acme-shop's 16 closed roles"
     );
     assert!(
-        picker.rows[0]
-            .label
-            .starts_with("t1  actor-a  Implement user authentication"),
+        picker.rows[0].label.starts_with("t1   actor-a"),
         "row 0 format: {:?}",
         picker.rows[0].label
+    );
+    assert!(
+        picker.rows[0]
+            .title
+            .as_deref()
+            .is_some_and(|t| t.starts_with("Implement user authentication")),
+        "row 0 title: {:?}",
+        picker.rows[0].title
     );
 
     if std::env::var_os("CAST_CLOSED_SHOT").is_some() {
