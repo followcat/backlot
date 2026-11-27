@@ -281,6 +281,7 @@ fn checked_ev(seq: u64, name: &str) -> backlot_model::Event {
             name: name.into(),
             exit_code: Some(0),
             timed_out: false,
+            expect_failed: None,
             output: format!("checks/5-{name}.log"),
             duration_ms: 1,
         },
@@ -475,6 +476,7 @@ fn finish_logs_appends_and_drops_the_tree_when_done() {
         timed_out,
         output,
         duration_ms,
+        ..
     } = &last.kind
     else {
         panic!("task.checked")
@@ -737,6 +739,7 @@ fn a_report_written_after_an_accept_over_failures_carries_the_section() {
                     name: "unit".into(),
                     exit_code: Some(1),
                     timed_out: false,
+                    expect_failed: None,
                     output: "checks/5-unit.log".into(),
                     duration_ms: 10,
                 },

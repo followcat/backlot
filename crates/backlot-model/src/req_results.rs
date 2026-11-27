@@ -317,6 +317,8 @@ pub struct DesignSignResult {
     pub mode: crate::design::SignMode,
     pub doc_file: String,
     pub seq: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub activated_checks: Vec<String>,
 }
 
 /// Result of `design-start-round` (or `backlot design open`).

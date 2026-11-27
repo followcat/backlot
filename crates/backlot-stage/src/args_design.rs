@@ -33,6 +33,7 @@ pub enum DesignCmd {
         refs: Vec<u64>,
         questions: Vec<QuestionInput>,
         questions_file: Option<PathBuf>,
+        checks_file: Option<PathBuf>,
     },
     Supplement {
         file: PathBuf,
@@ -47,6 +48,7 @@ pub enum DesignCmd {
         skip: bool,
         reason: Option<String>,
         note: Option<String>,
+        no_checks: bool,
     },
     Show {
         version: Option<u32>,
@@ -174,6 +176,7 @@ fn write(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut refs = Vec::new();
     let mut questions = Vec::new();
     let mut questions_file = None;
+    let mut checks_file = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_DESIGN)));
@@ -204,6 +207,12 @@ fn write(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
             _ if eq(&arg, "--questions-file").is_some() => {
                 questions_file = eq(&arg, "--questions-file").map(PathBuf::from)
             }
+            "--checks-file" => {
+                checks_file = Some(PathBuf::from(it.value("--checks-file", U_DESIGN)?))
+            }
+            _ if eq(&arg, "--checks-file").is_some() => {
+                checks_file = eq(&arg, "--checks-file").map(PathBuf::from)
+            }
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_DESIGN)),
         }
     }
@@ -215,6 +224,7 @@ fn write(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
             refs,
             questions,
             questions_file,
+            checks_file,
         }),
     ))
 }
@@ -287,6 +297,7 @@ fn sign(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut skip = false;
     let mut reason: Option<String> = None;
     let mut note: Option<String> = None;
+    let mut no_checks = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_DESIGN)));
@@ -296,6 +307,7 @@ fn sign(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
         }
         match arg.as_str() {
             "--skip" => skip = true,
+            "--no-checks" => no_checks = true,
             "--reason" => reason = Some(it.value("--reason", U_DESIGN)?),
             _ if eq(&arg, "--reason").is_some() => reason = eq(&arg, "--reason").map(String::from),
             "--note" => note = Some(it.value("--note", U_DESIGN)?),
@@ -306,6 +318,9 @@ fn sign(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     if reason.is_some() && !skip {
         return Err(usage("--reason requires --skip", U_DESIGN));
     }
+    if skip && no_checks {
+        return Err(usage("--no-checks cannot combine with --skip", U_DESIGN));
+    }
     if let Some(r) = &reason
         && r.trim().is_empty()
     {
@@ -313,7 +328,12 @@ fn sign(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     }
     Ok((
         std::mem::take(common),
-        Cmd::Design(DesignCmd::Sign { skip, reason, note }),
+        Cmd::Design(DesignCmd::Sign {
+            skip,
+            reason,
+            note,
+            no_checks,
+        }),
     ))
 }
 

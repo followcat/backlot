@@ -260,6 +260,7 @@ fn design_actions_and_results_round_trip() {
             skip: false,
             reason: None,
             note: None,
+            no_checks: false,
         }
     );
 
@@ -278,6 +279,7 @@ fn design_actions_and_results_round_trip() {
             skip: true,
             reason: Some("typo fix only".into()),
             note: Some("proceed directly".into()),
+            no_checks: false,
         }
     );
 
@@ -307,6 +309,7 @@ fn design_actions_and_results_round_trip() {
         round: 2,
         mode: SignMode::Approved,
         doc_file: "design/v1-final.md".into(),
+        activated_checks: Vec::new(),
     };
     let sign_res_rt: DesignSignResult =
         serde_json::from_value(serde_json::to_value(&sign_res).unwrap()).unwrap();

@@ -20,11 +20,7 @@ fn tmp(tag: &str) -> TestDir {
 }
 
 fn check(name: &str, run: &str) -> CheckDecl {
-    CheckDecl {
-        name: name.into(),
-        run: run.into(),
-        timeout_s: 600,
-    }
+    CheckDecl::new(name, run, 600)
 }
 
 /// The slug cmd computes for a workdir: lowercase, camel-boundary

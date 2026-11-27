@@ -392,6 +392,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         // `studio cast set` is answered by `verbs::cast_set`, which
         // appends its own events with the diff in hand.
         | Cmd::StudioCast(_)
+        | Cmd::StudioCheck(_)
         | Cmd::PermsRevoke { .. }
         | Cmd::Server(..)
         | Cmd::TellHollywood { .. } => {

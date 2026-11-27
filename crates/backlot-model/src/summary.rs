@@ -175,6 +175,8 @@ pub struct DesignSummary {
     pub summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub questions: Vec<crate::event::DesignQuestion>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposed_checks: Vec<crate::event::CheckDecl>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting_since_ms: Option<u64>,
 }

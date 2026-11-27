@@ -62,6 +62,7 @@ fn entry(
             source,
             refs: Vec::new(),
             questions: Vec::new(),
+            checks: Vec::new(),
         },
     )
 }

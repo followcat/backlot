@@ -4,24 +4,23 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use backlot_model::cast::{self, CastSettings};
 use backlot_model::design::{DesignPhase, DesignQuestion, DesignSlot, EntrySource, SignMode};
+use backlot_model::event::{CheckDecl, CheckOrigin};
 use backlot_model::req_results::{DesignSignResult, DesignStartRoundResult};
 use backlot_model::{EventKind, NewEvent};
 
 use crate::args::TextSource;
 use crate::args_design::{DesignCmd, QuestionInput, load_questions};
+use crate::checks;
+use crate::checks_preflight;
 use crate::cli::{Caller, Env, Fail};
 pub(crate) use crate::design_doc::design_show;
 use crate::render;
 use crate::store::{self, Pending, PendingFile};
 use crate::verbs::require_studio_dir;
 
-pub(crate) fn run(
-    base: &Path,
-    _env: &Env,
-    caller: &Caller,
-    cmd: DesignCmd,
-) -> Result<String, Fail> {
+pub(crate) fn run(base: &Path, env: &Env, caller: &Caller, cmd: DesignCmd) -> Result<String, Fail> {
     match cmd {
         DesignCmd::Open {
             req,
@@ -40,12 +39,28 @@ pub(crate) fn run(
             refs,
             questions,
             questions_file,
-        } => design_write(base, caller, slot, file, refs, questions, questions_file),
+            checks_file,
+        } => design_write(
+            base,
+            env,
+            caller,
+            slot,
+            file,
+            refs,
+            questions,
+            questions_file,
+            checks_file,
+        ),
         DesignCmd::Supplement { file, refs } => design_supplement(base, caller, file, refs),
         DesignCmd::Note { from: _, source } => design_note(base, caller, source),
         DesignCmd::Next => Ok(format_design_open(&design_next(base, caller)?)),
-        DesignCmd::Sign { skip, reason, note } => Ok(format_design_sign(&design_sign(
-            base, caller, skip, reason, note,
+        DesignCmd::Sign {
+            skip,
+            reason,
+            note,
+            no_checks,
+        } => Ok(format_design_sign(&design_sign(
+            base, caller, skip, reason, note, no_checks,
         )?)),
         DesignCmd::Show { .. } => {
             unreachable!("`design show` is dispatched through hwood_read::read")
@@ -188,14 +203,17 @@ pub(crate) fn design_next(base: &Path, caller: &Caller) -> Result<DesignStartRou
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn design_write(
     base: &Path,
+    env: &Env,
     caller: &Caller,
     slot: DesignSlot,
     file: PathBuf,
     refs: Vec<u64>,
     questions: Vec<QuestionInput>,
     questions_file: Option<PathBuf>,
+    checks_file: Option<PathBuf>,
 ) -> Result<String, Fail> {
     if !matches!(
         slot,
@@ -209,7 +227,59 @@ pub(crate) fn design_write(
     if !parsed_questions.is_empty() && slot != DesignSlot::Summary {
         return Err(Fail::refused("only summary entries may carry questions"));
     }
-    append_entry(base, caller, slot, file, None, refs, parsed_questions)
+    if checks_file.is_some() && slot != DesignSlot::Buildability {
+        return Err(Fail::refused(
+            "only buildability entries may pass --checks-file",
+        ));
+    }
+    let proposed_checks = if let Some(path) = checks_file {
+        let dir = store::studio_dir(base, &caller.studio);
+        require_studio_dir(&dir, &caller.studio)?;
+        let state = store::load_state(&dir).map_err(crate::hwood::store_fail)?;
+        let studio = state
+            .studio
+            .as_ref()
+            .ok_or_else(|| Fail::refused("no studio recorded yet"))?;
+        let probe = NewEvent::new(
+            caller.by(),
+            EventKind::DesignEntry {
+                version: state.requirement_version,
+                round: state
+                    .design
+                    .as_ref()
+                    .filter(|d| d.version == state.requirement_version)
+                    .map_or(1, |d| d.round),
+                slot,
+                file: "design/preflight.md".into(),
+                source: None,
+                refs: refs.clone(),
+                questions: Vec::new(),
+                checks: Vec::new(),
+            },
+        );
+        backlot_model::validate::validate(&state, &probe)
+            .map_err(|e| Fail::refused(e.to_string()))?;
+
+        let raw_checks = checks::parse_checks_file(&path)?;
+        let (_, decls) =
+            checks::declarations_with_origin(&studio.check_env, &raw_checks, CheckOrigin::Design)?;
+        cast::validate_proposed_checks(&studio.checks, &decls)
+            .map_err(|e| Fail::refused(e.to_string()))?;
+        checks_preflight::run_director_preflight(&dir, studio, env, &decls)?;
+        decls
+    } else {
+        Vec::new()
+    };
+    append_entry(
+        base,
+        caller,
+        slot,
+        file,
+        None,
+        refs,
+        parsed_questions,
+        proposed_checks,
+    )
 }
 
 pub(crate) fn design_supplement(
@@ -228,6 +298,7 @@ pub(crate) fn design_supplement(
         file,
         None,
         refs,
+        Vec::new(),
         Vec::new(),
     )
 }
@@ -249,9 +320,11 @@ pub(crate) fn design_note(
         entry_source,
         Vec::new(),
         Vec::new(),
+        Vec::new(),
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_entry(
     base: &Path,
     caller: &Caller,
@@ -260,6 +333,7 @@ fn append_entry(
     source: Option<EntrySource>,
     refs: Vec<u64>,
     questions: Vec<DesignQuestion>,
+    checks: Vec<CheckDecl>,
 ) -> Result<String, Fail> {
     let body = fs::read_to_string(&file)
         .map_err(|e| Fail::refused(format!("cannot read --file {}: {e}", file.display())))?;
@@ -295,6 +369,7 @@ fn append_entry(
                     source,
                     refs,
                     questions,
+                    checks,
                 },
             ),
             files: vec![PendingFile {
@@ -313,6 +388,7 @@ pub(crate) fn design_sign(
     skip: bool,
     reason: Option<String>,
     note: Option<String>,
+    no_checks: bool,
 ) -> Result<DesignSignResult, Fail> {
     if caller.role != "user" {
         return Err(Fail::refused(format!(
@@ -321,6 +397,9 @@ pub(crate) fn design_sign(
         )));
     }
     check_reason_flag(skip, reason.as_deref(), "--skip")?;
+    if skip && no_checks {
+        return Err(Fail::usage("--no-checks cannot combine with --skip"));
+    }
     let dir = store::studio_dir(base, &caller.studio);
     require_studio_dir(&dir, &caller.studio)?;
     let mode = if skip {
@@ -330,7 +409,7 @@ pub(crate) fn design_sign(
     };
     let recorded_note = note.or(reason);
     let by = caller.by();
-    let event = store::append(&dir, move |state, _| {
+    let events = store::append_many(&dir, move |state, _| {
         let version = state.requirement_version;
         let round = state
             .design
@@ -342,9 +421,9 @@ pub(crate) fn design_sign(
         } else {
             format!("design/v{version}-final.md")
         };
-        Ok::<Pending, Fail>(Pending {
+        let mut pending = vec![Pending {
             event: NewEvent::new(
-                by,
+                by.clone(),
                 EventKind::DesignSigned {
                     version,
                     round,
@@ -354,9 +433,45 @@ pub(crate) fn design_sign(
                 },
             ),
             files: Vec::new(),
-        })
+        }];
+        if !skip && !no_checks {
+            let proposed = state
+                .design
+                .as_ref()
+                .filter(|d| d.version == version)
+                .map(|d| d.proposed_checks.as_slice())
+                .unwrap_or(&[]);
+            let has_prior_design = state
+                .studio
+                .as_ref()
+                .is_some_and(|s| s.checks.iter().any(|c| c.origin == CheckOrigin::Design));
+            if !proposed.is_empty() || has_prior_design {
+                let mut next = CastSettings::of(state)
+                    .ok_or_else(|| Fail::refused("no studio recorded yet"))?;
+                next.checks = cast::merge_design_checks(&next.checks, proposed)
+                    .map_err(|e| Fail::refused(e.to_string()))?;
+                cast::check_runnable(state, &next).map_err(|e| Fail::refused(e.to_string()))?;
+                pending.push(Pending {
+                    event: NewEvent::new(by, next.event_kind(None)),
+                    files: Vec::new(),
+                });
+            }
+        }
+        Ok::<Vec<Pending>, Fail>(pending)
     })?;
-    match event.kind {
+    let mut iter = events.into_iter();
+    let sign_ev = iter
+        .next()
+        .ok_or_else(|| Fail::refused("missing design.signed event"))?;
+    let activated_checks = match iter.next().map(|ev| ev.kind) {
+        Some(EventKind::StudioCast { checks, .. }) => checks
+            .into_iter()
+            .filter(|c| c.origin == CheckOrigin::Design)
+            .map(|c| c.name)
+            .collect(),
+        _ => Vec::new(),
+    };
+    match sign_ev.kind {
         EventKind::DesignSigned {
             version,
             round,
@@ -365,11 +480,12 @@ pub(crate) fn design_sign(
             ..
         } => Ok(DesignSignResult {
             studio: caller.studio.clone(),
-            seq: event.seq,
+            seq: sign_ev.seq,
             version,
             round,
             mode,
             doc_file,
+            activated_checks,
         }),
         other => Err(Fail::refused(format!("unexpected event: {other:?}"))),
     }
@@ -394,8 +510,18 @@ pub(crate) fn format_design_sign(res: &DesignSignResult) -> String {
         SignMode::Approved => "approved",
         SignMode::Skipped => "skipped",
     };
-    format!(
-        "event {}: design.signed v{} r{} {mode}",
-        res.seq, res.version, res.round
-    )
+    if res.activated_checks.is_empty() {
+        format!(
+            "event {}: design.signed v{} r{} {mode}",
+            res.seq, res.version, res.round
+        )
+    } else {
+        format!(
+            "event {}: design.signed v{} r{} {mode} (+checks: {})",
+            res.seq,
+            res.version,
+            res.round,
+            res.activated_checks.join(", ")
+        )
+    }
 }

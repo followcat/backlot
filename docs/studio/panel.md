@@ -66,12 +66,12 @@ RowActions | Compose)`, or `CallSheet`):
 | `j`/`k`, `↑`/`↓` | Move the selection one row |
 | `Tab` / `Shift+Tab` | Jump to the first selectable row of the next / previous non-empty section (`Header` → `People` → `Tasks` → `Exchange` → `›` Input), wrapping across studios (compact rows count as header-only) |
 | `PageUp`/`PageDown` | Move one viewport |
-| `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
+| `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. Call Sheet `DECISION` row with proposed checks: opens a read-only `CardView` listing `Signing off also activates N check(s):` and every check verbatim (`name`, `run`, `timeout_s`, `expect`). |
 | `i` / `/` | Compose on the selected studio's `›` tell input (`/` seeds `/`, `Tab` completes `/verb`). While composing: `↑`/`↓` step per-studio `user` message history (`StudioSummary.exchange` + session submits, saving/restoring any draft, consecutive repeats collapsed), `Enter` sends and rests, `Esc` rests keeping the draft |
 | `Space` | Open or close the three-line drawer under a person or task; toggle a `✓ … done` or `□ … closed` fold line; on a studio header, fold/unfold the whole block |
-| `o` | On an opening-design row: open `design/v<N>.md` (`backlot report show --file …`) in the `Design` Reader. Otherwise: reopen a closed resumable person (`backlot reopen … --as user`) |
+| `o` | On an opening-design row: open `design/v<N>.md` (`backlot report show --file …`) in the `Design` Reader (prepended with `Signing off also activates N check(s):` while unsigned and proposed checks exist). Otherwise: reopen a closed resumable person (`backlot reopen … --as user`) |
 | `r` | On an opening-design row or studio awaiting user design reply: focus the studio's `›` producer tell line (or run `backlot design open` when `SuggestSkip`) |
-| `a` | On an opening-design row: open the confirm modal (`sign off` vs `skip` + frozen file) and send `backlot design sign [--skip]` on confirm |
+| `a` | On an opening-design row (or inside its `Enter` show view or Design Reader): when proposed checks exist, opens a 3-choice modal listing every check verbatim (`name`, wrapped `run`, `timeout_s`, `expect`) with choices to sign + activate checks, sign without checks (`--no-checks`), or cancel; otherwise opens the confirm modal (`sign off` vs `skip` + frozen file). |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
 | `p` | Peek the person's terminal |
 | `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
@@ -539,9 +539,11 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   between herdr's configured width and backlot's `[sidebar] width` unless the user dragged it.
 - Opening design cards and the Design Reader read the additive `design` (`DesignSummary`)
   projection from `backlot/1` whenever `design_gate = "required"` and `phase != "idle"`, routing
-  `waiting_user` / `suggest_skip` decisions to the warm `?N` bucket (never blocking `!B`), loading
-  `design/v<N>.md` / `design/v<N>-final.md` via `report show --file ...` (`[`/`]` / `◀`/`▶` jump
-  `## R<r>` / `### §R*` headings), and dispatching `a` / `r` via `backlot design sign [--skip]`,
-  `tell producer`, or `backlot design open` — locally or over `plugin.backlot.req`
-  (`design-sign`, `design-start-round`, `tell`); see [design.md](design.md#opening-design-discussion)
-  and [requests.md](requests.md).
+  `waiting_user` / `suggest_skip` decisions to the warm `?N` bucket (never blocking `!B`),
+  rendering `+N check(s)` on the Call Sheet `DECISION` row and opening verbatim proposed checks on
+  `Enter`, loading `design/v<N>.md` / `design/v<N>-final.md` via `report show --file ...`
+  (`[`/`]` / `◀`/`▶` jump `## R<r>` / `### §R*` headings), and dispatching `a` / `r` via
+  `backlot design sign [--skip]`, `tell producer`, or `backlot design open` — locally or over
+  `plugin.backlot.req` (`design-sign`, `design-start-round`, `tell`); see
+  [design.md](design.md#opening-design-discussion) and [requests.md](requests.md). Also the Task &
+  Delivery Sheet shows any `expect_failed` detail on `task.checked` records alongside exit codes.

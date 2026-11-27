@@ -43,6 +43,7 @@ fn design_entry(version: u32, round: u32, seq: u64, slot: DesignSlot) -> EventKi
         source: None,
         refs: Vec::new(),
         questions: Vec::new(),
+        checks: Vec::new(),
     }
 }
 

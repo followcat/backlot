@@ -106,6 +106,9 @@ permission_profile = "worktree"
 name = "units"
 run = "cargo test --lib"
 timeout_s = 120
+# Optional regex + minimum non-overlapping matches so exit-0 no-ops cannot pass:
+# expect = "test result: ok\\. [1-9][0-9]* passed"
+# min_matches = 1
 ```
 
 | Key | Meaning |
@@ -129,7 +132,7 @@ timeout_s = 120
 | `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
 | `design_gate` | Optional opening design policy: `"required"` (the default for new studios) or `"off"`. Historical studios whose `studio.created` event predates `design_gate` keep `"off"`; set `design_gate = "off"` in `cast.toml` or apply it later with `backlot studio cast set` to skip the opening design discussion for a studio. |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
-| `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. A single-repository feature — refused on a workspace or no-git studio at `studio new`. |
+| `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later — plus optional `expect` (regex) and `min_matches` (`>= 1`, default `1` when `expect` is set) so exit-0 no-ops record `expect_failed` instead of a false green. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. Checks can also be proposed at opening design (`design write --checks-file`) and activated atomically on sign-off (`design sign`), or added/removed live via `studio check add|remove` (`origin = "user"`). A single-repository feature — refused on a workspace or no-git studio. |
 | `[push]` | Optional outward push policy (`policy = "recorded" | "any" | "none"`, `protected_branches`, `allow_remotes`, `allow_tags`, `allow_gh_pr`; overrides also via `--push-*` flags or `[push]` in user config). Under the default `recorded` mode, non-protected branch pushes to remotes recorded at `studio new` pass directly, while protected branches, tags, other remotes, and `gh pr create` propose a user card; force pushes and `core.*` overrides stay refused. |
 
 The three fixed roles and every `[[candidates]]` entry each need `runner`, `model` and
@@ -475,12 +478,16 @@ discussion with you, the writer, and the director:
 1. **Round 1+:** When `req.version` arrives, the producer opens Round 1 (`backlot design open`, or
    `--suggest-skip` only for a tiny fix or an already-finalized external plan). The writer posts
    concrete options and a recommendation (`proposal`), the director checks buildability, commands,
-   and task split (`buildability`), and the producer writes a short convergence `summary` with 0–3
-   decisions/questions (`waiting_user`).
+   and task split (`buildability`, optionally attaching `--checks-file <toml>` to preflight and
+   propose `[[checks]]` under its guard), and the producer writes a short convergence `summary` with
+   0–3 decisions/questions (`waiting_user`).
 2. **Respond and sign off in the TUI or CLI:** Review the `DECISION` card (`?N` in the lot pill,
-   Call Sheet, or Lot Dock — press `o` to read `design/v<N>.md` with `§R<r>.*` section jumps, `r` to
-   reply or ask a follow-up round, or `a` to confirm sign-off / confirm skip). Roles can never sign
-   off on your behalf (`backlot design sign` is refused from role terminals). Once signed off
+   Call Sheet — showing `+N check(s)` and opening verbatim proposed checks on `Enter` — or Lot
+   Dock; press `o` to read `design/v<N>.md` with `§R<r>.*` section jumps and any proposed checks
+   at the top, `r` to reply or ask a follow-up round, or `a` to confirm sign-off / confirm skip).
+   Confirming sign-off atomically activates proposed `design` checks while keeping your `cast.toml`
+   and `user` checks; pass `--no-checks` on CLI or choose skip to activate none. Roles can never
+   sign off on your behalf (`backlot design sign` is refused from role terminals). Once signed off
    (`approved`), `design/v<N>-final.md` freezes and the writer derives the plan and acceptance
    criteria citing `design v<N> §R<r>.*` before the producer dispatches automatically:
 
@@ -488,10 +495,12 @@ discussion with you, the writer, and the director:
 backlot design show --studio acme-shop
 backlot tell producer --text "Go with Option B" --studio acme-shop --as user
 backlot design sign --studio acme-shop --as user
+backlot design sign --no-checks --studio acme-shop --as user
 backlot design sign --skip --reason "tiny one-line fix" --studio acme-shop --as user
 backlot design open --studio acme-shop --as user
 backlot design note --from user --text "Go with Option B" --studio acme-shop --as producer
 backlot design next --studio acme-shop --as producer
+backlot studio check add --name lint --run "cargo clippy -- -D warnings" --timeout 120 --preflight --studio acme-shop --as user
 ```
 
 3. **Turn the gate off per studio:** Existing studios whose ledgers predate `design_gate` stay
@@ -1122,7 +1131,9 @@ archived studio, `studio restore` brings it back finished and it reopens the sam
 | `studio list --archived` | Lists what is under `archive/`: name, stamp, repo and last requirement title. | Read-only. |
 | `studio restore <archived-name> [--name <new>]` | Copies an archived ledger back under `studios/` as a finished studio; `--name` renames it. Refuses a name already taken; `--dry-run` shows the plan. | The copy is live again; the archive copy stays. |
 | `studio cast show [--json]` | Prints the cast the studio plays now as a cast file (the fixed roles as their newest recast has them); `--json` is the same settings structured. | Read-only. |
-| `studio cast set --file <f> [--dry-run]` | Validates a cast file with `studio new --dry-run`'s runnable rules and, unless `--dry-run`, records it. A fixed role whose identity moved is recast in the same apply. | `studio.cast` (plus a `role.recast` per moved role) appended; the earlier events keep what they recorded. |
+| `studio cast set --file <f> [--dry-run]` | Validates a cast file with `studio new --dry-run`'s runnable rules and, unless `--dry-run`, records it (preserving `design`/`user` origins on matching checks). A fixed role whose identity moved is recast in the same apply. | `studio.cast` (plus a `role.recast` per moved role) appended; the earlier events keep what they recorded. |
+| `studio check add --name <n> --run <cmd> [--timeout <s>] [--expect <re>] [--min-matches <k>] [--preflight]` | User-only (`--as user`, single-repo studios): adds a check with `origin = "user"` (or replaces/errors per name uniqueness; runs optional stripped-env preflight when `--preflight` is set). | `studio.cast` appended with the added check (`origin = "user"`). |
+| `studio check remove --name <n>` | User-only (`--as user`): removes a declared check by name from the studio's active checks. | `studio.cast` appended without the removed check. |
 
 `studio restore` recreates no work areas: the studio comes back `finished` and `reopen` works from
 there. `prune` stays what it was — it never touches the ledger.

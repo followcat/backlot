@@ -123,6 +123,8 @@ pub struct Running {
     pub delivery: u32,
     pub delivery_seq: u64,
     pub name: String,
+    pub expect: Option<String>,
+    pub min_matches: Option<u32>,
     worktree: PathBuf,
     child: Box<dyn CheckChild>,
     started_ms: u64,
@@ -184,6 +186,8 @@ impl Running {
             delivery: 1,
             delivery_seq: 5,
             name: "unit".into(),
+            expect: None,
+            min_matches: None,
             worktree,
             child,
             started_ms: 0,
@@ -306,6 +310,8 @@ pub fn start(
         delivery: owed.delivery,
         delivery_seq: owed.delivery_seq,
         name: owed.check.name.clone(),
+        expect: owed.check.expect.clone(),
+        min_matches: owed.check.min_matches,
         worktree: work,
         child,
         started_ms: now_ms,
@@ -351,6 +357,7 @@ pub fn fail_start(
             name: owed.check.name.clone(),
             exit_code: None,
             timed_out: false,
+            expect_failed: None,
             output: rel,
             duration_ms: 0,
         },
@@ -399,6 +406,11 @@ pub fn finish(
     fs::create_dir_all(path.parent().expect("checks/ has a parent"))
         .map_err(|e| Fail::refused(format!("checks dir: {e}")))?;
     fs::write(&path, &out.output).map_err(|e| Fail::refused(format!("check log: {e}")))?;
+    let expect_failed = if out.exit_code == Some(0) && !out.timed_out {
+        checks::check_expect(run.expect.as_deref(), run.min_matches, &out.output)
+    } else {
+        None
+    };
     crate::act::record(
         dir,
         EventKind::TaskChecked {
@@ -407,6 +419,7 @@ pub fn finish(
             name: run.name.clone(),
             exit_code: out.exit_code,
             timed_out: out.timed_out,
+            expect_failed,
             output: rel,
             duration_ms: out.duration_ms,
         },

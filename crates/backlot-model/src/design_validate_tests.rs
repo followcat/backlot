@@ -51,6 +51,7 @@ fn entry_kind(
         source,
         refs: Vec::new(),
         questions,
+        checks: Vec::new(),
     }
 }
 

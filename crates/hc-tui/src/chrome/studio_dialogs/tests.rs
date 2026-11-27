@@ -197,3 +197,63 @@ fn archived_list_hint_and_buttons_sit_on_distinct_rows() {
         );
     }
 }
+
+#[test]
+fn design_sign_modal_wraps_150_char_run_verbatim_at_80_and_200_cols_with_three_choices() {
+    use backlot_model::event::CheckDecl;
+
+    let long_run = format!("check_{}_end", "x".repeat(140));
+    assert_eq!(long_run.len(), 150);
+    let checks = vec![
+        CheckDecl {
+            expect: Some("files_scanned=[1-9]".into()),
+            ..CheckDecl::new("long_scan", &long_run, 45)
+        },
+        CheckDecl::new("lint", "cargo clippy --all-targets -- -D warnings", 120),
+    ];
+    let d = StudioDialog::design_sign(&key(Some("host-b")), false, Some("design/v1.md"), &checks);
+    let palette = Palette::catppuccin();
+
+    for (cols, rows) in [(80u16, 40u16), (200u16, 44u16)] {
+        let area = Rect::new(0, 0, cols, rows);
+        let mut buf = Buffer::empty(area);
+        let hits = render(&mut buf, area, &d, &palette).unwrap();
+        let rendered = text_of(&buf, hits.area);
+        assert!(
+            !rendered.contains('…'),
+            "sign modal must not truncate checks with ellipsis at {cols}x{rows}:\n{rendered}"
+        );
+        // Strip border glyphs and join wrapped lines inside the modal to prove
+        // every single character of the 150-char `run` renders verbatim.
+        let unwrapped: String = rendered
+            .lines()
+            .map(|l| {
+                l.trim()
+                    .trim_matches(|c: char| {
+                        c == '│' || c == '╭' || c == '╮' || c == '╰' || c == '╯' || c == '─'
+                    })
+                    .trim()
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        assert!(
+            unwrapped.contains(&long_run),
+            "150-char `run` cut at {cols}x{rows}:\n{rendered}"
+        );
+        for want in [
+            "long_scan (timeout 45s)",
+            "expect: files_scanned=[1-9]",
+            "lint (timeout 120s)",
+            "cargo clippy --all-targets -- -D warnings",
+            "Sign off and activate 2 checks",
+            "Sign off without checks (--no-checks)",
+            "Cancel",
+        ] {
+            assert!(
+                rendered.contains(want),
+                "sign modal missing `{want}` at {cols}x{rows}:\n{rendered}"
+            );
+        }
+        assert_eq!(hits.choices.len(), 3, "expected 3 choice hit rects");
+    }
+}

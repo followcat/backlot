@@ -345,6 +345,7 @@ fn a_bare_actor_records_nothing() {
             name: "units".into(),
             exit_code: Some(0),
             timed_out: false,
+            expect_failed: None,
             output: "checks/9.txt".into(),
             duration_ms: 1,
         },

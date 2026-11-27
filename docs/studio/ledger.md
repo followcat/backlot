@@ -62,7 +62,7 @@ prints `already at ledger v1`.
 
 | Kind | Main fields |
 |---|---|
-| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps, `max_actors`, `design_gate` |
+| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks` (with optional `expect`, `min_matches`, `origin`), optional `task_budget_s`, `[limits]` runner caps, `max_actors`, `design_gate` |
 | `studio.cast` | the same cast fields `studio.created` holds — roles, candidates, rework cap, timings, `check_env`, declared `checks`, `task_budget_s`, `[limits]`, `max_actors`, `design_gate`, push knobs — plus the optional `card`. The newest `studio.cast` (or `studio.created`) is the settings the stage uses; earlier events keep what they recorded. The binding (`repo`, `members`, `no_git`, `mode`) and `push.remotes` are not cast and never change. A fixed role whose identity moves is also recorded as a `role.recast`, appended first. |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
@@ -79,7 +79,7 @@ prints `already at ledger v1`.
 | `task.priority` | task, priority |
 | `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`, or empty `""` on `readonly`/`audit` tasks), report file, requirement version, actor-reported checks, optional `usage` |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes (`upstream_changes` refused on `readonly`/`audit` tasks) |
-| `task.checked` | task, delivery number, check name, exit code, `timed_out`, output log, duration — `stage` only (not scheduled for `readonly`/`audit` empty-commit deliveries) |
+| `task.checked` | task, delivery number, check name, exit code, `timed_out`, optional `expect_failed`, output log, duration — `stage` only (not scheduled for `readonly`/`audit` empty-commit deliveries) |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq`; `delivered` carries the target seq |
@@ -92,7 +92,7 @@ prints `already at ledger v1`.
 | `outward.requested` | role, optional task, `command`, `cwd`, `argv`, optional `why` — explicit `backlot ask --run` card request |
 | `outward.completed` | `card`, `source_seq`, `outcome` (`Succeeded`/`Failed`/`TimedOut`/`Denied`/`Stale`), optional `exit_code`, `output_tail`, optional `log_file` — `stage` only |
 | `design.opened` | `version`, `round`, `suggest_skip` (`bool`, omitted when `false`), optional `reason`, `doc_file` — `producer` or `user` |
-| `design.entry` | `version`, `round`, `slot` (`proposal` / `buildability` / `summary` / `user_input` / `supplement`), `file`, optional `source` (`tell` / `hook` / `producer_note`), `refs` (`u64[]`, omitted when empty), `questions` (`DesignQuestion[]`: `{ id, prompt, recommendation, section_ref? }`, up to 3, omitted when empty) |
+| `design.entry` | `version`, `round`, `slot` (`proposal` / `buildability` / `summary` / `user_input` / `supplement`), `file`, optional `source` (`tell` / `hook` / `producer_note`), `refs` (`u64[]`, omitted when empty), `questions` (`DesignQuestion[]`: `{ id, prompt, recommendation, section_ref? }`, up to 3, omitted when empty), optional `checks` (`CheckDecl[]` with `origin: "design"` when `slot == "buildability"`, omitted when empty) |
 | `design.signed` | `version`, `round`, `mode` (`approved` / `skipped`), `doc_file`, optional `note` — `user` only |
 | `correction` | target event, changed fields, reason |
 
@@ -231,21 +231,9 @@ they aggregate the same way — `StudioState` sums every delivery's usage, an ac
 only its own, and the `backlot/1` summary carries the totals only while a counter is non-zero.
 Like every added field they are serde-optional: old logs and old summaries read unchanged.
 
-`task.checked` is the stage's own check record (S9b part 2): `studio.created` carries the cast's
-`[[checks]]` — a name, the `run` command and `timeout_s` — and `check_env`, the stage-environment
-names a check may see. Each declared check runs once per delivery on the stage, `sh -c` in a
-detached worktree at the delivery's end sha with the environment stripped to a passthrough list
-plus `check_env`; the timeout escalates TERM then KILL, and the capped log lands at
-`checks/<delivery-seq>-<name>.log` before the event. An append that is not by `stage`, names an
-undeclared check, targets a delivery that does not exist or repeats a `(delivery, check)` pair is
-refused. A pass is exit 0 — a signal exit or a timeout is not. An accepting or partially accepting
-`task.reviewed` is refused while a declared check has no record — the user alone may accept over
-pending ones — and refused unless its conclusion names every failing or timed-out check; a
-`correction` producing such a review is gated the same way. The reviewer's delivery notice waits
-the same, then lists what the stage ran — pass, fail or timed out, with its log — apart from the
-actor's own `--check` claims, and `backlot status` marks each declared check `running`, `pass` or
-`fail` on the task line. A report file copied into the ledger gains a "Accepted with failing
-stage checks" section while a task accepted over failures exists.
+`task.checked` is the stage's own check record (S9b part 2): `studio.created` (and newer `studio.cast`) carries the cast's `[[checks]]` — a `name`, `run` command, `timeout_s`, optional `expect` regex and `min_matches` (`u32`, default `1` when `expect` is set), and `origin` (`"cast"`, omitted by default; `"design"`; `"user"`) — alongside `check_env`, the stage-environment names a check may see. Each declared check runs once per delivery on the stage, `sh -c` in a detached worktree at the delivery's end sha with the environment stripped to a passthrough list plus `check_env`; the timeout escalates TERM then KILL, and the capped log lands at `checks/<delivery-seq>-<name>.log` before the event. An append that is not by `stage`, names an undeclared check, targets a delivery that does not exist or repeats a `(delivery, check)` pair is refused. A pass requires exit `0`, `!timed_out`, and `expect_failed.is_none()` — if an `expect` regex matches fewer than `min_matches` non-overlapping occurrences across combined stdout+stderr, `task.checked` keeps the real `exit_code` and records `expect_failed` with the mismatch summary. An accepting or partially accepting `task.reviewed` is refused while a declared check has no record — the user alone may accept over pending ones — and refused unless its conclusion names every failing, timed-out, or expect-failed check; a `correction` producing such a review is gated the same way. The reviewer's delivery notice waits the same, then lists what the stage ran — pass, fail, expect-failed, or timed out, with its log — apart from the actor's optional `--check` claims, and `backlot status` marks each declared check `running`, `pass` or `fail` on the task line. A report file copied into the ledger gains a "Accepted with failing stage checks" section while a task accepted over failures exists.
+
+Proposed checks can enter the studio during opening design via `backlot design write --slot buildability --checks-file <toml>`: the director runs a stripped + guarded preflight once per check in the director's worktree before recording `design.entry.checks`, and `backlot design sign` (user only) atomically appends `design.signed` + `studio.cast` replacing `origin == "design"` checks while keeping `cast` and `user` checks untouched (`--no-checks` and `--skip` activate none). Live studios also support user-only `backlot studio check add|remove`, which appends `studio.cast` with `origin == "user"`.
 
 `role.approval` records a director's or user's decision on an open `permission prompt` attention —
 refused without one, and refused for the director when the prompt is the user's (S9b): a flagged

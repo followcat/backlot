@@ -207,7 +207,11 @@ pub(super) fn studio_exchange_meta(
     meta
 }
 
-pub(super) fn design_meta(machines: &[MachineSummary], key: StudioKey, file: &str) -> ReaderMeta {
+pub(in crate::app) fn design_meta(
+    machines: &[MachineSummary],
+    key: StudioKey,
+    file: &str,
+) -> ReaderMeta {
     let d = data::studio(machines, &key).and_then(|s| s.studio.design.as_ref());
     let file_ver = hollywood::version_from_file(file);
     let is_final = file.ends_with("-final.md");

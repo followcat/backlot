@@ -8,23 +8,48 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use backlot_model::event::CheckDecl;
+use backlot_model::event::{CheckDecl, CheckOrigin};
 use backlot_model::state::{StudioState, TaskStatus};
 use serde::Deserialize;
 
 use crate::cli::Fail;
 
-/// One `[[checks]]` stanza of the cast file.
-#[derive(Debug, Deserialize)]
+/// One `[[checks]]` stanza of the cast file or `--checks-file`.
+#[derive(Debug, Clone, Deserialize)]
 pub struct CastCheck {
     pub name: String,
     pub run: String,
     #[serde(default = "default_timeout_s")]
     pub timeout_s: u64,
+    #[serde(default)]
+    pub expect: Option<String>,
+    #[serde(default)]
+    pub min_matches: Option<u32>,
+}
+
+/// Standalone `--checks-file` TOML using the same `[[checks]]` syntax as `cast.toml`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChecksFile {
+    #[serde(default)]
+    pub checks: Vec<CastCheck>,
+}
+
+/// Parse a standalone `--checks-file` TOML document into raw [`CastCheck`] entries.
+pub fn parse_checks_file(path: &Path) -> Result<Vec<CastCheck>, Fail> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| Fail::refused(format!("cannot read --checks-file {}: {e}", path.display())))?;
+    let parsed: ChecksFile = toml::from_str(&text)
+        .map_err(|e| Fail::usage(format!("bad checks file {}: {e}", path.display())))?;
+    Ok(parsed.checks)
 }
 
 fn default_timeout_s() -> u64 {
     600
+}
+
+fn compile_expect(pattern: &str) -> Result<regex::Regex, regex::Error> {
+    regex::RegexBuilder::new(pattern).multi_line(true).build()
 }
 
 /// A check name is a short lowercase slug: it keys `task.checked`
@@ -51,48 +76,88 @@ fn env_ok(name: &str) -> bool {
         .any(|bad| up.contains(bad))
 }
 
-/// Vet the cast's check declaration for `studio new`; answers the
-/// values recorded on `studio.created`.
-pub fn declarations(
-    check_env: &[String],
-    checks: &[CastCheck],
-) -> Result<(Vec<String>, Vec<CheckDecl>), Fail> {
-    let mut names = BTreeSet::new();
-    for check in checks {
-        if !name_ok(&check.name) {
+/// Validate a single check stanza with the given [`CheckOrigin`].
+pub fn validate_one_check(check: &CastCheck, origin: CheckOrigin) -> Result<CheckDecl, Fail> {
+    if !name_ok(&check.name) {
+        return Err(Fail::usage(format!(
+            "check name '{}' must match [a-z0-9_-]+",
+            check.name
+        )));
+    }
+    if check.run.trim().is_empty() {
+        return Err(Fail::usage(format!(
+            "check '{}' has an empty run command",
+            check.name
+        )));
+    }
+    // A `run` reaching for `BACKLOT_*` or an environment-clearing
+    // flag is refused outright — the same words `touches_env`
+    // flags on a prompt. A claude launch pre-allows each check
+    // verbatim and could never be trusted to cover one.
+    if crate::permit::touches_env(&check.run) {
+        return Err(Fail::usage(format!(
+            "check '{}' run may not reach for BACKLOT_*, env -i or --ignore-environment",
+            check.name
+        )));
+    }
+    if check.timeout_s == 0 {
+        return Err(Fail::usage(format!(
+            "check '{}' timeout_s must be at least 1",
+            check.name
+        )));
+    }
+    if check.min_matches == Some(0) {
+        return Err(Fail::usage(format!(
+            "check '{}' min_matches must be at least 1",
+            check.name
+        )));
+    }
+    if check.min_matches.is_some() && check.expect.is_none() {
+        return Err(Fail::usage(format!(
+            "check '{}' min_matches requires expect",
+            check.name
+        )));
+    }
+    if let Some(pat) = &check.expect {
+        if pat.is_empty() {
             return Err(Fail::usage(format!(
-                "check name '{}' must match [a-z0-9_-]+",
+                "check '{}' expect regex must not be empty",
                 check.name
             )));
         }
+        compile_expect(pat).map_err(|e| {
+            Fail::usage(format!(
+                "check '{}' bad expect regex '{pat}': {e}",
+                check.name
+            ))
+        })?;
+    }
+    Ok(CheckDecl {
+        name: check.name.clone(),
+        run: check.run.clone(),
+        timeout_s: check.timeout_s,
+        expect: check.expect.clone(),
+        min_matches: check.min_matches,
+        origin,
+    })
+}
+
+/// Vet check declarations and tag them with `origin`.
+pub fn declarations_with_origin(
+    check_env: &[String],
+    checks: &[CastCheck],
+    origin: CheckOrigin,
+) -> Result<(Vec<String>, Vec<CheckDecl>), Fail> {
+    let mut names = BTreeSet::new();
+    let mut decls = Vec::with_capacity(checks.len());
+    for check in checks {
         if !names.insert(&check.name) {
             return Err(Fail::usage(format!(
                 "check name '{}' is declared twice",
                 check.name
             )));
         }
-        if check.run.trim().is_empty() {
-            return Err(Fail::usage(format!(
-                "check '{}' has an empty run command",
-                check.name
-            )));
-        }
-        // A `run` reaching for `BACKLOT_*` or an environment-clearing
-        // flag is refused outright — the same words `touches_env`
-        // flags on a prompt. A claude launch pre-allows each check
-        // verbatim and could never be trusted to cover one.
-        if crate::permit::touches_env(&check.run) {
-            return Err(Fail::usage(format!(
-                "check '{}' run may not reach for BACKLOT_*, env -i or --ignore-environment",
-                check.name
-            )));
-        }
-        if check.timeout_s == 0 {
-            return Err(Fail::usage(format!(
-                "check '{}' timeout_s must be at least 1",
-                check.name
-            )));
-        }
+        decls.push(validate_one_check(check, origin)?);
     }
     for name in check_env {
         if !env_ok(name) {
@@ -101,17 +166,37 @@ pub fn declarations(
             )));
         }
     }
-    Ok((
-        check_env.to_vec(),
-        checks
-            .iter()
-            .map(|c| CheckDecl {
-                name: c.name.clone(),
-                run: c.run.clone(),
-                timeout_s: c.timeout_s,
-            })
-            .collect(),
-    ))
+    Ok((check_env.to_vec(), decls))
+}
+
+/// Vet the cast's check declaration for `studio new` / `studio cast set`.
+pub fn declarations(
+    check_env: &[String],
+    checks: &[CastCheck],
+) -> Result<(Vec<String>, Vec<CheckDecl>), Fail> {
+    declarations_with_origin(check_env, checks, CheckOrigin::Cast)
+}
+
+/// Check captured stdout+stderr against `expect` and `min_matches`.
+/// Returns `Some(reason)` when the expectation is not met.
+pub fn check_expect(
+    expect: Option<&str>,
+    min_matches: Option<u32>,
+    output: &[u8],
+) -> Option<String> {
+    let pat = expect?;
+    let re = match compile_expect(pat) {
+        Ok(re) => re,
+        Err(e) => return Some(format!("expect '{pat}' invalid regex: {e}")),
+    };
+    let text = String::from_utf8_lossy(output);
+    let matched = re.find_iter(&text).count();
+    let min = min_matches.unwrap_or(1) as usize;
+    if matched < min {
+        Some(format!("expect '{pat}' matched {matched} (min {min})"))
+    } else {
+        None
+    }
 }
 
 /// A check the ledger still owes: the next unrecorded declared

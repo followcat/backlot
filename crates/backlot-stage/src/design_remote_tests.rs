@@ -319,6 +319,7 @@ fn remote_design_sign_skip_works_on_suggest_skip_without_final_snapshot() {
             skip: true,
             reason: Some("agreed trivial".into()),
             note: Some("go".into()),
+            no_checks: false,
         };
         let fut = tokio::spawn(async move {
             doc_client::send_typed::<DesignSignResult>(

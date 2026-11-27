@@ -57,15 +57,21 @@ pub(super) fn deliveries(sheet: &Sheet, out: &mut Vec<SheetLine>) {
                 .exit_code
                 .map(|c| format!("exit {c}"))
                 .unwrap_or_else(|| "no exit".to_string());
-            let timeout = if check.timed_out { " · timed out" } else { "" };
+            let detail = if check.timed_out {
+                " · timed out".to_string()
+            } else if let Some(msg) = &check.expect_failed {
+                format!(" · {msg}")
+            } else {
+                String::new()
+            };
             let status = if check.passed() {
                 format!("✓ {} · pass ({exit})", check.name)
             } else {
-                format!("× {} · FAIL ({exit}){timeout}", check.name)
+                format!("× {} · FAIL ({exit}){detail}", check.name)
             };
             out.push(file_line_meta(
                 format!(
-                    "    {} {} {exit} · {}ms{timeout}",
+                    "    {} {} {exit} · {}ms{detail}",
                     if check.passed() { "✓" } else { "×" },
                     check.name,
                     check.duration_ms

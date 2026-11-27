@@ -37,6 +37,31 @@ pub(crate) fn find_real_binary(
     None
 }
 
+/// Remove `extra_bin` and any directory containing a backlot guard shim
+/// from a `:`-separated `PATH` string.
+pub(crate) fn strip_shim_dirs(path_env: &str, extra_bin: Option<&Path>) -> String {
+    let canon_extra = extra_bin.and_then(|p| std::fs::canonicalize(p).ok());
+    let filtered: Vec<&str> = path_env
+        .split(':')
+        .filter(|seg| !seg.is_empty())
+        .filter(|seg| {
+            let dir = Path::new(seg);
+            if let Some(eb) = extra_bin
+                && dir == eb
+            {
+                return false;
+            }
+            if let (Some(ce), Ok(cd)) = (&canon_extra, std::fs::canonicalize(dir))
+                && cd == *ce
+            {
+                return false;
+            }
+            !is_guard_shim_file(&dir.join("git")) && !is_guard_shim_file(&dir.join("gh"))
+        })
+        .collect();
+    filtered.join(":")
+}
+
 pub(crate) fn is_guard_shim_file(path: &Path) -> bool {
     use std::io::Read;
     let Ok(mut f) = std::fs::File::open(path) else {

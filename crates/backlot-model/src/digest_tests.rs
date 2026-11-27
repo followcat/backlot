@@ -50,16 +50,8 @@ fn digest_studio_events() -> Vec<Event> {
             "acme-shop",
             "/home/user/acme-shop",
             vec![
-                CheckDecl {
-                    name: "test".into(),
-                    run: "cargo test".into(),
-                    timeout_s: 60,
-                },
-                CheckDecl {
-                    name: "lint".into(),
-                    run: "cargo clippy".into(),
-                    timeout_s: 60,
-                },
+                CheckDecl::new("test", "cargo test", 60),
+                CheckDecl::new("lint", "cargo clippy", 60),
             ],
         ),
         evt(
@@ -113,6 +105,7 @@ fn digest_studio_events() -> Vec<Event> {
                 name: "test".into(),
                 exit_code: Some(0),
                 timed_out: false,
+                expect_failed: None,
                 output: "checks/t1-d1.log".into(),
                 duration_ms: 250,
             },

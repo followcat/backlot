@@ -377,7 +377,9 @@ pub(crate) fn exec_event(
     // apply`. So is a `studio cast set`: it changes who plays a role.
     if matches!(
         cmd,
-        Cmd::Recast { .. } | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
+        Cmd::Recast { .. }
+            | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
+            | Cmd::StudioCheck(_)
     ) && env.get("BACKLOT_ROLE").is_some()
     {
         return Err(Fail::refused(
@@ -390,6 +392,7 @@ pub(crate) fn exec_event(
         Cmd::StudioNew { .. }
         | Cmd::Recast { .. }
         | Cmd::StudioCast(crate::args::CastCmd::Set { .. })
+        | Cmd::StudioCheck(_)
         | Cmd::Design(crate::args::DesignCmd::Sign { .. })
         | Cmd::Design(crate::args::DesignCmd::Note { .. }) => Caller {
             studio: studio_name(&common, env)?,
@@ -630,6 +633,7 @@ pub(crate) fn exec_event(
         }) => Some(crate::verbs::format_cast_set(&crate::verbs::cast_set(
             base, env, &caller, &file, dry_run, json,
         )?)),
+        Cmd::StudioCheck(ccmd) => Some(crate::studio_check::run(base, env, &caller, ccmd)?),
         Cmd::TaskState { change, reason }
             if matches!(
                 change,

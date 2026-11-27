@@ -382,15 +382,22 @@ re-raise one `stall_limit_s` later.
   refuse working-role callers. `backlot deliver --commits A..B` resolves both ends in
   `work/<task>` and refuses an empty range or a tip off the task branch, so the recorded
   `sha..sha` is real. The stage also runs the declared checks itself (S9b part 2): each
-  `[[checks]]` entry in the cast runs once per delivery in a detached worktree at the delivery's
+  `[[checks]]` entry in the cast (including `design`- and `user`-origin checks activated via `design sign` or `studio check add`) runs once per delivery in a detached worktree at the delivery's
   end sha, `sh -c` under an environment stripped to a passthrough list plus the declared
   `check_env` names, with the timeout escalated TERM then KILL and the log capped — the result
-  is `task.checked`, recorded by `stage`. An accepting review waits for every declared check —
-  the user may accept over pending ones — and names each failing check in its conclusion; a
-  correction is gated the same. `--check name=pass` on `deliver` stays the actor's own claim,
-  kept apart from the stage's records in notices, `status` and `records`. A check is
-  actor-written code run as the user with a stripped environment and a timeout — it is not a
-  sandbox. Processes a check leaves behind are killed by their group or, when their tree is
+  is `task.checked`, recorded by `stage`. When `expect` (and optional `min_matches`, default `1`)
+  is declared, an exit `0` run with fewer than `min_matches` regex hits records `expect_failed`
+  while preserving real `exit_code`, so false-green `task.reviewed` acceptances are refused.
+  An accepting review waits for every declared check —
+  the user may accept over pending ones — and names each failing/expect-failed check in its
+  conclusion; a `correction` is gated the same. `--check name=pass` on `deliver` is optional and
+  stays the actor's own claim, kept apart from the stage's records in notices, `status` and
+  `records`. During `backlot design write --slot buildability --checks-file <toml>`, Gate 2
+  preflight runs in `roles/director` worktree under the same stripped `checks::env_for` environment
+  wrapped in the director's outward-action guard (`roles/director/bin` + `core.hooksPath`, 120 s cap),
+  so accidental `git push` or outside-worktree `git` calls refuse cleanly as `role.refused`. A check is
+  actor-written or director-proposed code run as the user with a stripped environment and a timeout
+  — it is not a sandbox. Processes a check leaves behind are killed by their group or, when their tree is
   swept, by a `/proc/<pid>/cwd` scan of the user's own processes; on a platform without
   `/proc` that sweep is skipped. A permission prompt whose own block reaches for
   `BACKLOT_*` — read, `unset`, `export`/`declare` — `env -i`, `--ignore-environment`,

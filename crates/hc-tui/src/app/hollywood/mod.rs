@@ -14,7 +14,7 @@ mod mouse;
 mod nav;
 mod reader_actions;
 mod reader_compose;
-mod reader_meta_from;
+pub(crate) mod reader_meta_from;
 mod reader_nav;
 mod view;
 

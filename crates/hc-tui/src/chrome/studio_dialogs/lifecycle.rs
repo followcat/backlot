@@ -75,9 +75,7 @@ pub(super) fn render_restart(
         area: q,
         send: *ok,
         cancel: *cancel,
-        body: Rect::default(),
-        summary: Rect::default(),
-        cursor: None,
+        ..DialogHits::default()
     })
 }
 
@@ -209,9 +207,7 @@ pub(super) fn render_recast(
         area: q,
         send: *ok,
         cancel: *cancel,
-        body: Rect::default(),
-        summary: Rect::default(),
-        cursor: None,
+        ..DialogHits::default()
     })
 }
 
@@ -306,8 +302,6 @@ pub(super) fn render_cast_edit(
         area: q,
         send: *send,
         cancel: *cancel,
-        body: Rect::default(),
-        summary: Rect::default(),
-        cursor: None,
+        ..DialogHits::default()
     })
 }

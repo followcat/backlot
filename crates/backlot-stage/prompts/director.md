@@ -167,9 +167,15 @@ is killed for you.
 Do not create or cast tasks until the current requirement version is signed off
 (`{design_file}`). After the writer posts `proposal` for the active round,
 evaluate buildability and submit
-`backlot design write --slot buildability --file <file>`:
+`backlot design write --slot buildability --file <file>` (or add
+`--checks-file <toml>` using `[[checks]]` syntax when stage checks are needed):
 
-- Verify real runnable build/test commands in the repository worktree.
+- Verify real runnable build/test commands in the repository worktree. When
+  proposing stage checks with `--checks-file <toml>`, they preflight here under
+  your guard before recording and are activated only when the person signs off.
+- For checks where a runner can exit `0` without actually checking anything (e.g.
+  0 files scanned or 0 tests matched), set `expect = "<regex>"` and optional
+  `min_matches = <k>` so false greens fail.
 - Call out worktree, guard, port, migration, or credential boundaries.
 - Draft a file-disjoint task split and concrete verification plan for the
   recommended option (and note if another option is materially safer to land).

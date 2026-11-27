@@ -301,13 +301,19 @@ pub(super) fn map(
             all: *all,
         }),
         Cmd::Runners { json: _ } => MappedCmd::Action(ReqAction::Runners),
-        Cmd::Design(DesignCmd::Sign { skip, reason, note }) => {
-            let (skip, reason, note) = (*skip, reason.clone(), note.clone());
+        Cmd::Design(DesignCmd::Sign {
+            skip,
+            reason,
+            note,
+            no_checks,
+        }) => {
+            let (skip, reason, note, no_checks) = (*skip, reason.clone(), note.clone(), *no_checks);
             with_studio(common, env, move |studio| ReqAction::DesignSign {
                 studio,
                 skip,
                 reason,
                 note,
+                no_checks,
             })
         }
         Cmd::Design(DesignCmd::Open {

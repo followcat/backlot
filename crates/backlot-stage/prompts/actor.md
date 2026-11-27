@@ -55,7 +55,9 @@ and the acceptance text disagree, ask the director with
 
 ## Delivering
 
-When the checks pass and the acceptance list holds:
+When the checks pass and the acceptance list holds (when the studio has checks,
+the stage runs them and records `task.checked` as the evidence; `--check` on
+`deliver` is optional, not required):
 
 {checks}
 Cannot proceed? Say why and stop guessing:

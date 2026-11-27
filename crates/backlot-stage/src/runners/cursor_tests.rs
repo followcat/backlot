@@ -23,11 +23,7 @@ fn tmp(tag: &str) -> TestDir {
 }
 
 fn check(name: &str, run: &str) -> CheckDecl {
-    CheckDecl {
-        name: name.into(),
-        run: run.into(),
-        timeout_s: 600,
-    }
+    CheckDecl::new(name, run, 600)
 }
 
 /// The slug cursor computes for a workdir — non-alphanumeric runs

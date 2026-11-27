@@ -120,7 +120,12 @@ impl CastSettings {
             && self.nudge_after_s == other.nudge_after_s
             && self.escalate_after_s == other.escalate_after_s
             && self.check_env == other.check_env
-            && self.checks == other.checks
+            && self.checks.len() == other.checks.len()
+            && self
+                .checks
+                .iter()
+                .zip(&other.checks)
+                .all(|(a, b)| a.same_spec(b))
             && self.task_budget_s == other.task_budget_s
             && self.limits == other.limits
             && self.max_actors == other.max_actors
@@ -218,4 +223,73 @@ pub fn check_runnable(state: &StudioState, new: &CastSettings) -> Result<(), Ref
         &new.candidates,
         &new.limits,
     )
+}
+
+/// Validate checks proposed by a buildability entry against existing
+/// non-design checks (`Cast` or `User`) so proposals cannot collide with
+/// or replace checks declared in `cast.toml` or `studio check add`.
+pub fn validate_proposed_checks(
+    existing: &[crate::event::CheckDecl],
+    proposed: &[crate::event::CheckDecl],
+) -> Result<(), Refusal> {
+    let mut seen = std::collections::BTreeSet::new();
+    for c in proposed {
+        if c.name.trim().is_empty() || c.run.trim().is_empty() || c.timeout_s == 0 {
+            return Err(Refusal::InvalidDesign(format!(
+                "invalid proposed check '{}'",
+                c.name
+            )));
+        }
+        if c.min_matches == Some(0) || (c.min_matches.is_some() && c.expect.is_none()) {
+            return Err(Refusal::InvalidDesign(format!(
+                "invalid proposed check '{}' min_matches",
+                c.name
+            )));
+        }
+        if let Some(pat) = &c.expect
+            && pat.is_empty()
+        {
+            return Err(Refusal::InvalidDesign(format!(
+                "proposed check '{}' has empty expect",
+                c.name
+            )));
+        }
+        if !seen.insert(c.name.as_str()) {
+            return Err(Refusal::InvalidDesign(format!(
+                "proposed check '{}' is declared twice",
+                c.name
+            )));
+        }
+        if existing
+            .iter()
+            .any(|e| e.origin != crate::event::CheckOrigin::Design && e.name == c.name)
+        {
+            return Err(Refusal::InvalidDesign(format!(
+                "proposed check '{}' collides with an existing cast or user check",
+                c.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Replace any previously design-activated checks in `existing` with
+/// `proposed` (stamped [`CheckOrigin::Design`]), preserving all `Cast`
+/// and `User` checks intact.
+pub fn merge_design_checks(
+    existing: &[crate::event::CheckDecl],
+    proposed: &[crate::event::CheckDecl],
+) -> Result<Vec<crate::event::CheckDecl>, Refusal> {
+    validate_proposed_checks(existing, proposed)?;
+    let mut merged: Vec<crate::event::CheckDecl> = existing
+        .iter()
+        .filter(|c| c.origin != crate::event::CheckOrigin::Design)
+        .cloned()
+        .collect();
+    for c in proposed {
+        let mut decl = c.clone();
+        decl.origin = crate::event::CheckOrigin::Design;
+        merged.push(decl);
+    }
+    Ok(merged)
 }

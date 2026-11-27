@@ -151,7 +151,13 @@ fn check_label(c: &CheckDecl) -> String {
     } else {
         c.run.clone()
     };
-    format!("{} {run} ({}s)", c.name, c.timeout_s)
+    match (&c.expect, c.min_matches) {
+        (Some(pat), Some(min)) if min != 1 => {
+            format!("{} {run} ({}s, expect {pat} x{min})", c.name, c.timeout_s)
+        }
+        (Some(pat), _) => format!("{} {run} ({}s, expect {pat})", c.name, c.timeout_s),
+        (None, _) => format!("{} {run} ({}s)", c.name, c.timeout_s),
+    }
 }
 
 /// The diff from `old` to `new`, in role, candidate, limit, check,
@@ -236,7 +242,10 @@ fn checks(old: &CastSettings, new: &CastSettings) -> Vec<CheckRow> {
     names.dedup();
     names
         .into_iter()
-        .filter(|name| was.get(name) != now.get(name))
+        .filter(|name| match (was.get(name), now.get(name)) {
+            (Some(a), Some(b)) => !a.same_spec(b),
+            _ => true,
+        })
         .map(|name| CheckRow {
             name: name.into(),
             was: was.get(name).map(|c| (*c).clone()),
