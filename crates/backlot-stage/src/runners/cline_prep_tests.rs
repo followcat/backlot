@@ -72,11 +72,13 @@ fn allowed_commands_per_role() {
         .chain(["git add".to_string(), "git commit".to_string()])
         .collect();
     assert_eq!(allow_commands("actor-t1-c1", &odd), actor_odd);
-    // Hollywood: exactly the overseer's set + `backlot progress`.
+    // Hollywood: exactly the overseer's set + `backlot progress`, `withdraw`, and `studio cast set --dry-run`.
     let h = allow_commands("hollywood", &[]);
-    assert_eq!(h.len(), 8, "{h:?}");
+    assert_eq!(h.len(), 10, "{h:?}");
     assert!(h.contains(&"backlot progress".to_string()));
     assert!(h.contains(&"backlot hollywood report".to_string()));
+    assert!(h.contains(&"backlot hollywood withdraw".to_string()));
+    assert!(h.contains(&"backlot studio cast set --dry-run".to_string()));
     assert!(h.contains(&"backlot guide".to_string()));
     assert!(!h.contains(&"backlot".to_string()));
 }

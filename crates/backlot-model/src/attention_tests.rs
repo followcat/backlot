@@ -8,7 +8,7 @@ use super::AttentionClass;
 #[test]
 fn every_model_reason_has_its_class() {
     let cases = [
-        (crate::event::PERMISSION_PROMPT, AttentionClass::NeedsYou),
+        (crate::event::PERMISSION_PROMPT, AttentionClass::Stuck),
         (crate::event::QUESTION, AttentionClass::Stuck),
         (crate::event::STALLED, AttentionClass::Stuck),
         (crate::event::CANNOT_RESUME, AttentionClass::NeedsYou),
@@ -17,6 +17,10 @@ fn every_model_reason_has_its_class() {
     for (reason, want) in cases {
         assert_eq!(AttentionClass::of(reason, false), want, "{reason}");
     }
+    assert_eq!(
+        AttentionClass::of(crate::event::PERMISSION_PROMPT, true),
+        AttentionClass::NeedsYou
+    );
     assert_eq!(
         AttentionClass::of(crate::event::QUESTION, true),
         AttentionClass::NeedsYou

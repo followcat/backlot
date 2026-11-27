@@ -180,11 +180,16 @@ re-raise one `stall_limit_s` later.
   `weekly limit` / `monthly limit` screens. Auto-retry delays still clamp at 1 h
   (`MAX_WAIT_MS`), while the true parsed `reset_at_ms` and `window` (`short`, `long`,
   `unknown`) stay unclamped across `waiting until HH:MM` (or `Mon HH:MM` when > 24 h away),
-  director rate-limit routing, and `Continuing automatically` tracking (which escalates only
+  director rate-limit routing (which escalates an actor's permission prompt at once when the
+  director is rate-limited, stalled, or not live), and `Continuing automatically` tracking (which escalates only
   past the true parsed reset rather than at +1 h). The parser handles Claude's local 12-hour
   clocks (`resets 2:10pm`), weekday+time banners (`resets Mon 9am`, `Your weekly limit resets
   Monday at 9:00 AM.`), month+day+time banners (`resets Nov 21, 4pm`, `resets Nov 30 at 12:00 UTC`),
   Devin's `at HH:MM UTC`, and relative waits; uncertain reset lines keep `reset_at_ms: None`.
+  While a role already has an open `rate limited` attention for the same `reset_at_ms` window,
+  repeat hits update nothing and raise nothing; a hit with a new, later reset supersedes the
+  open attention and raises once as the next window, while working again clears it `resumed`
+  and unknown resets fall back to the bounded retry path.
   A short limit waits the parsed retry cadence and sends `continue` three times before escalating;
   a weekly or monthly quota escalates `needs the user` at once instead of burning those retries.
   Escalation uses `attention.escalated` on the same attention, so one stall raises one attention

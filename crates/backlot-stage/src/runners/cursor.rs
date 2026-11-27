@@ -134,7 +134,9 @@ pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             "backlot progress",
             "backlot hollywood propose",
             "backlot hollywood report",
+            "backlot hollywood withdraw",
             "backlot studio new --dry-run",
+            "backlot studio cast set --dry-run",
             // Read-only, compiled into the binary: the docs, no disk
             // search.
             "backlot guide",
