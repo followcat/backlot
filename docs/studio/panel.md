@@ -39,10 +39,12 @@ RowActions | Compose)`, or `CallSheet`):
 
 - **Single focus ring & modebar:** Whenever focus is outside `Terminal`, bordered panes mute with
   `[unfocused · Esc returns]` in their border title and borderless studio headers carry the cue at
-  the right end of the top bar (never drawn over terminal content), the modebar shows `FOCUS:
-  <region>` (for example `FOCUS: lot › acme-shop › ask`), and entered Lot studios draw heavy accent
-  rails (`┏`/`┃`) with `entered studio` in the header. Remembered cursors in non-focused lists show
-  a faint `·` without `selection_bg`.
+  the right end of the top bar (never drawn over terminal content), the modebar shows a clasped
+  plaque (`╡ FOCUS: LOT · <studio> ╞` on `accent`, `╡ LOCKED ╞` / `╡ ERROR ╞` on `red`, `╡ RESIZE ╞` on
+  `mauve`, plain `--plain`/`source = "herdr"` setups keep plain text), and entered Lot studios draw heavy
+  accent rails (`┏`/`┃`/`┗` on outer seam, `┏━┓`/`┣─┫`/`┗━┛` on the studio) with `entered studio` in
+  the header (`esc studios`). Remembered cursors in non-focused lists show a faint `·` without
+  `selection_bg`.
 - **Keyboard in Cast (`Ctrl+B a`) & Tree (`Ctrl+B t`):** Focuses the left sidebar sections (`Tab`/`Shift+Tab`
   between them, `Esc` returns to `Terminal`). In Cast, `←`/`→` steps inline action chips on urgent roles,
   `t`/`r` opens targeted Lot compose, and `x` acknowledges an open ask.
@@ -161,12 +163,14 @@ dock's border.
 
 ## The blocks
 
-Expanded, the dock's top line is `lot · <n>` — one **block per studio**, in document order,
-drawn as a rounded frame (`╭╮╰╯`). The row cursor (`selection_bg` with an accent `▌` in the
-first column) lands only on actionable rows, skips decorative lines and block bottoms, and stays
-honest about focus (hidden when unfocused). Every border cell of the **selected studio** (`╭ ─ ╮ │ ╰ ╯`
-from `rows_fold::selected_studio`) draws in `palette.accent` whether or not the lot owns the keys;
-every other studio keeps `surface1`.
+Expanded, the dock's top header sits on `stage_well` reading `│ ✦ L O T · <n>` (`┏ ▸ L O T · <n> ━━ esc studios┓`
+while entered) — one **block per studio**, in document order:
+- Resting blocks draw slim brass frames (`╭─╮│╰─╯`, `├─┤` dividers), and finished studios carry `✦ THE END·<done>/<total>` (stepping down to `✦ END` and `✓ done` on narrower docks, keeping `↺ reopen producer [o]` at the same height).
+- Focused at `Studios` (`LotLevel::Studios`), the selected studio promotes to double brass (`╔═╗║╚═╝` in `accent`, `╟─╢` section dividers).
+- Entered (`LotLevel::InsideStudio`), the entered studio draws heavy accent borders (`┏━┓┃┗━┛`, `┣─┫` dividers) inside the heavy outer seam (`┏`/`┃`/`┗`).
+The row cursor (`selection_bg` with an accent `▌` in the first column) lands only on actionable rows,
+skips decorative lines and block bottoms, and stays honest about focus (hidden when unfocused). With
+`--plain` or `[theme] source = "herdr"`, rounded `lot · <n>` borders remain unchanged.
 
 - **Opening-design rows & 16-col strip badge:** when a studio has an active pre-signed
   `StudioSummary.design`, its expanded block (and active folded card) shows `◆ design · R<r> · you`
@@ -431,8 +435,7 @@ non-closed actors) show an indented second line in quiet `palette.subtext0` carr
 under height pressure unfocused roles fall back to one line first so the focused role keeps its
 model line longest, and no role is ever hidden for a model line). An `info` attention stays hidden
 from the row. The person whose terminal is focused gets the active-row background and an accent `▌`
-in the first column. Closed people fold behind `┄ closed (n) ┄` (staying strictly one line with no
-model row).
+in the first column. In studio mode the Cast top rule renders as `──╡ ✦ CAST ╞────` (`━━╡ ▸ CAST ╞━━━━` in `accent` while focused) in the same row, and closed people fold behind `── · closed (n) · ───────` (`┄ closed (n) ┄` in `--plain` / `source = "herdr"`), staying strictly one line with no model row.
 
 After the people, a `shells` header groups the studio's **shells** — the user's own terminals
 opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). One line each: a dim `$` (or the

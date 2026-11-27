@@ -580,7 +580,7 @@ draw East-Asian-ambiguous characters wide will shift the cells after them. The m
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line counts the studios (`lot · 2`). `stage stopped` means no live
+The title line counts the studios (`✦ L O T · 2` in expanded mode). `stage stopped` means no live
 `backlot-stage` terminal — the panel and the cast keep the last document. The collapsed
 16-column strip shows each studio's health, a short `id·machine` label and progress or
 attention, and one row per active or blocked role.
@@ -680,7 +680,7 @@ While studios come from one machine nothing looks different. Once they span mach
 header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-b` is never
 confused with the local `acme-shop`.
 
-The **left machines tree** lists every machine's studios even when its document cannot answer.
+The **left machines tree** (` ✦ MACHINES` header on `stage_well`, footer `+ new · <machine>`) lists every machine's studios even when its document cannot answer (`✦ <id>` for finished studios in studio mode).
 Drawing the tree is only half of it: `Ctrl+B t` moves the keyboard into it (opening the sidebar
 if it is collapsed), `↑`/`↓` move the highlight, `Enter` runs the row's click action — a studio's
 space, `stage down` start, the finished fold, a finished studio's menu — and `m` opens the row's
