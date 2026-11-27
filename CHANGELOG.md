@@ -13,6 +13,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Added
 
 - **`backlot metrics` and `backlot digest` show how a studio is doing, from its ledger alone.** `metrics` lists first-delivery pass rate, send-backs, what waited on you and for how long, rate-limit windows, approvals and refusals, Hollywood notices, and review and task times, per studio or for all (`--json` for scripts). `digest` is a daily report: what finished, was sent back, is blocked or waits on you, plus a table from each design section to its task, commits, checks and verdict. Neither command uses a model or writes anything (`docs/studio/metrics.md`).
+## 0.4.22 — 2026-11-27
 
 ### Changed
 
@@ -22,10 +23,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
-- Hollywood's allow lists (`claude`, `cmd`, `cursor`, `cline`), `hwcli` / `prompts/hollywood-cli.md`, and `prompts/hollywood.md` now pre-allow `backlot hollywood withdraw` and `backlot studio cast set --dry-run` and explain withdrawing stale cards (`docs/studio/{hollywood,ledger,limits,panel,guide}.md`).
-- A rate limit raises one notice per reset window (repeated hits within the same `reset_at_ms` window update nothing and raise nothing; a hit with a later reset supersedes and raises once as the next window; unknown resets fall back to bounded auto-retries, and working again clears `resumed`).
-- Permission prompts the director is handling no longer count as waiting on you or wake Hollywood, unless the director can't answer them (`AttentionClass::of("permission prompt", false)` and `AttentionClass::of("agent error", false)` are `stuck`; `StudioSummary.waiting` counts `needs you` only; `route_prompts` escalates via `attention.escalated` with the wait duration at once when the director is rate-limited, stalled, or not live, or after `default_stall_limit_s` / 10 minutes unanswered; `hnotice` holds `stuck` notices for 10 minutes and names how long an overdue actor prompt waited and why).
-- **A role whose turn you interrupted shows as idle instead of working** (`backlot-stage`, `docs/studio/design.md`). Recognized Claude Code's captured interrupt screen line (`Interrupted · What should Claude do instead?`, tracked across turns so older scrollback markers never cancel a new turn), let `StatusSource::Native` / `ForkInference` `idle`/`done`/`waiting` core status + `Waiting` screen override `Working` hook signals older than `SIGNAL_STALE_MS` (5 s) while preserving `Working` during the grace window and keeping `Blocked` highest priority from any source.
+- **A role whose turn you interrupted shows as idle instead of working.** Claude Code's `Interrupted` line ends the turn, and a working signal older than a few seconds gives way when hc and the screen both say the role is idle. A blocked role still shows blocked.
+- Hollywood can withdraw an out-of-date card, and preview a cast change with `backlot studio cast set --dry-run`, without a permission prompt. Its prompt says when to withdraw a card instead of proposing a second one.
+- A rate limit raises one notice per reset window instead of one per hit. A hit with a later reset replaces it with one for the next window.
+- Permission prompts the director is handling no longer count as waiting on you or wake Hollywood. They come to you when the director is rate limited, stalled or gone, or hasn't answered within 10 minutes, and the notice says how long the prompt waited and why. An agent error the director is handling counts the same way.
 
 ## 0.4.21 — 2026-11-27
 
