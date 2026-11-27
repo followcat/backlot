@@ -3,6 +3,7 @@
 //! `acme-shop`, `beta-tools`, `alice`.
 mod babylon_dock_tests;
 mod babylon_reader_tests;
+mod compose_target_tests;
 mod decision_tests;
 mod draw_tests;
 mod focus_dock_tests;

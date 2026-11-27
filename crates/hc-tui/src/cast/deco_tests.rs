@@ -78,6 +78,7 @@ fn cast_view<'a>(summary: &'a Summary, focused: Option<&'a str>) -> CastView<'a>
         cursor_target: None,
         remembered_target: None,
         active_chip: None,
+        studio_chrome: true,
     }
 }
 
@@ -102,7 +103,7 @@ fn deco_cast_divider_closed_rule_scroll_and_herdr_bypass() {
     let area = Rect::new(0, 0, 26, 20);
 
     // 1. Unfocused Deco Cast: `──╡ ✦ CAST ╞────` in `gilt` on row 0,
-    // `── · closed (1) · ───────` divider, 0 extra rows, click hits preserved.
+    // `── · 1 closed · dave     ▸` single line, 0 extra rows, click hits preserved.
     let unfocused = cast_view(&summary, None);
     let mut ubuf = Buffer::empty(area);
     let mut uhits = ShellHitMap::default();
@@ -127,18 +128,12 @@ fn deco_cast_divider_closed_rule_scroll_and_herdr_bypass() {
         "costs 0 rows: {:?}",
         ulines[1]
     );
-    let div_y = ulines
-        .iter()
-        .position(|l| l.contains("closed (1)"))
-        .unwrap() as u16;
-    assert!(
-        ulines[div_y as usize].starts_with("── · closed (1) · ─"),
-        "{:?}",
-        ulines[div_y as usize]
-    );
+    let div_y = ulines.iter().position(|l| l.contains("1 closed")).unwrap() as u16;
+    assert_eq!(ulines[div_y as usize], "── · 1 closed · dave     ▸");
     assert_eq!(ubuf[(0, div_y)].fg, elev.border_muted);
     assert_eq!(ubuf[(3, div_y)].fg, elev.gilt);
     assert_eq!(ubuf[(5, div_y)].fg, elev.muted_surface);
+    assert!(uhits.cast_closed.is_some());
     assert!(!uhits.agents.is_empty());
 
     // 2. Focused Deco Cast (`region_focused = true`): `━━╡ ▸ CAST ╞━━━━` in `accent` + `▌` bar.

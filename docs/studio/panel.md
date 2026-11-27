@@ -163,9 +163,9 @@ Dialogs — studio dialogs, confirms, the sheet, the New Studio wizard, help —
 
 Expanded, the dock's top header sits on `stage_well` reading `│ ✦ L O T · <n>` (`┏ ▸ L O T · <n> ━━ esc studios┓`
 while entered) — one **block per studio**, in document order:
-- Resting blocks draw slim brass frames (`╭─╮│╰─╯`, `├─┤` dividers), and finished studios carry `✦ THE END·<done>/<total>` (stepping down to `✦ END` and `✓ done` on narrower docks, keeping `↺ reopen producer [o]` at the same height).
-- Focused at `Studios` (`LotLevel::Studios`), the selected studio promotes to double brass (`╔═╗║╚═╝` in `accent`, `╟─╢` section dividers).
-- Entered (`LotLevel::InsideStudio`), the entered studio draws heavy accent borders (`┏━┓┃┗━┛`, `┣─┫` dividers) inside the heavy outer seam (`┏`/`┃`/`┗`).
+- Resting blocks draw slim brass frames (`╭─╮│╰─╯`, `├─┤` dividers) — antique `gilt` for other studios, and warmer `bulb_warm` brass with `accent` `▪` bulbs every 3 cells across top rule segments and the bottom border for the current (`▸`) studio (matching `(machine, id)`; one-line collapsed rows keep today's frameless row) — and finished studios carry `✦ THE END·<done>/<total>` (stepping down to `✦ END` and `✓ done` on narrower docks, keeping `↺ reopen producer [o]` at the same height).
+- Focused at `Studios` (`LotLevel::Studios`), the selected studio promotes to double brass (`╔═╗║╚═╝` in `accent`, `╟─╢` section dividers — overriding the current studio's marquee frame when selected).
+- Entered (`LotLevel::InsideStudio`), the entered studio draws heavy accent borders (`┏━┓┃┗━┛`, `┣─┫` dividers) inside the heavy outer seam (`┏`/`┃`/`┗`, also overriding the marquee frame).
 The row cursor (`selection_bg` with an accent `▌` in the first column) lands only on actionable rows,
 skips decorative lines and block bottoms, and stays honest about focus (hidden when unfocused). With
 `--plain` or `[theme] source = "herdr"`, rounded `lot · <n>` borders remain unchanged.
@@ -458,7 +458,7 @@ non-closed actors) show an indented second line in quiet `palette.subtext0` carr
 under height pressure unfocused roles fall back to one line first so the focused role keeps its
 model line longest, and no role is ever hidden for a model line). An `info` attention stays hidden
 from the row. The person whose terminal is focused gets the active-row background and an accent `▌`
-in the first column. In studio mode the Cast top rule renders as `──╡ ✦ CAST ╞────` (`━━╡ ▸ CAST ╞━━━━` in `accent` while focused) in the same row, and closed people fold behind `── · closed (n) · ───────` (`┄ closed (n) ┄` in `--plain` / `source = "herdr"`), staying strictly one line with no model row.
+in the first column. In studio mode the Cast top rule renders as `──╡ ✦ CAST ╞────` (`━━╡ ▸ CAST ╞━━━━` in `accent` while focused) in the same row, and closed people collapse onto a single interactive line `── · <n> closed · <names> ▸` (`▸` at the right end, truncating `<names>` with `…` while keeping `<n> closed` and `▸` whole; `--plain` and `[theme] source = "herdr"` keep the `┄ closed (n) ┄` layout). Clicking the line or pressing `Enter`/`o` on it opens the studio's `reopen a closed role` picker sorted numerically by task (offline seats stay dimmed), and no closed role registers an attach hit.
 
 After the people, a `shells` header groups the studio's **shells** — the user's own terminals
 opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). One line each: a dim `$` (or the
@@ -550,7 +550,10 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   the finished group; Enter opens the archived list (name, stamp, repo, requirement) and its
   `Restore as <name>` dialog, which runs `studio restore` with `--dry-run` first. The archived
   list is cached per machine on the same 30 s clock. The tree scrolls to the machine
-  row of the studio the selection lands on. While the Lot is focused and any row of a studio
+  row of the studio the selection lands on. In studio mode, the machine row hosting the current studio
+  renders its name in bold `accent` followed by ` ✦` in `accent` (dropping ` ✦` first on long
+  machine names so the right-side status dot never shifts or clips; unchanged under `--plain` and
+  `[theme] source = "herdr"`). While the Lot is focused and any row of a studio
   is selected, the tree quietly marks that studio's endpoint row and `backlot` server row under it
   with an accent `▎` left bar and bold server line (without scrolling the tree if off-screen),
   clearing the mark when the Lot loses focus.

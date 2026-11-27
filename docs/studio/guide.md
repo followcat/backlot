@@ -548,14 +548,18 @@ merged into `integration`, and feeds confirmed defects back onto the audited bui
 
 ### What the panel and the cast show
 
-The sidebar's cast lists the current studio's people, live first, a first row each: mark,
-name and task, the runner at the right edge. The rest wraps over as many rows as it needs
-(up to four per person) — the full state text and, on a row of its own, the full model with
-its effort. An open attention wraps its whole state text (`needs you · …`, `asks you · …`)
-and takes the model's row away; a failed turn says `last turn failed` the same way. When the
-studio's people do not all fit, only the focused person keeps the full height and the others
-fall back to two rows. The focused person's rows are highlighted with a `▌` marker. A
-trailing `others` row expands to the agents that belong to no studio.
+The sidebar's cast lists the current studio's open people first: mark, name and task on row 1
+(with an indented `runner · model · effort` line underneath when height allows). An open
+attention wraps its whole state text (`needs you · …`, `asks you · …`) and takes the model's row
+away; a failed turn says `last turn failed` the same way. Closed roles collapse onto one
+interactive summary line (`── · <n> closed · <names> ▸`, keeping `<n> closed` and `▸` whole and
+truncating names with `…` on narrower sidebars): clicking it, or pressing `Enter` or `o` while
+Cast focus sits on it, opens the studio's reopen picker (`reopen a closed role`) ordered
+numerically by task (`t1, t2, …`), where `Enter` or a click reopens the selected seat (`Esc`
+closes; offline machines stay dimmed). Plain mode (`--plain`) and `[theme] source = "herdr"`
+keep their existing sidebar appearance without stale-terminal attaches on closed roles. The
+focused person's rows are highlighted with a `▌` marker. A trailing `others` row expands to the
+agents that belong to no studio.
 
 Expanded, the dock draws one bordered block per studio — the id in the frame, a header row
 with the health glyph (`●` live, `◌` stage stopped, `×` offline or ledger error, `✓`
@@ -581,10 +585,7 @@ draw East-Asian-ambiguous characters wide will shift the cells after them. The m
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line counts the studios (`✦ L O T · 2` in expanded mode). `stage stopped` means no live
-`backlot-stage` terminal — the panel and the cast keep the last document. The collapsed
-16-column strip shows each studio's health, a short `id·machine` label and progress or
-attention, and one row per active or blocked role.
+The title line counts the studios (`✦ L O T · 2` in expanded mode). Within the Lot, the current studio (`▸`) wears a thin warm-brass marquee frame with `▪` bulbs every 3 cells along its top rule and bottom border when resting, yielding to double `╔═╗` when selected and heavy `┏━┓` when entered (`--plain` and `[theme] source = "herdr"` keep plain borders). `stage stopped` means no live `backlot-stage` terminal — the panel and the cast keep the last document. The collapsed 16-column strip shows each studio's health, a short `id·machine` label and progress or attention, and one row per active or blocked role.
 
 Panel keys use one unified focus grammar across levels (`Studios → InsideStudio → RowActions /
 Compose`): `j`/`k` or `↑`/`↓` move the selection (bounded within the studio once entered), `Tab` /
@@ -631,7 +632,11 @@ The expanded strip, top to bottom:
 - the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
 - below them, with an agent: the newest headline, one row per open card with `apply`,
   `cancel` and `show`, the recent conversation (the newest turn and the one before it, older
-  lines folded into `… <n> earlier · ↵ read`) and the `tell hollywood` line. A card Hollywood
+  lines folded into `… <n> earlier · ↵ read`) and the compose line. Compose always names its
+  recipient first: `hollywood` normally, or `↩ <studio> · <role>` after `r` on a question. That
+  reply target lasts only while you are composing it — leaving Compose, closing the sheet,
+  answering the question elsewhere, or Backspace on an empty line returns it to Hollywood — and
+  the sent reply appears in the conversation as `you → <studio> · <role>`. A card Hollywood
   proposes draws under the person's line as its own reply; the newest Hollywood line wraps to a
   few rows so its end is never cut off. Without one: the `⏎ hollywood setup` line — the setup
   dialog's button.
@@ -681,7 +686,7 @@ While studios come from one machine nothing looks different. Once they span mach
 header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-b` is never
 confused with the local `acme-shop`.
 
-The **left machines tree** (` ✦ MACHINES` header on `stage_well`, footer `+ new · <machine>`) lists every machine's studios even when its document cannot answer (`✦ <id>` for finished studios in studio mode).
+The **left machines tree** (` ✦ MACHINES` header on `stage_well`, footer `+ new · <machine>`) lists every machine's studios even when its document cannot answer (`✦ <id>` for finished studios in studio mode), and highlights the machine hosting the current studio with its name in bold accent plus ` ✦` (dropping ` ✦` when a long name fills the row so the right-side status dot stays put; `--plain` and `[theme] source = "herdr"` keep plain rows).
 Drawing the tree is only half of it: `Ctrl+B t` moves the keyboard into it (opening the sidebar
 if it is collapsed), `↑`/`↓` move the highlight, `Enter` runs the row's click action — a studio's
 space, `stage down` start, the finished fold, a finished studio's menu — and `m` opens the row's

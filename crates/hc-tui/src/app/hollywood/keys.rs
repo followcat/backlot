@@ -79,7 +79,7 @@ impl App {
                 // One Esc out of Compose rests on `›` — draft (even
                 // empty) intact. The second Esc in Resting collapses.
                 self.hollywood.editing = false;
-                self.hollywood.reply_to = None;
+                self.hollywood.clear_reply();
                 self.hollywood.history.reset_nav();
                 return;
             }
@@ -89,6 +89,12 @@ impl App {
                 }
                 self.hollywood_input_submit();
                 return;
+            }
+            if code == KeyCode::Backspace
+                && modifiers.is_empty()
+                && self.hollywood.input.as_str().is_empty()
+            {
+                self.hollywood.clear_reply();
             }
             if code == KeyCode::Up && modifiers.is_empty() {
                 self.sync_hollywood_history();
@@ -199,6 +205,7 @@ impl App {
     pub(crate) fn hollywood_collapse(&mut self) {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
+        self.hollywood.clear_reply();
         self.hollywood.history.reset_nav();
         self.hollywood.view = None;
         self.hollywood.confirm = None;

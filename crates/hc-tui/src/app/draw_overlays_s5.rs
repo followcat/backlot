@@ -15,6 +15,25 @@ pub(super) fn render_help(
     area: ratatui::layout::Rect,
     layout: &crate::chrome::snapshot::ClientShellLayout,
 ) -> crate::chrome::help::HelpRender {
+    if let Some(picker) = app.help_state.picker.as_ref().filter(|p| p.standalone) {
+        crate::chrome::popup_frame::dim_backdrop(
+            buf,
+            &app.shell.palette,
+            app.shell.popup_backdrop,
+            None,
+        );
+        let mut hits = crate::chrome::help::HelpRender::default();
+        let surface = app.backlot_modal_surface(area, layout, 48);
+        crate::chrome::help_picker::render_picker_with_shadow(
+            buf,
+            surface,
+            picker,
+            &mut hits,
+            &app.shell.palette,
+            app.shell.popup_shadow,
+        );
+        return hits;
+    }
     if !app.help_launcher() {
         crate::chrome::popup_frame::dim_backdrop(
             buf,

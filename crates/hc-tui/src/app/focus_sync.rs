@@ -108,6 +108,15 @@ impl App {
     /// (for tests or legacy paths that mutate `panel.focused`,
     /// `tree_focus`, or `hollywood.mode` directly).
     pub(crate) fn sync_focus(&mut self) {
+        if !self.help
+            && self
+                .help_state
+                .picker
+                .as_ref()
+                .is_some_and(|p| p.standalone)
+        {
+            self.help_state.picker = None;
+        }
         let active = self.current_modal_layers();
         self.focus.sync_modals(&active);
 
@@ -214,6 +223,7 @@ impl App {
         if !matches!(next, WorkspaceRegion::CallSheet(_)) && self.hollywood.expanded() {
             self.hollywood.mode = LayerMode::Collapsed;
             self.hollywood.editing = false;
+            self.hollywood.clear_reply();
             self.hollywood.history.reset_nav();
             self.hollywood.confirm = None;
         }

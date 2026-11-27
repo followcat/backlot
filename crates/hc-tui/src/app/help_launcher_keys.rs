@@ -71,6 +71,8 @@ impl App {
                     title: row.label.trim_end_matches('…').to_owned(),
                     rows,
                     selected: 0,
+                    scroll: 0,
+                    standalone: false,
                 });
             }
             Launch::Nav(nav) => {

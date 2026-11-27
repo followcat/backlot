@@ -62,10 +62,20 @@ impl App {
         if let Some(key) = self.cast_studio_key()
             && let Some(studio_ref) = crate::panel::data::studio(&machines, &key)
         {
-            for role in studio::cast_order(studio_ref.studio) {
+            let ordered = studio::cast_order(studio_ref.studio);
+            let chrome = self.shell.studio_chrome;
+            for role in &ordered {
+                if chrome && role.state == "closed" {
+                    continue;
+                }
                 out.push(CastTarget::Role {
                     studio: key.clone(),
                     role: role.role.clone(),
+                });
+            }
+            if chrome && ordered.iter().any(|r| r.state == "closed") {
+                out.push(CastTarget::ClosedRoles {
+                    studio: key.clone(),
                 });
             }
             for (_n, terminal) in
@@ -228,6 +238,7 @@ impl App {
                 }
             }
             KeyCode::Char('m') if plain && press => self.cast_open_menu(),
+            KeyCode::Char('o') if plain && press => self.cast_reopen(),
             KeyCode::Char('t') if plain && press => self.cast_tell(),
             KeyCode::Char('p') if plain && press => self.cast_peek(),
             KeyCode::Char(' ') if plain && press => {
@@ -363,6 +374,7 @@ impl App {
                     );
                 }
             }
+            CastTarget::ClosedRoles { studio } => self.open_cast_reopen_picker(&studio),
             CastTarget::Shell { terminal, .. } => {
                 self.cast_focus_leave();
                 self.focus_pane(terminal);

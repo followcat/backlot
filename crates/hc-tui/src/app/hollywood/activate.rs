@@ -107,8 +107,24 @@ impl App {
             }
             Some(Target::Headline) => self.hollywood_headline_open(),
             Some(Target::Talk(seq)) => {
-                let card = self.hollywood_exchange_is_card(seq);
-                self.run_action(crate::studio_cmds::hollywood_exchange(seq, card));
+                if let Some(echo) = self.hollywood.reply_echoes.iter().find(|e| e.seq == seq) {
+                    self.hollywood.view = Some(crate::hollywood::CardView {
+                        title: format!("reply to {}", echo.to.as_deref().unwrap_or("studio")),
+                        lines: echo.text.lines().map(str::to_string).collect(),
+                        raw_body: echo.text.clone(),
+                        meta: crate::hollywood::ReaderMeta {
+                            kind: crate::hollywood::ReaderKind::Tell,
+                            seq: Some(seq),
+                            from: Some("user".into()),
+                            to: echo.to.clone(),
+                            ..crate::hollywood::ReaderMeta::default()
+                        },
+                        ..crate::hollywood::CardView::default()
+                    });
+                } else {
+                    let card = self.hollywood_exchange_is_card(seq);
+                    self.run_action(crate::studio_cmds::hollywood_exchange(seq, card));
+                }
             }
             // U7's setup line: the in-TUI dialog — runner/model/
             // effort pickers, the write through `hollywood setup`.

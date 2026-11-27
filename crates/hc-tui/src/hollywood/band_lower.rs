@@ -182,11 +182,21 @@ pub(super) fn draw_input(
         }
         _ => None,
     };
+    let right_clasp_x = field.x + field.width - 1;
+    let chip_x = field.x + 4;
+    let text_x = super::compose_chip::draw_compose_chip(
+        buf,
+        chip_x,
+        field.y,
+        right_clasp_x,
+        hollywood.reply_to.as_ref(),
+        palette,
+    );
     let badge_w = badge.as_ref().map_or(0, |(b, _)| display_width(b) as u16);
     let text = Rect::new(
-        field.x + 4,
+        text_x,
         field.y,
-        field.width.saturating_sub(5 + badge_w),
+        right_clasp_x.saturating_sub(text_x).saturating_sub(badge_w),
         1,
     );
     let placeholder = match hollywood.reply_to.as_ref() {

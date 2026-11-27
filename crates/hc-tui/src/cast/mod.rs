@@ -10,6 +10,8 @@ pub(crate) mod rows;
 mod simple;
 
 #[cfg(test)]
+mod closed_tests;
+#[cfg(test)]
 mod deco_tests;
 #[cfg(test)]
 mod standby_tests;
@@ -80,6 +82,8 @@ pub(crate) struct CastView<'a> {
     pub(crate) remembered_target: Option<crate::focus::CastTarget>,
     /// Active inline chip index for Cast (`←`/`→`).
     pub(crate) active_chip: Option<usize>,
+    /// True in Babylon studio chrome (`!plain && !source_herdr`), which collapses closed roles to one line.
+    pub(crate) studio_chrome: bool,
 }
 
 impl<'a> CastView<'a> {
@@ -209,6 +213,7 @@ impl<'a> CastView<'a> {
             cursor_target: None,
             remembered_target: None,
             active_chip: None,
+            studio_chrome: config.studio_chrome,
         }
     }
 }

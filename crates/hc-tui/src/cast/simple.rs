@@ -6,8 +6,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
+use super::CastView;
 use crate::chrome::palette::Palette;
-use crate::chrome::render::put_text;
+use crate::chrome::render::{ShellHitMap, put_right_text, put_text};
+use crate::chrome::text::{display_width, truncate_end};
+use crate::focus::CastTarget;
+use crate::studio::StudioKey;
 
 /// The `shells` group header — a dim label line between the people
 /// and their shells.
@@ -228,5 +232,131 @@ pub(crate) fn draw_closed_divider(
             &"┄".repeat(right),
             rule_style,
         );
+    }
+}
+
+/// Draw the interactive 1-row collapsed closed-roles line in Cast:
+/// `── · N closed · actor-a×6 actor-b×10 ▸`, keeping `N closed` and `▸` whole,
+/// recording `hits.cast_closed`, and painting the focus/remembered cursor.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_closed_fold_row(
+    buffer: &mut Buffer,
+    rect: Rect,
+    studio: &StudioKey,
+    count: usize,
+    tokens: &[String],
+    view: &CastView<'_>,
+    hits: &mut ShellHitMap,
+    palette: &Palette,
+) {
+    hits.cast_closed = Some((rect, studio.clone()));
+    draw_closed_fold(buffer, rect, count, tokens, palette);
+    let is_cursor = view.region_focused
+        && matches!(
+            &view.cursor_target,
+            Some(CastTarget::ClosedRoles { studio: s }) if s == studio
+        );
+    let is_remembered = !view.region_focused
+        && matches!(
+            &view.remembered_target,
+            Some(CastTarget::ClosedRoles { studio: s }) if s == studio
+        );
+    if is_cursor {
+        buffer.set_style(rect, Style::default().bg(palette.selection_bg));
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            1,
+            "▌",
+            Style::default().fg(palette.accent).bg(palette.selection_bg),
+        );
+    } else if is_remembered {
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            1,
+            "·",
+            Style::default().fg(palette.overlay0),
+        );
+    }
+}
+
+/// Draw `── · N closed · <tokens> ▸` in divider style (rule, gilt dots,
+/// muted text) with `▸` at the right end and `N closed` / `▸` kept whole.
+pub(crate) fn draw_closed_fold(
+    buffer: &mut Buffer,
+    rect: Rect,
+    count: usize,
+    tokens: &[String],
+    palette: &Palette,
+) {
+    if rect.is_empty() {
+        return;
+    }
+    let elev = palette.elevation();
+    let rule_style = Style::default().fg(elev.border_muted);
+    let mut dot_style = Style::default().fg(elev.gilt);
+    if elev.is_terminal_16 {
+        dot_style = dot_style.add_modifier(Modifier::DIM);
+    }
+    let text_style = Style::default().fg(elev.muted_surface);
+    let count_text = format!("{count} closed");
+    let core = format!(" {count_text} ");
+    let prefix_w = 3 + 1 + display_width(&core) + 2;
+    let w = rect.width as usize;
+
+    if w >= prefix_w + 2 {
+        let mut x = rect.x;
+        for (seg, style) in [
+            ("── ", rule_style),
+            ("·", dot_style),
+            (core.as_str(), text_style),
+            ("· ", dot_style),
+        ] {
+            let sw = display_width(seg) as u16;
+            put_text(buffer, x, rect.y, sw, seg, style);
+            x = x.saturating_add(sw);
+        }
+        let token_room = w - prefix_w - 2;
+        if token_room > 0 && !tokens.is_empty() {
+            let shown = truncate_end(&tokens.join(" "), token_room);
+            put_text(buffer, x, rect.y, token_room as u16, &shown, text_style);
+        }
+        put_right_text(buffer, rect, rect.y, "▸", text_style);
+        return;
+    }
+    if w > 1 + display_width(&core) {
+        let core_w = display_width(&core) as u16;
+        put_text(buffer, rect.x, rect.y, 1, "·", dot_style);
+        put_text(buffer, rect.x + 1, rect.y, core_w, &core, text_style);
+        put_right_text(buffer, rect, rect.y, "▸", text_style);
+        return;
+    }
+    let label_w = display_width(&count_text);
+    if w >= label_w + 2 {
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            label_w as u16,
+            &count_text,
+            text_style,
+        );
+        put_right_text(buffer, rect, rect.y, "▸", text_style);
+    } else if w >= 2 {
+        let avail = w - 2;
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            avail as u16,
+            &truncate_end(&count_text, avail),
+            text_style,
+        );
+        put_right_text(buffer, rect, rect.y, "▸", text_style);
+    } else {
+        put_right_text(buffer, rect, rect.y, "▸", text_style);
     }
 }

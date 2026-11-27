@@ -56,6 +56,12 @@ impl App {
                         self.hollywood.editing = true;
                         return;
                     }
+                    // A press on another row takes Compose out of the moment, even
+                    // when it hits blank chrome and selects nothing. The compose row's
+                    // own margins still belong to that line.
+                    if point.1 != self.hollywood_hits.input.y {
+                        self.hollywood.clear_reply();
+                    }
                     if contains(self.hollywood_hits.scrollbar, point)
                         && let Some(metrics) = self.hollywood_hits.metrics
                     {

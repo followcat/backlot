@@ -9,7 +9,7 @@ use ratatui::style::{Modifier, Style};
 use backlot_model::summary::RoleSummary;
 
 use super::CastView;
-use super::rows::{CastRow, cast_rows};
+use super::rows::CastRow;
 use crate::chrome::ClientShellConfig;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::{ShellHitMap, put_right_text, put_text};
@@ -95,7 +95,7 @@ pub(crate) fn render_cast(
         }
     }
 
-    let mut rows = cast_rows(view);
+    let mut rows = super::rows::cast_rows_with(view, config.studio_chrome);
     let body = Rect::new(
         area.x,
         area.y.saturating_add(3),
@@ -136,7 +136,7 @@ pub(crate) fn render_cast(
     // The cast packs its entries: no inter-row gap.
     let gaps = vec![0u16; rows.len().saturating_sub(1)];
     let target = std::mem::take(reveal_focused_agent)
-        .then(|| rows.iter().position(|row| row.focused()))
+        .then(|| rows.iter().position(|row| row.reveal_target(view)))
         .flatten();
     if let Some(target) = target {
         *cast_scroll = crate::chrome::scroll::list_scroll_start_to_reveal(
@@ -168,7 +168,9 @@ pub(crate) fn render_cast(
                 focused,
                 meta,
             } => {
-                if let Some(terminal) = &role.terminal {
+                if role.state != "closed"
+                    && let Some(terminal) = &role.terminal
+                {
                     hits.agents.push((rect, terminal.clone()));
                 }
                 draw_person(buffer, rect, role, *focused, meta.as_deref(), view, palette);
@@ -229,6 +231,13 @@ pub(crate) fn render_cast(
                     palette,
                 );
             }
+            CastRow::ClosedFold {
+                studio,
+                count,
+                tokens,
+            } => super::simple::render_closed_fold_row(
+                buffer, rect, studio, *count, tokens, view, hits, palette,
+            ),
             CastRow::Shells => super::simple::draw_shells_header(buffer, rect, palette),
             CastRow::Shell { shell, focused } => {
                 hits.agents.push((rect, shell.terminal.clone()));

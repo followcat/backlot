@@ -114,6 +114,19 @@ impl App {
             self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
             return;
         }
+        // Cast's collapsed closed-roles line opens the studio reopen picker.
+        if self.studio.active
+            && let Some((rect, key)) = hits.cast_closed.clone()
+            && contains(rect, point)
+        {
+            self.cast_focus = Some(crate::focus::CastTarget::ClosedRoles {
+                studio: key.clone(),
+            });
+            self.cast_remembered = self.cast_focus.clone();
+            self.set_workspace_focus(crate::focus::WorkspaceRegion::Cast);
+            self.open_cast_reopen_picker(&key);
+            return;
+        }
         // The sidebar's `menu` button (or bottom-left `? keys`) opens `Ctrl+B ?`
         // (S5 §2) — studio mode only; in `--plain` herdr's dead hit stays dead.
         if !self.plain
