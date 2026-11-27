@@ -285,6 +285,150 @@ async fn plain_mode_keeps_herdrs_endpoint_sidebar_unchanged() {
     assert_eq!(backend.buffer(), again.buffer());
 }
 
+#[tokio::test]
+async fn focused_lot_marks_selected_studios_endpoint_and_server_row_without_scrolling() {
+    let mut app = two_machine_studio_app();
+    app.area = (140, 30);
+    app.panel.mode = crate::panel::PanelMode::Expanded;
+    app.panel.focused = false;
+    draw_to(&mut app, 140, 30);
+
+    let find_endpoint_ys = |buf: &ratatui::buffer::Buffer, label: &str| -> (u16, u16) {
+        let ep_y = (0..30u16)
+            .find(|&y| {
+                let row: String = (0..26).map(|x| buf[(x, y)].symbol()).collect();
+                row.contains(label)
+            })
+            .unwrap_or_else(|| panic!("missing endpoint `{label}`"));
+        (ep_y, ep_y + 1)
+    };
+
+    let find_backlot_col = |buf: &ratatui::buffer::Buffer, y: u16| -> u16 {
+        let row: String = (0..26).map(|x| buf[(x, y)].symbol()).collect();
+        row.find("backlot")
+            .unwrap_or_else(|| panic!("missing backlot on server row y={y}: {row:?}"))
+            as u16
+    };
+
+    // Unfocused Lot: neither Local nor host-b endpoint/server row shows the `▎` mark.
+    let unfocused = draw_to(&mut app, 140, 30);
+    let ubuf = unfocused.buffer();
+    let (u_local, u_local_srv) = find_endpoint_ys(ubuf, "▾ Local");
+    let (u_host, u_host_srv) = find_endpoint_ys(ubuf, "▾ host-b");
+    for y in [u_local, u_local_srv, u_host, u_host_srv] {
+        assert_eq!(ubuf[(0, y)].symbol(), " ", "unfocused col 0 at y={y}");
+    }
+    assert!(
+        !ubuf[(find_backlot_col(ubuf, u_local_srv), u_local_srv)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+    assert!(
+        !ubuf[(find_backlot_col(ubuf, u_host_srv), u_host_srv)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+
+    // Focus Lot -> `acme-shop` (on Local) lights up Local + its `backlot` server row.
+    let accent = app.shell.palette.accent;
+    app.panel_toggle();
+    assert!(app.panel.focused);
+    let focused_local = draw_to(&mut app, 140, 30);
+    let fbuf = focused_local.buffer();
+    assert_eq!(fbuf[(0, u_local)].symbol(), "▎");
+    assert_eq!(fbuf[(0, u_local)].fg, accent);
+    assert_eq!(fbuf[(0, u_local_srv)].symbol(), "▎");
+    assert_eq!(fbuf[(0, u_local_srv)].fg, accent);
+    assert!(
+        fbuf[(find_backlot_col(fbuf, u_local_srv), u_local_srv)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+    assert_eq!(fbuf[(0, u_host)].symbol(), " ");
+    assert_eq!(fbuf[(0, u_host_srv)].symbol(), " ");
+
+    // Step across to `beta-tools` (on `host-b`) via Tab: mark follows to `host-b`.
+    let press = |app: &mut App, k: hc_vt::Key| {
+        app.on_input(
+            crate::app::input::UiEvent::Key(term_key(k, hc_vt::Mods::NONE, hc_vt::Action::Press)),
+            app.area.0,
+        );
+    };
+    while !matches!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(k) if k.id == "beta-tools"
+    ) {
+        press(&mut app, hc_vt::Key::Tab);
+    }
+    let focused_remote = draw_to(&mut app, 140, 30);
+    let rbuf = focused_remote.buffer();
+    let (r_local, r_local_srv) = find_endpoint_ys(rbuf, "▾ Local");
+    let (r_host, r_host_srv) = find_endpoint_ys(rbuf, "▾ host-b");
+    assert_eq!(rbuf[(0, r_local)].symbol(), " ");
+    assert_eq!(rbuf[(0, r_local_srv)].symbol(), " ");
+    assert_eq!(rbuf[(0, r_host)].symbol(), "▎");
+    assert_eq!(rbuf[(0, r_host)].fg, accent);
+    assert_eq!(rbuf[(0, r_host_srv)].symbol(), "▎");
+    assert_eq!(rbuf[(0, r_host_srv)].fg, accent);
+    assert!(
+        rbuf[(find_backlot_col(rbuf, r_host_srv), r_host_srv)]
+            .modifier
+            .contains(Modifier::BOLD)
+    );
+
+    // ArrowUp back into `acme-shop` (Local): mark follows back to Local.
+    press(&mut app, hc_vt::Key::ArrowUp);
+    while matches!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(k) if k.id == "beta-tools"
+    ) {
+        press(&mut app, hc_vt::Key::ArrowUp);
+    }
+    let back_local = draw_to(&mut app, 140, 30);
+    let bbuf = back_local.buffer();
+    assert_eq!(bbuf[(0, r_local)].symbol(), "▎");
+    assert_eq!(bbuf[(0, r_host)].symbol(), " ");
+
+    // Collapse `host-b` while `beta-tools` is selected -> collapsed `▸ host-b` still gets `▎`.
+    while !matches!(
+        app.panel.selected.as_ref().and_then(|t| t.studio()),
+        Some(k) if k.id == "beta-tools"
+    ) {
+        press(&mut app, hc_vt::Key::Tab);
+    }
+    app.shell_state.collapsed_endpoints.insert(remote("host-b"));
+    let collapsed = draw_to(&mut app, 140, 30);
+    let cbuf = collapsed.buffer();
+    let (c_host, _) = find_endpoint_ys(cbuf, "▸ host-b");
+    assert_eq!(cbuf[(0, c_host)].symbol(), "▎");
+    assert_eq!(cbuf[(0, c_host)].fg, accent);
+
+    // Losing Lot focus (`Esc`) removes the mark immediately.
+    press(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
+    let after_esc = draw_to(&mut app, 140, 30);
+    let ebuf = after_esc.buffer();
+    assert_eq!(ebuf[(0, c_host)].symbol(), " ");
+
+    // Scrolled-off machine row must NEVER scroll the tree when selected in focused Lot.
+    app.shell_state.collapsed_endpoints.clear();
+    app.area = (140, 14);
+    app.shell_state.workspace_scroll = 5;
+    app.panel.focused = true;
+    app.panel.selected = Some(crate::panel::Target::Studio(
+        crate::studio::StudioKey::local("acme-shop"),
+    ));
+    draw_to(&mut app, 140, 14);
+    let scrolled = app.shell_state.workspace_scroll;
+    // Switching selection to remote studio (or local off-screen) must not reset/scroll workspace_scroll.
+    app.panel.selected = Some(crate::panel::Target::Studio(crate::studio::StudioKey {
+        machine: Some("host-b".into()),
+        id: "beta-tools".into(),
+    }));
+    draw_to(&mut app, 140, 14);
+    assert_eq!(app.shell_state.workspace_scroll, scrolled);
+}
+
 // The `--plain` sidebar cell for cell — herdr's expanded endpoint
 // sidebar: the draggable split's divider, `agents` + `grouped`, the
 // stray agent row and the collapse toggle. The header right-aligns

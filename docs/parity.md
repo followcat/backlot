@@ -1012,9 +1012,14 @@ Everything else on the compared surfaces still diffs normally.
   (`[theme.custom] sidebar_bg` overrides, `terminal` 16-color `Color::Reset`, and Herdr `--plain` /
   `source = "herdr"` translucent sidebars stay unchanged), keeping only one `accent` focus ring across
   Terminal, Lot, Tree, Cast, and Call Sheet (`--plain` mode is untouched for Herdr parity). Left `machines`
-  deduplicates live studio workspaces and shows clickable `? keys` at bottom-left, the center header keeps
-  a bucketed lot pill (`✦ S · !B · ?A · Cc · ✓R ready · alt+y`) with clickable jump targets, the docked
-  Call Sheet follows focus-driven zone expansion (`Title → WAITING → HOLLYWOOD → STUDIOS → Hints → ▀▀`
-  without top perforation or external shadow, keeping unfocused zones at 1 line per item), and Cast/Lot
-  unify onto single-line `InlineState` role rows separated by role-group `├──┤` rules (`working <dur>` sublines,
-  `actors <live>/<cap>`, and unfocused Lot footer hints are removed).
+  deduplicates live studio workspaces and shows clickable `? keys` at bottom-left (while quietly marking the
+  focused Lot's selected studio endpoint/server row with an accent `▎`), the center header keeps
+  a bucketed lot pill (`✦ S · !B · ?A · Cc · ✓R ready · alt+y`) with clickable jump targets alongside a
+  `elevation.raised_row` current-studio capsule, the docked Call Sheet follows focus-driven zone expansion
+  (`Title → WAITING → HOLLYWOOD → STUDIOS → Hints → ▀▀` without top perforation or external shadow, keeping
+  unfocused zones at 1 line per item), Cast renders row 1 via the shared `InlineState` formatter
+  plus an indented `runner · model · effort` sub-line in `subtext0` under open roles (dropping under height
+  pressure while keeping the focused role's model line longest), and Lot renders every open/idle role
+  individually separated by `├──┤` rules and blank spacers between studio blocks, with `Tab`/`Shift+Tab`
+  jumping between block sections (`working <dur>` sublines, `actors <live>/<cap>`, `CalmSummary`, and
+  unfocused Lot footer hints are removed).

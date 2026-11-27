@@ -187,7 +187,6 @@ impl super::App {
                 key: None,
                 studio: String::new(),
                 machine: None,
-                studio_focused: false,
                 kind: HeaderKind::Hollywood,
             });
         }
@@ -207,13 +206,11 @@ impl super::App {
                 machine: m.map(str::to_string),
                 id: s.id.clone(),
             };
-            let studio_focused = self.studio.focused_studio() == Some(&key);
             let machine = self.header_machine(&key, machines);
             return Some(StudioHeader {
                 key: Some(key),
                 studio: s.id.clone(),
                 machine,
-                studio_focused,
                 kind: HeaderKind::Role {
                     role_key: role.role.clone(),
                     name: role.name.clone(),
@@ -236,13 +233,11 @@ impl super::App {
             .get("backlot.shell")
             .and_then(|s| s.parse::<u32>().ok())
         {
-            let studio_focused = self.studio.focused_studio() == Some(&key);
             let machine = self.header_machine(&key, machines);
             return Some(StudioHeader {
                 key: Some(key),
                 studio: id,
                 machine,
-                studio_focused,
                 kind: HeaderKind::Shell(n),
             });
         }
@@ -259,13 +254,11 @@ impl super::App {
                 effort: None,
             })
             .unwrap_or(HeaderKind::Bare);
-        let studio_focused = self.studio.focused_studio() == Some(&key);
         let machine = self.header_machine(&key, machines);
         Some(StudioHeader {
             key: Some(key),
             studio: id,
             machine,
-            studio_focused,
             kind,
         })
     }

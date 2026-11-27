@@ -132,12 +132,27 @@ impl App {
                     }
                     self.panel_input_complete();
                 }
+                crossterm::event::KeyCode::BackTab | crossterm::event::KeyCode::Tab => {}
                 _ => {
                     if let Some(Target::Input(studio_key)) = self.panel.selected.clone() {
                         let _ = self.panel.draft_mut(&studio_key).handle_key(key);
                     }
                 }
             }
+            return;
+        }
+        if matches!(
+            code,
+            crossterm::event::KeyCode::Tab | crossterm::event::KeyCode::BackTab
+        ) && (modifiers.is_empty() || modifiers == crossterm::event::KeyModifiers::SHIFT)
+            && matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            )
+        {
+            let forward = code == crossterm::event::KeyCode::Tab
+                && !modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
+            self.panel_tab_section(forward);
             return;
         }
         if matches!(

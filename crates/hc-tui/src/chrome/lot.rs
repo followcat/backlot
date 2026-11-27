@@ -92,8 +92,6 @@ pub(crate) struct StudioHeader {
     pub studio: String,
     /// `· host-b` when the aggregate spans machines.
     pub machine: Option<String>,
-    /// `true` while `StudioFocus::Studio(key)` points at this studio.
-    pub studio_focused: bool,
     pub kind: HeaderKind,
 }
 
@@ -193,18 +191,20 @@ pub(crate) fn header_text(header: &StudioHeader) -> String {
     }
 }
 
-/// The studio id's own width, leading space included (` acme-shop`) —
-/// what a narrow mobile header must keep whole before the update hint
-/// may claim cells. The `· machine` qualifier is the first thing a
-/// tight row may clip.
+/// The studio id's own capsule width, leading and trailing space included
+/// (` acme-shop `) — what a narrow mobile header must keep whole before the
+/// update hint may claim cells. The `· machine` qualifier is the first thing
+/// a tight row may clip.
 pub(crate) fn header_name_width(header: &StudioHeader) -> u16 {
-    display_width(&format!(" {}", header.studio))
+    display_width(&format!(" {} ", header.studio))
 }
 
 /// The studio header's styled left pieces: ` id · machine › part`
-/// with the role badge, person glyph and priority mark in their colours.
+/// with the current-studio capsule, role badge, person glyph and
+/// priority mark in their colours.
 fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)> {
     let header_bg = palette.elevation().surface;
+    let capsule = crate::studio::glyphs::studio_capsule_style(palette);
     let text = Style::default().fg(palette.text).bg(header_bg);
     let dim = Style::default().fg(palette.overlay0).bg(header_bg);
     if let HeaderKind::Hollywood = header.kind {
@@ -219,27 +219,22 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
             (" ".into(), text),
         ];
     }
+    let sep = if header.machine.is_some() {
+        " › "
+    } else {
+        "› "
+    };
     let mut spans = vec![
-        (
-            format!(" {}", header.studio),
-            if header.studio_focused {
-                Style::default()
-                    .fg(palette.accent)
-                    .bg(header_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                text.add_modifier(Modifier::BOLD)
-            },
-        ),
+        (format!(" {} ", header.studio), capsule),
         (
             header
                 .machine
                 .as_ref()
-                .map(|m| format!(" · {m}"))
+                .map(|m| format!("· {m}"))
                 .unwrap_or_default(),
             dim,
         ),
-        (" › ".into(), dim),
+        (sep.into(), dim),
     ];
     match &header.kind {
         HeaderKind::Bare => {
@@ -318,7 +313,7 @@ pub(crate) fn render_studio_header(
     let name_rows = area.width.saturating_sub(pill_w.saturating_add(1));
     let mut x = area.x;
     let right = area.x.saturating_add(name_rows);
-    let name_end = x.saturating_add(display_width(&header.studio) + 1);
+    let name_end = x.saturating_add(display_width(&header.studio) + 2);
     for (text, style) in header_spans(header, palette) {
         let room = right.saturating_sub(x);
         if room == 0 {

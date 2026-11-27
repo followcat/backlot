@@ -18,7 +18,7 @@ use super::draw_blocks::{
     draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
-use super::draw_compact::{draw_calm_summary, draw_compact_studio};
+use super::draw_compact::draw_compact_studio;
 use super::draw_tasks::{draw_closed_fold, draw_drawer, draw_fold, draw_task};
 use super::rows::{Row, Target};
 use super::{Panel, PanelMode, rows};
@@ -281,6 +281,7 @@ pub(crate) fn render(
                     | Row::DesignActions { .. }
                     | Row::AcceptedFold { .. }
                     | Row::ClosedFold { .. }
+                    | Row::CompactStudio { .. }
                     | Row::Stacked(_)
                     | Row::Strip { .. }
                     | Row::Talk { .. }
@@ -422,20 +423,7 @@ pub(crate) fn render(
                     palette,
                 );
             }
-            Row::CalmSummary {
-                studio,
-                idle_count,
-                standby_badges,
-            } => {
-                draw_calm_summary(
-                    buf,
-                    rect,
-                    *idle_count,
-                    standby_badges,
-                    frame_of(&studio.key()),
-                    palette,
-                );
-            }
+            Row::Spacer => {}
             Row::Divider { studio } => {
                 let edge = frame_of(&studio.key());
                 if rect.width >= 2 {
@@ -452,7 +440,17 @@ pub(crate) fn render(
                 }
             }
             Row::CompactStudio { studio, kind } => {
-                draw_compact_studio(buf, rect, *studio, *kind, &label(*studio), now_ms, palette);
+                draw_compact_studio(
+                    buf,
+                    rect,
+                    *studio,
+                    *kind,
+                    &label(*studio),
+                    paints,
+                    mark == Some(&studio.key()),
+                    now_ms,
+                    palette,
+                );
             }
             Row::Task { studio, task } => {
                 draw_task(buf, rect, *studio, task, frame_of(&studio.key()), palette);
@@ -582,6 +580,7 @@ pub(crate) fn render(
                     &label(*studio),
                     selected_studio.as_ref() == Some(&studio.key()),
                     lot_focused,
+                    mark == Some(&studio.key()),
                     panel.spin,
                     palette,
                     &mut hits,
