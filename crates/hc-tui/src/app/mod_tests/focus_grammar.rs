@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::app::input::UiEvent;
-use crate::focus::{LotLevel, WorkspaceRegion};
+use crate::focus::{CallSheetZone, LotLevel, WorkspaceRegion};
 use crate::new_studio::{Probe, RunnerRow, Step, Step2Field};
 use crate::panel::Target;
 use crate::sheet::SheetTab;
@@ -492,4 +492,91 @@ async fn modal_grammar_fixes_across_sheet_update_wizard_dialogs_and_menu() {
     assert_eq!(menu_app.menu.as_ref().unwrap().highlighted, start_hi);
     key(&mut menu_app, hc_vt::Key::ArrowLeft);
     assert!(menu_app.menu.is_none(), "ArrowLeft closes ContextMenu");
+}
+
+#[tokio::test]
+async fn call_sheet_zone_syncs_with_waiting_hollywood_studios_tab_ring_and_opening_rule() {
+    let cfg = Ok(Some(backlot_stage::config::HollywoodCfg {
+        runner: "fake".into(),
+        model: "m".into(),
+        effort: Some("high".into()),
+        key: None,
+        default_cast: None,
+    }));
+
+    // 1. With a blocking wait (`!B > 0`), `Alt+Y` opens into `CallSheetZone::Waiting`.
+    let mut app = grammar_app(true, true);
+    app.set_hollywood(cfg.clone(), std::path::Path::new("/tmp/focus-grammar.toml"));
+    draw_to(&mut app, 140, 36);
+    key_mods(&mut app, hc_vt::Key::Char('y'), hc_vt::Mods::ALT);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Waiting)
+    );
+    assert!(!app.hollywood.editing);
+    let backend = draw_to(&mut app, 140, 36);
+    let buf = backend.buffer();
+    let mode_row: String = (0..140).map(|x| buf[(x, 35)].symbol()).collect();
+    assert!(
+        mode_row.contains("FOCUS: call sheet › waiting"),
+        "modebar should show Waiting breadcrumb: {mode_row:?}"
+    );
+
+    // 2. `Tab` cycles `Waiting -> Hollywood (compose) -> Studios -> Waiting`, `Shift+Tab` reverses.
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Hollywood)
+    );
+    assert!(app.hollywood.editing);
+    let backend = draw_to(&mut app, 140, 36);
+    let mode_row: String = (0..140)
+        .map(|x| backend.buffer()[(x, 35)].symbol())
+        .collect();
+    assert!(
+        mode_row.contains("FOCUS: call sheet › hollywood"),
+        "modebar should show Hollywood breadcrumb: {mode_row:?}"
+    );
+
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Studios)
+    );
+    assert!(!app.hollywood.editing);
+    let backend = draw_to(&mut app, 140, 36);
+    let mode_row: String = (0..140)
+        .map(|x| backend.buffer()[(x, 35)].symbol())
+        .collect();
+    assert!(
+        mode_row.contains("FOCUS: call sheet › studios"),
+        "modebar should show Studios breadcrumb: {mode_row:?}"
+    );
+
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Waiting)
+    );
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Studios)
+    );
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert_eq!(
+        app.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Hollywood)
+    );
+
+    // 3. Without blocking items (`!B == 0`), `Alt+Y` opens into `CallSheetZone::Hollywood` composing.
+    let mut calm_block = grammar_app(false, true);
+    calm_block.set_hollywood(cfg, std::path::Path::new("/tmp/focus-grammar.toml"));
+    draw_to(&mut calm_block, 140, 36);
+    key_mods(&mut calm_block, hc_vt::Key::Char('y'), hc_vt::Mods::ALT);
+    assert_eq!(
+        calm_block.focus.workspace,
+        WorkspaceRegion::CallSheet(CallSheetZone::Hollywood)
+    );
+    assert!(calm_block.hollywood.editing);
 }

@@ -27,50 +27,49 @@ layout, so toggling it resizes nothing.
   missing requirements); otherwise it uses `elevation.raised_row` with `teal`/`peach`/`accent`
   segments. Clicking a bucket segment jumps straight to that `WaitBucket` (`Blocking`, `Asks`,
   `Cards`, `Ready`) in the expanded Call Sheet.
-- **Expanded** is the **Call Sheet** — the film-strip band dropped from the top over the
-  whole width, at most half the height (sixteen rows on a mobile width) over `elevation.surface`
-  with an external 1-row `elevation.shadow` below the bottom sprocket (unless `[ui] popup_shadow = false`
-  or `height < 16`; a beside Lot dock starts below the shadow row): `▄▄`/`▀▀` sprocket rows, the
-  `✦  H O L L Y W O O D` title with the agent's square, role state and runner / model / effort
-  plus the right-hand studio count and `k waiting on you` (red while a prompt, blocked role, or
-  a down stage waits, peach otherwise), then three titled zone rules: `── STUDIOS · <S> ──`,
-  `── WAITING ON YOU · <N> ──` (dropped completely when calm; displays `<top>–<bot>/<N>` on the
-  rule's right end while overflowing), and `── HOLLYWOOD ──` (carrying `<k> earlier · ↵ read` on
-  its right end when older turns fold, or a muted hairline when `[hollywood]` is absent). Under
-  `STUDIOS`, one seven-row frame per studio — active main-pane studio prefixed `▸ ` in bold text
-  with a muted border, selected frame accented on `raised_row`, its own machine's `■ live` /
-  `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>` task counts, the
-  role on set, what it is doing (a broken ledger's error in red), and one `◆` per cast member
-  coloured by its state beside `actors <live>/<cap>` (or `<N> cast` on a document an older stage
-  wrote). A frame whose studio has a plain next step carries `· next: tell the producer what to
-  build`, `· next: director reviewing` or `· next: finish (f)` on its blank row. The last frame
-  is always the dashed **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`,
-  a narrow screen puts two per row. Under `WAITING ON YOU`, the band lists the **waiting items** —
-  the one needs-you list, everything that waits on the user across every machine, sorted by
-  urgency: user-owned prompts first (a director-owned prompt never lists), then roles with a
-  needs-you attention or an unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`,
-  which takes the same `y` allow once / `d` deny / `p` peek / Enter as its live row, or
-  `HOLLYWOOD blocked` without a prompt — opening-design decisions (`Wait::Decision`, `◆ DECISION`,
-  counted under warm peach `?A` asks and never `!B` blocking, with round/`skip suggested`, summary,
-  up to 3 `Q1..Q3` items, and `[o] read` / `[r] reply` (`discuss` on `SuggestSkip`) / `[a] sign`
-  (`skip` on `SuggestSkip`) / `[↵] open`), studios with no requirement, stopped stages and offline
-  machines that have live studios, then the local core's open cards, then studios ready to finish.
-  Every waiting row carries a persistent col-2 severity `▎` bar, bold colored verb, bold studio id,
-  and an aligned detail line; selecting a row paints `▌▸` on `raised_row` with action chips on
-  the right. Every item the person must decide or answer (`Prompt`, `Upgrade`, `Role`,
-  `Hollywood`, `Decision`, `NoRequirement`, `Stage`, `Card`, `Outward`) is always its own row and
-  never folded behind a studio's `READY` row or `· +N`, so actionable items on a studio always
-  come before its `READY` row and `WAITING ON YOU · <N>` matches the listed items; card rows show
-  the card id, role badge (`Ⓟ`/`Ⓓ`/`Ⓦ`/`Ⓐ`), and runner/model target (`from → to` when carried in
-  the card summary) with `apply`/`cancel`/`show` chips. Only when the list is empty does a calm
-  `✓` row say `nothing waiting on you`. Under
-  `HOLLYWOOD`, the compose field (`tell hollywood…`) sits on `raised_field` (keeping its italic
-  placeholder even while editing an empty buffer) above a separated two-tone footer hint bar —
-  or, without a `[hollywood]` table, the `⏎ hollywood setup` line. Waiting rows and compose never
-  drop; the 10-step height ladder sheds optional blanks/hairlines, 2->1 line wraps, unselected
-  waiting details, older `Talk` lines (bumping `k earlier` on `HOLLYWOOD`), zone rules,
-  headline/live rows, then folds 7-row frames into the 1-row chip strip ahead of hints and
-  waiting scroll compression.
+- **Expanded** is the **Call Sheet** — a focus-driven docked band dropped from the top over the
+  pane + dock width (`surface`), capped at half the frame height (`12..=h/2`, or `h.min(16)` on a
+  mobile width), ending in a single `▀▀` bottom perforation edge with no top perforation row and
+  no external drop shadow (a beside Lot dock starts directly below `▀▀`, and a click below `▀▀`
+  is outside the sheet). Zones appear in fixed top-to-bottom **screen order**:
+  1. **Title** (`1` row): `✦  H O L L Y W O O D` (`✦ HOLLYWOOD` under 100 columns) with the agent's
+     square, state and `runner / model / effort` on the left, and Lot-pill-matching bucket counts
+     (`<S> studios · !B · ?A · Cc · ✓R ready`, plus `{top}–{bot}/{N}` when waiting overflows) on
+     the right.
+  2. **WAITING** (omitted completely when nothing waits — no `WAITING ON YOU` rule and no calm filler
+     row): one needs-you list across every machine in urgency order — user prompts (`Prompt`),
+     needs-you/asking roles (`Role`), Hollywood prompts/blocks (`Wait::Hollywood`), opening-design
+     decisions (`Wait::Decision`, `◆ DECISION`, warm peach `?A` asks, round/`skip suggested`, summary,
+     up to 3 `Q1..Q3` items), no-requirement studios (`Wait::NoRequirement`), stopped stages / offline
+     machines (`Stage`), open cards (`Card`), outward cards (`Outward`), then ready studios
+     (`Ready`). Unfocused, each item is **1 line** (no detail lines, no action chips). When
+     `WAITING` is focused, a `palette.accent` `▌` gutter runs down column 0 of the entire zone and
+     only the selected item expands (`why:`, `Q1..Q3`, or inline `finish studio? y/n` + action
+     chips on the right). If tight height sheds the Title row while waiting items scroll,
+     `{top}–{bot}/{N}` moves onto the first waiting row.
+  3. **HOLLYWOOD**: unfocused, shows the newest **1** talk line (clipped with `…`, ending in
+     `<age> · <N> earlier` or `<age>`) plus the `tell hollywood…` compose field on `raised_field`
+     (or `⏎ hollywood setup` when unconfigured). When `HOLLYWOOD` is focused, draws the
+     `── HOLLYWOOD ──` zone rule (`<N> earlier · ↵ read` on the right when earlier turns fold),
+     up to 8 newest talk lines with their 2-line CJK-aware wraps, the optional live progress /
+     non-duplicate headline row, and compose (dropping the zone rule first when space is scarce
+     while keeping `<N> earlier` inline).
+  4. **STUDIOS**: unfocused, renders a **1-row chip strip** (`STUDIOS N  [▸acme-shop ✓ 3c] … [+ new]`)
+     marking the active main-pane studio with `▸` and appending per-studio `!B`/`?A`/`Cc` or live
+     `done/total`, with `[+ new]` pinned at the right and `‹`/`›` sideways scrolling on the rest.
+     When `STUDIOS` is focused and space permits, it expands to the centered
+     `▄▄ ▄▄ …  STUDIOS N  … ▄▄ ▄▄` perforation header plus frames — `7` rows full (role badge + next
+     step + cast dots), `5` rows compact (dropping the role badge and next/blank row), or `3` rows
+     micro (border + `state · round · done/total` + border) — falling back to the focused 1-row
+     strip (`▌` + accent `STUDIOS N`) when fewer than `4` rows remain.
+  5. **Footer** (`Hints` row + `▀▀` bottom edge).
+
+  **Two-phase height rule:** every zone is laid out unfocused first; if it exceeds the cap,
+  chrome and unfocused lines shed in order (`hints` → `▀▀` → unfocused talk → title → unfocused
+  studio strip → scroll waiting window keeping selection, leaving compose and the selected wait
+  intact). Only the currently focused zone then expands into remaining rows (`cap - base`),
+  never shrinking another zone's unfocused lines (an inline `finish studio? y/n` confirm also keeps
+  its 1-line ask visible when armed from `STUDIOS`).
 
 The start policy is **`collapsed`** by default (`[hollywood] start` — `collapsed`,
 `when_waiting`, or `expanded`), applied once the first settled `backlot` read lands.
@@ -109,12 +108,13 @@ with a 2nd press jumping to `Compose`). `Ctrl+B t` (`[keys] focus_tree`) and `Ct
 region chords (`Alt+L`, `Alt+Y`, `Ctrl+B y/t/a`) cross cleanly between regions without trapping
 (`docs/keys.md`). Under `--plain`, `Alt+L` and `Alt+Y` fall through to the program.
 
-Inside the expanded bar: `Tab` / `Shift+Tab` cycles the three zones — `Compose (›)` →
-`Waiting/Exchange` (first waiting item, or newest exchange row) → `Studios` (upper frames) —
-skipping empty zones (`Shift+Tab` reverses); in Resting, `←` `→` (or `h` `l`) move between the
-frames (new-studio included) or action chips, `↓` `↑` (or `j` `k`) walk within the active section,
-`PageUp` / `PageDown` scroll the waiting list, `1`–`9` jump to a frame and `0` to the
-new-studio frame, and `Enter` activates the selection. Each waiting row has its own keys: on a
+Inside the expanded bar: `Tab` / `Shift+Tab` cycles screen order — `Waiting` → `Hollywood`
+(compose armed) → `Studios` → `Waiting` — skipping empty zones (`Shift+Tab` reverses); in
+Resting, `←` `→` (or `h` `l`) move between the studio chips/frames (new-studio included, scrolling
+uneven strip chips while keeping `[+ new]` pinned) or action chips, `↓` `↑` (or `j` `k`) cross zone
+boundaries (`Waiting ↔ Hollywood ↔ Studios`) smoothly with focus following selection, `PageUp` /
+`PageDown` scroll the waiting list, `1`–`9` select that studio chip/frame (focusing and expanding
+`STUDIOS`) and `0` selects `[+ new]`, and `Enter` activates the selection. Each waiting row has its own keys: on a
 **prompt** row `y` answers `allow` and `d` answers `deny` (`backlot approve --person <role>
 --decision <d>` on the prompt's own machine), `p` peeks at the role's live screen read-only;
 on a **stage** row `s` runs `backlot stage start` on that machine, and an offline machine's
@@ -129,10 +129,13 @@ collapses first), `?` opens this help, `Esc` or the toggle collapses the bar. A 
 stage or finish action on a remote machine runs there through the shared RPC connection —
 never SSH, never a local spawn; cards and `tell` run on the local core. The bar owns those
 keys while it is expanded — an armed prefix disarms into it. A click on the pill expands it,
-a click on a row selects it and acts like `Enter`, a click on a chip runs that chip's action,
-the wheel scrolls the frames sideways and the waiting rows vertically, and a click outside
-collapses the bar to the pill and hands the keys to what is under it — a typed letter lands in
-the pane. Right-click on the title or a row opens the same context menu `m` opens.
+a click on a waiting row or talk line selects it (shifting focus to that zone) while clicking an
+item's action chip (including `↵ read` on a talk line) runs that action, a click on a studio chip or
+frame opens that studio and collapses the sheet, clicking `STUDIOS N` focuses `STUDIOS`, clicking
+`[+ new]` opens the new-studio wizard, the wheel scrolls frames/strip sideways and waiting rows
+vertically, and a click outside (including immediately below the `▀▀` bottom edge) collapses the
+bar to the pill and hands the keys to what is under it — a typed letter lands in the pane.
+Right-click on the title or a row opens the same context menu `m` opens.
 
 `s` (or `Enter`) on a card, headline, or talk row opens it in the **Lot Reader** card: arrows / `j` / `k`, `Space`/`PageDown`/`Ctrl+D`, `b`/`PageUp`/`Ctrl+U`, `g`/`Home`, and `G`/`End` scroll (while plain `d` stays unbound), `←`/`→` (or `[`/`]` or clicking `◀`/`▶`) step sibling entries (or jump `## R<r>` / `### §R<r>.<W|D|P|U>` sections on `design/` Markdown docs), `y` copies raw unwrapped text via OSC 52 without answering prompts, `v` jumps to the studio's Task & Delivery Sheet, `o`/`p` focus or peek a live seat (when present), `t`/`i` (and `r` on an active `Design` doc) open inline compose sharing `hollywood.input` / studio draft and `↑`/`↓` history (`Esc` keeps draft), `?` opens key help, and `Esc`/`q` close (on read-only entries `Enter` closes too; on open cards `a`/`x` apply/cancel when unlocked and `a` confirms sign-off on waiting `Design` docs; `Enter` on cards is a no-op).
 
@@ -142,8 +145,8 @@ composing, plain `↑`/`↓` step through `user` exchange history (`HollywoodSum
 local sends, consecutive repeats collapsed), saving and restoring any unsent draft; `Alt+arrows`
 remain studio/role navigation; `Enter` on non-empty text sends and stays in Compose (empty
 rests); `Esc` always rests on `›` keeping the draft (never collapsing), and a second `Esc`
-collapses. While composing, the footer names `⏎ send   ↑↓ history   tab waiting   esc rows   alt+y close`
-(or `tab studios` when nothing waits), fitting narrower widths down to `⏎ ↑↓ esc`.
+clears. While composing, the footer names `⏎ send   ↑↓ history   tab next zone   esc rows   alt+y close`,
+fitting narrower widths down to `⏎ ↑↓ esc`.
 
 Under the newest `user ›` line the band shows what Hollywood is doing with it, for as long as
 that line has no `hollywood` reply after it: `… sending to hollywood` while the line is still in
@@ -169,16 +172,16 @@ from the screen's wrapping: the whole command for cmd, the question for the othe
 `permission prompt` when the screen cannot name it. The same width-independent picker detection
 and detail reading raise a role's `permission prompt` attention.
 
-The talk above the input keeps only the **recent conversation**: the newest turn (a `› you` line
-and everything after it up to the next one) and the turn before it — or, with no user line, the
-newest two lines — laid out with a fixed speaker column (`✦ hollywood` / `› you` wide,
-`✦ hw` / `› you` narrow) and right-aligned relative age (swapping for ` ↵ read ` when selected).
-Older turns fold onto the right end of the `── HOLLYWOOD ──` rule as `<k> earlier · ↵ read`;
-Enter on it opens the newest folded entry in the Lot Reader, and the Reader's `←`/`→` stepping
-still reaches every earlier line. Any message wraps to at most two lines at the band's width,
-using the same CJK-aware wrap the Reader body uses, clamping with `…`. When the band is short
-wraps drop from two lines to one (oldest first) and older turns fold onto the `HOLLYWOOD` rule
-before frames compress or waiting rows drop. Selection, mouse hits and scrolling treat a wrapped
+The talk above the input keeps up to the **8 newest entries** when `HOLLYWOOD` is focused (folding
+older turns onto the right end of the `── HOLLYWOOD ──` rule as `<k> earlier · ↵ read`), laid out
+with a fixed speaker column (`✦ hollywood` / `› you` wide, `✦ hw` / `› you` narrow) and
+right-aligned relative age (swapping for ` ↵ read ` when selected). Unfocused (when `WAITING` or
+`STUDIOS` is focused), `HOLLYWOOD` collapses to the single newest talk line ending in `<age> · <N>
+earlier` (or `<age>`) above compose. Enter on the fold badge or ` ↵ read ` chip opens the Reader,
+where `←`/`→` still step through every earlier line. In focused `HOLLYWOOD`, any message wraps up to
+two lines at the band's width using the same CJK-aware wrap the Reader body uses, clamping with
+`…`; as height shrinks, older wraps and older lines give way back to `<k> earlier` without ever
+pushing another zone's unfocused lines out. Selection, mouse hits and scrolling treat a wrapped
 line as one row.
 
 

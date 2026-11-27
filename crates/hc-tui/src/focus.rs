@@ -65,12 +65,13 @@ pub enum LotLevel {
     },
 }
 
-/// Active zone inside the Hollywood Call Sheet.
+/// Active zone inside the Call Sheet dock, in screen and `Tab` order
+/// (`WAITING -> HOLLYWOOD -> STUDIOS`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallSheetZone {
-    Studios,
     Waiting,
-    Compose,
+    Hollywood,
+    Studios,
 }
 
 /// Non-modal workspace regions that share one global switching contract.
@@ -166,11 +167,11 @@ impl FocusState {
             },
             WorkspaceRegion::CallSheet(zone) => {
                 let z = match zone {
-                    CallSheetZone::Studios => "studios",
                     CallSheetZone::Waiting => "waiting",
-                    CallSheetZone::Compose => "compose",
+                    CallSheetZone::Hollywood => "hollywood",
+                    CallSheetZone::Studios => "studios",
                 };
-                format!("hollywood › {z}")
+                format!("call sheet › {z}")
             }
         };
         Some(format!("FOCUS: {body}"))

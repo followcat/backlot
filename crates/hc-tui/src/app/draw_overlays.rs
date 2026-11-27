@@ -129,7 +129,7 @@ pub(super) fn render_overlays_and_cursor(
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
                 suppress_highlights: !active_surface,
-                no_shadow: !app.shell.popup_shadow,
+                no_shadow: true,
             },
         )
     } else {
@@ -235,7 +235,7 @@ pub(super) fn render_overlays_and_cursor(
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
                 suppress_highlights: !active_surface,
-                no_shadow: !app.shell.popup_shadow,
+                no_shadow: true,
             },
             &app.shell.palette,
         )

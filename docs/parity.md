@@ -1015,7 +1015,9 @@ Everything else on the compared surfaces still diffs normally.
   deduplicates live studio workspaces and shows clickable `? keys` at bottom-left (while quietly marking the
   focused Lot's selected studio endpoint/server row with an accent `▎`), the center header keeps
   a bucketed lot pill (`✦ S · !B · ?A · Cc · ✓R ready · alt+y`) with clickable jump targets alongside a
-  `elevation.raised_row` current-studio capsule, Cast renders row 1 via the shared `InlineState` formatter
+  `elevation.raised_row` current-studio capsule, the docked Call Sheet follows focus-driven zone expansion
+  (`Title → WAITING → HOLLYWOOD → STUDIOS → Hints → ▀▀` without top perforation or external shadow, keeping
+  unfocused zones at 1 line per item), Cast renders row 1 via the shared `InlineState` formatter
   plus an indented `runner · model · effort` sub-line in `subtext0` under open roles (dropping under height
   pressure while keeping the focused role's model line longest), and Lot renders every open/idle role
   individually separated by `├──┤` rules and blank spacers between studio blocks, with `Tab`/`Shift+Tab`

@@ -22,8 +22,8 @@ async fn a_click_on_the_lot_pill_expands_the_layer() {
 
 #[tokio::test]
 async fn a_card_row_click_acts_like_enter() {
-    // S5 §2: a row click selects the row and runs its Enter — a
-    // card's Enter is the "Show me" view.
+    // Clicking a card row selects & focuses it; clicking its `show ↵` chip
+    // runs `card show`.
     let mut app = app_with_hollywood();
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
@@ -43,6 +43,20 @@ async fn a_card_row_click_acts_like_enter() {
         rect.y,
     ));
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert!(recorded.lock().unwrap().is_empty());
+    draw_to(&mut app, 120, 24);
+    let (chip_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, k)| matches!(t, Target::Card(id) if id == "c3") && *k == '\r')
+        .cloned()
+        .expect("c3 show chip");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        chip_rect.x + 1,
+        chip_rect.y,
+    ));
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "show", "c3", "--as", "user"]]
@@ -436,7 +450,7 @@ async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
     app.set_hollywood_runner(runner);
     app.area = (120, 44);
     app.hollywood.mode = LayerMode::Expanded;
-    app.hollywood.selected = Some(Target::Card("c3".into()));
+    app.hollywood.selected = Some(Target::Hollywood);
     draw_to(&mut app, 120, 44);
 
     let (row_rect, _) = app
@@ -617,6 +631,20 @@ async fn clicking_recast_card_rows_and_chips_on_ready_studio_targets_each_card()
         c1373_rect.y,
     ));
     assert_eq!(app.hollywood.selected, Some(Target::Card("c1373".into())));
+    assert!(recorded.lock().unwrap().is_empty());
+    draw_to(&mut app, 200, 17);
+    let (show_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, k)| matches!(t, Target::Card(id) if id == "c1373") && *k == '\r')
+        .cloned()
+        .expect("c1373 show chip");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        show_rect.x + 1,
+        show_rect.y,
+    ));
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "show", "c1373", "--as", "user"]]

@@ -266,10 +266,13 @@ async fn switch_lifecycle_states_render_call_sheet_pill_and_toasts() {
         if phase == "verifying" {
             assert!(sheet_sw.contains("peek next"), "{sheet_sw}");
             assert!(sheet_sw.contains("cancel"), "{sheet_sw}");
+            app.hollywood_select(Target::Input);
+            let live_sw = screen_lines(&draw_to(&mut app, 100, 18)).join("\n");
             assert!(
-                sheet_sw.contains("waiting for handoff to codex/gpt-6-sol/high"),
-                "{phase}: {sheet_sw}"
+                live_sw.contains("waiting for handoff to codex/gpt-6-sol/high"),
+                "{phase} live row: {live_sw}"
             );
+            app.hollywood_select(Target::Hollywood);
         }
     }
 

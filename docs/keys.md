@@ -176,11 +176,11 @@ never covers the studios: it opens the new-studio dialog directly instead.
 
 The key is `Alt+Y` (`call_sheet`) / `Ctrl+B i` (`prefix_call_sheet`); the lot header advertises `alt+l`,
 `alt+y`, and the active focus breadcrumb. `Alt+Y` — a direct key, no prefix — switches cleanly from
-any non-modal region (`Terminal`, `Tree`, `Cast`, `Lot`), expanding the band straight into Compose (`›`)
-or Collapsed, one `Alt+Y` expands straight into Compose (`›`) when `[hollywood]` is configured
-(waiting items remain visible above; unconfigured keeps wait/frame landing). From Expanded, one
-`Alt+Y` collapses back keeping any draft. Toast jumps (`Ctrl+B o` or click) still land on their
-named item in Resting. Collapsed, the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
+any non-modal region (`Terminal`, `Tree`, `Cast`, `Lot`): from Hidden or Collapsed it expands and
+lands directly on the first blocking wait (`Resting`) whenever blocking items wait (`!B > 0`), or
+straight into Compose (`›`) inside `HOLLYWOOD` when `blocking == 0` and `[hollywood]` is configured
+(unconfigured keeps wait/frame landing). From Expanded, one `Alt+Y` collapses back keeping any
+draft. Toast jumps (`Ctrl+B o` or click) still land on their named item in Resting. Collapsed, the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
 the tab bar — or of the one-row studio header on a studio workspace — that counts the urgent
 items (`U`: your prompts, stopped stages, ledger errors), the open cards and studios ready to
 finish (`C`), and the studios (`✦`). In studio mode the bar exists even with no `[hollywood]`
@@ -194,9 +194,9 @@ role navigation cleanly from Compose):
 
 | Keys | Action |
 |---|---|
-| `Tab`/`Shift+Tab` | Cycle the 3-zone ring (`Compose ›` → `Waiting/Exchange` first wait or newest exchange → `Studios`), skipping empty zones; `Shift+Tab` reverses |
-| `←`/`→`, `h`/`l` | In the upper section: move between studio frames (including `+ new studio`); in the lower section: move the highlighted action chip across a waiting row |
-| `↓`/`↑`, `j`/`k` | In Compose: plain `↑`/`↓` recall prior `user` messages to Hollywood (consecutive repeats collapsed, live draft saved/restored past newest). In Resting: move within the active section |
+| `Tab`/`Shift+Tab` | Cycle the 3-zone ring in screen order (`WAITING` → `HOLLYWOOD` compose → `STUDIOS`), skipping empty zones; `Shift+Tab` reverses |
+| `←`/`→`, `h`/`l` | In `STUDIOS`: move between studio chips/frames (including `[+ new]`); in `WAITING` / `HOLLYWOOD`: move the highlighted action chip across the selected item |
+| `↓`/`↑`, `j`/`k` | In Compose: plain `↑`/`↓` recall prior `user` messages to Hollywood (consecutive repeats collapsed, live draft saved/restored past newest). In Resting: step across visible rows (`WAITING ↔ HOLLYWOOD ↔ STUDIOS`) with zone expansion following focus |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
 | `Enter` | In Compose: send `tell hollywood` and stay ready on `›` (empty rests). On a waiting row: run the highlighted action chip (`allow y` by default on a prompt, `show ↵` on a card, `open ↵` focuses the role terminal); on a studio frame, headline or talk row: open or read it |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine — only when the runner can answer (a runner with no approval key shows `answer in its terminal` and these keys do nothing there) |

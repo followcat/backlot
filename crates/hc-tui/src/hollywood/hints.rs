@@ -126,38 +126,19 @@ pub(crate) fn pairs_for_row(
     width: usize,
 ) -> Vec<(&'static str, &'static str)> {
     if editing && matches!(selected, Some(Target::Input)) {
-        let wide: &[(&str, &str)] = if waits.is_empty() {
-            &[
-                ("⏎", "send"),
-                ("↑↓", "history"),
-                ("tab", "studios"),
-                ("esc", "rows"),
-                ("alt+y", "close"),
-            ]
-        } else {
-            &[
-                ("⏎", "send"),
-                ("↑↓", "history"),
-                ("tab", "waiting"),
-                ("esc", "rows"),
-                ("alt+y", "close"),
-            ]
-        };
-        let mid: &[(&str, &str)] = if waits.is_empty() {
-            &[
-                ("⏎", "send"),
-                ("↑↓", "hist"),
-                ("tab", "studios"),
-                ("esc", "rows"),
-            ]
-        } else {
-            &[
-                ("⏎", "send"),
-                ("↑↓", "hist"),
-                ("tab", "waits"),
-                ("esc", "rows"),
-            ]
-        };
+        let wide: &[(&str, &str)] = &[
+            ("⏎", "send"),
+            ("↑↓", "history"),
+            ("tab", "next zone"),
+            ("esc", "rows"),
+            ("alt+y", "close"),
+        ];
+        let mid: &[(&str, &str)] = &[
+            ("⏎", "send"),
+            ("↑↓", "hist"),
+            ("tab", "zone"),
+            ("esc", "rows"),
+        ];
         let bare: &[(&str, &str)] = &[("⏎ ↑↓ esc", "")];
         return [wide, mid, bare]
             .into_iter()

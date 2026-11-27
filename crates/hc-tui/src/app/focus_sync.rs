@@ -3,7 +3,7 @@
 //! `hollywood.mode`, and open modals).
 
 use crate::focus::{CallSheetZone, LotLevel, ModalLayer, TellTarget, WorkspaceRegion};
-use crate::hollywood::{LayerMode, Section, Target as SheetTarget};
+use crate::hollywood::{LayerMode, Section};
 use crate::panel::Target as PanelTarget;
 use crate::studio::StudioKey;
 
@@ -56,14 +56,16 @@ impl App {
     }
 
     pub(crate) fn derived_call_sheet_zone(&self) -> CallSheetZone {
-        match self.hollywood.selected.as_ref() {
-            Some(SheetTarget::Input) => CallSheetZone::Compose,
-            Some(t) if Section::of(t) == Section::Upper => CallSheetZone::Studios,
-            Some(_) => CallSheetZone::Waiting,
-            None => match self.hollywood.section {
-                Section::Upper => CallSheetZone::Studios,
-                Section::Lower => CallSheetZone::Waiting,
-            },
+        let section = self
+            .hollywood
+            .selected
+            .as_ref()
+            .and_then(Section::focus_of)
+            .unwrap_or(self.hollywood.section);
+        match section {
+            Section::Waiting => CallSheetZone::Waiting,
+            Section::Hollywood => CallSheetZone::Hollywood,
+            Section::Studios => CallSheetZone::Studios,
         }
     }
 

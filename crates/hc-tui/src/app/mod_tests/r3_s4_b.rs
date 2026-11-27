@@ -323,22 +323,22 @@ async fn popup_backdrop_none_and_shadow_false_and_hit_area_gutter_vs_shadow() {
 }
 
 #[tokio::test]
-async fn expanded_call_sheet_casts_external_shadow_above_beside_lot_dock() {
+async fn expanded_call_sheet_meets_beside_lot_dock_without_external_shadow() {
     let mut app = s4_app();
     app.area = (160, 44);
     app.panel.mode = PanelMode::Expanded;
     app.hollywood.mode = LayerMode::Expanded;
     let drawn = draw_to(&mut app, 160, 44);
-    assert!(app.hollywood_hits.shadow_drawn);
+    assert!(!app.hollywood_hits.shadow_drawn);
     assert_eq!(
         app.panel_hits.area.y,
-        app.hollywood_hits.area.bottom() + 1,
-        "beside Lot dock starts below 1-row external shadow"
+        app.hollywood_hits.area.bottom(),
+        "beside Lot dock starts directly below bottom perforation edge"
     );
-    let shadow_x = app.panel_hits.area.x + 2;
-    let shadow_y = app.hollywood_hits.area.bottom();
-    let shadow = app.shell.palette.elevation().shadow.unwrap();
-    assert_eq!(drawn.buffer()[(shadow_x, shadow_y)].bg, shadow);
+    let bottom = (app.hollywood_hits.area.x..app.hollywood_hits.area.right())
+        .map(|x| drawn.buffer()[(x, app.hollywood_hits.area.bottom() - 1)].symbol())
+        .collect::<String>();
+    assert!(bottom.contains("▀▀"), "bottom edge ends sheet: {bottom}");
 
     app.shell.popup_shadow = false;
     draw_to(&mut app, 160, 44);
