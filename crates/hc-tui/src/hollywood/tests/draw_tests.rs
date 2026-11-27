@@ -2242,8 +2242,8 @@ fn card_view_inline_compose_states_render_band_and_never_overflow_80x24() {
     assert!(sline.contains("■ sending to director…"), "{sline}");
 }
 
-/// The ASKS row is the person-inbox row: exact shape, age, folded
-/// sibling count, and reply/acknowledge chips on its selected row.
+/// The ASKS row shows its exact shape, age, and chips without folding
+/// sibling cards into `· +N` — the studio's card renders on its own row.
 #[test]
 fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
     let mut value = summary_json();
@@ -2271,7 +2271,8 @@ fn the_selected_asks_row_reads_exactly_and_shows_its_chips() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("? ASKS acme-shop · Ⓟ · "), "{text}");
     assert!(text.contains("— What should we build?"), "{text}");
-    assert!(text.contains("· +1"), "{text}");
+    assert!(!text.contains("· +1"), "{text}");
+    assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
     assert!(text.contains(" reply r "), "{text}");
     assert!(text.contains(" ack x "), "{text}");
 }
@@ -2325,4 +2326,234 @@ fn a_studio_needing_upgrade_draws_single_line_in_call_sheet() {
     assert_eq!(sbuf[(2, row_y)].symbol(), "▎");
     assert_eq!(sbuf[(2, row_y)].fg, palette.peach);
     assert_eq!(sbuf[(2, row_y)].bg, elev.raised_row);
+}
+
+#[test]
+fn six_studios_ready_recast_200x17_and_100x17_show_every_card_and_match_header_count() {
+    let summary = six_studios_ready_recast_summary();
+    let palette = palettes()[0].clone();
+
+    for width in [200u16, 100u16] {
+        let area = Rect::new(0, 0, width, 17);
+        let (buf, hits) = draw(
+            area,
+            Some(&summary),
+            true,
+            &layer(LayerMode::Expanded),
+            false,
+            &palette,
+        );
+        let text = lines(&buf, Rect::new(0, 0, width, hits.area.height)).join("\n");
+        assert!(
+            text.contains("6 studios  ·  5 waiting on you"),
+            "{width}x17 missing matching header count:\n{text}"
+        );
+        for needle in [
+            "CARD c1372  acme-shop · recast Ⓟ → agy/gemini-3-pro/high",
+            "CARD c1373  acme-shop · recast Ⓓ → agy/gemini-3-pro/high",
+            "CARD c1374  acme-shop · recast Ⓦ → agy/gemini-3-pro/high",
+            "READY acme-shop · 12/13 tasks accepted",
+            "READY beta-api · 13/13 tasks accepted",
+        ] {
+            assert!(
+                text.contains(needle),
+                "{width}x17 missing `{needle}`:\n{text}"
+            );
+        }
+        assert!(
+            !text.contains("· +3"),
+            "{width}x17 must not fold cards:\n{text}"
+        );
+        assert!(
+            !text.contains("· +2"),
+            "{width}x17 must not fold cards:\n{text}"
+        );
+        assert!(
+            !text.contains("· +1"),
+            "{width}x17 must not fold cards:\n{text}"
+        );
+
+        // Role badges carry their semantic role colours.
+        for (glyph, color) in [
+            ("Ⓟ", palette.mauve),
+            ("Ⓓ", palette.blue),
+            ("Ⓦ", palette.teal),
+        ] {
+            let found = (0..hits.area.height).any(|y| {
+                (0..width).any(|x| buf[(x, y)].symbol() == glyph && buf[(x, y)].fg == color)
+            });
+            assert!(found, "{width}x17 missing coloured badge {glyph}:\n{text}");
+        }
+    }
+
+    // Selected recast card keeps its chips (`apply a`, `cancel x`, `show ↵`) and `why:` line
+    // while keeping all 3 card IDs visible on screen at 100x17 and 200x17.
+    for width in [200u16, 100u16] {
+        let area = Rect::new(0, 0, width, 17);
+        let (buf, hits) = draw(
+            area,
+            Some(&summary),
+            true,
+            &selecting(LayerMode::Expanded, Target::Card("c1372".into())),
+            false,
+            &palette,
+        );
+        let text = lines(&buf, Rect::new(0, 0, width, hits.area.height)).join("\n");
+        assert!(
+            text.contains("c1372") && text.contains("c1373") && text.contains("c1374"),
+            "{text}"
+        );
+        assert!(
+            text.contains("apply a") && text.contains("cancel x") && text.contains("show ↵"),
+            "{text}"
+        );
+        assert!(text.contains("why: producer hit quota limit"), "{text}");
+    }
+}
+
+#[test]
+fn card_row_shows_role_badge_and_from_to_when_present_in_summary() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([
+        {
+            "id": "c40",
+            "studio": "acme-shop",
+            "action": "recast actor-t1-c1 claude/sonnet-4 → agy/gemini-3-pro/high",
+            "why": "timeout"
+        },
+        {
+            "id": "c41",
+            "studio": "hollywood",
+            "action": "Hollywood: cmd / deepseek-v4.1-flash → claude / claude-opus-5-5",
+            "why": "user requested switch"
+        }
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 140, 30);
+    let (buf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, Rect::new(0, 0, 140, hits.area.height)).join("\n");
+    assert!(
+        text.contains("CARD c40  acme-shop · recast Ⓐ t1 claude/sonnet-4 → agy/gemini-3-pro/high"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "CARD c41  hollywood · Hollywood: cmd / deepseek-v4.1-flash → claude / claude-opus-5-5"
+        ),
+        "{text}"
+    );
+    let actor_coloured = (0..hits.area.height)
+        .any(|y| (0..140).any(|x| buf[(x, y)].symbol() == "Ⓐ" && buf[(x, y)].fg == palette.peach));
+    assert!(actor_coloured, "actor badge must use peach:\n{text}");
+}
+
+#[test]
+fn decision_and_prompt_on_ready_studio_render_their_own_rows() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    value["studios"][0]["tasks_done"] = serde_json::json!(4);
+    value["studios"][0]["tasks_total"] = serde_json::json!(4);
+    value["studios"][0]["roles"][1]["attention_user"] = serde_json::json!(true);
+    value["studios"][0]["roles"][1]["attention_seq"] = serde_json::json!(7);
+    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("permission prompt");
+    value["studios"][0]["roles"][1]["attention_detail"] = serde_json::json!("cargo test");
+    value["studios"][0]["design"] = serde_json::json!({
+        "version": 1,
+        "round": 2,
+        "phase": "waiting_user",
+        "waiting_user": true,
+        "suggest_skip": false,
+        "doc_file": "design/v1.md",
+        "summary": "Keep SQLite WAL",
+        "questions": [
+            { "id": "Q1", "prompt": "Keep WAL?", "recommendation": "yes", "section_ref": "§R2.W" }
+        ]
+    });
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 140, 44);
+    let (buf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, Rect::new(0, 0, 140, hits.area.height)).join("\n");
+    assert!(text.contains("3 waiting on you"), "{text}");
+    assert!(text.contains("WAITING ON YOU · 3"), "{text}");
+    let prompt_y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Prompt(..)))
+        .expect("prompt hit")
+        .0
+        .y;
+    let decision_y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Decision(..)))
+        .expect("decision hit")
+        .0
+        .y;
+    let ready_y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Ready(..)))
+        .expect("ready hit")
+        .0
+        .y;
+    assert!(
+        prompt_y < decision_y && decision_y < ready_y,
+        "order: {prompt_y}, {decision_y}, {ready_y}\n{text}"
+    );
+    assert!(!text.contains("· +"), "{text}");
+}
+
+#[test]
+fn waiting_scroll_selecting_last_detailable_item_never_overflows_band() {
+    let mut value = serde_json::to_value(six_studios_ready_recast_summary()).unwrap();
+    value["hollywood"]["cards"] = serde_json::json!([
+        { "id": "c1", "studio": "acme-shop", "action": "recast producer → agy/m", "why": "one" },
+        { "id": "c2", "studio": "acme-shop", "action": "recast director → agy/m", "why": "two" },
+        { "id": "c3", "studio": "acme-shop", "action": "recast writer → agy/m", "why": "three" },
+        { "id": "c4", "studio": "gamma-web", "action": "pause t1", "why": "four" },
+        { "id": "c5", "studio": "delta-ops", "action": "pause t2", "why": "five" },
+        { "id": "c6", "studio": "eps-ui", "action": "pause t3", "why": "six" },
+        { "id": "c7", "studio": "zeta-jobs", "action": "pause t4", "why": "seven" }
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 100, 17);
+    let (buf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, Target::Card("c7".into())),
+        false,
+        &palette,
+    );
+    assert!(hits.area.height <= 12, "height={} > 12", hits.area.height);
+    let bottom = row_of(&buf, area, hits.area.bottom() - 1);
+    assert!(
+        bottom.contains("▀▀"),
+        "bottom sprocket kept inside area: {bottom}"
+    );
+    let text = lines(&buf, Rect::new(0, 0, 100, hits.area.height)).join("\n");
+    assert!(text.contains("CARD c7"), "{text}");
+    assert!(text.contains("why: seven"), "{text}");
+    assert!(
+        text.contains("/9"),
+        "scroll marker reflects all 9 waits:\n{text}"
+    );
 }

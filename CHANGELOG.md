@@ -20,6 +20,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- Cards and other items that wait on you are always listed on their own Call Sheet rows instead of being folded behind a studio's `READY` row.
 - Retarget the main pane (and studio role cursor / remembered member) to a role's new live terminal when the role resumes, restarts, recasts, or reopens from a finished terminal, while preserving keyboard focus and leaving non-resumed finished terminals alone.
 - The update check no longer reports a freshly installed binary as unreadable when it is still open for writing for a moment.
 

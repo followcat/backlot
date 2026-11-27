@@ -326,9 +326,10 @@ studios ready to finish. The Call Sheet's waiting rows, the lot pill's urgent co
 calm row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is
 no separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
 
-The band projects that list as **one row per studio**: a READY row absorbs the studio's asks,
-otherwise the most urgent item leads and the studio's other decisions fold into `· +n`. The
-header count still counts decisions, not rows. An ASKS row reads
+The band lists every actionable item in that needs-you list on its own row — prompts,
+needs-you/asks roles, Hollywood waits, design decisions, new studios, stopped stages, open cards,
+and outward cards are never folded into a studio's `READY` row or `· +n`, so actionable rows on a
+studio always come before its `READY` row and the header count matches what is listed. An ASKS row reads
 `? ASKS <studio> · <role> · <age> — <first sentence>` (truncated to width; peek/read shows the
 whole turn), offers `r` reply / `x` acknowledge / `p` peek / Enter, and paints action chips only
 on the selected row. `r` composes a tell back to the role; `x` records `ask.acknowledged`.

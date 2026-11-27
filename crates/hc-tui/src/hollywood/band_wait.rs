@@ -22,7 +22,6 @@ pub(super) fn draw_wait(
     rect: Rect,
     row_height: u16,
     wait: &Wait<'_>,
-    waits: &[Wait<'_>],
     hollywood: &Hollywood,
     local: &str,
     multi: bool,
@@ -52,10 +51,6 @@ pub(super) fn draw_wait(
     } else {
         super::items::wait_parts(wait, local, multi)
     };
-    let extra = super::rows::group_extra(waits, wait);
-    if extra > 0 {
-        parts.rest.push_str(&format!(" · +{extra}"));
-    }
     if rect.width < 90 && parts.gap.len() > 1 {
         parts.gap = " ";
     }

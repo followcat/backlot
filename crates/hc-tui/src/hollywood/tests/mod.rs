@@ -116,3 +116,120 @@ pub(super) fn remote(summary: &Summary) -> crate::panel::data::MachineSummary {
         summary: summary.clone(),
     }
 }
+
+/// Six live studios with two READY (`acme-shop`, `beta-api`) and three
+/// open recast cards (`c1372`, `c1373`, `c1374`) targeting `acme-shop`.
+pub(super) fn six_studios_ready_recast_summary() -> Summary {
+    let mut value = summary_json();
+    value["studios"] = serde_json::json!([
+        {
+            "id": "acme-shop",
+            "title": "Acme shop",
+            "state": "live",
+            "requirement_version": 2,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 12,
+            "tasks_total": 13,
+            "ready_to_finish": true,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "waiting" },
+                { "role": "director", "name": "director", "state": "live", "work": "waiting" },
+                { "role": "writer", "name": "writer", "state": "live", "work": "waiting" }
+            ]
+        },
+        {
+            "id": "beta-api",
+            "title": "Beta api",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 13,
+            "tasks_total": 13,
+            "ready_to_finish": true,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "waiting" }
+            ]
+        },
+        {
+            "id": "gamma-web",
+            "title": "Gamma web",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 1,
+            "tasks_total": 4,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "working" }
+            ]
+        },
+        {
+            "id": "delta-ops",
+            "title": "Delta ops",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 2,
+            "tasks_total": 5,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "waiting" }
+            ]
+        },
+        {
+            "id": "eps-ui",
+            "title": "Eps ui",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 0,
+            "tasks_total": 3,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "waiting" }
+            ]
+        },
+        {
+            "id": "zeta-jobs",
+            "title": "Zeta jobs",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "tasks_done": 3,
+            "tasks_total": 4,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "state": "live", "work": "waiting" }
+            ]
+        }
+    ]);
+    value["hollywood"] = serde_json::json!({
+        "state": "live",
+        "work": "waiting",
+        "runner": "claude",
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "headline": "acme-shop recast cards c1372, c1373, c1374 proposed; apply to switch",
+        "headline_seq": 10,
+        "cards": [
+            { "id": "c1372", "studio": "acme-shop", "action": "recast producer → agy/gemini-3-pro/high", "why": "producer hit quota limit" },
+            { "id": "c1373", "studio": "acme-shop", "action": "recast director → agy/gemini-3-pro/high", "why": "director hit quota limit" },
+            { "id": "c1374", "studio": "acme-shop", "action": "recast writer → agy/gemini-3-pro/high", "why": "writer hit quota limit" }
+        ],
+        "exchange": [
+            { "seq": 1, "who": "user", "text": "check all studios" },
+            { "seq": 2, "who": "hollywood", "text": "all 6 studios running" },
+            { "seq": 3, "who": "user", "text": "switch acme-shop to agy" },
+            { "seq": 10, "who": "hollywood", "text": "acme-shop recast cards c1372, c1373, c1374 proposed; apply to switch" }
+        ]
+    });
+    serde_json::from_value(value).unwrap()
+}

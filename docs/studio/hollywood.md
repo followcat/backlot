@@ -57,7 +57,13 @@ layout, so toggling it resizes nothing.
   machines that have live studios, then the local core's open cards, then studios ready to finish.
   Every waiting row carries a persistent col-2 severity `▎` bar, bold colored verb, bold studio id,
   and an aligned detail line; selecting a row paints `▌▸` on `raised_row` with action chips on
-  the right. Only when the list is empty does a calm `✓` row say `nothing waiting on you`. Under
+  the right. Every item the person must decide or answer (`Prompt`, `Upgrade`, `Role`,
+  `Hollywood`, `Decision`, `NoRequirement`, `Stage`, `Card`, `Outward`) is always its own row and
+  never folded behind a studio's `READY` row or `· +N`, so actionable items on a studio always
+  come before its `READY` row and `WAITING ON YOU · <N>` matches the listed items; card rows show
+  the card id, role badge (`Ⓟ`/`Ⓓ`/`Ⓦ`/`Ⓐ`), and runner/model target (`from → to` when carried in
+  the card summary) with `apply`/`cancel`/`show` chips. Only when the list is empty does a calm
+  `✓` row say `nothing waiting on you`. Under
   `HOLLYWOOD`, the compose field (`tell hollywood…`) sits on `raised_field` (keeping its italic
   placeholder even while editing an empty buffer) above a separated two-tone footer hint bar —
   or, without a `[hollywood]` table, the `⏎ hollywood setup` line. Waiting rows and compose never
