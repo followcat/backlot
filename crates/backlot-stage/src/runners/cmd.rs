@@ -134,7 +134,7 @@ fn allow_rules_for(
             .collect();
     }
     let mut rules = vec!["Shell(backlot)".to_string()];
-    for cmd in super::READ_ONLY {
+    for cmd in super::native_read_only() {
         rules.push(format!("Shell({cmd}:*)"));
     }
     if worktree {

@@ -205,7 +205,6 @@ fn the_read_only_set_lands_in_permissions_allow() {
         "Exec(git branch --list)",
         "Exec(git branch --show-current)",
         "Exec(ls)",
-        "Exec(rg)",
         "Exec(wc)",
         "Exec(head)",
         "Exec(backlot msg show)",
@@ -215,6 +214,7 @@ fn the_read_only_set_lands_in_permissions_allow() {
             "missing {want}: {text}"
         );
     }
+    assert!(!listed.iter().any(|r| r.as_str() == Some("Exec(rg)")));
     // Devin's syntax takes no `Bash(...)` and no ` *` form — one rule
     // per command, prefix-matched by the runner itself.
     for rule in listed {
@@ -245,5 +245,5 @@ fn the_read_only_set_holds_no_writes() {
         assert!(!rules.iter().any(|r| r == bad), "{bad}: {rules:?}");
     }
     // One rule per read-only command — no doubled ` *` variant.
-    assert_eq!(rules.len(), crate::runners::READ_ONLY.len());
+    assert_eq!(rules.len(), crate::runners::native_read_only().count());
 }

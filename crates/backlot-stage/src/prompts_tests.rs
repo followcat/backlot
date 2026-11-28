@@ -1066,9 +1066,9 @@ fn every_prompt_reads_its_docs_from_the_guide() {
     }
 }
 
-/// Field notes 1126 §5: the shared read-only set reaches **every**
-/// role on **every** runner with an allow list — the producer's and
-/// writer's included — so a role's `git log` never asks a person.
+/// Field notes 1126 §5: the native-safe shared read-only set reaches
+/// **every** role on **every** runner with an allow list — the producer's
+/// and writer's included — so a role's `git log` never asks a person.
 #[test]
 fn every_runner_pre_allows_the_read_only_set_for_every_role() {
     assert!(
@@ -1081,7 +1081,7 @@ fn every_runner_pre_allows_the_read_only_set_for_every_role() {
         let cmd = crate::runners::cmd::allow_rules(role, &[]);
         let cline = crate::runners::cline::allow_commands(role, &[]);
         let devin = crate::runners::devin::allow_rules();
-        for cmd_name in crate::runners::READ_ONLY {
+        for cmd_name in crate::runners::native_read_only() {
             assert!(
                 claude.contains(&format!("Bash({cmd_name} *)")),
                 "claude {role} misses `{cmd_name}`"

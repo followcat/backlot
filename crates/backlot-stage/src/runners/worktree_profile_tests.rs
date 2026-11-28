@@ -9,8 +9,8 @@ use std::path::Path;
 use backlot_model::event::{ActorIdentity, CheckDecl};
 
 use crate::runners::{
-    IDENTICAL_WORKTREE_RUNNERS, LaunchCtx, Prep, READ_ONLY, agy, claude, cline, cmd, codex, cursor,
-    devin, opencode, plan,
+    IDENTICAL_WORKTREE_RUNNERS, LaunchCtx, Prep, agy, claude, cline, cmd, codex, cursor, devin,
+    native_read_only, opencode, plan,
 };
 use crate::test_support::TestDir;
 
@@ -159,7 +159,7 @@ fn cmd_worktree_writes_diagnostics_scratch_dir_and_worktree_path_rules() {
             "missing diagnostic `{diag}` in {allow:?}"
         );
     }
-    for ro in READ_ONLY {
+    for ro in native_read_only() {
         assert!(
             allow.contains(&format!("Shell({ro}:*)")),
             "missing READ_ONLY `{ro}` in {allow:?}"
@@ -311,7 +311,7 @@ fn cmd_standard_and_readonly_are_unchanged_by_worktree_profile() {
         let raw = fs::read_to_string(worktree.join(".commandcode/settings.json")).unwrap();
 
         let mut expected_allow = vec!["Shell(backlot)".to_string()];
-        for ro in READ_ONLY {
+        for ro in native_read_only() {
             expected_allow.push(format!("Shell({ro}:*)"));
         }
         if !is_ro {
@@ -416,7 +416,7 @@ fn cursor_worktree_adds_diagnostics_and_worktree_path_rules_without_broadening_s
         let bytes = fs::read(prep.root.join("config/cli-config.json")).unwrap();
 
         let mut expected_allow = vec!["Shell(backlot)".to_string()];
-        for ro in READ_ONLY {
+        for ro in native_read_only() {
             expected_allow.push(format!("Shell({ro})"));
         }
         if !is_ro {

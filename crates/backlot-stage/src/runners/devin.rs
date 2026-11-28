@@ -51,8 +51,7 @@ pub(crate) const HOOK_EVENTS: &[&str] = &[
 /// director's merge, a check's `run`) is pre-allowed here: Devin
 /// takes no argv allow list and its smart mode governs the rest.
 pub(crate) fn allow_rules() -> Vec<String> {
-    super::READ_ONLY
-        .iter()
+    super::native_read_only()
         .map(|cmd| format!("Exec({cmd})"))
         .collect()
 }

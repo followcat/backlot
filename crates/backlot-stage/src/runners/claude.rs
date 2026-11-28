@@ -124,7 +124,7 @@ fn allowed_tools_for(
         return rules.join(",");
     }
     let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
-    for cmd in super::READ_ONLY {
+    for cmd in super::native_read_only() {
         command(&mut rules, cmd);
     }
     if worktree {

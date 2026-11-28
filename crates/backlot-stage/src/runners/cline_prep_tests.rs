@@ -33,7 +33,6 @@ fn allowed_commands_per_role() {
         "git branch --list",
         "git branch --show-current",
         "ls",
-        "rg",
         "wc",
         "head",
         "backlot msg show",

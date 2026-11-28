@@ -39,11 +39,14 @@ pub use probe::{installed, supported};
 pub(crate) use prompt::prompt_detail;
 pub(crate) use work::work_state;
 
-/// The read-only commands **every** role is pre-allowed on every
-/// runner that has an allow list — the forensic reads a role needs
-/// to understand a repo, a delivery or its own state without
-/// stopping at a prompt (field notes 1126 §5: a producer's `git log
-/// --stat` asked the person). Nothing here writes, moves or deletes:
+/// The read-only commands whose coverage **every** role gets without
+/// a remembered grant — the forensic reads a role needs to understand
+/// a repo, a delivery or its own state without stopping at a prompt
+/// (field notes 1126 §5: a producer's `git log --stat` asked the
+/// person). Most are written to a runner's native allow list; the
+/// exec-flag-capable families named by [`ledger_only_shell`] stay
+/// logical-only and are answered by backlot after a whole-argv check.
+/// Nothing here writes, moves or deletes in its covered form:
 /// `git branch` is absent on purpose — `git branch -D` would come
 /// with the bare prefix — and only its two listing forms are named,
 /// which git refuses to combine with a delete (measured: `git branch
@@ -70,6 +73,23 @@ pub const READ_ONLY: &[&str] = &[
 /// Extra read-only diagnostic commands pre-allowed in the `"worktree"`
 /// profile (`ls`, `wc` and `head` are already in [`READ_ONLY`]).
 pub const WORKTREE_DIAGNOSTICS: &[&str] = &["which", "nproc", "df", "free", "test", "ps", "tail"];
+
+/// Whether a shell rule's program can carry exec- or write-capable
+/// flags after the prefix a runner stores. Those rules are covered by
+/// backlot's whole-argv auto-answer but are never written natively.
+pub(crate) fn ledger_only_shell(rule: &str) -> bool {
+    let prog = rule.split_whitespace().next().unwrap_or_default();
+    let prog = prog.rsplit('/').next().unwrap_or(prog);
+    matches!(prog, "find" | "fd" | "rg" | "sort" | "tar" | "sed")
+}
+
+/// The fixed read-only rules narrow enough for a native runner prefix.
+pub(crate) fn native_read_only() -> impl Iterator<Item = &'static str> {
+    READ_ONLY
+        .iter()
+        .copied()
+        .filter(|rule| !ledger_only_shell(rule))
+}
 
 /// Runners whose `"worktree"` `permission_profile` emits the exact same
 /// settings/flags as `"standard"`.
@@ -424,12 +444,7 @@ pub fn apply_permits(
         return;
     }
     let clean = |r: &str| !r.contains(['(', ')', ',', '*', '?', '[', ']', '{', '}', '\\']);
-    let ledger_only = |r: &str| {
-        let prog = r.split_whitespace().next().unwrap_or_default();
-        let prog = prog.rsplit('/').next().unwrap_or(prog);
-        matches!(prog, "find" | "fd" | "rg" | "sort" | "tar" | "sed")
-    };
-    let native_shell = |r: &&str| clean(r) && !ledger_only(r);
+    let native_shell = |r: &&str| clean(r) && !ledger_only_shell(r);
     match runner {
         "devin" => {
             if let Some(Prep::Devin(prep)) = launch.prep.as_mut() {
