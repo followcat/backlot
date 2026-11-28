@@ -441,6 +441,7 @@ fn audit_start_prompt_clean_context_and_role_instructions() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 1,
+        via: None,
         delivered_ms: None,
     });
     state.tasks.insert(

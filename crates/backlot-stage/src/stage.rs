@@ -335,6 +335,9 @@ pub fn run(common: &Common, env: &Env) -> Result<String, Fail> {
             "stage run belongs inside the stage terminal; start it with 'backlot stage start'",
         ));
     }
+    // A new stage version refreshes the agent skill copies the manifest
+    // lists — never a new place, and never a start delayed by a skill.
+    let _ = crate::skill::refresh(env);
     if common.remote.is_none() {
         crate::server_lock::refuse_if_server_or_retired(&env.vars, None)?;
     }

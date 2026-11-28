@@ -315,6 +315,11 @@ pub(crate) fn route(
             "--server cannot be combined with --remote or --session",
         )));
     }
+    // Installing the agent skill touches this machine's home, never a
+    // server's: it stays local whatever `[client] server` says.
+    if matches!(cmd, Cmd::Skill(_)) {
+        return None;
+    }
     let explicit_env = env
         .get(SERVER_ENV)
         .map(str::trim)

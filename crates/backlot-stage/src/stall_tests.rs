@@ -201,6 +201,7 @@ fn stalled_notice_routes_per_role() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     });
     assert!(notices::owed(&state, dir()).is_empty());

@@ -28,7 +28,7 @@ pub use crate::hollywood_summary::{
     studio_outward_cards,
 };
 pub use crate::studio_exchange::{
-    MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,
+    MAX_STUDIO_EXCHANGE, StudioExchange, sender_label, studio_exchange, studio_exchange_files,
 };
 
 /// The `schema` value this generation writes.

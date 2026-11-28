@@ -31,6 +31,9 @@ fn main() -> ExitCode {
 /// Runs the client. A restart execs the installed binary only after the
 /// runtime is gone and `run_options` has restored the terminal.
 fn run_client(options: &Options) -> ExitCode {
+    // A new client version refreshes the agent skill copies backlot
+    // installed; a missing manifest means nothing to do.
+    let _ = backlot_stage::skill::refresh(&backlot_stage::cli::Env::process());
     let outcome = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

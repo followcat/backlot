@@ -190,6 +190,7 @@ fn studio_exchange_surfaces_user_decision_not_internal_role_decision() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 1000,
+        via: None,
         delivered_ms: Some(1100),
     });
     state.messages.push(Message {
@@ -203,6 +204,7 @@ fn studio_exchange_surfaces_user_decision_not_internal_role_decision() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 1200,
+        via: None,
         delivered_ms: Some(1300),
     });
     let files = BTreeMap::from([

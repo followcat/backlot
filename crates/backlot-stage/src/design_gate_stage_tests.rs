@@ -174,6 +174,7 @@ fn waiting_user_and_suggest_skip_are_never_nudged_while_role_slots_nudge() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     };
     assert_eq!(stale_reason(&s_skip, &stale_open_nudge), Some("step done"));
@@ -297,6 +298,7 @@ fn gate_off_notices_and_nudges_are_byte_identical_to_baseline() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     };
     let moved = replay(&[

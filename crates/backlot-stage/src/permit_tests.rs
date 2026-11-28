@@ -400,6 +400,7 @@ fn attention_notice_owed_once() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     });
     assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 7));
@@ -996,6 +997,7 @@ fn deny_notice_owed_once() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     });
     assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 4));

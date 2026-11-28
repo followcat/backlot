@@ -11,7 +11,7 @@ use backlot_model::event::{
 };
 
 use crate::cli::Fail;
-use crate::{args_decide, args_design, args_hwood, args_studio, args_task};
+use crate::{args_decide, args_design, args_hwood, args_skill, args_studio, args_task};
 
 #[derive(Default, Clone)]
 pub struct Common {
@@ -24,6 +24,9 @@ pub struct Common {
     pub session: Option<String>,
     pub remote: Option<String>,
     pub server: Option<String>,
+    /// `--via <agent>`: the coding agent acting for the person, recorded
+    /// on events written `--as user` as `agent:<name>`.
+    pub via: Option<String>,
 }
 
 pub use crate::args_source::TextSource;
@@ -316,6 +319,9 @@ pub enum Cmd {
         topic: Option<String>,
         grep: Option<String>,
     },
+    /// `backlot skill install|status|show|uninstall` — the Agent Skills
+    /// file shipped in the binary, for every coding agent on the machine.
+    Skill(SkillCmd),
     /// `backlot runners [--json]` — the detector's table (U5) or the
     /// G4 document, read-only.
     Runners {
@@ -353,6 +359,26 @@ pub enum Cmd {
     Design(DesignCmd),
     /// `backlot server run|start|stop|adopt|service` — single-server mode (B3).
     Server(ServerCmd),
+}
+
+/// Subcommands under `backlot skill`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkillCmd {
+    /// `install [--agent <name>[,…]] [--dry-run] [--force]`: write
+    /// `<dir>/backlot/SKILL.md` for every detected agent, or only the
+    /// named ones.
+    Install {
+        agents: Vec<String>,
+        dry_run: bool,
+        force: bool,
+    },
+    /// `status`: where the skill is installed and whether each copy is
+    /// current, stale or foreign.
+    Status,
+    /// `show`: print the skill the binary carries.
+    Show,
+    /// `uninstall`: remove only the copies backlot wrote.
+    Uninstall,
 }
 
 /// Subcommands under `backlot studio cast`.
@@ -407,7 +433,7 @@ pub enum RepoNoteCmd {
 }
 
 /// Tail line of every command's usage text.
-pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t> --server <host>[/<session>]";
+pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t> --server <host>[/<session>] --via <agent>";
 
 pub(crate) fn usage(msg: impl Into<String>, u: &'static str) -> Fail {
     Fail::usage(format!("{}\n{}\n{}", msg.into(), u, COMMON))
@@ -462,6 +488,7 @@ pub(crate) fn common_flag(
     flag!(session, "--session");
     flag!(remote, "--remote");
     flag!(server, "--server");
+    flag!(via, "--via");
     Ok(false)
 }
 
@@ -503,6 +530,7 @@ fn is_common_flag(arg: &str) -> bool {
         "--session",
         "--remote",
         "--server",
+        "--via",
     ]
     .iter()
     .any(|flag| arg == *flag || eq(arg, flag).is_some())
@@ -716,6 +744,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             }
         }
         "guide" => args_studio::guide(&mut common, &mut it),
+        "skill" => args_skill::skill(&mut common, &mut it),
         "runners" => args_studio::runners(&mut common, &mut it),
         "repos" => args_studio::repos(&mut common, &mut it),
         other => Err(usage(format!("unknown command '{other}'"), U_STATUS)),
