@@ -97,6 +97,28 @@ fn listing(rows: &[(String, String)]) -> String {
     s
 }
 
+/// A recorded call's git arguments, without the `[<cwd>] ` prefix. The
+/// cwd sits under a random temp name, so a check on the whole recorded
+/// line can trip over text in it that has nothing to do with the git
+/// call.
+fn argv(call: &str) -> &str {
+    call.split_once("] ").map_or(call, |(_cwd, rest)| rest)
+}
+
+/// The flag and branch a recorded `git branch -d|-D <branch>` call
+/// names, if it is one. The branch argument is what matters: `s2` or
+/// `feature` in the temp dir's own name must not read as one.
+fn branch_delete(call: &str) -> Option<(&str, &str)> {
+    let call = argv(call);
+    for flag in ["-d", "-D"] {
+        let marker = format!("branch {flag} ");
+        if let Some(rest) = call.split(&marker).nth(1) {
+            return Some((flag, rest.split_whitespace().next()?));
+        }
+    }
+    None
+}
+
 /// A clean worktree goes, a dirty one stays without `--force`, and a
 /// branch goes only when `git branch -d` accepts it. `--dry-run` reads
 /// and prints, changing nothing.
@@ -150,7 +172,11 @@ fn safe_and_dry_run_plans() {
         "branch -D",
     ] {
         assert!(
-            !fake.calls.iter().any(|c| c.contains(banned)),
+            !fake
+                .calls
+                .iter()
+                .map(|c| argv(c))
+                .any(|c| c.contains(banned)),
             "dry run ran {banned}: {:?}",
             fake.calls
         );
@@ -174,27 +200,19 @@ fn safe_and_dry_run_plans() {
             ),
         ]
     );
-    let removes: Vec<&String> = fake
+    // Read each call's git arguments, not the whole line: the line also
+    // carries the work dir under a random temp name (see `branch_delete`).
+    let removes: Vec<&str> = fake
         .calls
         .iter()
+        .map(|c| argv(c))
         .filter(|c| c.contains("worktree remove"))
         .collect();
     assert_eq!(removes.len(), 1, "{removes:?}");
     assert!(!removes[0].contains("--force"), "{removes:?}");
-    assert!(
-        fake.calls
-            .iter()
-            .any(|c| c.contains("branch -d backlot/s/integration")),
-        "{:?}",
-        fake.calls
-    );
-    assert!(
-        fake.calls
-            .iter()
-            .any(|c| c.contains("branch -d backlot/s/t1")),
-        "{:?}",
-        fake.calls
-    );
+    let deleted: Vec<(&str, &str)> = fake.calls.iter().filter_map(|c| branch_delete(c)).collect();
+    let want = [("-d", "backlot/s/integration"), ("-d", "backlot/s/t1")];
+    assert_eq!(deleted, want, "{:?}", fake.calls);
 
     // --force takes the dirty tree and the unmerged branch too.
     fake.calls.clear();
@@ -214,17 +232,14 @@ fn safe_and_dry_run_plans() {
     assert!(
         fake.calls
             .iter()
+            .map(|c| argv(c))
             .any(|c| c.contains("worktree remove --force")),
         "{:?}",
         fake.calls
     );
-    assert!(
-        fake.calls
-            .iter()
-            .any(|c| c.contains("branch -D backlot/s/t1")),
-        "{:?}",
-        fake.calls
-    );
+    let deleted: Vec<(&str, &str)> = fake.calls.iter().filter_map(|c| branch_delete(c)).collect();
+    let want = [("-D", "backlot/s/integration"), ("-D", "backlot/s/t1")];
+    assert_eq!(deleted, want, "{:?}", fake.calls);
 }
 
 /// A registered worktree whose folder vanished is pruned once, and a
@@ -270,28 +285,23 @@ fn missing_trees_are_pruned_and_foreign_refs_left_alone() {
     assert_eq!(
         fake.calls
             .iter()
+            .map(|c| argv(c))
             .filter(|c| c.ends_with("worktree prune"))
             .count(),
         1,
         "{:?}",
         fake.calls
     );
-    let deleted: Vec<&String> = fake
-        .calls
-        .iter()
-        .filter(|c| c.contains("branch -d") || c.contains("branch -D"))
-        .collect();
+    let deleted: Vec<(&str, &str)> = fake.calls.iter().filter_map(|c| branch_delete(c)).collect();
     assert_eq!(deleted.len(), 1, "{:?}", fake.calls);
-    assert!(
-        deleted[0].contains("branch -d backlot/s/t1"),
-        "{:?}",
-        fake.calls
-    );
-    assert!(
-        !deleted[0].contains("s2") && !deleted[0].contains("feature"),
-        "a foreign branch was touched: {:?}",
-        fake.calls
-    );
+    assert_eq!(deleted[0], ("-d", "backlot/s/t1"), "{:?}", fake.calls);
+    for foreign in ["backlot/s2/t1", "feature/x"] {
+        assert!(
+            !deleted.iter().any(|(_, branch)| *branch == foreign),
+            "a foreign branch was touched: {:?}",
+            fake.calls
+        );
+    }
 }
 
 /// macOS reaches its temp tree through `/var` → `/private/var`: git's
