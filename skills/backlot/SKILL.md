@@ -95,7 +95,7 @@ file, a dry-run command or the card request text, and tell the person.
 - Configure, switch, or cancel Hollywood setup (`backlot hollywood setup --runner <r> --model <m>`, `backlot hollywood switch --status` or `--cancel`).
 - Answer non-actor, self, or user-owned permission prompts (`backlot approve --person <role> --decision allow`, or `deny`, for `producer`, `director`, `writer`, `hollywood`, self, or `needs_user` prompts).
 - Accept a delivery while declared `[[checks]]` still have no recorded run (`backlot review --task <task> --delivery 1 --verdict accepted --conclusion <r>`).
-- Revoke permissions (`backlot perms revoke <seq>`).
+- List or revoke remembered permissions (`backlot permit list`, `backlot permit revoke --id <id>`).
 - Start, stop, adopt, or manage the server (`backlot server start`, `run`, `stop`, `adopt`, `service`).
 - Show or remove approved repository notes directly (`backlot repo-note show`, `backlot repo-note remove --id <n>`; propose notes with `backlot repo-note propose --id <n> --text <r> --why <r>`).
 - Acknowledge a user ask (`backlot ask acknowledged --person <role> --target <seq>`).

@@ -873,6 +873,8 @@ backlot permit list --role actor-t1-c1 --studio acme-shop --json --as user
 backlot permit revoke --id p42 --studio acme-shop --as user
 ```
 
+Hollywood’s own prompts use the same dialog and `--scope role`; because Hollywood is not inside a studio, studio scope is refused. Its grants live in Hollywood's own ledger and are applied when Hollywood starts or resumes.
+
 The stage writes active grants into the runner's own permission file or argv on every start and resume. Revoked grants are simply absent the next time. When a later prompt is already covered by active grants plus the built-in read-only rules, the stage sends the runner's ordinary allow key and records `permit.used` instead of raising an attention. It never auto-answers a once-only command, a changed prompt, or anything a backlot guard would stop.
 
 ## Restarting a stuck role

@@ -646,6 +646,8 @@ When you approve a shell prompt with `--scope role` or `--scope studio`, backlot
 | cmd | `Shell(<stem>:*)` in `<worktree>/.commandcode/settings.json` `permissions.allow`; bare multi-purpose families are never emitted |
 | claude | `Bash(<stem>)` and `Bash(<stem> *)` in the session `--allowedTools` argv |
 | cursor | `Shell(<stem>)` in `config/cli-config.json` `permissions.allow` |
-| agy | no separate allow list is written; its existing `command(...)` deny rules remain in force |
+| agy | `command(<stem>)` in `<worktree>/.agy-settings.json` `permissions.allow` |
+
+Edit grants store one canonical file path inside the role worktree or studio repository. cursor writes the measured exact `Write(<path>)` form and claude writes `Edit(<path>)`; cmd, devin and agy have no exact measured path form in this step, so their edit grants are enforced by backlot's auto-answer rather than a native file rule. Paths containing `..`, secrets such as `.env` or `.ssh`, or paths outside the role/studio roots cannot be remembered.
 
 Rules carrying runner syntax or glob metacharacters are not written natively; they still exist in the ledger for backlot's own coverage check. Guards and deny rules always win over an allow rule.
