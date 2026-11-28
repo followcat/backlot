@@ -703,9 +703,8 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
          \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"du -sh /home/user/acme-shop\"}}\n",
     )
     .unwrap();
-    fake.lock().unwrap().screen = format!(
-        "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n du -sh /home/user/acme-shop\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
-    );
+    fake.lock().unwrap().screen = "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n du -sh /home/user/acme-shop\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
+        .to_string();
 
     tokio::time::timeout(
         std::time::Duration::from_secs(3),
