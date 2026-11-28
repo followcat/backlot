@@ -773,6 +773,36 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 entry.progress = Some(record);
             }
         }
+        EventKind::PermitGranted {
+            id,
+            scope,
+            role,
+            permit_kind,
+            rule,
+            outward,
+            from,
+            runner,
+        } => {
+            state.permits.insert(
+                id.clone(),
+                PermitRecord {
+                    id: id.clone(),
+                    scope: *scope,
+                    role: role.clone(),
+                    kind: *permit_kind,
+                    rule: rule.clone(),
+                    outward: *outward,
+                    from: *from,
+                    runner: runner.clone(),
+                    seq,
+                    ts_ms: ts,
+                },
+            );
+        }
+        EventKind::PermitRevoked { id, .. } => {
+            state.permits.remove(id);
+        }
+        EventKind::PermitUsed { .. } => {}
         EventKind::RoleApproval { role, decision } => {
             state.approvals.push(ApprovalRecord {
                 seq,

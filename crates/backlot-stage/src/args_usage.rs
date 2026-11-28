@@ -53,3 +53,7 @@ pub(crate) const U_SKILL: &str = "usage: backlot skill install [--agent <name>[,
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
 pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>] [--all]\n       dot-directories stay hidden unless --all is given";
 pub(crate) const U_DESIGN: &str = "usage: backlot design open [--req <v>] [--suggest-skip [--reason <r>]]\n       backlot design write --slot <proposal|buildability|summary> --file <p> [--refs <seq>[,<seq>...]] [--question <json|@file>...] [--questions-file <p>] [--checks-file <toml>]\n       backlot design supplement --file <p> --refs <seq>[,<seq>...]\n       backlot design note --from user (--text <t> | --file <p> | --stdin)\n       backlot design next\n       backlot design sign [--skip [--reason <r>]] [--note <t>] [--no-checks] [--as user]\n       backlot design show [--version <n>] [--round <r>] [--json]";
+
+/// `permit` — remembered grants.
+pub const U_PERMIT: &str =
+    "usage: backlot permit list [--role <role>] [--json] | backlot permit revoke --id <id>";

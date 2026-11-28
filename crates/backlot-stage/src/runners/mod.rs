@@ -399,6 +399,62 @@ pub fn decide_start(
     }
 }
 
+/// Add active grants to a planned launch's native permission surface.
+/// Revocation needs no removal pass: every start/resume rebuilds these
+/// lists from active grants only. Shell rules use each runner's native
+/// form; edit grants are left to the prompt until a runner's exact path
+/// rule is measured.
+pub fn apply_permits(
+    launch: &mut Launch,
+    runner: &str,
+    permits: &[backlot_model::event::PermitRecord],
+) {
+    let rules: Vec<&str> = permits
+        .iter()
+        .filter(|p| p.kind == backlot_model::event::PermitKind::Shell)
+        .map(|p| p.rule.as_str())
+        .collect();
+    if rules.is_empty() {
+        return;
+    }
+    let clean = |r: &str| !r.contains(['(', ')', ',', '*', '?', '[', ']', '{', '}', '\\']);
+    match runner {
+        "devin" => {
+            if let Some(Prep::Devin(prep)) = launch.prep.as_mut() {
+                for rule in rules {
+                    prep.allow.push(format!("Exec({rule})"));
+                }
+            }
+        }
+        "cmd" => {
+            if let Some(Prep::Cmd(prep)) = launch.prep.as_mut() {
+                for rule in rules.into_iter().filter(|r| clean(r) && !r.contains(':')) {
+                    prep.allow.push(format!("Shell({rule}:*)"));
+                }
+            }
+        }
+        "cursor" => {
+            if let Some(Prep::Cursor(prep)) = launch.prep.as_mut() {
+                for rule in rules.into_iter().filter(|r| clean(r) && !r.contains(':')) {
+                    prep.allow.push(format!("Shell({rule})"));
+                }
+            }
+        }
+        "claude" => {
+            let Some(at) = launch.argv.iter().position(|a| a == "--allowedTools") else {
+                return;
+            };
+            let Some(value) = launch.argv.get_mut(at + 1) else {
+                return;
+            };
+            for rule in rules.into_iter().filter(|r| clean(r)) {
+                value.push_str(&format!(",Bash({rule}),Bash({rule} *)"));
+            }
+        }
+        _ => {}
+    }
+}
+
 /// The runner's plan for `identity` in `ctx`, or why it cannot run.
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.runner.as_str() {

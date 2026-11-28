@@ -247,6 +247,8 @@ pub enum Refusal {
     InvalidDesign(String),
     /// Invalid decision message payload.
     InvalidDecision(String),
+    /// Invalid remembered-permission payload or target.
+    InvalidPermit(String),
     /// Ledger contains records from a newer backlot (`EventKind::Unknown`).
     NewerRecords(Vec<String>),
     /// `backlot halt` on a studio that is already halted.
@@ -518,7 +520,8 @@ impl fmt::Display for Refusal {
             Refusal::BadProgress(msg)
             | Refusal::InvalidOutward(msg)
             | Refusal::InvalidDesign(msg)
-            | Refusal::InvalidDecision(msg) => f.write_str(msg),
+            | Refusal::InvalidDecision(msg)
+            | Refusal::InvalidPermit(msg) => f.write_str(msg),
             Refusal::DesignWrongVersion { current, got } => write!(
                 f,
                 "current requirement version is v{current}, got design event for v{got}"

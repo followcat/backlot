@@ -661,8 +661,20 @@ impl Stage {
                 {
                     let _ = crate::repo_note::sync_studio_snapshot(dir, &start.repo);
                 }
+                let grants: Vec<backlot_model::event::PermitRecord> =
+                    backlot_model::permit::grants_for(
+                        state,
+                        &backlot_model::permit::role_key(state, &start.role),
+                    )
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                let planned = runners::plan(&start.actor, &ctx).map(|mut launch| {
+                    runners::apply_permits(&mut launch, &start.actor.runner, &grants);
+                    launch
+                });
                 match runners::decide_start(
-                    runners::plan(&start.actor, &ctx),
+                    planned,
                     &start.actor.runner,
                     self.runner_env(&start.actor.runner),
                     real_slot_free,

@@ -78,6 +78,20 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             )),
         };
     }
+    if let EventKind::PermitGranted { .. } | EventKind::PermitRevoked { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
+        };
+    }
+    if let EventKind::PermitUsed { .. } = &new.kind {
+        return if role == "stage" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the stage"))
+        };
+    }
     // Recasting a fixed role is the user's — a card's execution appends
     // it under `by: user` too, so a role terminal never records one.
     if let EventKind::RoleRecast { .. } = &new.kind {
@@ -269,6 +283,8 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::TaskChecked { .. }
         | EventKind::OutwardCompleted { .. } => "the stage",
         EventKind::AskAcknowledged { .. } => "the user",
+        EventKind::PermitGranted { .. } | EventKind::PermitRevoked { .. } => "the user",
+        EventKind::PermitUsed { .. } => "the stage",
         EventKind::RoleReopen { .. }
         | EventKind::RoleRelease { .. }
         | EventKind::RoleRestart { .. }

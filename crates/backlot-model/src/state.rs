@@ -632,6 +632,10 @@ pub struct StudioState {
     pub reports: Vec<ReportRecord>,
     #[serde(default)]
     pub attention: Vec<Attention>,
+    /// Active remembered permission grants by id; revocations remove
+    /// their entries, so native writers never see a revoked rule.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub permits: BTreeMap<String, PermitRecord>,
     /// `role.approval` records, in log order.
     #[serde(default)]
     pub approvals: Vec<ApprovalRecord>,

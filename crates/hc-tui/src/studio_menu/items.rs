@@ -256,6 +256,16 @@ impl StudioMenu {
                     StudioAct::Decide(true),
                 ),
                 item(
+                    "Allow for this role".to_owned(),
+                    None,
+                    StudioAct::DecideScoped(backlot_stage::args::ApprovalScope::Role),
+                ),
+                item(
+                    "Allow for the studio".to_owned(),
+                    None,
+                    StudioAct::DecideScoped(backlot_stage::args::ApprovalScope::Studio),
+                ),
+                item(
                     "Deny prompt (d)".to_owned(),
                     Some('d'),
                     StudioAct::Decide(false),
@@ -446,10 +456,15 @@ fn role_lifecycle_items(
     allow_close: bool,
 ) -> Vec<StudioItem> {
     let mut out = vec![item(
+        "Permissions…".to_owned(),
+        None,
+        StudioAct::Permissions,
+    )];
+    out.push(item(
         format!("Restart {}", role.name),
         Some('r'),
         StudioAct::Restart,
-    )];
+    ));
     // An actor recasts onto a new identity; the task, its terminal and
     // its work area stay. `e` is free on an actor row (a fixed seat's
     // `Close`, which actors keep, is `c`).

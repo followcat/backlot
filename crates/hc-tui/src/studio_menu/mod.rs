@@ -198,6 +198,10 @@ pub(crate) enum StudioAct {
     TaskSheet,
     /// `y`/`d` on a user-owned prompt — `backlot approve` direct.
     Decide(bool),
+    /// Allow and remember this prompt for a role or the studio.
+    DecideScoped(backlot_stage::args::ApprovalScope),
+    /// Read the grants reaching this role (`backlot permit list --role`).
+    Permissions,
     /// D9's override — a director-routed prompt the user answers
     /// after the confirm dialog.
     DirOverride(bool),

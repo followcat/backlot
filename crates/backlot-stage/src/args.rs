@@ -40,6 +40,30 @@ pub enum DigestFormat {
 pub(crate) use crate::args_source::Source;
 pub(crate) use crate::args_usage::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalScope {
+    Once,
+    Role,
+    Studio,
+}
+
+impl ApprovalScope {
+    pub fn parse(v: &str) -> Option<Self> {
+        match v {
+            "once" => Some(Self::Once),
+            "role" => Some(Self::Role),
+            "studio" => Some(Self::Studio),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PermitCmd {
+    List { role: Option<String>, json: bool },
+    Revoke { id: String },
+}
+
 pub enum Cmd {
     Help(&'static str),
     StudioNew {
@@ -193,7 +217,10 @@ pub enum Cmd {
     Approve {
         person: String,
         decision: ApprovalDecision,
+        scope: ApprovalScope,
     },
+    /// `permit list|revoke`: inspect or withdraw remembered grants.
+    Permit(PermitCmd),
     AttentionClear {
         target: u64,
     },
@@ -680,6 +707,19 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
         "design" => args_design::design(&mut common, &mut it),
+        "permit" => match it.next().as_deref() {
+            Some("list") => args_task::permit_list(&mut common, &mut it),
+            Some("revoke") => args_task::permit_revoke(&mut common, &mut it),
+            Some("-h" | "--help") => Ok((common, Cmd::Help(crate::args_usage::U_PERMIT))),
+            Some(s) => Err(usage(
+                format!("unknown permit subcommand '{s}'"),
+                crate::args_usage::U_PERMIT,
+            )),
+            None => Err(usage(
+                "missing permit subcommand",
+                crate::args_usage::U_PERMIT,
+            )),
+        },
         "perms" => match it.next().as_deref() {
             Some("revoke") => {
                 let id = it

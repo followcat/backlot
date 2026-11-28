@@ -218,6 +218,57 @@ pub(crate) fn decide(key: &StudioKey, role: &str, allow: bool) -> Action {
     a
 }
 
+/// `approve --person <role> --decision allow --scope role|studio` — the
+/// server derives the exact narrow rule from the saved prompt.
+pub(crate) fn decide_scoped(
+    key: &StudioKey,
+    role: &str,
+    scope: backlot_stage::args::ApprovalScope,
+) -> Action {
+    let word = match scope {
+        backlot_stage::args::ApprovalScope::Role => "role",
+        backlot_stage::args::ApprovalScope::Studio => "studio",
+        backlot_stage::args::ApprovalScope::Once => "once",
+    };
+    let mut a = action(
+        format!("remembering allow for {role}"),
+        format!("remembered allow for {role} ({})", key.id),
+        format!("remember allow {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &[
+            "approve".into(),
+            "--person".into(),
+            role.into(),
+            "--decision".into(),
+            "allow".into(),
+            "--scope".into(),
+            word.into(),
+        ],
+        key,
+    );
+    a
+}
+
+/// `permit list --role <role>` as a read-only view.
+pub(crate) fn permit_list(key: &StudioKey, role: &str) -> Action {
+    let mut a = action(
+        format!("reading permissions {role}"),
+        format!("read permissions {role}"),
+        format!("permissions {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &["permit".into(), "list".into(), "--role".into(), role.into()],
+        key,
+    );
+    a.view = true;
+    a
+}
+
 /// `attention clear <seq>` (§4).
 pub(crate) fn clear_attention(key: &StudioKey, role: &str, seq: u64) -> Action {
     let mut a = action(

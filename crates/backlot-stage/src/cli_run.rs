@@ -88,8 +88,24 @@ pub(crate) fn run_stdin_with_host(
     if let Cmd::Approve {
         ref person,
         decision,
+        scope,
     } = cmd
     {
+        if scope != crate::args::ApprovalScope::Once
+            && person != backlot_model::hollywood::HOLLYWOOD
+        {
+            let base = base(env, &common)?;
+            let resolved = crate::cli::resolve_base(
+                env,
+                &common,
+                &base,
+                &crate::cli::studio_name(&common, env)?,
+            )?;
+            return crate::permit_cmd::approve_scoped(
+                &common, env, &resolved, person, decision, scope,
+            );
+        }
+
         crate::proc_guard::check_cli_gate(
             crate::proc_guard::CliVerb::Approve { person },
             &common,
@@ -109,6 +125,12 @@ pub(crate) fn run_stdin_with_host(
         && person == backlot_model::hollywood::HOLLYWOOD
     {
         return crate::hwood::restart(&common, env, fresh, reason);
+    }
+    if let Cmd::Permit(ref pc) = cmd {
+        let base = base(env, &common)?;
+        let studio = crate::cli::studio_name(&common, env)?;
+        let resolved = crate::cli::resolve_base(env, &common, &base, &studio)?;
+        return crate::permit_cmd::permit(&common, env, &resolved, pc);
     }
     match cmd {
         // The stage connects itself; no ledger command needs it here.

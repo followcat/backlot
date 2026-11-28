@@ -50,6 +50,16 @@ impl App {
                     self.run_action(studio_cmds::decide(key, &role.role, allow));
                 }
             }
+            StudioAct::DecideScoped(scope) => {
+                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                    self.run_action(studio_cmds::decide_scoped(key, &role.role, scope));
+                }
+            }
+            StudioAct::Permissions => {
+                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                    self.run_action(studio_cmds::permit_list(key, &role.role));
+                }
+            }
             StudioAct::DirOverride(allow) => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
                     self.studio_dialog = Some(StudioDialog::confirm(

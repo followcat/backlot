@@ -635,3 +635,17 @@ Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
 
 Claude Code, Codex, Devin, OpenCode, cursor-agent, cmd, cline and agy. Kimi and others follow the
 same adapter shape when needed.
+
+## Remembered permission rules
+
+When you approve a shell prompt with `--scope role` or `--scope studio`, backlot stores the derived narrow stem and writes active grants beside the fixed read-only rules on every later start and resume:
+
+| runner | remembered shell form |
+| --- | --- |
+| devin | `Exec(<stem>)` in `<worktree>/.devin/config.local.json` `permissions.allow` |
+| cmd | `Shell(<stem>:*)` in `<worktree>/.commandcode/settings.json` `permissions.allow`; bare multi-purpose families are never emitted |
+| claude | `Bash(<stem>)` and `Bash(<stem> *)` in the session `--allowedTools` argv |
+| cursor | `Shell(<stem>)` in `config/cli-config.json` `permissions.allow` |
+| agy | no separate allow list is written; its existing `command(...)` deny rules remain in force |
+
+Rules carrying runner syntax or glob metacharacters are not written natively; they still exist in the ledger for backlot's own coverage check. Guards and deny rules always win over an allow rule.

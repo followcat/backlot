@@ -233,7 +233,7 @@ pub(crate) fn check_identity(common: &Common, env: &Env) -> Result<(), Fail> {
     Ok(())
 }
 
-fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
+pub(crate) fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
     let studio = check_studio_name(
         &common
             .studio

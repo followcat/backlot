@@ -405,6 +405,53 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 _ => Err(Refusal::NoAttention(*target)),
             }
         }
+        EventKind::PermitGranted {
+            id,
+            scope,
+            role,
+            rule,
+            outward,
+            ..
+        } => {
+            require_studio(state)?;
+            if id.trim().is_empty() || rule.trim().is_empty() {
+                return Err(Refusal::InvalidPermit(
+                    "a permit needs a non-empty id and rule".into(),
+                ));
+            }
+            if state.permits.contains_key(id) {
+                return Err(Refusal::InvalidPermit(format!(
+                    "permit '{id}' already exists"
+                )));
+            }
+            match (scope, role) {
+                (crate::event::PermitScope::Role, Some(r)) if !r.is_empty() => {}
+                (crate::event::PermitScope::Studio, None) if !outward => {}
+                (crate::event::PermitScope::Studio, None) => {
+                    return Err(Refusal::InvalidPermit(
+                        "an outward permit can be remembered only for its role".into(),
+                    ));
+                }
+                _ => {
+                    return Err(Refusal::InvalidPermit(
+                        "role scope needs a role key; studio scope takes none".into(),
+                    ));
+                }
+            }
+            Ok(())
+        }
+        EventKind::PermitRevoked { id, .. } => {
+            require_studio(state)?;
+            if state.permits.contains_key(id) {
+                Ok(())
+            } else {
+                Err(Refusal::InvalidPermit(format!("no active permit '{id}'")))
+            }
+        }
+        EventKind::PermitUsed { .. } => {
+            require_studio(state)?;
+            Ok(())
+        }
         // An approval answers an open `permission prompt` attention —
         // refusing without one keeps the stage from answering a prompt
         // nobody recorded a decision for. A flagged prompt (`BACKLOT_*`

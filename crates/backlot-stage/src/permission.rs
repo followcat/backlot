@@ -66,8 +66,42 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    self.raise_permission(dir, role, w.runner, text, request, &area)
-                        .await?;
+                    let command = request.and_then(|s| s.tool_target());
+                    let auto = command.and_then(|command| {
+                        if !crate::permit_auto::screen_matches(w.runner, text, command) {
+                            return None;
+                        }
+                        let env = crate::cli::Env {
+                            vars: self.env_vars.clone(),
+                        };
+                        let grants =
+                            crate::permit_auto::covering_shell_grants(state, role, command, &env)?;
+                        let key = crate::permit_auto::allow_key(w.runner)?;
+                        Some((grants, key))
+                    });
+                    if let Some((grants, key)) = auto {
+                        if self
+                            .driver
+                            .keys(&self.client, &w.term.address, &[key])
+                            .await
+                            .is_ok()
+                        {
+                            record(
+                                dir,
+                                EventKind::PermitUsed {
+                                    grants,
+                                    role: role.into(),
+                                },
+                            )?;
+                            self.blocked_since.borrow_mut().remove(&pair);
+                        } else {
+                            self.raise_permission(dir, role, w.runner, text, request, &area)
+                                .await?;
+                        }
+                    } else {
+                        self.raise_permission(dir, role, w.runner, text, request, &area)
+                            .await?;
+                    }
                 }
             }
             None => {

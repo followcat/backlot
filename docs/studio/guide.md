@@ -854,6 +854,27 @@ you approve what is actually there. A prompt answered in the terminal itself clo
 `prompt answered elsewhere` a couple of seconds later, so the next prompt raises fresh either way.
 A denied role gets a notice telling it the command did not run.
 
+
+## Remembered permissions
+
+`backlot approve` still answers one prompt by default. When you trust the narrow shape of the command, pass `--scope role` or `--scope studio`:
+
+```sh
+backlot approve --person actor-t1-c1 --decision allow --scope role --studio acme-shop --as user
+```
+
+A role grant follows the fixed role or the actor's candidate name, so later tasks cast to the same candidate inherit it. A studio grant reaches every role in that studio. Compound shell commands are remembered only when every segment can be a narrow rule; loops, interpreters such as `python3 -c`, destructive commands, `find`/`fd` exec forms, redirections, environment overrides and commands backlot's guard would stop stay once-only. Network fetches, installs, publishing, paid cloud commands and remote-host commands are outward rules: they can be remembered for a role, never for a studio.
+
+List and revoke grants with:
+
+```sh
+backlot permit list --studio acme-shop --as user
+backlot permit list --role actor-t1-c1 --studio acme-shop --json --as user
+backlot permit revoke --id p42 --studio acme-shop --as user
+```
+
+The stage writes active grants into the runner's own permission file or argv on every start and resume. Revoked grants are simply absent the next time. When a later prompt is already covered by active grants plus the built-in read-only rules, the stage sends the runner's ordinary allow key and records `permit.used` instead of raising an attention. It never auto-answers a once-only command, a changed prompt, or anything a backlot guard would stop.
+
 ## Restarting a stuck role
 
 `close` only releases a held actor; `reopen` needs a closed seat; `recast` changes the identity.
