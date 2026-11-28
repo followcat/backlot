@@ -22,6 +22,8 @@ pub(crate) struct SkillNeed {
     pub machine: Option<String>,
     pub label: String,
     pub agents: Vec<String>,
+    pub missing_agents: Vec<String>,
+    pub stale_agents: Vec<String>,
     pub version: String,
 }
 
@@ -44,19 +46,48 @@ fn key(machine: Option<&str>) -> String {
 }
 
 pub(crate) fn needs(app: &App) -> Vec<SkillNeed> {
+    use backlot_model::summary::SkillState;
     app.panel_summaries()
         .iter()
         .filter_map(|ms| {
             let skill = ms.summary.agent_skill.as_ref()?;
-            let agents = skill.installable_agents();
+            let mut missing_agents = Vec::new();
+            let mut stale_agents = Vec::new();
+            for row in &skill.rows {
+                match row.state {
+                    SkillState::Missing => missing_agents.push(row.agent.clone()),
+                    SkillState::Stale => stale_agents.push(row.agent.clone()),
+                    _ => {}
+                }
+            }
+            let mut agents = missing_agents.clone();
+            agents.extend(stale_agents.iter().cloned());
             (!agents.is_empty()).then(|| SkillNeed {
                 machine: ms.machine.clone(),
                 label: ms.machine.clone().unwrap_or_else(|| "Local".into()),
                 agents,
+                missing_agents,
+                stale_agents,
                 version: skill.version.clone(),
             })
         })
         .collect()
+}
+
+fn state_text(missing: bool, stale: bool) -> &'static str {
+    match (missing, stale) {
+        (true, true) => "missing and out of date",
+        (true, false) => "missing",
+        (false, true) => "out of date",
+        (false, false) => "current",
+    }
+}
+
+fn need_state(need: &SkillNeed) -> &'static str {
+    state_text(
+        !need.missing_agents.is_empty(),
+        !need.stale_agents.is_empty(),
+    )
 }
 
 impl App {
@@ -105,15 +136,38 @@ impl App {
         if self.skill_notice.as_ref() == Some(&visible) {
             return;
         }
-        let missing = visible.iter().any(|need| need.agents.iter().any(|_| true));
-        let _ = missing;
-        let mut parts = Vec::new();
-        for need in &visible {
-            parts.push(format!("{} ({})", need.label, need.agents.join(", ")));
-        }
-        let body = format!("on {}\n↵ install · d dismiss", parts.join(" · "));
+        let any_missing = visible.iter().any(|need| !need.missing_agents.is_empty());
+        let any_stale = visible.iter().any(|need| !need.stale_agents.is_empty());
+        let (title, body) = if let [need] = visible.as_slice() {
+            (
+                format!(
+                    "Agent skill {} on {} ({})",
+                    need_state(need),
+                    need.label,
+                    need.agents.join(", ")
+                ),
+                "↵ install · d dismiss".to_owned(),
+            )
+        } else {
+            let machines = visible
+                .iter()
+                .map(|need| {
+                    format!(
+                        "{} on {} ({})",
+                        need_state(need),
+                        need.label,
+                        need.agents.join(", ")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" · ");
+            (
+                format!("Agent skill {}", state_text(any_missing, any_stale)),
+                format!("{machines} — ↵ install · d dismiss"),
+            )
+        };
         self.skill_notice = Some(visible);
-        self.show_skill_notice("Agent skill missing or stale", &body);
+        self.show_skill_notice(&title, &body);
     }
 
     /// Whether the notice owns plain input right now.

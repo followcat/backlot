@@ -74,25 +74,18 @@ impl App {
             })
     }
 
-    /// Every machine's Agent Skill rows. A stage document answers for
+    /// Every connected machine's Agent Skill rows. A stage document answers for
     /// remote machines; outside server mode the local machine uses the
     /// same filesystem implementation as the CLI, so the manual view is
     /// current even before the stage's next ten-minute scan.
     fn agent_skill_view(&self) -> Vec<crate::chrome::settings::SkillMachineView> {
         use crate::chrome::settings::{SkillAgentView, SkillMachineView};
-        let mut out = Vec::new();
-        let summaries = self.panel_summaries();
-        let mut seen_local = false;
-        for ms in &summaries {
-            let label = ms.machine.clone().unwrap_or_else(|| "Local".into());
-            let known = ms.summary.agent_skill.is_some();
-            if ms.machine.is_none() {
-                seen_local = true;
-            }
-            let rows = ms
-                .summary
-                .agent_skill
-                .as_ref()
+        fn view(
+            machine: Option<String>,
+            label: String,
+            skill: Option<&backlot_model::summary::AgentSkillSummary>,
+        ) -> SkillMachineView {
+            let mut rows = skill
                 .map(|skill| {
                     skill
                         .rows
@@ -102,49 +95,85 @@ impl App {
                             dir: row.dir.clone(),
                             state: row.state,
                         })
-                        .collect()
+                        .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            out.push(SkillMachineView {
-                machine: ms.machine.clone(),
+            rows.sort_by_key(|row| crate::chrome::settings::skill_state_rank(row.state));
+            SkillMachineView {
+                machine,
                 label,
                 rows,
-                known,
-            });
+                known: skill.is_some(),
+            }
         }
-        if !seen_local {
+
+        let summaries = self.panel_summaries();
+        let mut out = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(ms) = summaries.iter().find(|ms| ms.machine.is_none()) {
+            out.push(view(None, "Local".into(), ms.summary.agent_skill.as_ref()));
+        } else {
             #[cfg(not(test))]
             {
                 let report =
                     backlot_stage::skill::status_report(&backlot_stage::cli::Env::process());
-                out.insert(
-                    0,
-                    SkillMachineView {
-                        machine: None,
-                        label: "Local".into(),
-                        rows: report
-                            .rows
-                            .iter()
-                            .map(|row| SkillAgentView {
-                                agent: row.agent.clone(),
-                                dir: row.dir.clone(),
-                                state: row.state,
-                            })
-                            .collect(),
-                        known: true,
-                    },
-                );
-            }
-            #[cfg(test)]
-            out.insert(
-                0,
-                SkillMachineView {
+                out.push(SkillMachineView {
                     machine: None,
                     label: "Local".into(),
-                    rows: Vec::new(),
-                    known: false,
-                },
-            );
+                    rows: report
+                        .rows
+                        .iter()
+                        .map(|row| SkillAgentView {
+                            agent: row.agent.clone(),
+                            dir: row.dir.clone(),
+                            state: row.state,
+                        })
+                        .collect(),
+                    known: true,
+                });
+                if let Some(local) = out.first_mut() {
+                    local
+                        .rows
+                        .sort_by_key(|row| crate::chrome::settings::skill_state_rank(row.state));
+                }
+            }
+            #[cfg(test)]
+            out.push(view(None, "Local".into(), None));
+        }
+
+        for endpoint in &self.projection.endpoints {
+            let crate::chrome::snapshot::ClientEndpointId::Remote(name) = &endpoint.endpoint_id
+            else {
+                continue;
+            };
+            if !matches!(
+                endpoint.status,
+                crate::chrome::snapshot::ClientEndpointStatus::Online
+                    | crate::chrome::snapshot::ClientEndpointStatus::Attention
+            ) {
+                continue;
+            }
+            seen.insert(name.clone());
+            let ms = summaries
+                .iter()
+                .find(|ms| ms.machine.as_deref() == Some(name.as_str()));
+            out.push(view(
+                Some(name.clone()),
+                name.clone(),
+                ms.and_then(|ms| ms.summary.agent_skill.as_ref()),
+            ));
+        }
+        // A watched summary whose machine list row has not arrived yet is
+        // still useful evidence; a machine with no document remains absent.
+        for ms in summaries.iter().filter(|ms| ms.machine.is_some()) {
+            let name = ms.machine.clone().unwrap_or_default();
+            if seen.insert(name.clone()) {
+                out.push(view(
+                    Some(name.clone()),
+                    name,
+                    ms.summary.agent_skill.as_ref(),
+                ));
+            }
         }
         out
     }
@@ -429,6 +458,7 @@ impl App {
                         settings
                             .agent_skill
                             .iter()
+                            .filter(|machine| machine.known)
                             .map(|machine| {
                                 let agents = machine
                                     .rows

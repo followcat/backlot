@@ -540,15 +540,18 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   (`systemctl --user start backlot-server.service` or `backlot server start --session backlot`)
   instead of starting anything itself.
 - Each machine's version sub-line also carries a compact Agent Skill fact when studio chrome is
-  on: a glyph — `✓` current, `↻` stale, `+` missing or `?` when no stage publishes
-  the additive `agent_skill` summary field. `+` covers a foreign copy for display only —
-  the automatic install path still never touches one. When any connected machine publishes a
-  missing or stale row, one notice in the usual notice surface names the machine and agents
-  (`Enter` installs exactly those rows, `d` dismisses that machine at that backlot version).
-  **Settings → agent skill** lists every machine and agent row; Enter installs the selection,
-  `u` uninstalls it, the machine rows act on their missing/stale rows, the first row installs
-  on all machines, and a foreign row's `replace…` needs a second Enter. A machine row's context
-  menu carries **Agent skill…**, opening the same Settings section filtered to that machine.
+  on: `✓` current, `↻` stale, `!` missing in the warning colour, or `?` when no stage publishes
+  the additive `agent_skill` summary field (the `?` keys legend explains the four). `!` covers a
+  foreign copy for display only — the automatic install path still never touches one. When any
+  connected machine publishes a missing or stale row, one notice in the usual notice surface says
+  whether the skill is missing or out of date and names the machine and agents (`Enter` installs
+  exactly those rows, `d` dismisses that machine at that backlot version). **Settings → agent
+  skill** lists every connected machine and agent row in current/stale/missing/foreign/absent
+  order; absent rows are dim, a machine with no published state appears as unknown and has no
+  action, Enter installs the selection, `u` uninstalls it, the machine rows act on their
+  missing/stale rows, the first row installs on all machines, and a foreign row's replacement
+  needs a second Enter. A machine row's context menu carries **Agent skill…**, opening the same
+  Settings section filtered to that machine.
 - The left machines tree is not only spaces: under each machine it also draws the studios its
   ledger lists when the document cannot speak for them (`stage down`, dim, Enter starts the
   stage), the machine's folded `finished (n)` group, and one `unreachable` line for a machine

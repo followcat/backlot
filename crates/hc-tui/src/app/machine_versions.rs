@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use crate::chrome::render::{MachineLine, MachineTone};
+use crate::chrome::render::{MachineLine, MachineSkillMark, MachineTone};
 use crate::chrome::snapshot::ClientEndpointId;
 use crate::machine_versions::Backlot;
 use crate::operations::Action;
@@ -42,7 +42,7 @@ fn machine_line(
     backlot: &Backlot,
     latest: Option<&str>,
     stage_running: bool,
-    skill: &str,
+    skill: MachineSkillMark,
 ) -> MachineLine {
     let (text, tone, stage_ok) = match backlot {
         Backlot::Installed { version, .. } => match latest {
@@ -50,7 +50,7 @@ fn machine_line(
                 (format!("↑{latest}"), MachineTone::Accent, None)
             }
             _ => (
-                format!("backlot {version} {skill}"),
+                format!("backlot {version}"),
                 MachineTone::Normal,
                 Some(stage_running),
             ),
@@ -64,6 +64,7 @@ fn machine_line(
         text,
         tone,
         stage_ok,
+        skill: stage_ok.map(|_| skill),
     }
 }
 
@@ -78,10 +79,10 @@ fn short(text: &str) -> String {
         .collect()
 }
 
-fn skill_mark(summary: Option<&crate::panel::data::MachineSummary>) -> &'static str {
+fn skill_mark(summary: Option<&crate::panel::data::MachineSummary>) -> MachineSkillMark {
     use backlot_model::summary::SkillState;
     let Some(skill) = summary.and_then(|ms| ms.summary.agent_skill.as_ref()) else {
-        return "?";
+        return MachineSkillMark::Unknown;
     };
     let rows = skill
         .rows
@@ -92,11 +93,11 @@ fn skill_mark(summary: Option<&crate::panel::data::MachineSummary>) -> &'static 
         .iter()
         .any(|row| matches!(row.state, SkillState::Missing | SkillState::Foreign))
     {
-        "+"
+        MachineSkillMark::Missing
     } else if rows.iter().any(|row| row.state == SkillState::Stale) {
-        "↻"
+        MachineSkillMark::Stale
     } else {
-        "✓"
+        MachineSkillMark::Current
     }
 }
 

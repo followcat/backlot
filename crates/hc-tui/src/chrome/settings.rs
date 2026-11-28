@@ -77,6 +77,17 @@ pub(crate) const STUDIO_DOCK_WIDTH: usize = 2;
 pub(crate) const STUDIO_OVERSEER: usize = 3;
 pub(crate) const STUDIO_ROWS: usize = 4;
 
+pub(crate) fn skill_state_rank(state: backlot_model::summary::SkillState) -> u8 {
+    use backlot_model::summary::SkillState;
+    match state {
+        SkillState::Current => 0,
+        SkillState::Stale => 1,
+        SkillState::Missing => 2,
+        SkillState::Foreign => 3,
+        SkillState::Absent => 4,
+    }
+}
+
 /// One agent row in the Agent Skill settings tab.
 #[derive(Debug, Clone)]
 pub(crate) struct SkillAgentView {

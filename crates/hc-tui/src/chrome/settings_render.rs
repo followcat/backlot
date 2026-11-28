@@ -62,6 +62,30 @@ fn draw_choice(
     );
 }
 
+fn draw_dim_choice(
+    buffer: &mut Buffer,
+    rect: Rect,
+    label: &str,
+    selected: bool,
+    dim: bool,
+    palette: &Palette,
+) {
+    let mut style = choice_style(selected, palette);
+    if dim && !selected {
+        style = style.fg(palette.overlay0);
+    }
+    buffer.set_style(rect, style);
+    let marker = if selected { "▸" } else { " " };
+    put_text(
+        buffer,
+        rect.x,
+        rect.y,
+        rect.width,
+        &format!(" {marker} {label}"),
+        style,
+    );
+}
+
 pub(crate) fn render_settings_overlay_with_shadow(
     buffer: &mut Buffer,
     settings: &SettingsOverlay,
@@ -531,12 +555,17 @@ fn render_agent_skill(
             .bg(bg)
             .add_modifier(Modifier::BOLD),
     );
+    let guidance = settings
+        .skill_confirm
+        .as_ref()
+        .map(|(_, agent)| format!("enter again to replace {agent}"))
+        .unwrap_or_else(|| "enter install · u uninstall · foreign rows ask twice".to_owned());
     put_text(
         buffer,
         area.x,
         area.y + 1,
         area.width,
-        "enter install · u uninstall · foreign rows ask twice",
+        &guidance,
         Style::default().fg(palette.overlay1).bg(bg),
     );
     let rows = skill_rows(settings);
@@ -562,37 +591,32 @@ fn render_agent_skill(
                 if agents.is_empty() {
                     format!("{label} — current")
                 } else {
-                    format!("{label} — install {} agent rows", agents.len())
+                    let plural = if agents.len() == 1 { "agent" } else { "agents" };
+                    format!("{label} — install {} {plural}", agents.len())
                 }
             }
             SkillSettingsRow::UnknownMachine { label } => {
-                format!("{label} — unknown (no stage skill state)")
+                format!("{label} — unknown (its stage publishes no skill state)")
             }
             SkillSettingsRow::Agent {
-                agent,
-                dir,
-                state,
-                machine,
-                ..
+                agent, dir, state, ..
             } => {
-                let confirm =
-                    settings.skill_confirm.as_ref() == Some(&(machine.clone(), agent.clone()));
-                let action = match state {
-                    backlot_model::summary::SkillState::Foreign if confirm => {
-                        "enter again to replace"
-                    }
-                    backlot_model::summary::SkillState::Foreign => "enter replace…",
-                    _ => "enter install · u uninstall",
-                };
-                format!("  {agent:<13} {:<8} {dir} — {action}", state.as_str())
+                format!("  {agent:<13} {:<8} {dir}", state.as_str())
             }
         };
-        draw_choice(
+        let dim = matches!(
+            row,
+            SkillSettingsRow::Agent {
+                state: backlot_model::summary::SkillState::Absent,
+                ..
+            }
+        );
+        draw_dim_choice(
             buffer,
             rect,
             &label,
             index == settings.selected,
-            false,
+            dim,
             palette,
         );
         hits.push((rect, index));

@@ -1,5 +1,5 @@
 //! S0's help additions: backlot's own sections first, the studio
-//! keys' shadow notes and the two-line glyph legend pinned above the
+//! keys' shadow notes and the glyph legend pinned above the
 //! footer — studio mode only; `--plain` keeps `Ctrl+B ?`
 //! cell-identical to herdr's.
 use super::*;
@@ -44,6 +44,7 @@ async fn studio_mode_leads_with_backlot_sections_and_pins_the_legend() {
     }
     assert!(text.contains("◐ work"), "the people row: {text}");
     assert!(text.contains("· wait"), "the tasks row: {text}");
+    assert!(text.contains("! missing"), "the skill row: {text}");
     // Scrolled to the bottom and mid-filter, the legend stays pinned.
     app.help_state.scroll = usize::MAX;
     let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
@@ -95,6 +96,12 @@ async fn the_glyph_legend_fits_inside_eighty_columns() {
             .iter()
             .any(|(key, label)| key == "roles" && label.contains("Ⓟ producer")),
         "the role legend line is pinned"
+    );
+    assert!(
+        app.help_legend()
+            .iter()
+            .any(|(key, label)| key == "skill" && label.contains("! missing")),
+        "the skill legend line is pinned"
     );
     // The renderer's ` {key:<7} {label}` at ≤66 cells each.
     for (key, label) in app.help_legend() {

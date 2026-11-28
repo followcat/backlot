@@ -254,7 +254,7 @@ async fn layout_200x44_and_100x40_satisfy_sidebar_lot_header_and_role_contracts(
     }
     let sidebar_rows = slice_cols(buf, layout.sidebar);
     let sidebar_text = sidebar_rows.join("\n");
-    let expected_ver = format!("backlot {} ?", env!("CARGO_PKG_VERSION"));
+    let expected_ver = format!("backlot {} · ● ok", env!("CARGO_PKG_VERSION"));
     assert!(
         sidebar_text.contains(&expected_ver),
         "missing `{expected_ver}` in:\n{sidebar_text}"

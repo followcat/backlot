@@ -57,6 +57,26 @@ pub(crate) struct WorkspaceHit {
     pub group_toggle: Option<(Rect, String)>,
 }
 
+/// The compact Agent Skill marker beside a machine's backlot version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MachineSkillMark {
+    Current,
+    Stale,
+    Missing,
+    Unknown,
+}
+
+impl MachineSkillMark {
+    pub(crate) fn glyph(self) -> &'static str {
+        match self {
+            Self::Current => "✓",
+            Self::Stale => "↻",
+            Self::Missing => "!",
+            Self::Unknown => "?",
+        }
+    }
+}
+
 /// U6c: a machine row's version sub-line in the expanded sidebar —
 /// the app renders the text and tone, the sidebar only draws it.
 /// `None` lines (plain mode) keep the row one line tall, so Herdr's
@@ -72,6 +92,8 @@ pub(crate) struct MachineLine {
     pub tone: MachineTone,
     /// Optional stage health suffix (`· ● ok` / `· ◌ down`) when installed.
     pub stage_ok: Option<bool>,
+    /// Compact Agent Skill state beside the version when installed.
+    pub skill: Option<MachineSkillMark>,
 }
 
 /// A machine sub-line's palette choice.

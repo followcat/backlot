@@ -5,7 +5,8 @@
 use super::endpoint_nav::remote;
 use super::studio_machines::two_machine_studio_app;
 use super::*;
-use crate::chrome::settings::SettingsSection;
+use crate::chrome::render::MachineSkillMark;
+use crate::chrome::settings::{SettingsSection, SkillSettingsRow, skill_rows};
 use crate::test_support::TestDir;
 use hc_proto::watch::DocKey;
 
@@ -64,17 +65,13 @@ async fn the_machine_row_marks_missing_stale_current_and_unknown() {
     );
     publish_skill(&mut app, None, "0.4.32", rows(&[("codex", "stale")]));
     let lines = app.machine_lines();
-    assert!(
-        lines[&remote("host-b")].text.contains("+"),
-        "{:?}",
-        lines[&remote("host-b")]
+    assert_eq!(
+        lines[&remote("host-b")].skill,
+        Some(MachineSkillMark::Missing)
     );
-    assert!(
-        lines[&crate::chrome::snapshot::ClientEndpointId::Local]
-            .text
-            .contains("↻"),
-        "{:?}",
-        lines[&crate::chrome::snapshot::ClientEndpointId::Local]
+    assert_eq!(
+        lines[&crate::chrome::snapshot::ClientEndpointId::Local].skill,
+        Some(MachineSkillMark::Stale)
     );
 
     publish_skill(
@@ -83,14 +80,21 @@ async fn the_machine_row_marks_missing_stale_current_and_unknown() {
         "0.4.32",
         rows(&[("codex", "current")]),
     );
-    assert!(app.machine_lines()[&remote("host-b")].text.contains("✓"));
+    assert_eq!(
+        app.machine_lines()[&remote("host-b")].skill,
+        Some(MachineSkillMark::Current)
+    );
     app.view
         .documents_mut()
         .get_mut(&key(Some("host-b")))
         .and_then(|doc| std::sync::Arc::make_mut(doc).value.as_object_mut())
         .unwrap()
         .remove("agent_skill");
-    assert!(app.machine_lines()[&remote("host-b")].text.contains("?"));
+    app.reconcile_published_view();
+    assert_eq!(
+        app.machine_lines()[&remote("host-b")].skill,
+        Some(MachineSkillMark::Unknown)
+    );
 }
 
 #[tokio::test]
@@ -104,9 +108,14 @@ async fn the_notice_appears_for_missing_or_stale_but_not_foreign_or_absent() {
     );
     app.sync_skill_notice();
     let text = notice_text(&app);
-    assert!(text.contains("Agent skill"), "{text}");
-    assert!(text.contains("host-b (codex, devin)"), "{text}");
-    assert!(text.contains("↵ install"), "{text}");
+    assert!(
+        text.contains("Agent skill missing and out of date on host-b (codex, devin)"),
+        "{text}"
+    );
+    assert!(
+        text.contains(" ↵ install") || text.contains("\n↵ install"),
+        "{text}"
+    );
     assert!(text.contains("d dismiss"), "{text}");
 
     let mut foreign = two_machine_studio_app();
@@ -172,8 +181,115 @@ async fn settings_lists_the_filtered_machines_agent_rows() {
     assert!(text.contains("host-b"), "{text}");
     assert!(text.contains("codex"), "{text}");
     assert!(text.contains("missing"), "{text}");
-    assert!(text.contains("enter replace…"), "{text}");
     assert!(!text.contains("Local —"), "{text}");
+}
+
+#[tokio::test]
+async fn settings_orders_rows_shows_unknown_machines_and_never_clips_hints() {
+    let mut app = two_machine_studio_app();
+    publish_skill(
+        &mut app,
+        Some("host-b"),
+        "0.4.32",
+        serde_json::json!([
+            {"agent":"opencode","dir":"~/.config/opencode/skills","state":"absent"},
+            {"agent":"devin","dir":"~/.config/devin/skills","state":"foreign"},
+            {"agent":"codex","dir":"~/.agents/skills","state":"missing"},
+            {"agent":"cursor","dir":"~/.cursor/skills","state":"stale"},
+            {"agent":"cline","dir":"~/.agents/skills","state":"current"}
+        ]),
+    );
+    app.open_agent_skill_settings(Some("host-b".into()));
+    let states: Vec<_> = app
+        .settings
+        .as_ref()
+        .and_then(|settings| {
+            settings
+                .agent_skill
+                .iter()
+                .find(|machine| machine.machine.as_deref() == Some("host-b"))
+        })
+        .map(|machine| machine.rows.iter().map(|row| row.state.as_str()).collect())
+        .unwrap();
+    assert_eq!(states, ["current", "stale", "missing", "foreign", "absent"]);
+
+    let backend = draw_to(&mut app, 80, 36);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("host-b — install 2 agents"), "{text}");
+    assert!(text.contains("~/.config/opencode/skills"), "{text}");
+    assert_eq!(text.matches("enter install").count(), 1, "{text}");
+    assert_eq!(text.matches("u uninstall").count(), 1, "{text}");
+    assert!(!text.contains("u unin…"), "{text}");
+    assert!(!text.contains("enter replace…"), "{text}");
+    let lines = screen_lines(&backend);
+    let absent_y = lines
+        .iter()
+        .position(|line| line.contains("opencode"))
+        .expect("absent row");
+    let absent_x = lines[absent_y].find("opencode").expect("absent text") as u16;
+    assert_eq!(
+        backend.buffer()[(absent_x, absent_y as u16)].fg,
+        app.shell.palette.overlay0,
+        "absent rows are dim"
+    );
+
+    let row_names: Vec<String> = skill_rows(app.settings.as_ref().unwrap())
+        .into_iter()
+        .filter_map(|row| match row {
+            SkillSettingsRow::Agent { agent, .. } => Some(agent),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(row_names, ["cline", "cursor", "codex", "devin", "opencode"]);
+}
+
+#[tokio::test]
+async fn settings_lists_a_connected_machine_with_no_published_skill_state() {
+    let mut app = two_machine_studio_app();
+    app.open_agent_skill_settings(Some("host-b".into()));
+    let machine = app
+        .settings
+        .as_ref()
+        .and_then(|settings| {
+            settings
+                .agent_skill
+                .iter()
+                .find(|machine| machine.machine.as_deref() == Some("host-b"))
+        })
+        .expect("host-b is a connected machine");
+    assert!(!machine.known);
+    let text = screen_lines(&draw_to(&mut app, 80, 36)).join("\n");
+    assert!(
+        text.contains("host-b — unknown (its stage publishes no skill state)"),
+        "{text}"
+    );
+    assert!(!text.contains("host-b — install"), "{text}");
+}
+
+#[tokio::test]
+async fn settings_pluralizes_machine_install_rows() {
+    let mut app = two_machine_studio_app();
+    publish_skill(
+        &mut app,
+        Some("host-b"),
+        "0.4.32",
+        rows(&[("codex", "missing"), ("devin", "missing")]),
+    );
+    app.open_agent_skill_settings(Some("host-b".into()));
+    let text = screen_lines(&draw_to(&mut app, 80, 36)).join("\n");
+    assert!(text.contains("host-b — install 2 agents"), "{text}");
+    assert!(!text.contains("install 2 agent rows"), "{text}");
+
+    publish_skill(
+        &mut app,
+        Some("host-b"),
+        "0.4.32",
+        rows(&[("codex", "missing")]),
+    );
+    app.open_agent_skill_settings(Some("host-b".into()));
+    let text = screen_lines(&draw_to(&mut app, 80, 36)).join("\n");
+    assert!(text.contains("host-b — install 1 agent"), "{text}");
+    assert!(!text.contains("install 1 agents"), "{text}");
 }
 
 #[tokio::test]

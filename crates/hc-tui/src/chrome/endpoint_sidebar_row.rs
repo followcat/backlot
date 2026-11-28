@@ -144,6 +144,15 @@ pub(super) fn render_machine_line(
     }
     let x = rect.x.saturating_add(indent);
     let hc = line.hc.as_deref().map(|v| format!("hc {v} "));
+    let skill_style = line.skill.map(|mark| {
+        let color = match mark {
+            crate::chrome::render::MachineSkillMark::Current => palette.green,
+            crate::chrome::render::MachineSkillMark::Stale => palette.yellow,
+            crate::chrome::render::MachineSkillMark::Missing => palette.peach,
+            crate::chrome::render::MachineSkillMark::Unknown => palette.overlay0,
+        };
+        Style::default().fg(color)
+    });
     let draw_stage_suffix = |buf: &mut Buffer, start_x: u16| {
         let Some(ok) = line.stage_ok else {
             return;
@@ -167,6 +176,11 @@ pub(super) fn render_machine_line(
             if ok { dim } else { dot_style },
         );
     };
+    if let (Some(mark), Some(style)) = (line.skill, skill_style)
+        && rect.width > 3
+    {
+        put_text(buffer, rect.x + 1, rect.y, 1, mark.glyph(), style);
+    }
     let text_w = display_width(&line.text);
     match hc {
         Some(hc) if display_width(&hc) + text_w <= inner => {
@@ -210,6 +224,7 @@ mod tests {
             text: "backlot 0.2.4".into(),
             tone: MachineTone::Normal,
             stage_ok: None,
+            skill: None,
         };
         let mut buf = Buffer::empty(Rect::new(0, 0, 26, 1));
         render_machine_line(&mut buf, Rect::new(0, 0, 26, 1), &line, false, &palette);
@@ -227,6 +242,7 @@ mod tests {
             text: "backlot 0.4.12".into(),
             tone: MachineTone::Normal,
             stage_ok: Some(true),
+            skill: None,
         };
         let mut buf = Buffer::empty(Rect::new(0, 0, 25, 1));
         render_machine_line(&mut buf, Rect::new(0, 0, 25, 1), &line, false, &palette);
@@ -236,5 +252,21 @@ mod tests {
         let mut ebuf = Buffer::empty(Rect::new(0, 0, 25, 1));
         render_machine_line(&mut ebuf, Rect::new(0, 0, 25, 1), &line, true, &palette);
         assert!(ebuf[(3, 0)].modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn the_skill_marker_has_its_state_colour() {
+        let palette = Palette::catppuccin();
+        let line = MachineLine {
+            hc: None,
+            text: "backlot 0.4.12".into(),
+            tone: MachineTone::Normal,
+            stage_ok: Some(true),
+            skill: Some(crate::chrome::render::MachineSkillMark::Missing),
+        };
+        let mut buf = Buffer::empty(Rect::new(0, 0, 26, 1));
+        render_machine_line(&mut buf, Rect::new(0, 0, 26, 1), &line, false, &palette);
+        assert_eq!(buf[(1, 0)].symbol(), "!");
+        assert_eq!(buf[(1, 0)].fg, palette.peach);
     }
 }

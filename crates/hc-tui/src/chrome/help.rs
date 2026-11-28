@@ -192,7 +192,7 @@ pub(crate) fn render_help_overlay_with_shadow(
         None
     };
 
-    // The two-line glyph legend pins above the footer — out of the
+    // The glyph legend pins above the footer — out of the
     // scrolled list, so it stays on screen while scrolling and while
     // a filter hides everything else. `--plain` has no legend (D6).
     let (legend, backlot) = match backlot {
@@ -213,7 +213,7 @@ pub(crate) fn render_help_overlay_with_shadow(
         }
         None => (Vec::new(), None),
     };
-    let legend_rows = u16::try_from(legend.len().min(3)).unwrap_or(0);
+    let legend_rows = u16::try_from(legend.len().min(4)).unwrap_or(0);
     let body = Rect::new(
         i.x,
         i.y + 3,
