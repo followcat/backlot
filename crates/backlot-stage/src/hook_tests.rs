@@ -218,3 +218,99 @@ fn a_scalar_payload_writes_a_ts_line() {
     assert!(got[0]["ts_ms"].as_u64().is_some());
     assert!(got[0].get("event").is_none());
 }
+
+fn role_fixture() -> (
+    TestDir,
+    crate::cli::Env,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let dir = tmp();
+    let state = dir.join("state");
+    let studio = state.join("studios/acme");
+    let work = studio.join("work/integration");
+    let home = dir.join("home");
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let mut env = crate::cli::Env::default();
+    env.vars.insert(
+        "BACKLOT_STATE_DIR".into(),
+        state.to_string_lossy().into_owned(),
+    );
+    env.vars.insert("BACKLOT_STUDIO".into(), "acme".into());
+    env.vars.insert("BACKLOT_ROLE".into(), "director".into());
+    env.vars
+        .insert("HOME".into(), home.to_string_lossy().into_owned());
+    (dir, env, work, studio.join("roles/director/signals.jsonl"))
+}
+
+fn hook_roundtrip(runner: &str, payload: Value) -> (TestDir, std::path::PathBuf, String) {
+    let (dir, env, work, signals) = role_fixture();
+    let argv = vec![
+        "--runner".into(),
+        runner.into(),
+        "--file".into(),
+        signals.to_string_lossy().into_owned(),
+    ];
+    let mut out = Vec::new();
+    let input = payload.to_string();
+    let mut input = input.as_bytes();
+    let code = crate::hook::run_io_env(
+        &argv,
+        &env,
+        &work,
+        std::time::Duration::from_millis(1500),
+        &mut input,
+        &mut out,
+    );
+    assert_eq!(code, ExitCode::SUCCESS);
+    (dir, signals, String::from_utf8(out).unwrap())
+}
+
+#[test]
+fn read_only_pre_tool_returns_each_runners_allow() {
+    for (runner, payload, want) in [
+        (
+            "claude",
+            json!({"hook_event_name":"PreToolUse","tool_input":{"command":"ls"}}),
+            "permissionDecision",
+        ),
+        (
+            "cmd",
+            json!({"hook_event_name":"PreToolUse","tool_input":{"command":"ls"}}),
+            "permissionDecision",
+        ),
+        (
+            "devin",
+            json!({"hook_event_name":"PermissionRequest","tool_input":{"command":"ls"}}),
+            "\"decision\":\"approve\"",
+        ),
+        (
+            "cursor",
+            json!({"hook_event_name":"beforeShellExecution","command":"ls"}),
+            "\"permission\":\"allow\"",
+        ),
+        (
+            "agy",
+            json!({"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"ls"}}}),
+            "\"decision\":\"allow\"",
+        ),
+    ] {
+        let (_dir, signals, out) = hook_roundtrip(runner, payload);
+        assert!(out.contains(want), "{runner}: {out}");
+        let text = std::fs::read_to_string(signals).unwrap();
+        assert!(text.contains("PermitAutoAllow"), "{runner}: {text}");
+        assert!(text.contains("provably read-only"), "{runner}: {text}");
+    }
+}
+
+#[test]
+fn a_secret_readonly_shape_gets_no_hook_allow() {
+    let (_dir, signals, out) = hook_roundtrip(
+        "claude",
+        json!({"hook_event_name":"PreToolUse","tool_input":{"command":"cat .env"}}),
+    );
+    assert!(out.is_empty(), "{out}");
+    let text = std::fs::read_to_string(signals).unwrap();
+    assert!(!text.contains("PermitAutoAllow"), "{text}");
+}

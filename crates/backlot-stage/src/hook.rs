@@ -383,13 +383,26 @@ fn run_io_inner(
     let normalized = normalize_payload(runner, &payload);
     let line = file.as_ref().map(|_| line_with_cap(&normalized, ts_ms));
     let capture = crate::design_capture::prepare_hook_capture(env, &normalized, ts_ms);
+    let runner_name = runner.unwrap_or("claude");
+    let allow = if in_role_env(env) {
+        crate::readonly_hook::decision(runner_name, &payload, env, cwd, ts_ms)
+    } else {
+        None
+    };
 
     if !is_agy {
         if let (Some(f), Some(l)) = (file, line) {
             append(&f, &l);
+            if let Some((_, auto)) = &allow {
+                append(&f, auto);
+            }
         }
         if let Some((f, l)) = capture {
             append(&f, &l);
+        }
+        if let Some((json, _)) = allow {
+            let _ = writeln!(stdout, "{json}");
+            let _ = stdout.flush();
         }
         return ExitCode::SUCCESS;
     }
@@ -400,11 +413,17 @@ fn run_io_inner(
     } else {
         None
     };
+    let auto = if is_pre_tool && refused.is_none() {
+        allow.map(|(_, line)| line)
+    } else {
+        None
+    };
 
     let worker_env = crate::cli::Env {
         vars: env.vars.clone(),
     };
     let refused_for_worker = refused.clone();
+    let auto_for_worker = auto.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         #[cfg(test)]
@@ -414,6 +433,9 @@ fn run_io_inner(
         }
         if let (Some(f), Some(l)) = (file, line) {
             append(&f, &l);
+            if let Some(auto) = auto_for_worker {
+                append(&f, &auto);
+            }
         }
         if let Some((f, l)) = capture {
             append(&f, &l);

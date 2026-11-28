@@ -45,6 +45,8 @@ fn apply_permits_writes_native_shell_and_edit_forms() {
         allow: Vec::new(),
         global_mcp: PathBuf::from("/tmp/mcp.json"),
         readonly: false,
+        hooks: PathBuf::from("/tmp/work/.cursor/hooks.json"),
+        signals: PathBuf::from("/tmp/signals.jsonl"),
     }));
     apply_permits(&mut cursor, "cursor", &permits);
     let Prep::Cursor(p) = cursor.prep.unwrap() else {
@@ -143,6 +145,8 @@ fn exec_capable_rule_families_stay_ledger_only_and_devin_rules_are_cleaned() {
                     allow: Vec::new(),
                     global_mcp: PathBuf::from("/tmp/mcp.json"),
                     readonly: false,
+                    hooks: PathBuf::from("/tmp/work/.cursor/hooks.json"),
+                    signals: PathBuf::from("/tmp/signals.jsonl"),
                 }),
                 _ => Prep::Agy(super::agy::AgyPrep {
                     settings: PathBuf::from("/tmp/a.json"),

@@ -211,6 +211,10 @@ pub struct CursorPrep {
     pub global_mcp: PathBuf,
     /// When true, add `Write(*)` and `Write(**)` to `permissions.deny`.
     pub readonly: bool,
+    /// `<cwd>/.cursor/hooks.json` — cursor's native project hooks.
+    pub hooks: PathBuf,
+    /// `<studio>/roles/<role>/signals.jsonl`.
+    pub signals: PathBuf,
 }
 
 /// The env the terminal gets — the three isolated roots. Never
@@ -271,6 +275,11 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
             allow: allow_rules_for(ctx.role, ctx.checks, readonly, worktree, ctx.cwd),
             global_mcp,
             readonly,
+            hooks: Path::new(ctx.cwd).join(".cursor").join("hooks.json"),
+            signals: Path::new(ctx.studio_dir)
+                .join("roles")
+                .join(ctx.role)
+                .join("signals.jsonl"),
         })),
     })
 }
@@ -419,6 +428,19 @@ pub(crate) fn prepare(prep: &CursorPrep) -> Result<bool, String> {
     let disabled = serde_json::to_string(&names).unwrap_or_default() + "\n";
     write600(&project_dir.join("mcp-disabled.json"), disabled.as_bytes())
         .map_err(io("mcp-disabled.json"))?;
+    const REL: &str = ".cursor/hooks.json";
+    let cwd = super::hook_files::work_dir_of(&prep.hooks);
+    if super::hook_files::is_tracked(cwd, REL) {
+        return Ok(open);
+    }
+    let was_new = !prep.hooks.exists();
+    let hdir = prep.hooks.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(hdir).map_err(io("cursor hook dirs"))?;
+    let existing_hooks = std::fs::read(&prep.hooks).ok();
+    let hook_bytes =
+        super::hook_files::cursor_hooks_content(existing_hooks.as_deref(), &prep.signals);
+    write600(&prep.hooks, &hook_bytes).map_err(io("hooks.json"))?;
+    super::hook_files::maybe_exclude_new(cwd, was_new, REL)?;
     Ok(open)
 }
 
