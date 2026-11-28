@@ -90,6 +90,12 @@ impl App {
             Some(StudioDialog::DesignSign(d)) => {
                 self.studio_dialog = self.design_sign_key(d, combo.code, combo.modifiers);
             }
+            Some(StudioDialog::Approval(d)) => {
+                self.studio_dialog = self.approval_key(d, combo.code, combo.modifiers);
+            }
+            Some(StudioDialog::Permissions(d)) => {
+                self.studio_dialog = self.permissions_key(d, combo.code);
+            }
             None => {}
         }
     }
@@ -384,6 +390,14 @@ impl App {
                 Some(StudioDialog::DesignSign(d)) => {
                     self.design_sign_submit(&d);
                 }
+                Some(StudioDialog::Approval(d)) => {
+                    self.approval_submit(&d);
+                }
+                Some(StudioDialog::Permissions(d)) => {
+                    if let Some(permit) = d.chosen().map(|p| p.id.clone()) {
+                        self.run_action(studio_cmds::permit_revoke(&d.key, &permit));
+                    }
+                }
                 None => {}
             }
             return;
@@ -393,11 +407,25 @@ impl App {
             .choices
             .iter()
             .position(|rect| contains(*rect))
-            && let Some(StudioDialog::DesignSign(mut d)) = self.studio_dialog.take()
         {
-            d.selected = idx;
-            self.design_sign_submit(&d);
-            return;
+            match self.studio_dialog.take() {
+                Some(StudioDialog::DesignSign(mut d)) => {
+                    d.selected = idx;
+                    self.design_sign_submit(&d);
+                    return;
+                }
+                Some(StudioDialog::Approval(mut d)) => {
+                    d.selected = idx;
+                    self.approval_submit(&d);
+                    return;
+                }
+                Some(StudioDialog::Permissions(mut d)) => {
+                    d.selected = idx;
+                    self.studio_dialog = Some(StudioDialog::Permissions(d));
+                    return;
+                }
+                other => self.studio_dialog = other,
+            }
         }
         if contains(self.studio_dialog_hits.area) {
             // Inside: a click on the body or summary moves the focus.

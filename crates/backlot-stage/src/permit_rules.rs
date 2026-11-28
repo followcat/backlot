@@ -328,3 +328,54 @@ pub fn coverage(command: &str) -> Result<Vec<DerivedRule>, String> {
         Derivation::OnceOnly(why) => Err(why),
     }
 }
+
+/// What an attention detail asks for, after the runner tool prefix is
+/// stripped. The detail is the ledger's uncapped tool line, so the rule
+/// shown in the client is the rule the server derives from the same text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttentionTarget {
+    Shell(Derivation),
+    Edit(String),
+    Unknown,
+}
+
+const EDIT_TOOLS: &[&str] = &[
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "edit",
+    "write",
+    "create_file",
+    "str_replace_editor",
+];
+const SHELL_TOOLS: &[&str] = &[
+    "Bash",
+    "Shell",
+    "run_command",
+    "execute_shell_command",
+    "terminal",
+    "Command",
+];
+
+/// Parse `attention_detail`/`attention_target`: either `<tool>: <target>`
+/// or a bare shell command. An empty or unbound detail is unknown.
+pub fn attention_target(detail: &str) -> AttentionTarget {
+    let detail = detail.trim();
+    if detail.is_empty() || detail.starts_with("unbound prompt") {
+        return AttentionTarget::Unknown;
+    }
+    let (tool, body) = detail
+        .split_once(": ")
+        .map(|(t, b)| (Some(t.trim()), b.trim()))
+        .unwrap_or((None, detail));
+    if body.is_empty() {
+        return AttentionTarget::Unknown;
+    }
+    if tool.is_some_and(|t| EDIT_TOOLS.contains(&t)) {
+        return AttentionTarget::Edit(body.to_string());
+    }
+    if tool.is_some_and(|t| !SHELL_TOOLS.contains(&t) && t.chars().any(|c| c.is_whitespace())) {
+        return AttentionTarget::Unknown;
+    }
+    AttentionTarget::Shell(derive(body))
+}

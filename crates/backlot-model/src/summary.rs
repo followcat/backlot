@@ -228,6 +228,19 @@ pub struct TaskSummary {
     pub latest_verdict: Option<crate::event::Verdict>,
 }
 
+/// One permission grant a role summary exposes for its Permissions list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermitSummary {
+    pub id: String,
+    pub rule: String,
+    pub permit_kind: crate::event::PermitKind,
+    pub scope: crate::event::PermitScope,
+    pub outward: bool,
+    pub runner: String,
+    pub seq: u64,
+    pub ts_ms: u64,
+}
+
 /// One recorded role: live, lost or closed. Closed roles stay listed
 /// while their studio is live — with no `doing` text (R19: closed,
 /// not deleted).
@@ -312,6 +325,13 @@ pub struct RoleSummary {
     /// tail — the prompt row's second line (S1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention_detail: Option<String>,
+    /// The uncapped prompt target the detail was derived from — the
+    /// client derives the exact remember rule from this text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_target: Option<String>,
+    /// Grants currently reaching this role, for the Permissions list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permits: Vec<PermitSummary>,
     /// When the stage last answered a dialog on this role's screen
     /// (`stage.answered`) — the drawer's `trust answered by stage`
     /// line. Not an attention: nothing here feeds `!N` or digests.
@@ -739,6 +759,8 @@ pub fn summary_with_running(
                 attention_user: false,
                 attention_seq: None,
                 attention_detail: None,
+                attention_target: None,
+                permits: Vec::new(),
                 stage_answer_ms: None,
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
                 restarted_ms: None,

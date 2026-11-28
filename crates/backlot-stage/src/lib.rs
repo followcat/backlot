@@ -122,7 +122,7 @@ mod permission;
 mod permit;
 mod permit_auto;
 mod permit_cmd;
-mod permit_rules;
+pub mod permit_rules;
 mod person_only;
 mod proc_guard;
 #[cfg(test)]

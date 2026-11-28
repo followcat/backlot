@@ -29,7 +29,18 @@ impl App {
         }
         let owned = found.is_some_and(|r| r.attention_user);
         if owned {
-            self.run_action(studio_cmds::decide(studio, role, allow));
+            let detail = found.and_then(|r| {
+                r.attention_target
+                    .as_deref()
+                    .or(r.attention_detail.as_deref())
+            });
+            self.approval_open_studio(
+                studio,
+                role,
+                found.map(|r| r.name.as_str()).unwrap_or(role),
+                detail,
+                !allow,
+            );
         } else {
             self.studio_dialog = Some(crate::studio_dialog::StudioDialog::dir_override(
                 studio, role, allow,
@@ -239,12 +250,28 @@ impl App {
             (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('y'))
                 if self.hollywood_asking() =>
             {
-                self.run_action(studio_cmds::hollywood_approve(true));
+                let detail =
+                    crate::hollywood::local_summary(&self.panel_summaries()).and_then(|s| {
+                        s.hollywood.as_ref().and_then(|h| {
+                            h.attention_target
+                                .clone()
+                                .or_else(|| h.attention_detail.clone())
+                        })
+                    });
+                self.approval_open_hollywood(detail.as_deref(), false);
             }
             (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('d'))
                 if self.hollywood_asking() =>
             {
-                self.run_action(studio_cmds::hollywood_approve(false));
+                let detail =
+                    crate::hollywood::local_summary(&self.panel_summaries()).and_then(|s| {
+                        s.hollywood.as_ref().and_then(|h| {
+                            h.attention_target
+                                .clone()
+                                .or_else(|| h.attention_detail.clone())
+                        })
+                    });
+                self.approval_open_hollywood(detail.as_deref(), true);
             }
             (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('p')) => {
                 self.hollywood_peek_live()

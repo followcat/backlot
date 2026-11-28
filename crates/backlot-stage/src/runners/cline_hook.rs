@@ -193,7 +193,7 @@ args_leak() {
 
 # Hole 3: refuse BACKLOT_*, interpreter code that writes the queue or
 # reaches the core socket, detach tricks, env -i / --ignore-environment,
-# card apply|cancel, perms revoke, server control and unauthorised
+# card apply|cancel, permit revoke, server control and unauthorised
 # backlot approve.
 hole3_blocked() {
     h3=$1
@@ -298,7 +298,7 @@ hole3_blocked() {
         esac
     done
     case "$sub1:$sub2" in
-        card:apply|card:cancel|perms:revoke) return 0 ;;
+        card:apply|card:cancel|perms:revoke|permit:revoke) return 0 ;;
         server:run|server:start|server:stop|server:adopt|server:service) return 0 ;;
         approve:*)
             case "$role" in

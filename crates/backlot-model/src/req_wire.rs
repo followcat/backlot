@@ -109,8 +109,7 @@ pub fn parse_action_value(value: &Value) -> Result<ReqAction, String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "missing action kind".to_string())?;
     match tag {
-        "approve" | "permission" | "dialog" | "answer" | "prompt" | "prompt-answer"
-        | "role-approval" => {
+        "permission" | "dialog" | "answer" | "prompt" | "prompt-answer" | "role-approval" => {
             return Err(
                 "prompts and dialogs must be answered in the agent terminal, not via request doc"
                     .into(),
@@ -147,6 +146,10 @@ where
     }
 }
 
+fn approval_scope_once() -> String {
+    "once".into()
+}
+
 /// Typed B1a person actions accepted over `plugin.backlot.req`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -180,6 +183,22 @@ pub enum ReqAction {
         #[serde(alias = "seq")]
         target: u64,
     },
+    /// `approve` through the server: `scope` is once, role or studio.
+    Approve {
+        studio: String,
+        person: String,
+        decision: crate::event::ApprovalDecision,
+        #[serde(default = "approval_scope_once")]
+        scope: String,
+    },
+    /// `permit list` through the server.
+    PermitList {
+        studio: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+    },
+    /// `permit revoke` through the server.
+    PermitRevoke { studio: String, id: String },
     AskAcknowledge {
         studio: String,
         role: String,

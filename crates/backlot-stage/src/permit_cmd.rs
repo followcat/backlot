@@ -24,7 +24,7 @@ fn pending(kind: EventKind, by: &EventBy) -> Pending {
 /// What the prompt asks for. A hook signal distinguishes the two native
 /// kinds; without one only a shell command can be remembered safely.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Target {
+pub(crate) enum Target {
     Shell(String),
     Edit(String),
 }
@@ -134,7 +134,21 @@ pub(crate) fn approve_scoped(
     decision: ApprovalDecision,
     scope: ApprovalScope,
 ) -> Result<String, Fail> {
+    crate::proc_guard::check_cli_gate(crate::proc_guard::CliVerb::Approve { person }, common, env)?;
     let caller = crate::cli::caller(common, env, false)?;
+    approve_scoped_caller(base, env, &caller, person, decision, scope)
+}
+
+/// Scoped approval for an already validated user caller — shared by the
+/// local CLI and the server queue.
+pub(crate) fn approve_scoped_caller(
+    base: &Path,
+    env: &Env,
+    caller: &crate::cli::Caller,
+    person: &str,
+    decision: ApprovalDecision,
+    scope: ApprovalScope,
+) -> Result<String, Fail> {
     if caller.role != "user" {
         return Err(Fail::refused("remembering a permission is the user's"));
     }
@@ -246,6 +260,47 @@ fn permit_json(state: &StudioState, role: Option<&str>) -> serde_json::Value {
     serde_json::Value::Array(rows)
 }
 
+/// List grants for a validated user caller; the server queue shares this.
+pub(crate) fn permit_list_base(
+    base: &Path,
+    caller: &crate::cli::Caller,
+    role: Option<&str>,
+) -> Result<serde_json::Value, Fail> {
+    if caller.role != "user" {
+        return Err(Fail::refused("permit administration is the user's"));
+    }
+    let dir = store::studio_dir(base, &caller.studio);
+    let state = crate::cli::load(&dir)?;
+    Ok(permit_json(&state, role))
+}
+
+/// Revoke one grant for a validated user caller; the server queue shares this.
+pub(crate) fn permit_revoke_base(
+    base: &Path,
+    caller: &crate::cli::Caller,
+    id: &str,
+) -> Result<String, Fail> {
+    if caller.role != "user" {
+        return Err(Fail::refused("permit administration is the user's"));
+    }
+    let dir = store::studio_dir(base, &caller.studio);
+    let by = EventBy {
+        role: caller.role.clone(),
+        session: caller.session.clone(),
+        via: caller.via.clone(),
+    };
+    store::append(&dir, |_, _| {
+        Ok::<_, Fail>(pending(
+            EventKind::PermitRevoked {
+                id: id.to_string(),
+                reason: "revoked by user".into(),
+            },
+            &by,
+        ))
+    })?;
+    Ok(format!("revoked permit {id}"))
+}
+
 /// `permit list` / `permit revoke`.
 pub(crate) fn permit(
     common: &Common,
@@ -261,8 +316,7 @@ pub(crate) fn permit(
     let dir = store::studio_dir(base, &caller.studio);
     match cmd {
         PermitCmd::List { role, json } => {
-            let state = crate::cli::load(&dir)?;
-            let value = permit_json(&state, role.as_deref());
+            let value = permit_list_base(base, &caller, role.as_deref())?;
             if *json {
                 Ok(format!(
                     "{}\n",

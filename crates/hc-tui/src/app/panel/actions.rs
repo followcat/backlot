@@ -194,7 +194,15 @@ impl App {
             return;
         }
         if role.attention_user {
-            self.run_action(studio_cmds::decide(&key, &role.role, allow));
+            self.approval_open_studio(
+                &key,
+                &role.role,
+                &role.name,
+                role.attention_target
+                    .as_deref()
+                    .or(role.attention_detail.as_deref()),
+                !allow,
+            );
         } else if role.attention_seq.is_some() {
             // D9: the prompt is routed to the director — answering it
             // myself takes the §2.2 override confirm.

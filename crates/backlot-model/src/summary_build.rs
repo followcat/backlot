@@ -9,7 +9,7 @@ use crate::design::{DesignGate, DesignPhase, DesignQuestion};
 use crate::event::Priority;
 use crate::progress::{RoleProgress, RoleRunning, cap_progress, cap_running};
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
-use crate::summary::{DesignSummary, RoleSummary, TaskSummary, Work, cap, steady};
+use crate::summary::{DesignSummary, PermitSummary, RoleSummary, TaskSummary, Work, cap, steady};
 
 /// A studio is finished when its ledger carries `studio.finished`,
 /// or — for ledgers that predate the marker — when every task it
@@ -131,6 +131,8 @@ fn standby_role_summary(state: &StudioState, role: &str) -> Option<RoleSummary> 
         attention_user: false,
         attention_seq: None,
         attention_detail: None,
+        attention_target: None,
+        permits: Vec::new(),
         stage_answer_ms: None,
         can_answer_prompt: crate::caps::can_answer_prompt(&actor.runner),
         restarted_ms: None,
@@ -489,6 +491,35 @@ pub(crate) fn role_summary(
         attention_user: role_attention_user(state, role),
         attention_seq: open.map(|a| a.seq),
         attention_detail: open.map(attention_detail),
+        permits: state
+            .permits
+            .values()
+            .filter(|p| p.reaches(role))
+            .map(|p| PermitSummary {
+                id: p.id.clone(),
+                rule: p.rule.clone(),
+                permit_kind: p.kind,
+                scope: p.scope.clone(),
+                outward: p.outward,
+                runner: p.runner.clone(),
+                seq: p.seq,
+                ts_ms: p.ts_ms,
+            })
+            .collect(),
+        attention_target: open
+            .map(|a| {
+                let tail = format!("screen saved to attention/{}.txt", a.seq);
+                let body = a
+                    .detail
+                    .rsplit_once(tail.as_str())
+                    .map(|(head, _)| head)
+                    .unwrap_or(a.detail.as_str());
+                let body = trim_tail(body);
+                body.strip_suffix("needs the user")
+                    .map_or(body, trim_tail)
+                    .to_string()
+            })
+            .filter(|s| !s.is_empty()),
         stage_answer_ms: r.stage_answer_ms,
         can_answer_prompt: actor.is_none_or(|a| crate::caps::can_answer_prompt(&a.runner)),
         restarted_ms: r.restarted_ms,

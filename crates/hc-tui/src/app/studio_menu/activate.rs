@@ -47,17 +47,25 @@ impl App {
             }
             StudioAct::Decide(allow) => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
-                    self.run_action(studio_cmds::decide(key, &role.role, allow));
-                }
-            }
-            StudioAct::DecideScoped(scope) => {
-                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
-                    self.run_action(studio_cmds::decide_scoped(key, &role.role, scope));
+                    self.approval_open_studio(
+                        key,
+                        &role.role,
+                        &role.name,
+                        role.attention_target.as_deref(),
+                        !allow,
+                    );
                 }
             }
             StudioAct::Permissions => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
-                    self.run_action(studio_cmds::permit_list(key, &role.role));
+                    self.studio_dialog = Some(crate::studio_dialog::StudioDialog::Permissions(
+                        crate::studio_dialog::PermissionsDialog {
+                            key: key.clone(),
+                            name: role.name.clone(),
+                            permits: role.permits.clone(),
+                            selected: 0,
+                        },
+                    ));
                 }
             }
             StudioAct::DirOverride(allow) => {
@@ -74,7 +82,6 @@ impl App {
                         ),
                         ConfirmFor::DirOverride {
                             key: key.clone(),
-                            role: role.role.clone(),
                             allow,
                         },
                     ));
@@ -168,10 +175,7 @@ impl App {
                             "{}'s terminal is removed; the role stays in the ledger and can reopen. Close it?",
                             role.name
                         ),
-                        ConfirmFor::Close {
-                            key: key.clone(),
-                            role: role.role.clone(),
-                        },
+                        ConfirmFor::Close { key: key.clone() },
                     ));
                 }
             }
@@ -192,7 +196,6 @@ impl App {
                         ),
                         ConfirmFor::ClearAttention {
                             key: key.clone(),
-                            role: role.role.clone(),
                             seq,
                         },
                     ));

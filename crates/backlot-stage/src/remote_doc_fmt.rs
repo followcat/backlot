@@ -126,6 +126,30 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
             let r: AskAcknowledgeResult = parse_res(&ack)?;
             format!("question #{} in {} marked seen", r.target, r.studio)
         }
+        ReqAction::Approve { .. } | ReqAction::PermitRevoke { .. } => parse_res::<String>(&ack)?,
+        ReqAction::PermitList { .. } => {
+            let rows: serde_json::Value = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&rows)
+                    .map_err(|e| Fail::refused(format!("permit list: {e}")))?
+            } else {
+                let mut out = String::new();
+                for row in rows.as_array().into_iter().flatten() {
+                    out.push_str(&format!(
+                        "{} {} {} {} {}\n",
+                        row["id"].as_str().unwrap_or_default(),
+                        row["scope"].as_str().unwrap_or("role"),
+                        row["role"].as_str().unwrap_or("studio"),
+                        row["kind"].as_str().unwrap_or_default(),
+                        row["rule"].as_str().unwrap_or_default(),
+                    ));
+                }
+                if out.is_empty() {
+                    out.push_str("no active permits\n");
+                }
+                out.trim_end().to_string()
+            }
+        }
         ReqAction::AttentionClear { .. } => {
             verbs_fmt::format_attention_clear(&parse_res::<AttentionClearResult>(&ack)?)
         }

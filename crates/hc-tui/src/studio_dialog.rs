@@ -16,6 +16,11 @@ pub(crate) use cast_edit::{CastEditDialog, CastEditStep};
 mod design_sign;
 pub(crate) use design_sign::{DesignSignChoice, DesignSignDialog};
 
+mod permissions;
+pub(crate) use permissions::PermissionsDialog;
+mod approval;
+pub(crate) use approval::{ApprovalChoice, ApprovalDialog, ApprovalTarget};
+
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
 #[derive(Debug, Clone)]
@@ -153,6 +158,8 @@ pub(crate) enum StudioDialog {
     Reason(ReasonDialog),
     Confirm(ConfirmDialog),
     DesignSign(DesignSignDialog),
+    Approval(ApprovalDialog),
+    Permissions(PermissionsDialog),
     Tell(TellDialog),
     Revise(ReviseDialog),
     Restart(RestartDialog),

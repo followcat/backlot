@@ -256,16 +256,6 @@ impl StudioMenu {
                     StudioAct::Decide(true),
                 ),
                 item(
-                    "Allow for this role".to_owned(),
-                    None,
-                    StudioAct::DecideScoped(backlot_stage::args::ApprovalScope::Role),
-                ),
-                item(
-                    "Allow for the studio".to_owned(),
-                    None,
-                    StudioAct::DecideScoped(backlot_stage::args::ApprovalScope::Studio),
-                ),
-                item(
                     "Deny prompt (d)".to_owned(),
                     Some('d'),
                     StudioAct::Decide(false),

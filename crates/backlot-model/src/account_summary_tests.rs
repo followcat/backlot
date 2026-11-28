@@ -115,6 +115,7 @@ fn summary_accounts_stay_quiet_across_same_as_and_old_readers_ignore_them() {
             attention: None,
             attention_user: false,
             attention_detail: None,
+            attention_target: None,
             can_answer_prompt: true,
             headline: None,
             restarted_ms: None,

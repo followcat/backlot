@@ -51,6 +51,52 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
             let caller = Caller::doc_user(studio);
             to_json(verbs::ask_acknowledge(base, &caller, role, target)?)
         }
+        ReqAction::Approve {
+            studio,
+            person,
+            decision,
+            scope,
+        } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(&studio);
+            let scope = crate::args::ApprovalScope::parse(&scope)
+                .ok_or_else(|| Fail::usage("want once|role|studio"))?;
+            let result = if scope == crate::args::ApprovalScope::Once {
+                let built = crate::commands::build(
+                    &caller,
+                    crate::args::Cmd::Approve {
+                        person: person.clone(),
+                        decision,
+                        scope,
+                    },
+                    env,
+                    base,
+                )?;
+                let event = crate::store::append(&crate::store::studio_dir(base, &studio), built)?;
+                format!("approved (seq {})", event.seq)
+            } else {
+                crate::permit_cmd::approve_scoped_caller(
+                    base, env, &caller, &person, decision, scope,
+                )?
+                .trim_end()
+                .to_string()
+            };
+            to_json(result)
+        }
+        ReqAction::PermitList { studio, role } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(&studio);
+            to_json(crate::permit_cmd::permit_list_base(
+                base,
+                &caller,
+                role.as_deref(),
+            )?)
+        }
+        ReqAction::PermitRevoke { studio, id } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(&studio);
+            to_json(crate::permit_cmd::permit_revoke_base(base, &caller, &id)?)
+        }
         ReqAction::AttentionClear { studio, target } => {
             let studio = cli::check_studio_name(&studio)?;
             let caller = Caller::doc_user(studio);
