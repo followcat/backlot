@@ -264,7 +264,7 @@ fn status_names_each_copy() {
     fs::create_dir_all(devin.parent().unwrap()).unwrap();
     fs::write(&devin, "mine\n").unwrap();
 
-    let out = skill::run(crate::args::SkillCmd::Status, &env).unwrap();
+    let out = skill::run(crate::args::SkillCmd::Status { json: false }, &env).unwrap();
     assert!(
         out.contains("current ~/.claude/skills/backlot/SKILL.md"),
         "{out}"
@@ -336,6 +336,94 @@ fn uninstall_removes_only_our_copies() {
     );
     assert!(!skill_file(&env, "~/.claude/skills").exists());
     assert_eq!(fs::read_to_string(&foreign).unwrap(), "mine\n");
+}
+
+/// `status` covers all five states against one temp HOME, and
+/// `--json` is exactly the published row model.
+#[test]
+fn status_covers_every_state_and_json() {
+    let dir = TestDir::new("backlot-skill-states");
+    let env = home_env(
+        &dir,
+        &[
+            ".claude",
+            ".cursor",
+            ".config/devin",
+            ".commandcode",
+            ".agents",
+        ],
+        &[],
+    );
+    fs::create_dir_all(skill_file(&env, "~/.claude/skills").parent().unwrap()).unwrap();
+    fs::write(
+        skill_file(&env, "~/.claude/skills"),
+        skill::generated(VERSION),
+    )
+    .unwrap();
+    fs::create_dir_all(skill_file(&env, "~/.cursor/skills").parent().unwrap()).unwrap();
+    fs::write(
+        skill_file(&env, "~/.cursor/skills"),
+        skill::generated("0.0.1"),
+    )
+    .unwrap();
+    fs::create_dir_all(skill_file(&env, "~/.config/devin/skills").parent().unwrap()).unwrap();
+    fs::write(skill_file(&env, "~/.config/devin/skills"), "mine\n").unwrap();
+    // `.commandcode` is detected but has no copy: missing. `.agents`
+    // detects the shared codex/cline/pi rows too, so give them a copy
+    // and leave opencode absent by non-detection.
+    fs::create_dir_all(skill_file(&env, "~/.agents/skills").parent().unwrap()).unwrap();
+    fs::write(
+        skill_file(&env, "~/.agents/skills"),
+        skill::generated(VERSION),
+    )
+    .unwrap();
+
+    let out = skill::run(crate::args::SkillCmd::Status { json: false }, &env).unwrap();
+    for word in ["current", "stale", "foreign", "missing", "absent"] {
+        assert!(out.contains(word), "{word} missing from {out}");
+    }
+    let json = skill::run(crate::args::SkillCmd::Status { json: true }, &env).unwrap();
+    let report: backlot_model::summary::AgentSkillSummary = serde_json::from_str(&json).unwrap();
+    assert_eq!(report.version, VERSION);
+    assert_eq!(report.rows.len(), crate::skill_agents::AGENTS.len());
+    let state = |name: &str| {
+        report
+            .rows
+            .iter()
+            .find(|row| row.agent == name)
+            .unwrap()
+            .state
+    };
+    use backlot_model::summary::SkillState;
+    assert_eq!(state("claude-code"), SkillState::Current);
+    assert_eq!(state("cursor"), SkillState::Stale);
+    assert_eq!(state("devin"), SkillState::Foreign);
+    assert_eq!(state("command-code"), SkillState::Missing);
+    assert_eq!(state("opencode"), SkillState::Absent);
+}
+
+/// The shared-machine request path can uninstall exactly the rows it
+/// names; foreign copies still stay put.
+#[test]
+fn targeted_uninstall_removes_only_named_rows() {
+    let dir = TestDir::new("backlot-skill-targeted-uninstall");
+    let env = home_env(&dir, &[".claude", ".cursor"], &[]);
+    skill::run(
+        crate::args::SkillCmd::Install {
+            agents: vec!["claude-code".into(), "cursor".into()],
+            dry_run: false,
+            force: false,
+        },
+        &env,
+    )
+    .unwrap();
+    let out = skill::uninstall_agents(&["claude-code".into()], &env).unwrap();
+    assert!(
+        out.contains("removed ~/.claude/skills/backlot/SKILL.md"),
+        "{out}"
+    );
+    assert!(!skill_file(&env, "~/.claude/skills").exists());
+    assert!(skill_file(&env, "~/.cursor/skills").exists());
 }
 
 /// `show` prints the compiled skill.

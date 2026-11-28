@@ -315,6 +315,13 @@ impl App {
                         kind = WakeKind::Panel;
                     }
                 },
+                reply = self.skill_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_skill_event(reply);
+                        dirty = true;
+                        kind = WakeKind::Panel;
+                    }
+                },
                 reply = self.mv_rx.recv() => {
                     if let Some(reply) = reply {
                         self.on_mv_reply(reply);

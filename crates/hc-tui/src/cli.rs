@@ -443,6 +443,10 @@ pub async fn run_with_server(
         env,
         loaded.config.update.version_check,
     ));
+    app.set_skill_dismissals_path(
+        crate::update_check::cache_path(env)
+            .and_then(|path| path.parent().map(|dir| dir.join("skill-dismissals.json"))),
+    );
     let diag = crate::diag::Diag::start(
         env,
         crate::diag::Sources::new(

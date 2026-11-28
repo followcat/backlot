@@ -41,6 +41,16 @@ fn next_req_id(ts_ms: u64) -> String {
 /// CAS-append one request envelope onto `plugin.backlot.req` (up to 3 CAS
 /// attempts), failing with `"server busy"` when `queue.len() >= 32`.
 pub async fn append_request(client: &Client, envelope: &ReqEnvelope) -> Result<u64, Fail> {
+    append_request_on(client, envelope, None).await
+}
+
+/// CAS-append one request on a specific machine document (`None` is the
+/// connected server core itself).
+pub async fn append_request_on(
+    client: &Client,
+    envelope: &ReqEnvelope,
+    machine: Option<&str>,
+) -> Result<u64, Fail> {
     let env_val = serde_json::to_value(envelope)
         .map_err(|e| Fail::refused(format!("request does not serialize: {e}")))?;
 
@@ -48,7 +58,7 @@ pub async fn append_request(client: &Client, envelope: &ReqEnvelope) -> Result<u
         let got = client
             .doc_get(DocGetParams {
                 name: REQ_DOC_NAME.into(),
-                on: None,
+                on: machine.map(str::to_owned),
             })
             .await
             .map_err(Fail::call)?;
@@ -69,7 +79,7 @@ pub async fn append_request(client: &Client, envelope: &ReqEnvelope) -> Result<u
         match client
             .doc_set(DocSetParams {
                 name: REQ_DOC_NAME.into(),
-                on: None,
+                on: machine.map(str::to_owned),
                 value,
                 version: got.version,
             })
@@ -108,6 +118,22 @@ pub async fn send_request(
     send_envelope(client, endpoint, &envelope, timeout).await
 }
 
+/// Send one request to a machine document (`None` is the connected core)
+/// and wait for that machine's ack.
+pub async fn send_request_on(
+    client: &Client,
+    endpoint: Option<&Endpoint>,
+    machine: Option<&str>,
+    action: &ReqAction,
+    timeout: Duration,
+) -> Result<ResAck, Fail> {
+    let ts_ms = current_ms();
+    let req_id = next_req_id(ts_ms);
+    let envelope = ReqEnvelope::new(req_id.clone(), ts_ms, action, None)
+        .map_err(|e| Fail::refused(format!("request encode: {e}")))?;
+    send_envelope_on(client, endpoint, machine, &envelope, timeout).await
+}
+
 fn timeout_err(req_id: &str) -> Fail {
     Fail::refused(format!(
         "timed out waiting for ack of '{req_id}' (no reply from server)"
@@ -121,6 +147,17 @@ pub async fn send_envelope(
     envelope: &ReqEnvelope,
     timeout: Duration,
 ) -> Result<ResAck, Fail> {
+    send_envelope_on(client, endpoint, None, envelope, timeout).await
+}
+
+/// Send a pre-built envelope to one machine document.
+pub async fn send_envelope_on(
+    client: &Client,
+    endpoint: Option<&Endpoint>,
+    machine: Option<&str>,
+    envelope: &ReqEnvelope,
+    timeout: Duration,
+) -> Result<ResAck, Fail> {
     let mut sub = match endpoint {
         Some(ep) => Subscription::connect(ep, None, &SubscribeParams::default())
             .await
@@ -128,11 +165,11 @@ pub async fn send_envelope(
         None => None,
     };
 
-    let _ = append_request(client, envelope).await?;
+    let _ = append_request_on(client, envelope, machine).await?;
     let deadline = Instant::now() + timeout;
 
     loop {
-        if let Some(ack) = find_ack(client, &envelope.req_id).await? {
+        if let Some(ack) = find_ack_on(client, machine, &envelope.req_id).await? {
             return Ok(ack);
         }
         let Some(rem) = deadline.checked_duration_since(Instant::now()) else {
@@ -150,7 +187,7 @@ pub async fn send_envelope(
                     tokio::time::sleep(wait).await;
                 }
                 Err(_) => {
-                    if let Some(ack) = find_ack(client, &envelope.req_id).await? {
+                    if let Some(ack) = find_ack_on(client, machine, &envelope.req_id).await? {
                         return Ok(ack);
                     }
                     return Err(timeout_err(&envelope.req_id));
@@ -182,11 +219,15 @@ pub async fn send_typed<T: DeserializeOwned>(
     serde_json::from_value(val).map_err(|e| Fail::refused(format!("bad result payload: {e}")))
 }
 
-async fn find_ack(client: &Client, req_id: &str) -> Result<Option<ResAck>, Fail> {
+async fn find_ack_on(
+    client: &Client,
+    machine: Option<&str>,
+    req_id: &str,
+) -> Result<Option<ResAck>, Fail> {
     let got = client
         .doc_get(DocGetParams {
             name: RES_DOC_NAME.into(),
-            on: None,
+            on: machine.map(str::to_owned),
         })
         .await
         .map_err(Fail::call)?;

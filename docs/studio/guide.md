@@ -65,6 +65,17 @@ foreign, and `uninstall` removes only the copies backlot wrote. `install` record
 client or the stage starts on a new version it rewrites the stale copies that manifest lists. It
 never writes a new place by itself, so `backlot --upgrade` refreshes them on the next start.
 
+`backlot skill status --json` prints the machine's whole row model: the version this backlot would
+write and one row per known agent with `agent`, `dir` and `state` (`current`, `stale`, `foreign`,
+`missing` or `absent`). A stage computes the same model at start, rescans it cheaply every ten
+minutes, refreshes it immediately after a skill install or uninstall, and publishes it as the
+additive `agent_skill` object in its `backlot` summary. The client uses that publication — never a
+scan of another machine's filesystem — to mark each machine row, to offer one install notice when
+copies are missing or stale, and to fill **Settings → agent skill**. The notice's Enter installs
+only the `missing` and `stale` rows on the named machines; `d` dismisses that machine at that
+backlot version until the version changes. Foreign copies are never installed over from the
+notice; in Settings their row asks twice before replacing one, the same protection as `--force`.
+
 An external agent may do what the person can, but the person-only actions only when the person
 asked for that action in the conversation — the skill says exactly that. The ledger records which
 agent acted: `BACKLOT_VIA=<agent>` or `--via <agent>` sets `by.via` to `agent:<agent>` on events

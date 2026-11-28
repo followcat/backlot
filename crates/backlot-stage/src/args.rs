@@ -374,7 +374,7 @@ pub enum SkillCmd {
     },
     /// `status`: where the skill is installed and whether each copy is
     /// current, stale or foreign.
-    Status,
+    Status { json: bool },
     /// `show`: print the skill the binary carries.
     Show,
     /// `uninstall`: remove only the copies backlot wrote.

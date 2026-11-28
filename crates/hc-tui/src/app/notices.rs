@@ -12,6 +12,8 @@ pub(super) struct Notice {
     /// Accent dot + click-opens-update semantics (the update toast);
     /// plain rejected-input notices are the red default.
     pub(super) update: bool,
+    /// A notice that owns an explicit key and never expires on its own.
+    pub(super) sticky: bool,
 }
 
 /// The reference's `CopyFeedback` — the `copied to clipboard` card.
@@ -59,6 +61,21 @@ impl App {
             body: body.into(),
             deadline: now + Duration::from_secs(3),
             update: false,
+            sticky: false,
+        });
+        self.sched.mark_dirty(now);
+    }
+
+    /// The Agent Skill notice: same card surface, but sticky because it
+    /// owns explicit install/dismiss keys.
+    pub(super) fn show_skill_notice(&mut self, title: &str, body: &str) {
+        let now = self.now();
+        self.notice = Some(Notice {
+            title: title.into(),
+            body: body.into(),
+            deadline: now,
+            update: true,
+            sticky: true,
         });
         self.sched.mark_dirty(now);
     }
@@ -98,6 +115,7 @@ impl App {
             body: body.into(),
             deadline: now + Duration::from_secs(5),
             update: true,
+            sticky: false,
         });
         self.sched.mark_dirty(now);
     }
@@ -111,7 +129,11 @@ impl App {
 
     /// `true` when the visible notice cleared — the card un-paints.
     pub(super) fn expire_notice(&mut self, now: Instant) -> bool {
-        if self.notice.as_ref().is_some_and(|n| now >= n.deadline) {
+        if self
+            .notice
+            .as_ref()
+            .is_some_and(|n| !n.sticky && now >= n.deadline)
+        {
             self.notice = None;
             return true;
         }

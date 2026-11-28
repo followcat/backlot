@@ -154,7 +154,7 @@ fn fresh_cached_tag(state: &crate::update_state::UpdateCheckState) -> Option<Str
 /// `$XDG_STATE_HOME/backlot/update-check.json`, falling back to
 /// `~/.local/state` — `None` when neither root is set (the check still
 /// runs; it just doesn't persist).
-fn cache_path(env: &Env) -> Option<PathBuf> {
+pub(crate) fn cache_path(env: &Env) -> Option<PathBuf> {
     let root = env
         .get(OsStr::new("XDG_STATE_HOME"))
         .filter(|v| !v.is_empty())

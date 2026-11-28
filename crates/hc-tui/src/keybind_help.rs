@@ -237,7 +237,7 @@ pub(crate) fn keybind_help_groups(
 
 /// Backlot's own sections (S0): the dock and call-sheet toggles, the
 /// four studio keys with the herdr action each one shadows on this
-/// config, and the two-line glyph legend. Studio mode only — plain
+/// config, and the pinned glyph legend. Studio mode only — plain
 /// mode never builds them, so its help stays cell-identical to
 /// herdr's.
 pub(crate) fn backlot_help_groups(
@@ -380,6 +380,7 @@ pub(crate) fn backlot_help_groups(
                     "· wait · ◐ run · ◈ rev · ✓ pass · = pause · ↑/↓ prio",
                 ),
                 entry("roles", "Ⓟ producer · Ⓓ director · Ⓦ writer · Ⓐ actor"),
+                entry("skill", "✓ current · ↻ stale · ! missing · ? unknown"),
             ],
         ),
     ];

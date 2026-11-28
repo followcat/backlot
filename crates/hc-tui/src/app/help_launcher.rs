@@ -680,7 +680,7 @@ impl App {
         groups
     }
 
-    /// The two pinned legend rows — the `glyph legend` section the
+    /// The pinned legend rows — the `glyph legend` section the
     /// classic overlay draws above its footer.
     pub(crate) fn help_legend(&self) -> Vec<(String, String)> {
         crate::keybind_help::backlot_help_groups(

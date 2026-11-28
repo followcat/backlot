@@ -21,6 +21,7 @@ impl App {
         let (image_read_done_tx, image_read_done_rx) = mpsc::channel(8);
         let (mv_tx, mv_rx) = mpsc::channel(16);
         let (update_tx, update_rx) = mpsc::channel(16);
+        let (skill_tx, skill_rx) = mpsc::channel(16);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         // Saved per-endpoint chrome choices win over config; each
@@ -74,6 +75,13 @@ impl App {
         pane.set_tick_epoch(pane_tick_epoch);
         let mut app = App {
             notice: None,
+            skill_notice: None,
+            skill_busy: false,
+            skill_dismissals: None,
+            skill_dismissals_path: None,
+            skill_queue: Default::default(),
+            skill_tx,
+            skill_rx,
             core_start: None,
             update_check: None,
             update_latest: None,

@@ -159,6 +159,19 @@ impl App {
 
     fn route_key_press(&mut self, key: &TerminalKey, width: u16) -> Option<u64> {
         self.sync_focus_before_key();
+        if self.skill_notice_keys_active() && key.input.mods == hc_vt::Mods::NONE {
+            match key.input.key {
+                Key::Enter => {
+                    self.skill_notice_install();
+                    return None;
+                }
+                Key::Char('d') => {
+                    self.skill_notice_dismiss();
+                    return None;
+                }
+                _ => {}
+            }
+        }
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);

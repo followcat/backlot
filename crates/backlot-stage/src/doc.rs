@@ -146,6 +146,7 @@ mod tests {
             hollywood: None,
             backlot_version: None,
             backlot_build: None,
+            agent_skill: None,
             accounts: Vec::new(),
         }
     }

@@ -32,6 +32,8 @@ pub(crate) fn handles(action: &ReqAction) -> bool {
             | ReqAction::Repos { .. }
             | ReqAction::Runners
             | ReqAction::Version
+            | ReqAction::SkillInstall { .. }
+            | ReqAction::SkillUninstall { .. }
     )
 }
 
@@ -95,6 +97,42 @@ pub(crate) async fn dispatch(
         }
         ReqAction::Runners => to_json(crate::runners::detect_report::rows(env)),
         ReqAction::Version => to_json(format!("backlot {}", env!("CARGO_PKG_VERSION"))),
+        ReqAction::SkillInstall {
+            agents,
+            force,
+            as_role,
+        } => {
+            if as_role.as_deref().is_some_and(|role| role != "user") {
+                return Err(Fail::refused("agent skill requests are person-only"));
+            }
+            let output = crate::skill::install(&agents, false, force, env)?;
+            stage.refresh_skill_state();
+            crate::stagelog::stage_log!("skill.install requested by the person");
+            let env = Env {
+                vars: stage.env_vars.clone(),
+            };
+            to_json(backlot_model::req_results::SkillResult {
+                action: "install".into(),
+                output,
+                skill: crate::skill_status::report(&env),
+            })
+        }
+        ReqAction::SkillUninstall { agents, as_role } => {
+            if as_role.as_deref().is_some_and(|role| role != "user") {
+                return Err(Fail::refused("agent skill requests are person-only"));
+            }
+            let output = crate::skill::uninstall_agents(&agents, env)?;
+            stage.refresh_skill_state();
+            crate::stagelog::stage_log!("skill.uninstall requested by the person");
+            let env = Env {
+                vars: stage.env_vars.clone(),
+            };
+            to_json(backlot_model::req_results::SkillResult {
+                action: "uninstall".into(),
+                output,
+                skill: crate::skill_status::report(&env),
+            })
+        }
         _ => unreachable!("handles() gates the studio actions"),
     }
 }

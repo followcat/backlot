@@ -267,6 +267,8 @@ pub(crate) enum StudioAct {
     /// official installer — a popup on remote, the update flow
     /// locally; managed binaries refuse first (W2).
     MachineInstall,
+    /// Open Settings → Agent skill filtered to this machine.
+    MachineSkill,
     /// `machine.connect` on an unreachable endpoint.
     MachineConnect,
     /// `machine.rename` — the same dialog the herdr menu opens.

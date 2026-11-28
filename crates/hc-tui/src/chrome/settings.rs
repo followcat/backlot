@@ -15,6 +15,8 @@ pub(crate) enum SettingsSection {
     Integrations,
     /// Backlot's own tab (S0) — studio mode only.
     Studio,
+    /// Per-machine Agent Skill management — studio mode only.
+    AgentSkill,
 }
 
 impl SettingsSection {
@@ -32,6 +34,7 @@ impl SettingsSection {
         let mut sections = Self::ALL.to_vec();
         if studio {
             sections.push(Self::Studio);
+            sections.push(Self::AgentSkill);
         }
         sections
     }
@@ -44,6 +47,7 @@ impl SettingsSection {
             Self::Toast => "toasts",
             Self::Integrations => "integrations",
             Self::Studio => "studio",
+            Self::AgentSkill => "agent skill",
         }
     }
 }
@@ -73,6 +77,112 @@ pub(crate) const STUDIO_DOCK_WIDTH: usize = 2;
 pub(crate) const STUDIO_OVERSEER: usize = 3;
 pub(crate) const STUDIO_ROWS: usize = 4;
 
+pub(crate) fn skill_state_rank(state: backlot_model::summary::SkillState) -> u8 {
+    use backlot_model::summary::SkillState;
+    match state {
+        SkillState::Current => 0,
+        SkillState::Stale => 1,
+        SkillState::Missing => 2,
+        SkillState::Foreign => 3,
+        SkillState::Absent => 4,
+    }
+}
+
+/// One agent row in the Agent Skill settings tab.
+#[derive(Debug, Clone)]
+pub(crate) struct SkillAgentView {
+    pub agent: String,
+    pub dir: String,
+    pub state: backlot_model::summary::SkillState,
+}
+
+/// One machine's published (or locally computed) skill state.
+#[derive(Debug, Clone)]
+pub(crate) struct SkillMachineView {
+    pub machine: Option<String>,
+    pub label: String,
+    pub rows: Vec<SkillAgentView>,
+    pub known: bool,
+}
+
+/// The flattened rows the Agent Skill tab renders and keys act on.
+#[derive(Debug, Clone)]
+pub(crate) enum SkillSettingsRow {
+    AllMachines,
+    Machine {
+        machine: Option<String>,
+        label: String,
+        agents: Vec<String>,
+    },
+    UnknownMachine {
+        label: String,
+    },
+    Agent {
+        machine: Option<String>,
+        agent: String,
+        dir: String,
+        state: backlot_model::summary::SkillState,
+    },
+    /// One folded, inert row for the agents that are not installed on
+    /// the machine at all. Keeping them out of the tree is what lets
+    /// every machine fit in the overlay.
+    AbsentAgents {
+        agents: Vec<String>,
+    },
+}
+
+pub(crate) fn skill_rows(settings: &SettingsOverlay) -> Vec<SkillSettingsRow> {
+    use backlot_model::summary::SkillState;
+    let mut out = if settings.agent_skill_filter.is_some() {
+        Vec::new()
+    } else {
+        vec![SkillSettingsRow::AllMachines]
+    };
+    for machine in &settings.agent_skill {
+        if settings
+            .agent_skill_filter
+            .as_ref()
+            .is_some_and(|wanted| wanted != &machine.machine)
+        {
+            continue;
+        }
+        if !machine.known {
+            out.push(SkillSettingsRow::UnknownMachine {
+                label: machine.label.clone(),
+            });
+            continue;
+        }
+        let agents = machine
+            .rows
+            .iter()
+            .filter(|row| matches!(row.state, SkillState::Missing | SkillState::Stale))
+            .map(|row| row.agent.clone())
+            .collect::<Vec<_>>();
+        out.push(SkillSettingsRow::Machine {
+            machine: machine.machine.clone(),
+            label: machine.label.clone(),
+            agents,
+        });
+        let mut absent = Vec::new();
+        for row in &machine.rows {
+            if row.state == SkillState::Absent {
+                absent.push(row.agent.clone());
+            } else {
+                out.push(SkillSettingsRow::Agent {
+                    machine: machine.machine.clone(),
+                    agent: row.agent.clone(),
+                    dir: row.dir.clone(),
+                    state: row.state,
+                });
+            }
+        }
+        if !absent.is_empty() {
+            out.push(SkillSettingsRow::AbsentAgents { agents: absent });
+        }
+    }
+    out
+}
+
 /// The reference `api::schema::IntegrationState`. hc's core publishes no
 /// integration rows; the enum survives so the render port stays verbatim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +211,12 @@ pub(crate) struct SettingsOverlay {
     pub sections: Vec<SettingsSection>,
     /// The studio tab's values — `None` outside studio mode.
     pub studio: Option<StudioView>,
+    /// Agent Skill rows by machine; empty only before studio data arrives.
+    pub agent_skill: Vec<SkillMachineView>,
+    /// `Some(machine)` when opened from a machine row menu.
+    pub agent_skill_filter: Option<Option<String>>,
+    /// A foreign row's first Enter — a second Enter is the destructive replace.
+    pub skill_confirm: Option<(Option<String>, String)>,
     pub original_theme_name: String,
     /// The theme list shown: the reference's, or backlot's own.
     pub theme_names: &'static [&'static str],

@@ -18,6 +18,7 @@ use super::{
         IntegrationInfo, IntegrationState, SettingsOverlay, SettingsSection,
         integration_needs_install, normalized_theme_name,
     },
+    text::truncate_end,
 };
 
 #[derive(Default)]
@@ -58,6 +59,30 @@ fn draw_choice(
         rect.y,
         rect.width,
         &format!(" {marker} {label}{current}"),
+        style,
+    );
+}
+
+fn draw_dim_choice(
+    buffer: &mut Buffer,
+    rect: Rect,
+    label: &str,
+    selected: bool,
+    dim: bool,
+    palette: &Palette,
+) {
+    let mut style = choice_style(selected, palette);
+    if dim && !selected {
+        style = style.fg(palette.overlay0);
+    }
+    buffer.set_style(rect, style);
+    let marker = if selected { "▸" } else { " " };
+    put_text(
+        buffer,
+        rect.x,
+        rect.y,
+        rect.width,
+        &format!(" {marker} {label}"),
         style,
     );
 }
@@ -239,6 +264,9 @@ pub(crate) fn render_settings_overlay_with_shadow(
         }
         SettingsSection::Studio => {
             render_studio(buffer, content, settings, palette, &mut choice_hits);
+        }
+        SettingsSection::AgentSkill => {
+            render_agent_skill(buffer, content, settings, palette, &mut choice_hits);
         }
     }
 
@@ -502,6 +530,113 @@ fn render_studio(
             palette,
         );
         hits.push((rect, row));
+    }
+}
+
+/// The Agent Skill tab: a flat, scrolling machine/agent tree. Enter
+/// installs (or replaces a foreign row after its second confirmation);
+/// `u` uninstalls the selected row.
+fn render_agent_skill(
+    buffer: &mut Buffer,
+    area: Rect,
+    settings: &SettingsOverlay,
+    palette: &Palette,
+    hits: &mut Vec<(Rect, usize)>,
+) {
+    use crate::chrome::settings::{SkillSettingsRow, skill_rows};
+    let bg = overlay_bg(palette);
+    put_text(
+        buffer,
+        area.x,
+        area.y,
+        area.width,
+        "agent skill",
+        Style::default()
+            .fg(palette.text)
+            .bg(bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    let guidance = settings
+        .skill_confirm
+        .as_ref()
+        .map(|(_, agent)| format!("enter again to replace {agent}"))
+        .unwrap_or_else(|| "enter install · u uninstall · foreign rows ask twice".to_owned());
+    put_text(
+        buffer,
+        area.x,
+        area.y + 1,
+        area.width,
+        &guidance,
+        Style::default().fg(palette.overlay1).bg(bg),
+    );
+    let rows = skill_rows(settings);
+    let list = Rect::new(
+        area.x,
+        area.y + 3,
+        area.width,
+        area.height.saturating_sub(3),
+    );
+    let capacity = usize::from(list.height).max(1);
+    let visible = if rows.len() > capacity {
+        capacity.saturating_sub(1).max(1)
+    } else {
+        capacity
+    };
+    let scroll = settings
+        .selected
+        .saturating_sub(visible.saturating_sub(1))
+        .min(rows.len().saturating_sub(visible));
+    for (line, (index, row)) in rows
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible)
+        .enumerate()
+    {
+        let rect = Rect::new(list.x, list.y + line as u16, list.width, 1);
+        let label = match row {
+            SkillSettingsRow::AllMachines => "install on all machines".to_owned(),
+            SkillSettingsRow::Machine { label, agents, .. } => {
+                if agents.is_empty() {
+                    format!("{label} — current")
+                } else {
+                    let plural = if agents.len() == 1 { "agent" } else { "agents" };
+                    format!("{label} — install {} {plural}", agents.len())
+                }
+            }
+            SkillSettingsRow::UnknownMachine { label } => {
+                format!("{label} — unknown (its stage publishes no skill state)")
+            }
+            SkillSettingsRow::Agent {
+                agent, dir, state, ..
+            } => {
+                format!("  {agent:<13} {:<8} {dir}", state.as_str())
+            }
+            SkillSettingsRow::AbsentAgents { agents, .. } => truncate_end(
+                &format!("  not detected: {}", agents.join(", ")),
+                usize::from(list.width.saturating_sub(3)),
+            ),
+        };
+        let dim = matches!(row, SkillSettingsRow::AbsentAgents { .. });
+        draw_dim_choice(
+            buffer,
+            rect,
+            &label,
+            index == settings.selected,
+            dim,
+            palette,
+        );
+        hits.push((rect, index));
+    }
+    if scroll + visible < rows.len() && capacity > 1 {
+        put_text(
+            buffer,
+            list.x,
+            list.y + visible as u16,
+            list.width,
+            " ↓ more",
+            Style::default().fg(palette.overlay0).bg(bg),
+        );
     }
 }
 

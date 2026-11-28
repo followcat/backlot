@@ -37,7 +37,8 @@ async fn the_studio_tab_appears_only_in_studio_mode() {
         .as_ref()
         .map(|s| s.sections.clone())
         .unwrap_or_default();
-    assert_eq!(sections.last(), Some(&SettingsSection::Studio));
+    assert!(sections.contains(&SettingsSection::Studio));
+    assert_eq!(sections.last(), Some(&SettingsSection::AgentSkill));
     assert!(
         app.settings
             .as_ref()

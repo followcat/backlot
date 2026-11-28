@@ -80,6 +80,7 @@ mod shared_rpc;
 mod sidebar_edge;
 mod sidebar_marquee;
 mod single_machine_sidebar;
+mod skill_sync;
 mod stage_toast;
 mod standby;
 mod studio;

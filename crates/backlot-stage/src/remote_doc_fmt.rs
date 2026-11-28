@@ -200,6 +200,15 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
             }
         }
         ReqAction::Version => parse_res::<String>(&ack)?,
+        ReqAction::SkillInstall { .. } | ReqAction::SkillUninstall { .. } => {
+            let res: backlot_model::req_results::SkillResult = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&res)
+                    .map_err(|e| Fail::refused(format!("skill result: {e}")))?
+            } else {
+                res.output
+            }
+        }
         ReqAction::HollywoodSwitch { .. } | ReqAction::HollywoodSwitchCancel => {
             let res: backlot_model::req_results::HollywoodSwitchResult = parse_res(&ack)?;
             if json {

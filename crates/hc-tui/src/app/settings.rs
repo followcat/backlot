@@ -36,6 +36,9 @@ impl App {
             selected: theme_index(self.shell.own_theme.names(), &self.shell.theme_name),
             sections: SettingsSection::visible(self.studio.active),
             studio: self.studio_view(),
+            agent_skill: self.agent_skill_view(),
+            agent_skill_filter: None,
+            skill_confirm: None,
             original_theme_name: self.shell.theme_name.clone(),
             theme_names: self.shell.own_theme.names(),
             original_palette: self.shell.palette.clone(),
@@ -71,6 +74,119 @@ impl App {
             })
     }
 
+    /// Every connected machine's Agent Skill rows. A stage document answers for
+    /// remote machines; outside server mode the local machine uses the
+    /// same filesystem implementation as the CLI, so the manual view is
+    /// current even before the stage's next ten-minute scan.
+    fn agent_skill_view(&self) -> Vec<crate::chrome::settings::SkillMachineView> {
+        use crate::chrome::settings::{SkillAgentView, SkillMachineView};
+        fn view(
+            machine: Option<String>,
+            label: String,
+            skill: Option<&backlot_model::summary::AgentSkillSummary>,
+        ) -> SkillMachineView {
+            let mut rows = skill
+                .map(|skill| {
+                    skill
+                        .rows
+                        .iter()
+                        .map(|row| SkillAgentView {
+                            agent: row.agent.clone(),
+                            dir: row.dir.clone(),
+                            state: row.state,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            rows.sort_by_key(|row| crate::chrome::settings::skill_state_rank(row.state));
+            SkillMachineView {
+                machine,
+                label,
+                rows,
+                known: skill.is_some(),
+            }
+        }
+
+        let summaries = self.panel_summaries();
+        let mut out = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(ms) = summaries.iter().find(|ms| ms.machine.is_none()) {
+            out.push(view(None, "Local".into(), ms.summary.agent_skill.as_ref()));
+        } else {
+            #[cfg(not(test))]
+            {
+                let report =
+                    backlot_stage::skill::status_report(&backlot_stage::cli::Env::process());
+                out.push(SkillMachineView {
+                    machine: None,
+                    label: "Local".into(),
+                    rows: report
+                        .rows
+                        .iter()
+                        .map(|row| SkillAgentView {
+                            agent: row.agent.clone(),
+                            dir: row.dir.clone(),
+                            state: row.state,
+                        })
+                        .collect(),
+                    known: true,
+                });
+                if let Some(local) = out.first_mut() {
+                    local
+                        .rows
+                        .sort_by_key(|row| crate::chrome::settings::skill_state_rank(row.state));
+                }
+            }
+            #[cfg(test)]
+            out.push(view(None, "Local".into(), None));
+        }
+
+        for endpoint in &self.projection.endpoints {
+            let crate::chrome::snapshot::ClientEndpointId::Remote(name) = &endpoint.endpoint_id
+            else {
+                continue;
+            };
+            if !matches!(
+                endpoint.status,
+                crate::chrome::snapshot::ClientEndpointStatus::Online
+                    | crate::chrome::snapshot::ClientEndpointStatus::Attention
+            ) {
+                continue;
+            }
+            seen.insert(name.clone());
+            let ms = summaries
+                .iter()
+                .find(|ms| ms.machine.as_deref() == Some(name.as_str()));
+            out.push(view(
+                Some(name.clone()),
+                name.clone(),
+                ms.and_then(|ms| ms.summary.agent_skill.as_ref()),
+            ));
+        }
+        // A watched summary whose machine list row has not arrived yet is
+        // still useful evidence; a machine with no document remains absent.
+        for ms in summaries.iter().filter(|ms| ms.machine.is_some()) {
+            let name = ms.machine.clone().unwrap_or_default();
+            if seen.insert(name.clone()) {
+                out.push(view(
+                    Some(name.clone()),
+                    name,
+                    ms.summary.agent_skill.as_ref(),
+                ));
+            }
+        }
+        out
+    }
+
+    /// The machine-row menu's Agent Skill view, filtered to that machine.
+    pub(crate) fn open_agent_skill_settings(&mut self, machine: Option<String>) {
+        self.open_settings_overlay();
+        if let Some(settings) = self.settings.as_mut() {
+            settings.agent_skill_filter = Some(machine);
+        }
+        self.select_settings_section(SettingsSection::AgentSkill);
+    }
+
     fn selected_index_for_settings_section(&self, section: SettingsSection) -> usize {
         match section {
             SettingsSection::Theme => {
@@ -79,7 +195,9 @@ impl App {
             SettingsSection::Indicators => indicator_index(self.shell.status_indicators),
             SettingsSection::Sound => usize::from(!self.shell.sound.enabled),
             SettingsSection::Toast => toast_index(self.shell.toast_delivery),
-            SettingsSection::Integrations | SettingsSection::Studio => 0,
+            SettingsSection::Integrations
+            | SettingsSection::Studio
+            | SettingsSection::AgentSkill => 0,
         }
     }
 
@@ -116,6 +234,7 @@ impl App {
                 SettingsSection::Toast => 4,
                 SettingsSection::Integrations => settings.integrations.len(),
                 SettingsSection::Studio => crate::chrome::settings::STUDIO_ROWS,
+                SettingsSection::AgentSkill => crate::chrome::settings::skill_rows(settings).len(),
             },
             _ => 0,
         }
@@ -252,6 +371,7 @@ impl App {
             // No `integration.install` method exists — Enter is inert.
             SettingsSection::Integrations => {}
             SettingsSection::Studio => self.apply_studio_row(selected),
+            SettingsSection::AgentSkill => self.apply_agent_skill_row(selected, false),
         }
     }
 
@@ -317,6 +437,91 @@ impl App {
         }
     }
 
+    /// Enter on an Agent Skill row. Foreign rows require a second
+    /// Enter on the same row — the client-side form of the CLI's
+    /// `--force` confirmation.
+    fn apply_agent_skill_row(&mut self, selected: usize, uninstall: bool) {
+        use crate::chrome::settings::{SkillSettingsRow, skill_rows};
+        let Some(settings) = self.settings.as_ref() else {
+            return;
+        };
+        let Some(row) = skill_rows(settings).get(selected).cloned() else {
+            return;
+        };
+        let confirm = settings.skill_confirm.clone();
+        match row {
+            SkillSettingsRow::AllMachines => {
+                let jobs = self
+                    .settings
+                    .as_ref()
+                    .map(|settings| {
+                        settings
+                            .agent_skill
+                            .iter()
+                            .filter(|machine| machine.known)
+                            .map(|machine| {
+                                let agents = machine
+                                    .rows
+                                    .iter()
+                                    .filter(|row| {
+                                        matches!(
+                                            row.state,
+                                            backlot_model::summary::SkillState::Missing
+                                                | backlot_model::summary::SkillState::Stale
+                                        )
+                                    })
+                                    .map(|row| row.agent.clone())
+                                    .collect::<Vec<_>>();
+                                (machine.machine.clone(), agents)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                for (machine, agents) in jobs {
+                    if uninstall || !agents.is_empty() {
+                        self.start_skill_action(machine, agents, uninstall, false);
+                    }
+                }
+            }
+            SkillSettingsRow::Machine {
+                machine, agents, ..
+            } => {
+                let agents = if uninstall { Vec::new() } else { agents };
+                self.start_skill_action(machine, agents, uninstall, false);
+            }
+            SkillSettingsRow::UnknownMachine { .. } | SkillSettingsRow::AbsentAgents { .. } => {}
+            SkillSettingsRow::Agent {
+                machine,
+                agent,
+                state,
+                ..
+            } => {
+                let foreign = state == backlot_model::summary::SkillState::Foreign;
+                let force = foreign && confirm == Some((machine.clone(), agent.clone()));
+                if foreign && !uninstall && !force {
+                    if let Some(settings) = self.settings.as_mut() {
+                        settings.skill_confirm = Some((machine, agent));
+                    }
+                    return;
+                }
+                self.start_skill_action(machine, vec![agent], uninstall, force && !uninstall);
+            }
+        }
+        if let Some(settings) = self.settings.as_mut() {
+            settings.skill_confirm = None;
+        }
+    }
+
+    /// `u` uninstalls the selected Agent Skill row (or machine/machine set).
+    pub(super) fn uninstall_agent_skill_row(&mut self) {
+        let Some(settings) = self.settings.as_ref() else {
+            return;
+        };
+        if settings.section == SettingsSection::AgentSkill {
+            self.apply_agent_skill_row(settings.selected, true);
+        }
+    }
+
     /// `route_settings_key` — while the overlay is open it owns every key.
     pub(super) fn route_settings_key(&mut self, key: &TerminalKey) -> bool {
         if self.settings.is_none() {
@@ -354,6 +559,10 @@ impl App {
         }
         if matches!(code, KeyCode::Down | KeyCode::Char('j')) && modifiers.is_empty() {
             self.move_settings_selection(1);
+            return true;
+        }
+        if code == KeyCode::Char('u') && modifiers.is_empty() {
+            self.uninstall_agent_skill_row();
             return true;
         }
         if matches!(code, KeyCode::Enter | KeyCode::Char(' ')) && modifiers.is_empty() {

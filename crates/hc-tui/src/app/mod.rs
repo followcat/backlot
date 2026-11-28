@@ -72,6 +72,7 @@ mod selection_copy;
 mod settings;
 mod shared;
 mod shell_state;
+mod skill_sync;
 mod stage_log;
 mod studio;
 mod studio_dialog;
@@ -155,6 +156,14 @@ type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 /// The whole application.
 pub struct App {
     notice: Option<notices::Notice>,
+    /// The aggregate Agent Skill notice's machine rows while its card is up.
+    skill_notice: Option<Vec<skill_sync::SkillNeed>>,
+    skill_busy: bool,
+    skill_dismissals: Option<std::collections::BTreeMap<String, String>>,
+    skill_dismissals_path: Option<std::path::PathBuf>,
+    skill_queue: std::collections::VecDeque<skill_sync::SkillJob>,
+    skill_tx: mpsc::Sender<skill_sync::SkillEvent>,
+    skill_rx: mpsc::Receiver<skill_sync::SkillEvent>,
     /// The one-shot `hc server start` report — `Some` until it lands.
     core_start: Option<crate::core_start::Report>,
     update_check: Option<crate::update_check::Report>,
