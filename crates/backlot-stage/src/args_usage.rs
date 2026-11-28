@@ -26,7 +26,7 @@ pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>\n  cl
 pub(crate) const U_RESTART: &str = "usage: backlot restart --person <role key> [--fresh] [--reason <r>]\n  restart stops the person's terminal and launches it again under the same\n  identity. It resumes the recorded session when the runner supports resume by\n  id; --fresh starts a new session with the role's prompt.";
 pub(crate) const U_RECAST: &str = "usage: backlot recast --person producer|director|writer | actor-<task>-c<n>\n       --runner <r> --model <m> [--effort <e>]\n       [--permission-profile standard|worktree|readonly] [--reason <r>] [--studio <s>]\n  A fixed role swaps the agent that plays it; an actor key swaps the actor on its\n  task (its newest cast's key). Either way the terminal name and the work area\n  stay, the conversation is new, and the task's deliveries and budget stay.";
 pub(crate) const U_APPROVE: &str =
-    "usage: backlot approve --person <role key> --decision allow|deny";
+    "usage: backlot approve --person <role key> --decision allow|deny [--scope once|role|studio]";
 pub(crate) const U_ATTENTION: &str = "usage: backlot attention clear <seq>";
 pub(crate) const U_DELIVER: &str = "usage: backlot deliver [--commits A..B] --report <f|-> [--check name=pass|fail...]\n       [--tokens-in <n>] [--tokens-out <n>] [--cache-read-tokens <n>] [--cost-usd <d>]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
