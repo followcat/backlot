@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+- The README and a new project page show 0.4.31, with new screenshots and animations.
+
 ## 0.4.31 — 2026-11-28
 
 ### Fixed
