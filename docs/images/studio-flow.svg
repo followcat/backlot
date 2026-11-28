@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-labelledby="t d">
   <title id="t">How a backlot studio works</title>
-  <desc id="d">You give a requirement to the producer. The producer and the writer agree on a plan, the director splits it into tasks and casts actors, each actor works in its own git worktree, the stage runs checks on every delivery, the director reviews it, and accepted work is merged. Hollywood watches every studio and proposes cards that you apply.</desc>
+  <desc id="d">You give a requirement to the producer. You, the producer, the writer and the director continue the opening discussion until the design is final. The director then splits the plan into tasks and casts actors, each actor works in its own git worktree, the stage runs checks on every delivery, the director reviews it, and accepted work is merged. The cast initializes the studio and can change later. Only you finish the studio. Hollywood watches every studio and proposes cards that you apply.</desc>
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#8892ad"/>
@@ -32,7 +32,7 @@
   <!-- the studio -->
   <rect x="40" y="136" width="1120" height="272" rx="6" fill="none" stroke="#39425c" stroke-width="1"/>
   <text x="64" y="164" class="h" fill="#8892ad">A STUDIO</text>
-  <text x="170" y="164" class="s">one requirement, one cast, one ledger</text>
+  <text x="170" y="164" class="s">the cast initializes it — and can change later</text>
 
   <g>
     <rect x="60" y="196" width="120" height="64" rx="6" fill="none" stroke="#ece5d3" stroke-width="1.5"/>
@@ -44,7 +44,7 @@
 
     <rect x="220" y="316" width="120" height="64" rx="6" class="box"/>
     <text x="280" y="344" class="n" text-anchor="middle">Writer</text>
-    <text x="280" y="364" class="s" text-anchor="middle">plan, acceptance</text>
+    <text x="280" y="364" class="s" text-anchor="middle">design, plan</text>
 
     <rect x="380" y="196" width="120" height="64" rx="6" class="box"/>
     <text x="440" y="224" class="n" text-anchor="middle">Director</text>
@@ -82,6 +82,7 @@
     <path d="M920 262V332H600V284" marker-end="url(#a)"/>
   </g>
   <text x="200" y="182" class="s" text-anchor="middle">requirement</text>
+  <text x="280" y="296" class="s" text-anchor="middle">opening discussion until the design is final</text>
   <text x="360" y="182" class="s" text-anchor="middle">dispatch</text>
   <text x="520" y="182" class="s" text-anchor="middle">cast</text>
   <text x="680" y="182" class="s" text-anchor="middle">deliver</text>
@@ -99,6 +100,6 @@
 
   <rect x="612" y="432" width="548" height="96" rx="6" fill="#171b28" stroke="#39425c" stroke-width="1"/>
   <text x="636" y="462" class="h" fill="#f0b24a">THE LEDGER</text>
-  <text x="636" y="486" class="l">every step is a recorded event: talking never moves a task,</text>
-  <text x="636" y="506" class="l">a backlot command does</text>
+  <text x="636" y="486" class="l">every step is a recorded event; only you finish the studio:</text>
+  <text x="636" y="506" class="l">talking never moves a task — a backlot command does</text>
 </svg>
