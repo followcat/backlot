@@ -82,6 +82,7 @@ impl App {
                         ),
                         ConfirmFor::DirOverride {
                             key: key.clone(),
+                            role: role.role.clone(),
                             allow,
                         },
                     ));
@@ -175,7 +176,10 @@ impl App {
                             "{}'s terminal is removed; the role stays in the ledger and can reopen. Close it?",
                             role.name
                         ),
-                        ConfirmFor::Close { key: key.clone() },
+                        ConfirmFor::Close {
+                            key: key.clone(),
+                            role: role.role.clone(),
+                        },
                     ));
                 }
             }
@@ -196,6 +200,7 @@ impl App {
                         ),
                         ConfirmFor::ClearAttention {
                             key: key.clone(),
+                            role: role.role.clone(),
                             seq,
                         },
                     ));
