@@ -90,35 +90,15 @@ pub(crate) fn covering_shell_grants(
     env: &crate::cli::Env,
 ) -> Option<Vec<String>> {
     let studio = state.studio.as_ref()?;
-    if !matches!(
-        crate::guard_shell::classify_command_line(
-            command,
-            &studio.push,
-            std::path::Path::new(&studio.repo),
-            env
-        ),
-        crate::guard_rules::GuardVerdict::Allow
-    ) {
-        return None;
-    }
-    let derived = crate::permit_rules::coverage(command).ok()?;
     let key = role_key(state, role);
     let grants = grants_for(state, &key);
-    let mut used = Vec::new();
-    for segment in derived {
-        if fixed_covers(&segment.rule) {
-            continue;
-        }
-        let grant = grants.iter().find(|g| {
-            g.kind == PermitKind::Shell
-                && (g.rule == segment.rule
-                    || g.rule == crate::permit_cmd::strip_git_location(&segment.rule))
-        })?;
-        if !used.iter().any(|id| id == &grant.id) {
-            used.push(grant.id.clone());
-        }
-    }
-    Some(used)
+    covering_shell_grants_in(
+        &grants,
+        command,
+        &studio.push,
+        std::path::Path::new(&studio.repo),
+        env,
+    )
 }
 
 /// The runner allow key for an auto-answer, through the same caps table
