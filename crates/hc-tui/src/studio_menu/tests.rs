@@ -110,6 +110,7 @@ fn a_live_role_rows_items() {
             "Peek screen (p)",
             "Tell alice…",
             "Inspect task t1 (v)",
+            "Permissions…",
             "Restart alice",
             "Recast…",
             "Close alice…"
@@ -131,6 +132,7 @@ fn a_user_prompt_rows_items() {
             "Deny prompt (d)",
             "Peek screen (p)",
             "Focus terminal",
+            "Permissions…",
             "Restart alice",
             "Recast…",
             "Clear stale attention #7…"
@@ -155,6 +157,7 @@ fn a_director_prompt_rows_items() {
             "Inspect task t1 (v)",
             "Answer prompt myself: Allow…",
             "Answer prompt myself: Deny…",
+            "Permissions…",
             "Restart alice",
             "Recast…",
             "Clear stale attention #7…"

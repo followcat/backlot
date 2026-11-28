@@ -278,6 +278,7 @@ async fn a_prompt_peek_answers_y_and_d() {
         "the prompt peek's footer: {text}"
     );
     key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec![
@@ -329,6 +330,7 @@ async fn y_on_the_hollywood_prompt_row_sends_the_one_time_allow() {
     alt_y(&mut app);
     app.hollywood_select(Target::Hollywood);
     key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec![
@@ -557,7 +559,9 @@ async fn enter_on_hollywood_ask_runs_allow_by_default_and_open_when_moved_right(
     alt_y(&mut app);
     app.hollywood_select(Target::Hollywood);
 
-    // Default highlighted chip is `[allow y]`: Enter runs allow and stays on sheet.
+    // Default highlighted chip is `[allow y]`: Enter opens the choice
+    // dialog, whose default `Allow once` is submitted by a second Enter.
+    key(&mut app, hc_vt::Key::Enter);
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     assert_eq!(

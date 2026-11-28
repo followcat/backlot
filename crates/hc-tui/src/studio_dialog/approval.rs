@@ -83,13 +83,14 @@ impl ApprovalDialog {
 
     pub(crate) fn choices(&self) -> Vec<(ApprovalChoice, String)> {
         let mut out = vec![(ApprovalChoice::Once, "Allow once".to_string())];
-        let hollywood = matches!(self.target, ApprovalTarget::Hollywood);
-        if self.once_only.is_none() && !hollywood {
+        if self.once_only.is_none() {
             out.push((
                 ApprovalChoice::Role,
                 format!("Allow for {} — {}", self.role_label, self.rule_text()),
             ));
-            if !self.outward {
+            // Hollywood has no wider studio scope; its choice list stops
+            // at its own role. Outward commands are never studio-wide.
+            if !self.outward && !matches!(self.target, ApprovalTarget::Hollywood) {
                 out.push((
                     ApprovalChoice::Studio,
                     format!("Allow for the studio — {}", self.rule_text()),
@@ -121,5 +122,74 @@ impl ApprovalDialog {
         {
             self.selected = at;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_choice_list_matches_scope_rules() {
+        let key = StudioKey::local("acme-shop");
+        let d = ApprovalDialog::new(
+            ApprovalTarget::Studio {
+                key,
+                role: "actor-alice".into(),
+            },
+            "alice",
+            Some("git status"),
+            false,
+        );
+        let labels: Vec<String> = d.choices().into_iter().map(|(_, l)| l).collect();
+        assert_eq!(labels[0], "Allow once");
+        assert!(labels[1].starts_with("Allow for alice — git"));
+        assert!(labels[2].starts_with("Allow for the studio — git"));
+        assert_eq!(labels.last().unwrap(), "Deny");
+
+        let h = ApprovalDialog::new(
+            ApprovalTarget::Hollywood,
+            "hollywood",
+            Some("git status"),
+            false,
+        );
+        let kinds: Vec<ApprovalChoice> = h.choices().into_iter().map(|(c, _)| c).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ApprovalChoice::Once,
+                ApprovalChoice::Role,
+                ApprovalChoice::Deny
+            ]
+        );
+    }
+
+    #[test]
+    fn outward_and_once_only_prompts_hide_wide_grants() {
+        let key = StudioKey::local("acme-shop");
+        let outward = ApprovalDialog::new(
+            ApprovalTarget::Studio {
+                key: key.clone(),
+                role: "actor-alice".into(),
+            },
+            "alice",
+            Some("git push origin main"),
+            false,
+        );
+        let kinds: Vec<ApprovalChoice> = outward.choices().into_iter().map(|(c, _)| c).collect();
+        assert!(!kinds.contains(&ApprovalChoice::Studio), "{kinds:?}");
+
+        let once = ApprovalDialog::new(
+            ApprovalTarget::Studio {
+                key,
+                role: "actor-alice".into(),
+            },
+            "alice",
+            Some("rm -rf build"),
+            false,
+        );
+        let kinds: Vec<ApprovalChoice> = once.choices().into_iter().map(|(c, _)| c).collect();
+        assert_eq!(kinds, vec![ApprovalChoice::Once, ApprovalChoice::Deny]);
+        assert!(once.once_only.is_some());
     }
 }

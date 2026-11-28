@@ -188,6 +188,7 @@ async fn enter_on_a_waiting_row_runs_through_the_tracker() {
     app.help = true;
     select_row(&mut app, "Allow prompt #7");
     app.help_launcher_activate();
+    key(&mut app, hc_vt::Key::Enter);
     assert!(!app.help, "the overlay closes");
     let argv = recorded.lock().unwrap();
     assert_eq!(argv.len(), 1, "one action ran: {argv:?}");
@@ -339,6 +340,7 @@ async fn arrows_move_the_selection_and_the_row_hit_runs() {
         rect.x + 2,
         rect.y,
     ));
+    key(&mut app, hc_vt::Key::Enter);
     assert!(!app.help, "the click ran the row");
     assert_eq!(recorded.lock().unwrap().len(), 1);
 }

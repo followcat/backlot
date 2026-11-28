@@ -300,6 +300,7 @@ async fn switch_lifecycle_states_render_call_sheet_pill_and_toasts() {
     assert!(sheet_ap.contains("cargo test"), "{sheet_ap}");
     assert!(sheet_ap.contains("allow"), "{sheet_ap}");
     key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().last().unwrap(),
         &vec![

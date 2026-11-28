@@ -366,6 +366,7 @@ async fn cast_chips_tell_and_action_shortcuts() {
         "Right activates Cast inline chip"
     );
     key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Enter);
     assert!(
         !recorded.lock().unwrap().is_empty(),
         "`y` in Cast answers user prompt"
