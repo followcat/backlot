@@ -36,6 +36,10 @@ BACKLOT_VIA=claude-code backlot tell producer --text "Please add search." --stud
 running you: `claude-code`, `codex`, `cursor`, `devin`, `command-code`, `opencode`, or a
 similar lowercase name matching `[a-z0-9-]{1,32}`.
 
+**Always act `--as user`.** Never pass `--as <role>` or an actor key, and never run a role's
+verbs: a role's work belongs in that role's own terminal, and running it from outside forges
+that role. To get a role's work done, `tell` that role.
+
 ## Read before you act
 
 ```sh
@@ -52,24 +56,25 @@ ask, design note or report. `backlot guide <topic>` prints the installed version
 
 ## Act
 
-Start a studio, ask a question, send a requirement or move a task:
+Only what the person does — every one `--as user`:
 
 ```sh
-backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml --ask "Build the checkout flow" --dry-run
-backlot stage start
+backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml --ask "Build the checkout flow" --dry-run --as user
+backlot stage start --as user
+backlot tell producer --text "Please add search." --studio acme-shop --as user
 backlot tell director --file /home/user/note.md --studio acme-shop --as user
-backlot ask --file /home/user/question.md --studio acme-shop --as producer
 backlot req revise --file /home/user/req-v2.md --summary "second version" --studio acme-shop --as user
-backlot task new --title "Add search" --kind feature --acceptance-file /home/user/acc.md --studio acme-shop --as director
-backlot cast --task t1 --actor actor-a --reason "backend work" --studio acme-shop --as director
-backlot plan publish --kind plan --file /home/user/plan.md --studio acme-shop --as writer
-backlot dispatch --file /home/user/plan.md --studio acme-shop --as producer
-backlot deliver --commits a1b2c3d..e4f5a6b --report /home/user/report.md --task t1 --studio acme-shop --as actor-t1-c1
-backlot review --task t1 --delivery 1 --verdict accepted --conclusion "Meets the criteria" --studio acme-shop --as director
+backlot priority --task t1 --level high --studio acme-shop --as user
+backlot task pause --task t1 --reason "waiting on design" --studio acme-shop --as user
+backlot task resume --task t1 --reason "design settled" --studio acme-shop --as user
+backlot task takeover --task t1 --reason "the actor is stuck" --studio acme-shop --as user
+backlot task abandon --task t1 --reason "no longer needed" --studio acme-shop --as user
 ```
 
 Run `studio new` without `--dry-run` only when the person asked for that studio. `--ask`
-queues the person's first message; `--dry-run` validates and records nothing.
+queues the person's first message; `--dry-run` validates and records nothing. A role's verbs
+— `task new`, `cast`, `plan publish`, `dispatch`, `deliver`, `review`, `ask` — are that
+role's own work: `tell` the role and let it run them in its terminal.
 
 ## Person-only
 
@@ -95,6 +100,9 @@ file, a dry-run command or the card request text, and tell the person.
 
 ## Never
 
+- Act as a role: always `--as user`, never `--as <role>` or an actor key, and never run a role's
+  verbs (`task new`, `cast`, `plan publish`, `dispatch`, `deliver`, `review`, `ask`). Tell the
+  role instead.
 - Answer a role's permission prompt or apply, cancel or withdraw a card unless the person asked
   for that in this conversation.
 - Kill a process, restart the hc server, or stop the stage to get unstuck.

@@ -437,11 +437,79 @@ fn the_person_only_block_is_the_crates_list() {
     );
 }
 
+/// The skill never teaches an outside agent to forge a role: every
+/// write example either carries `--as user` or no `--as` at all, and a
+/// read carries none.
+#[test]
+fn every_example_acts_as_the_person() {
+    let mut writes = 0;
+    for line in skill_commands(skill::SKILL) {
+        let words: Vec<String> = crate::docs_tests::shell_words(&line)
+            .into_iter()
+            .skip(1)
+            .map(|w| crate::docs_tests::substitute(&w))
+            .collect();
+        let seat = words.iter().position(|w| w == "--as");
+        if let Some(i) = seat {
+            assert_eq!(
+                words.get(i + 1).map(String::as_str),
+                Some("user"),
+                "`{line}` acts as someone other than the person"
+            );
+        }
+        if is_read(&command_path(&words)) {
+            assert!(seat.is_none(), "`{line}` is a read and takes no --as");
+        } else {
+            writes += 1;
+        }
+    }
+    assert!(writes > 0, "no write example found");
+}
+
 /// The skill goes where the guide topic and the install path say it is.
 #[test]
 fn the_guide_topic_is_the_same_file() {
     let out = crate::guide::run(Some("agents"), None).unwrap();
     assert_eq!(out, skill::SKILL);
+}
+
+/// The command words after any leading common flags.
+fn command_path(words: &[String]) -> Vec<&str> {
+    let mut i = 0;
+    while i < words.len() {
+        let w = words[i].as_str();
+        if matches!(
+            w,
+            "--studio" | "--as" | "--task" | "--session" | "--remote" | "--server" | "--via"
+        ) {
+            i += 2;
+            continue;
+        }
+        if w.starts_with("--") {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    words[i.min(words.len())..]
+        .iter()
+        .map(String::as_str)
+        .collect()
+}
+
+/// A read-only command: it takes no `--as` and moves nothing.
+fn is_read(path: &[&str]) -> bool {
+    match path.first().copied() {
+        Some("status" | "records" | "guide" | "runners" | "repos" | "metrics" | "digest") => true,
+        Some("studio") => path.get(1).copied() == Some("list"),
+        Some("msg") => path.get(1).copied() == Some("show"),
+        Some("repo-note") => path.get(1).copied() == Some("show"),
+        Some("card") => path.get(1).copied() == Some("list"),
+        Some("design") => path.get(1).copied() == Some("show"),
+        Some("report") => path.get(1).copied() == Some("show"),
+        Some("skill") => matches!(path.get(1).copied(), Some("status" | "show")),
+        _ => false,
+    }
 }
 
 fn between_markers(text: &str) -> Option<String> {
@@ -562,4 +630,47 @@ fn a_bad_via_is_refused_and_a_role_keeps_none() {
         .find(|e| e.by.role == "director")
         .expect("director's tell was recorded");
     assert_eq!(tell.by.via, None);
+}
+
+/// The CLI cannot tell a person's shell from a role's: only a role
+/// terminal's pinned `BACKLOT_ROLE` refuses a different seat, so a
+/// plain shell can claim any role the ledger's own rules allow. This
+/// records the behaviour the skill's rule stands in front of; it is not
+/// an enforced boundary.
+#[test]
+fn a_plain_shell_can_claim_a_role() {
+    use crate::cli_testkit::{CAST_TOML, fixture, ok, refused, scratch};
+
+    let (s, env) = scratch();
+    let cast = fixture(
+        &s,
+        "cast.toml",
+        &format!("design_gate = \"off\"\n{CAST_TOML}"),
+    );
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let req = fixture(&s, "req.md", "# req\n");
+    let line = format!("req revise --file {req} --summary s --as producer");
+    let words: Vec<String> = line.split(' ').map(String::from).collect();
+    // The parser accepts the seat, and the caller resolution honours it
+    // with no core and no role terminal behind the shell.
+    assert!(args::parse(&words).is_ok(), "the flag parses");
+    ok(&env, &line);
+
+    let dir = crate::store::studio_dir(&s.dir, "acme-shop");
+    let (events, _) = crate::store::load_events(&dir).unwrap();
+    assert_eq!(events.last().unwrap().by.role, "producer");
+
+    // A role terminal's pinned seat is the only thing that refuses one.
+    let mut pinned = Env {
+        vars: env.vars.clone(),
+    };
+    pinned.vars.insert("BACKLOT_ROLE".into(), "director".into());
+    let err = refused(
+        &pinned,
+        &format!("req revise --file {req} --summary s --as producer"),
+    );
+    assert!(err.contains("disagrees with BACKLOT_ROLE"), "{err}");
 }
