@@ -329,6 +329,7 @@ fn prepare_writes_the_session_settings() {
         hooks: dir.join("work/.agents/hooks.json"),
         signals: dir.join("signals.jsonl"),
         trusted_workspace: Some(dir.join("work")),
+        allow: Vec::new(),
         readonly: false,
     };
     assert_eq!(prepare(&p).unwrap(), None);
@@ -381,6 +382,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         hooks: hooks.clone(),
         signals: sig.clone(),
         trusted_workspace: Some(wt.clone()),
+        allow: Vec::new(),
         readonly: false,
     };
     assert_eq!(prepare(&prep).unwrap(), None);
@@ -441,6 +443,7 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
         hooks: tracked_hooks.clone(),
         signals: sig,
         trusted_workspace: Some(tracked_repo.clone()),
+        allow: Vec::new(),
         readonly: false,
     };
     assert_eq!(

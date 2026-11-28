@@ -397,6 +397,8 @@ impl Stage {
             resume,
             recast_from.map(|old| (old, &*actor)),
         );
+        let grants: Vec<backlot_model::event::PermitRecord> =
+            self.hstate.borrow().permits.values().cloned().collect();
         let planned = runners::plan(
             actor,
             &runners::LaunchCtx {
@@ -410,7 +412,11 @@ impl Stage {
                 checks: &[],
                 answer_trust: self.stage_cfg.get().answer_trust,
             },
-        );
+        )
+        .map(|mut launch| {
+            runners::apply_permits(&mut launch, &actor.runner, &grants);
+            launch
+        });
         match runners::decide_start(
             planned,
             &actor.runner,

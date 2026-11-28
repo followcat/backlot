@@ -105,16 +105,19 @@ impl Stage {
             Err(_) => return,
         };
         let session = role.session_id.clone();
+        let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
         let (signal, signal_state) = session
             .as_deref()
             .map(|sid| {
-                let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
                 (
                     crate::signals::last_work(&tail, sid),
                     crate::signals::state(&tail, sid, &std::collections::BTreeSet::new()),
                 )
             })
             .unwrap_or((None, None));
+        let request = session.as_deref().and_then(|sid| {
+            crate::signals::pending_request(&tail, sid, &std::collections::BTreeSet::new())
+        });
         let interrupted = crate::signals::note_role_interrupt(
             &self.interrupt_track,
             &pair,
@@ -175,7 +178,7 @@ impl Stage {
         let prev = self.screens.borrow().get(&pair).cloned();
         self.screens.borrow_mut().insert(
             pair,
-            crate::deliver::Screen::note(prev.as_ref(), text, now_ms),
+            crate::deliver::Screen::note(prev.as_ref(), text.clone(), now_ms),
         );
         if crate::handoff::load_handoff(hdir)
             .ok()
@@ -184,7 +187,7 @@ impl Stage {
         {
             return;
         }
-        self.hanswer(t, runner).await;
+        self.hanswer(hdir, t, runner, &text, request.as_ref()).await;
     }
 
     /// Send the runner's one-time allow key when the user has recorded
@@ -194,7 +197,14 @@ impl Stage {
     /// same `permit::approval_keys` a studio prompt uses — `enter` on
     /// cmd's `❯ 1. Yes` (run-once), never option 2's "don't ask
     /// again" (S12a).
-    async fn hanswer(&self, term: &LiveTerminal, runner: &str) {
+    async fn hanswer(
+        &self,
+        hdir: &Path,
+        term: &LiveTerminal,
+        runner: &str,
+        text: &str,
+        request: Option<&crate::signals::Signal>,
+    ) {
         if self.hprompt_is_question.get() {
             *self.hprompt_base.borrow_mut() = None;
             self.hanswered.borrow_mut().clear();
@@ -216,6 +226,76 @@ impl Stage {
                 }
             }
         };
+        // A grant already covering the pending hook request answers it
+        // directly. The screen must still name the same command/edit target,
+        // the command must pass backlot's guard, and the runner must expose
+        // a one-time allow key. `request.ts_ms` in `hanswered` suppresses a
+        // repeat while the runner catches up; failure falls back to the user.
+        if let Some(req) = request
+            && !self.hanswered.borrow().contains(&req.ts_ms)
+        {
+            let auto = req
+                .tool_input
+                .as_ref()
+                .and_then(crate::permit_cmd::target_from_tool_input)
+                .and_then(|target| {
+                    let env = crate::cli::Env {
+                        vars: self.env_vars.clone(),
+                    };
+                    let permits: Vec<backlot_model::event::PermitRecord> =
+                        self.hstate.borrow().permits.values().cloned().collect();
+                    let refs: Vec<&backlot_model::event::PermitRecord> = permits.iter().collect();
+                    let grants = match target {
+                        crate::permit_cmd::Target::Shell(command) => {
+                            if !crate::permit_auto::screen_matches(runner, text, &command) {
+                                return None;
+                            }
+                            crate::permit_auto::covering_shell_grants_in(
+                                &refs,
+                                &command,
+                                &backlot_model::push_policy::PushPolicy::default(),
+                                hdir,
+                                &env,
+                            )?
+                        }
+                        crate::permit_cmd::Target::Edit(path) => {
+                            let roots = [hdir.to_path_buf()];
+                            let rule = crate::permit_cmd::edit_rule(&path, hdir, &roots).ok()?;
+                            if !crate::permit_auto::edit_screen_matches(text, &path, &rule) {
+                                return None;
+                            }
+                            let grant = refs.iter().find(|g| {
+                                g.kind == backlot_model::event::PermitKind::Edit && g.rule == rule
+                            })?;
+                            vec![grant.id.clone()]
+                        }
+                    };
+                    let key = crate::permit_auto::allow_key(runner)?;
+                    Some((grants, key))
+                });
+            if let Some((grants, key)) = auto
+                && self
+                    .driver
+                    .keys(&self.client, &term.address, &[key])
+                    .await
+                    .is_ok()
+            {
+                self.hanswered.borrow_mut().insert(req.ts_ms);
+                let _ = crate::store::append_hollywood(hdir, |_, _| {
+                    Ok::<crate::store::HPending, crate::cli::Fail>(crate::store::HPending {
+                        event: backlot_model::hollywood::NewHollywoodEvent::new(
+                            backlot_model::EventBy::role("stage"),
+                            backlot_model::hollywood::HollywoodKind::PermitUsed {
+                                grants,
+                                role: HOLLYWOOD.into(),
+                            },
+                        ),
+                        files: Vec::new(),
+                    })
+                });
+                return;
+            }
+        }
         let Some(appr) = self.hstate.borrow().approval_after(base).copied() else {
             return;
         };

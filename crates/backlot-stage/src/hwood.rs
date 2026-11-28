@@ -9,8 +9,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use backlot_model::EventBy;
-use backlot_model::event::ApprovalDecision;
-use backlot_model::hollywood::{CardAction, HollywoodKind, NewHollywoodEvent};
+use backlot_model::event::{ApprovalDecision, PermitKind, PermitScope};
+use backlot_model::hollywood::{CardAction, HOLLYWOOD, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::StudioState;
 
 use crate::args::{CardCmd, Cmd, Common, HollywoodCmd};
@@ -271,27 +271,131 @@ pub(crate) fn approve(
     common: &Common,
     env: &Env,
     decision: ApprovalDecision,
+    scope: crate::args::ApprovalScope,
 ) -> Result<String, Fail> {
+    crate::proc_guard::check_cli_gate(
+        crate::proc_guard::CliVerb::Approve { person: HOLLYWOOD },
+        common,
+        env,
+    )?;
     let r = role(common, env);
     if r != "user" {
         return Err(Fail::refused(format!(
             "role '{r}' cannot do this; the user can"
         )));
     }
+    if scope == crate::args::ApprovalScope::Studio {
+        return Err(Fail::refused("Hollywood has no studio; use --scope role"));
+    }
     let base = base_of(common, env)?;
     let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
-    let event = store::append_hollywood(&hdir, |_, _| {
-        Ok::<HPending, Fail>(HPending {
-            event: NewHollywoodEvent::new(by, HollywoodKind::RoleApproval { decision }),
-            files: Vec::new(),
+    if scope == crate::args::ApprovalScope::Once || decision != ApprovalDecision::Allow {
+        let event = store::append_hollywood(&hdir, |_, _| {
+            Ok::<HPending, Fail>(HPending {
+                event: NewHollywoodEvent::new(by, HollywoodKind::RoleApproval { decision }),
+                files: Vec::new(),
+            })
         })
+        .map_err(store_fail)?;
+        return Ok(format!(
+            "{} — the stage answers the prompt",
+            hrender::hconfirm(&event)
+        ));
+    }
+
+    // Role scope: derive exact narrow rules from the still-pending hook
+    // request, then append grants and the approval in one locked batch.
+    let events = store::append_hollywood_many(&hdir, |state, next_seq| {
+        let Some(session) = state.role.session_id.as_deref() else {
+            return Err(Fail::refused("Hollywood has no live session"));
+        };
+        let runner = state
+            .role
+            .actor
+            .as_ref()
+            .map(|a| a.runner.clone())
+            .unwrap_or_else(|| "cmd".into());
+        let tail = crate::signals::tail(&crate::signals::signals_path(&hdir, HOLLYWOOD));
+        let request =
+            crate::signals::pending_request(&tail, session, &std::collections::BTreeSet::new())
+                .ok_or_else(|| Fail::refused("no permission prompt is pending on Hollywood"))?;
+        let target = request
+            .tool_input
+            .as_ref()
+            .and_then(crate::permit_cmd::target_from_tool_input)
+            .ok_or_else(|| {
+                Fail::refused(
+                    "the pending prompt names no command or edit path, so it is once-only",
+                )
+            })?;
+        let rules: Vec<(PermitKind, String, bool)> = match target {
+            crate::permit_cmd::Target::Edit(path) => {
+                let root = hdir.clone();
+                let rule = crate::permit_cmd::edit_rule(&path, &root, std::slice::from_ref(&root))?;
+                vec![(PermitKind::Edit, rule, false)]
+            }
+            crate::permit_cmd::Target::Shell(command) => {
+                if !matches!(
+                    crate::guard_shell::classify_command_line(
+                        &command,
+                        &backlot_model::push_policy::PushPolicy::default(),
+                        &hdir,
+                        env,
+                    ),
+                    crate::guard_rules::GuardVerdict::Allow
+                ) {
+                    return Err(Fail::refused(
+                        "backlot's guard would stop this command, so it cannot be remembered",
+                    ));
+                }
+                crate::permit_rules::coverage(&command)
+                    .map_err(Fail::refused)?
+                    .into_iter()
+                    .filter(|r| !crate::permit_cmd::fixed_covers(&r.rule))
+                    .map(|r| (PermitKind::Shell, r.rule, r.outward))
+                    .collect()
+            }
+        };
+        let approval_seq = next_seq + rules.len() as u64;
+        let mut out = Vec::new();
+        for (i, (kind, rule, outward)) in rules.iter().enumerate() {
+            out.push(HPending {
+                event: NewHollywoodEvent::new(
+                    by.clone(),
+                    HollywoodKind::PermitGranted {
+                        id: format!("p{}", next_seq + i as u64),
+                        scope: PermitScope::Role,
+                        role: Some(HOLLYWOOD.into()),
+                        permit_kind: *kind,
+                        rule: rule.clone(),
+                        outward: *outward,
+                        from: approval_seq,
+                        runner: runner.clone(),
+                    },
+                ),
+                files: Vec::new(),
+            });
+        }
+        out.push(HPending {
+            event: NewHollywoodEvent::new(by.clone(), HollywoodKind::RoleApproval { decision }),
+            files: Vec::new(),
+        });
+        Ok(out)
     })
     .map_err(store_fail)?;
-    Ok(format!(
-        "{} — the stage answers the prompt",
-        hrender::hconfirm(&event)
-    ))
+    let granted = events
+        .iter()
+        .filter(|e| matches!(e.kind, HollywoodKind::PermitGranted { .. }))
+        .count();
+    if granted == 0 {
+        Ok("approved; fixed permissions already cover it\n".into())
+    } else {
+        Ok(format!(
+            "approved; remembered {granted} permit{}\n",
+            if granted == 1 { "" } else { "s" }
+        ))
+    }
 }
 
 /// The message file a Hollywood caller just sent a studio — its own

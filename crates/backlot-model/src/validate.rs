@@ -448,9 +448,24 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::InvalidPermit(format!("no active permit '{id}'")))
             }
         }
-        EventKind::PermitUsed { .. } => {
+        EventKind::PermitUsed { grants, role } => {
             require_studio(state)?;
-            Ok(())
+            if new.by.role != "stage" {
+                return Err(Refusal::RoleBound {
+                    role: new.by.role.clone(),
+                    who: "stage",
+                });
+            }
+            if !state.roles.contains_key(role) {
+                return Err(Refusal::InvalidPermit("a permit use names no role".into()));
+            }
+            if grants.iter().all(|id| state.permits.contains_key(id)) {
+                Ok(())
+            } else {
+                Err(Refusal::InvalidPermit(
+                    "a permit use names a missing grant".into(),
+                ))
+            }
         }
         // An approval answers an open `permission prompt` attention —
         // refusing without one keeps the stage from answering a prompt

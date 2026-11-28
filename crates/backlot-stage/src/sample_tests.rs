@@ -647,6 +647,101 @@ async fn a_signal_bound_prompt_needs_no_screen_block() {
     );
 }
 
+/// A prompt already covered by a remembered grant is answered by the
+/// stage before it ever becomes an attention: the same screen and hook
+/// request must name the command, the runner gets its ordinary one-time
+/// allow key, and `permit.used` records the grant id.
+#[tokio::test]
+async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("bl-acme-shop-t1".into()),
+                    actor: Some(actor()),
+                    session_id: Some("fake-t1".into()),
+                    reason: None,
+                    prompt_hash: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("user"),
+                EventKind::PermitGranted {
+                    id: "p90".into(),
+                    scope: backlot_model::event::PermitScope::Role,
+                    role: Some("actor-a".into()),
+                    permit_kind: backlot_model::event::PermitKind::Shell,
+                    rule: "du -sh".into(),
+                    outward: false,
+                    from: 1,
+                    runner: "claude".into(),
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let sig_dir = dir.join("roles").join("actor-t1-c1");
+    fs::create_dir_all(&sig_dir).unwrap();
+    fs::write(
+        sig_dir.join("signals.jsonl"),
+        "{\"ts_ms\":1,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\
+         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"du -sh /home/user/acme-shop\"}}\n",
+    )
+    .unwrap();
+    fake.lock().unwrap().screen = format!(
+        "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n du -sh /home/user/acme-shop\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
+    );
+
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0).await;
+    assert!(fake.lock().unwrap().keys.is_empty());
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 2_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+    assert!(events(&dir, "attention.raised").is_empty());
+    let used = events(&dir, "permit.used");
+    assert_eq!(used.len(), 1, "the auto-answer recorded no permit use");
+    match &used[0].kind {
+        EventKind::PermitUsed { grants, role } => {
+            assert_eq!(grants, &vec!["p90".to_string()]);
+            assert_eq!(role, "actor-t1-c1");
+        }
+        _ => unreachable!(),
+    }
+
+    // A different command under the same grant shape is not the same
+    // prompt: no key and no permit use until the person decides.
+    fake.lock().unwrap().keys.clear();
+    fake.lock().unwrap().screen = fake
+        .lock()
+        .unwrap()
+        .screen
+        .replace("du -sh /home/user/acme-shop", "du -sh /home/user/other");
+    fs::write(
+        sig_dir.join("signals.jsonl"),
+        "{\"ts_ms\":2,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\
+         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"du -sh /home/user/other\"}}\n",
+    )
+    .unwrap();
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 3_000).await;
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 5_000).await;
+    assert!(fake.lock().unwrap().keys.is_empty());
+    assert_eq!(events(&dir, "permit.used").len(), 1);
+}
+
 /// A cmd role on a 21-column terminal still raises `permission
 /// prompt`, and its detail names the whole wrapped command — the
 /// picker and the sentence wrapping must not hide the episode.

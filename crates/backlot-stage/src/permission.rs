@@ -66,16 +66,33 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    let command = request.and_then(|s| s.tool_target());
-                    let auto = command.and_then(|command| {
-                        if !crate::permit_auto::screen_matches(w.runner, text, command) {
-                            return None;
-                        }
+                    let target = request
+                        .and_then(|s| s.tool_input.as_ref())
+                        .and_then(crate::permit_cmd::target_from_tool_input);
+                    let auto = target.and_then(|target| {
                         let env = crate::cli::Env {
                             vars: self.env_vars.clone(),
                         };
-                        let grants =
-                            crate::permit_auto::covering_shell_grants(state, role, command, &env)?;
+                        let grants = match target {
+                            crate::permit_cmd::Target::Shell(command) => {
+                                if !crate::permit_auto::screen_matches(w.runner, text, &command) {
+                                    return None;
+                                }
+                                crate::permit_auto::covering_shell_grants(
+                                    state, role, &command, &env,
+                                )?
+                            }
+                            crate::permit_cmd::Target::Edit(path) => {
+                                let repo = state.studio.as_ref()?.repo.clone();
+                                let roots = [area.clone(), std::path::PathBuf::from(repo)];
+                                let rule =
+                                    crate::permit_cmd::edit_rule(&path, &area, &roots).ok()?;
+                                if !crate::permit_auto::edit_screen_matches(text, &path, &rule) {
+                                    return None;
+                                }
+                                crate::permit_auto::covering_edit_grant(state, role, &rule)?
+                            }
+                        };
                         let key = crate::permit_auto::allow_key(w.runner)?;
                         Some((grants, key))
                     });

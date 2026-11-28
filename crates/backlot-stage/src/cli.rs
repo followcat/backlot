@@ -57,6 +57,7 @@ const COMMANDS: &[&str] = &[
     "hollywood",
     "card",
     "design",
+    "permit",
     "perms",
     "runners",
     "repos",

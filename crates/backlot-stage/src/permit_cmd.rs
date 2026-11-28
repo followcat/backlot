@@ -1,7 +1,7 @@
 //! CLI implementation of remembered permission grants: scoped approve,
 //! `permit list` and `permit revoke`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use backlot_model::event::{
     ApprovalDecision, EventKind, PERMISSION_PROMPT, PermitKind, PermitScope,
@@ -29,10 +29,7 @@ pub(crate) enum Target {
     Edit(String),
 }
 
-fn target_from_signal(dir: &Path, seq: u64) -> Option<Target> {
-    let text = std::fs::read_to_string(dir.join("attention").join(format!("{seq}.signal"))).ok()?;
-    let s: crate::signals::Signal = serde_json::from_str(&text).ok()?;
-    let input = s.tool_input.as_ref()?;
+pub(crate) fn target_from_tool_input(input: &serde_json::Value) -> Option<Target> {
     if let Some(command) = input.get("command").and_then(|v| v.as_str()) {
         return Some(Target::Shell(command.to_string()));
     }
@@ -40,6 +37,12 @@ fn target_from_signal(dir: &Path, seq: u64) -> Option<Target> {
         .get("file_path")
         .and_then(|v| v.as_str())
         .map(|p| Target::Edit(p.to_string()))
+}
+
+fn target_from_signal(dir: &Path, seq: u64) -> Option<Target> {
+    let text = std::fs::read_to_string(dir.join("attention").join(format!("{seq}.signal"))).ok()?;
+    let s: crate::signals::Signal = serde_json::from_str(&text).ok()?;
+    target_from_tool_input(s.tool_input.as_ref()?)
 }
 
 fn target(dir: &Path, runner: &str, seq: u64) -> Option<Target> {
@@ -93,19 +96,103 @@ pub(crate) fn fixed_covers(rule: &str) -> bool {
     fixed_shell_rules().any(|r| r == rule || r == strip_git_location(rule))
 }
 
+/// Whether a path names a secret-shaped file or directory. This is a
+/// conservative grant-time check, not a complete secret detector.
+pub(crate) fn secret_path(path: &Path) -> bool {
+    let lower = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    let leaf = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    lower.contains("/.ssh/")
+        || lower.contains("/.gnupg/")
+        || lower.contains("/.config/secrets/")
+        || lower.ends_with("/.docker/config.json")
+        || lower.ends_with("/.kube/config")
+        || leaf == ".env"
+        || leaf.starts_with(".env.")
+        || leaf == "credentials"
+        || leaf == "auth.json"
+}
+
+fn deepest_canonical(path: &Path) -> PathBuf {
+    let mut missing = Vec::new();
+    let mut cur = path.to_path_buf();
+    loop {
+        if let Ok(real) = cur.canonicalize() {
+            let mut out = real;
+            for part in missing.iter().rev() {
+                out.push(part);
+            }
+            return out;
+        }
+        let Some(name) = cur.file_name().map(|n| n.to_os_string()) else {
+            return path.to_path_buf();
+        };
+        missing.push(name);
+        if !cur.pop() {
+            return path.to_path_buf();
+        }
+    }
+}
+
+/// The exact absolute edit rule a prompt may store: inside one of
+/// `roots` after canonicalizing its deepest existing ancestor, with no
+/// `..` component and no secret-shaped path. Relative prompt paths are
+/// resolved from `cwd` (the role's work area).
+pub(crate) fn edit_rule(path: &str, cwd: &Path, roots: &[PathBuf]) -> Result<String, Fail> {
+    if path.trim().is_empty() || path.contains(['\n', '\r', '\0']) || path.contains('…') {
+        return Err(Fail::refused(
+            "an edit prompt without one clean path is once-only",
+        ));
+    }
+    let raw = PathBuf::from(path);
+    if raw
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(Fail::refused("an edit grant cannot contain `..`"));
+    }
+    let joined = if raw.is_absolute() {
+        raw
+    } else {
+        cwd.join(raw)
+    };
+    if !joined.is_absolute() {
+        return Err(Fail::refused("an edit grant needs an absolute path"));
+    }
+    let resolved = deepest_canonical(&joined);
+    if secret_path(&resolved) {
+        return Err(Fail::refused("an edit grant cannot name a secret path"));
+    }
+    let inside = roots.iter().any(|root| {
+        let root = deepest_canonical(root);
+        resolved == root || resolved.starts_with(root)
+    });
+    if !inside {
+        return Err(Fail::refused(
+            "an edit grant must stay inside the role's worktree or the studio repository",
+        ));
+    }
+    Ok(resolved.to_string_lossy().into_owned())
+}
+
 fn grantable_rules(
     target: &Target,
     state: &StudioState,
     env: &Env,
+    dir: &Path,
+    person: &str,
 ) -> Result<Vec<(PermitKind, String, bool)>, Fail> {
     match target {
         Target::Edit(path) => {
-            if path.trim().is_empty() || path.contains('\n') || path.contains('\r') {
-                return Err(Fail::refused(
-                    "an edit prompt without one clean path is once-only",
-                ));
-            }
-            Ok(vec![(PermitKind::Edit, path.clone(), false)])
+            let Some(studio) = state.studio.as_ref() else {
+                return Err(Fail::refused("the studio is not ready"));
+            };
+            let repo = PathBuf::from(&studio.repo);
+            let area = crate::workareas::role_dir(dir, &studio.repo, person, studio.no_git);
+            let rule = edit_rule(path, &area, &[area.clone(), repo])?;
+            Ok(vec![(PermitKind::Edit, rule, false)])
         }
         Target::Shell(command) => {
             if !guard_allows(command, state, env) {
@@ -175,7 +262,7 @@ pub(crate) fn approve_scoped_caller(
         let target = target(&dir, &runner, attn.seq).ok_or_else(|| {
             Fail::refused("the saved prompt names no command or edit path, so it is once-only")
         })?;
-        let rules = grantable_rules(&target, state, env)?;
+        let rules = grantable_rules(&target, state, env, &dir, person)?;
         if rules.is_empty() {
             let approval = pending(
                 EventKind::RoleApproval {

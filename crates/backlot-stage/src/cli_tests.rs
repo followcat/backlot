@@ -676,6 +676,7 @@ fn every_command_word_is_registered() {
         "reopen",
         "close",
         "approve",
+        "permit",
         "attention",
         "deliver",
         "block",

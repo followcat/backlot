@@ -112,7 +112,7 @@ pub(crate) fn run_stdin_with_host(
             env,
         )?;
         if person == backlot_model::hollywood::HOLLYWOOD {
-            return crate::hwood::approve(&common, env, decision);
+            return crate::hwood::approve(&common, env, decision, scope);
         }
     }
     // `restart --person hollywood` restarts the overseer's own

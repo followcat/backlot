@@ -402,8 +402,9 @@ pub fn decide_start(
 /// Add active grants to a planned launch's native permission surface.
 /// Revocation needs no removal pass: every start/resume rebuilds these
 /// lists from active grants only. Shell rules use each runner's native
-/// form; edit grants are left to the prompt until a runner's exact path
-/// rule is measured.
+/// form; edit grants use only measured exact path forms (cursor's
+/// `Write(<path>)`, claude's `Edit(<path>)`); other runners rely on the
+/// auto-answer.
 pub fn apply_permits(
     launch: &mut Launch,
     runner: &str,
@@ -414,7 +415,12 @@ pub fn apply_permits(
         .filter(|p| p.kind == backlot_model::event::PermitKind::Shell)
         .map(|p| p.rule.as_str())
         .collect();
-    if rules.is_empty() {
+    let edits: Vec<&str> = permits
+        .iter()
+        .filter(|p| p.kind == backlot_model::event::PermitKind::Edit)
+        .map(|p| p.rule.as_str())
+        .collect();
+    if rules.is_empty() && edits.is_empty() {
         return;
     }
     let clean = |r: &str| !r.contains(['(', ')', ',', '*', '?', '[', ']', '{', '}', '\\']);
@@ -438,6 +444,20 @@ pub fn apply_permits(
                 for rule in rules.into_iter().filter(|r| clean(r) && !r.contains(':')) {
                     prep.allow.push(format!("Shell({rule})"));
                 }
+                // cursor's own picker offers `Add Write(<path>) to allowlist?`;
+                // that exact measured form is safe for a canonical file path.
+                for path in edits.iter().filter(|p| clean(p)) {
+                    prep.allow.push(format!("Write({path})"));
+                }
+            }
+        }
+        "agy" => {
+            if let Some(Prep::Agy(prep)) = launch.prep.as_mut() {
+                for rule in rules.iter().copied().filter(|r| clean(r)) {
+                    if !prep.allow.iter().any(|existing| existing == rule) {
+                        prep.allow.push(rule.to_string());
+                    }
+                }
             }
         }
         "claude" => {
@@ -449,6 +469,11 @@ pub fn apply_permits(
             };
             for rule in rules.into_iter().filter(|r| clean(r)) {
                 value.push_str(&format!(",Bash({rule}),Bash({rule} *)"));
+            }
+            // Claude Code's permission language uses Edit(<path>) for its
+            // file-edit tool; exact canonical paths carry no glob suffix.
+            for path in edits.iter().filter(|p| clean(p)) {
+                value.push_str(&format!(",Edit({path})"));
             }
         }
         _ => {}
@@ -606,6 +631,8 @@ mod dialog_tests;
 mod fake_runner_tests;
 #[cfg(test)]
 mod normalise_tests;
+#[cfg(test)]
+mod permit_apply_tests;
 #[cfg(test)]
 mod readonly_tests;
 #[cfg(test)]
