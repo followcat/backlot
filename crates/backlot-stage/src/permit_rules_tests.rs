@@ -67,3 +67,97 @@ fn once_only_shapes_name_the_reason() {
         assert!(once(cmd).contains(part), "{} -> {}", cmd, once(cmd));
     }
 }
+
+#[test]
+fn program_words_stay_exactly_as_typed() {
+    for (cmd, want) in [
+        ("./ls -la", "./ls -la"),
+        ("/tmp/x/head -n 1 f", "/tmp/x/head -n"),
+        ("~/bin/rg pattern", "~/bin/rg"),
+        ("/usr/bin/git status", "/usr/bin/git status"),
+    ] {
+        assert_eq!(rules(cmd), vec![(want.into(), false)], "{cmd}");
+    }
+    assert!(!crate::permit_cmd::fixed_covers("./ls"));
+    assert!(!crate::permit_cmd::fixed_covers("/tmp/x/head"));
+    assert!(crate::permit_cmd::fixed_covers("ls"));
+    assert!(crate::permit_cmd::fixed_covers("head"));
+}
+
+#[test]
+fn interpreters_in_disguise_are_never_grantable() {
+    for prog in [
+        "awk",
+        "gawk",
+        "mawk",
+        "nawk",
+        "npx",
+        "pnpx",
+        "bunx",
+        "uvx",
+        "bun",
+        "deno",
+        "php",
+        "lua",
+        "Rscript",
+        "osascript",
+    ] {
+        let cmd = format!("{prog} --version");
+        assert!(once(&cmd).contains("arbitrary code"), "{cmd}");
+    }
+    assert!(once("/bin/rm -rf build").contains("destructive"));
+}
+
+#[test]
+fn multi_command_families_need_safe_subcommands() {
+    for (cmd, want) in [
+        ("go test ./...", "go test"),
+        ("make test", "make test"),
+        ("just check", "just check"),
+        ("poetry check", "poetry check"),
+        ("pnpm test", "pnpm test"),
+        ("yarn test", "yarn test"),
+    ] {
+        assert_eq!(rules(cmd), vec![(want.into(), false)], "{cmd}");
+    }
+    for cmd in [
+        "uv run tool",
+        "uv tool run x",
+        "npm exec x",
+        "npm x x",
+        "pnpm exec x",
+        "pnpm dlx x",
+        "yarn exec x",
+        "yarn dlx x",
+    ] {
+        assert!(
+            once(cmd).contains("arbitrary code"),
+            "{cmd} -> {}",
+            once(cmd)
+        );
+    }
+}
+
+#[test]
+fn exec_and_write_capable_flags_are_once_only_wherever_they_appear() {
+    for cmd in [
+        "find . -type f -exec rm {} ;",
+        "find . -type f -fprint /tmp/out",
+        "fd . -t f --exec rm",
+        "rg foo --pre ./script",
+        "sort input -o output",
+        "sort input --compress-program gzip",
+        "tar tzf a.tgz --to-command='sh -c x'",
+        "tar tzf a.tgz --checkpoint-action=exec=x",
+        "sed -i s/a/b/ f",
+        "sed -n 'e ls' f",
+        "git diff --output=/tmp/out",
+        "git diff --ext-diff",
+    ] {
+        assert!(
+            once(cmd).contains("exec or delete"),
+            "{cmd} -> {}",
+            once(cmd)
+        );
+    }
+}

@@ -23,12 +23,44 @@ pub enum Derivation {
 }
 
 const WRAPPERS: &[&str] = &[
-    "sh", "bash", "zsh", "dash", "ash", "node", "perl", "ruby", "env", "xargs", "flock", "timeout",
-    "nice", "nohup", "sudo", "eval", "exec", "time", "watch",
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "ash",
+    "node",
+    "perl",
+    "ruby",
+    "env",
+    "xargs",
+    "flock",
+    "timeout",
+    "nice",
+    "nohup",
+    "sudo",
+    "eval",
+    "exec",
+    "time",
+    "watch",
+    "awk",
+    "gawk",
+    "mawk",
+    "nawk",
+    "npx",
+    "pnpx",
+    "bunx",
+    "uvx",
+    "bun",
+    "deno",
+    "php",
+    "lua",
+    "Rscript",
+    "osascript",
 ];
 const DESTRUCTIVE: &[&str] = &["rm", "mv", "dd", "chmod", "chown", "kill", "pkill"];
 const MULTI: &[&str] = &[
-    "git", "cargo", "npm", "docker", "gh", "hc", "backlot", "kubectl",
+    "git", "cargo", "npm", "docker", "gh", "hc", "backlot", "kubectl", "uv", "go", "pnpm", "yarn",
+    "make", "just", "poetry",
 ];
 const CONTROL: &[&str] = &[
     "for", "do", "done", "if", "then", "else", "elif", "fi", "while", "until", "case", "esac",
@@ -92,28 +124,94 @@ fn redirection(word: &str) -> Option<bool> {
     None
 }
 
+fn sed_write_or_exec(args: &[String]) -> bool {
+    let mut script = None;
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "-e" || a == "--expression" || a == "-f" || a == "--file" {
+            if a == "-e" || a == "--expression" {
+                script = args.get(i + 1).map(String::as_str);
+            } else {
+                return true;
+            }
+            i += 2;
+            continue;
+        }
+        if a == "-i" || a == "--in-place" || a.starts_with("-i") || a.starts_with("--in-place=") {
+            return true;
+        }
+        if !a.starts_with('-') && script.is_none() {
+            script = Some(a);
+        }
+        i += 1;
+    }
+    let Some(script) = script else {
+        return false;
+    };
+    // Only a plain line-address print is reliably side-effect free (`-n '1,160p'`).
+    // Every other sed program is conservatively once-only: `e` executes a shell
+    // command and `w`/`W` write files, including inside addresses and branches.
+    !(script.ends_with('p')
+        && script[..script.len() - 1]
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == ',' || c == '$'))
+}
+
 fn exec_action(prog: &str, args: &[String]) -> bool {
-    if prog == "find" {
-        return args.iter().any(|a| {
+    match prog {
+        "find" => args.iter().any(|a| {
             matches!(
                 a.as_str(),
                 "-exec" | "-execdir" | "-delete" | "-ok" | "-okdir"
-            )
-        });
-    }
-    if prog == "fd" {
-        return args.iter().any(|a| {
+            ) || a.starts_with("-fprint")
+        }),
+        "fd" => args.iter().any(|a| {
             matches!(a.as_str(), "-x" | "--exec" | "-X" | "--exec-batch")
                 || a.starts_with("--exec=")
                 || a.starts_with("--exec-batch=")
-        });
+        }),
+        "rg" => args.iter().any(|a| a == "--pre" || a.starts_with("--pre=")),
+        "sort" => args.iter().any(|a| {
+            a == "--compress-program"
+                || a.starts_with("--compress-program=")
+                || a == "-o"
+                || a == "--output"
+                || a.starts_with("--output=")
+        }),
+        "tar" => args.iter().any(|a| {
+            a == "--to-command"
+                || a.starts_with("--to-command=")
+                || a == "-I"
+                || a == "--use-compress-program"
+                || a.starts_with("--use-compress-program=")
+                || a == "--checkpoint-action"
+                || a.starts_with("--checkpoint-action=")
+                || a == "-F"
+                || a == "--info-script"
+                || a.starts_with("--info-script=")
+                || a == "--new-volume-script"
+                || a.starts_with("--new-volume-script=")
+        }),
+        "sed" => sed_write_or_exec(args),
+        "git" => args.iter().any(|a| {
+            a == "--ext-diff"
+                || a == "--output"
+                || a.starts_with("--output=")
+                || a == "--exec"
+                || a.starts_with("--exec=")
+                || a == "--upload-pack"
+                || a.starts_with("--upload-pack=")
+                || a == "--receive-pack"
+                || a.starts_with("--receive-pack=")
+        }),
+        _ => false,
     }
-    false
 }
 
 fn git_rule(words: &[String]) -> Result<String, String> {
     let mut i = 1usize;
-    let mut prefix = vec!["git".to_string()];
+    let mut prefix = vec![words[0].clone()];
     // Preserve repository-selecting globals: they are part of the narrow
     // shape the person saw. Config/transport overrides are the guard's
     // territory and are never normalized away.
@@ -178,7 +276,22 @@ fn subcommand_rule(words: &[String], prog: &str) -> Result<String, String> {
             "{prog} without a subcommand is too broad to remember"
         ));
     }
-    let mut out = format!("{prog} {sub}");
+    if matches!(
+        (prog, sub.as_str()),
+        ("npm", "exec")
+            | ("npm", "x")
+            | ("pnpm", "exec")
+            | ("pnpm", "dlx")
+            | ("yarn", "exec")
+            | ("yarn", "dlx")
+            | ("uv", "run")
+            | ("uv", "tool")
+    ) {
+        return Err(format!(
+            "{prog} {sub} runs arbitrary code and cannot be remembered"
+        ));
+    }
+    let mut out = format!("{} {sub}", words[0]);
     if prog == "npm" && sub == "run" {
         let script = words
             .get(2)
@@ -229,22 +342,23 @@ fn segment_rule(words: &[String]) -> Result<DerivedRule, String> {
     if clean.is_empty() {
         return Err("an empty shell segment cannot be remembered".into());
     }
-    let prog = base(&clean[0]).to_string();
-    if prog.starts_with("python") || WRAPPERS.contains(&prog.as_str()) {
+    let prog_base = base(&clean[0]).to_string();
+    let prog = clean[0].clone();
+    if prog_base.starts_with("python") || WRAPPERS.contains(&prog_base.as_str()) {
         return Err(format!(
             "`{prog}` runs arbitrary code and cannot be remembered"
         ));
     }
-    if DESTRUCTIVE.contains(&prog.as_str()) {
+    if DESTRUCTIVE.contains(&prog_base.as_str()) {
         return Err(format!("`{prog}` is destructive and cannot be remembered"));
     }
-    if exec_action(&prog, &clean[1..]) {
+    if exec_action(&prog_base, &clean[1..]) {
         return Err(format!(
             "`{prog}` with an exec or delete action cannot be remembered"
         ));
     }
-    let out = outward(&prog, &clean);
-    let rule = match prog.as_str() {
+    let out = outward(&prog_base, &clean);
+    let rule = match prog_base.as_str() {
         "git" => git_rule(&clean)?,
         "du" | "sed" | "sort" => {
             let mut parts = vec![prog.clone()];
@@ -276,9 +390,9 @@ fn segment_rule(words: &[String]) -> Result<DerivedRule, String> {
             let sub = clean.get(2).ok_or_else(|| {
                 "uv pip without a subcommand is too broad to remember".to_string()
             })?;
-            format!("uv pip {sub}")
+            format!("{} pip {sub}", clean[0])
         }
-        p if MULTI.contains(&p) => subcommand_rule(&clean, &prog)?,
+        p if MULTI.contains(&p) => subcommand_rule(&clean, &prog_base)?,
         _ => {
             let mut parts = vec![prog.clone()];
             for w in &clean[1..] {
