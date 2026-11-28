@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>backlot — a film studio for coding agents</title>
+  <meta name="description" content="backlot runs a small cast of coding agents from one terminal: design, tasks, worktrees, checks, reviews and the record.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">backlot 0.4.31</p>
+    <h1>A film studio for coding agents, in your terminal.</h1>
+    <p class="lede">Give one requirement to a producer. The opening discussion settles the design, a director casts
+      actors into their own git worktrees, the stage runs checks and reviews, and the ledger records what happened.</p>
+    <p class="actions"><a class="button" href="#install">Install</a> <a class="button secondary" href="https://github.com/followcat/backlot">Repository</a></p>
+  </header>
+
+  <main>
+    <section>
+      <h2>See the studio</h2>
+      <p>The client keeps the cast, the Call Sheet and the Lot in one terminal. Waiting items rise to the top;
+        every role remains an ordinary terminal you can open and type into.</p>
+      <figure>
+        <img src="images/backlot.png" alt="backlot running acme-shop on Local and docs-site on host-b, with the cast, producer exchange, Call Sheet and Lot visible">
+        <figcaption>Two studios, one waiting prompt, and the producer's account of the plan.</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>How work moves</h2>
+      <p>The opening discussion continues until the design is final. The cast file initializes the studio and can
+        change later. Talking never moves a task; recorded commands do. Only the person finishes a studio.</p>
+      <figure>
+        <img src="images/studio-flow.svg" alt="Diagram of the studio flow from opening design through casting, checks, review and merge">
+      </figure>
+    </section>
+
+    <section class="grid">
+      <div>
+        <h2>What needs you comes forward</h2>
+        <p>A permission prompt that belongs to you is lifted into the Call Sheet. Open it, decide, and the actor
+          goes back to work.</p>
+        <img src="images/waiting.gif" alt="Animation of a permission prompt moving into the Call Sheet, being allowed, and the actor returning to work">
+      </div>
+      <div>
+        <h2>Focus stays narrow</h2>
+        <p>Tab moves through the Call Sheet zones. Only the focused zone expands, so the sheet stays calm while
+          several studios run.</p>
+        <img src="images/focus.gif" alt="Animation of Tab moving through Call Sheet zones with only the focused zone expanded">
+      </div>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <p>backlot is one static binary. The installer verifies the release archive against its checksums and installs
+        the `hc` core when it is missing.</p>
+      <pre><code>curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | sh</code></pre>
+      <p>Prebuilt archives cover Linux (x86_64 and aarch64, static musl) and macOS (arm64 and Intel). Details and
+        manual verification are in <a href="https://github.com/followcat/backlot/blob/main/docs/install.md">docs/install.md</a>.</p>
+    </section>
+
+    <section>
+      <h2>Read the docs</h2>
+      <ul class="docs">
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/studio/guide.md">Studio guide</a></li>
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/studio/panel.md">The Lot and Call Sheet</a></li>
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/studio/hollywood.md">Hollywood</a></li>
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/keys.md">Keys</a></li>
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/compatibility.md">Core compatibility</a></li>
+        <li><a href="https://github.com/followcat/backlot/blob/main/docs/theme.md">Theme</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Apache-2.0 · <a href="https://github.com/followcat/backlot">github.com/followcat/backlot</a></p>
+  </footer>
+</body>
+</html>
