@@ -42,6 +42,7 @@ fn machine_line(
     backlot: &Backlot,
     latest: Option<&str>,
     stage_running: bool,
+    skill: &str,
 ) -> MachineLine {
     let (text, tone, stage_ok) = match backlot {
         Backlot::Installed { version, .. } => match latest {
@@ -49,7 +50,7 @@ fn machine_line(
                 (format!("↑{latest}"), MachineTone::Accent, None)
             }
             _ => (
-                format!("backlot {version}"),
+                format!("backlot {version} {skill}"),
                 MachineTone::Normal,
                 Some(stage_running),
             ),
@@ -75,6 +76,28 @@ fn short(text: &str) -> String {
         .chars()
         .take(64)
         .collect()
+}
+
+fn skill_mark(summary: Option<&crate::panel::data::MachineSummary>) -> &'static str {
+    use backlot_model::summary::SkillState;
+    let Some(skill) = summary.and_then(|ms| ms.summary.agent_skill.as_ref()) else {
+        return "?";
+    };
+    let rows = skill
+        .rows
+        .iter()
+        .filter(|row| row.state != SkillState::Absent)
+        .collect::<Vec<_>>();
+    if rows
+        .iter()
+        .any(|row| matches!(row.state, SkillState::Missing | SkillState::Foreign))
+    {
+        "+"
+    } else if rows.iter().any(|row| row.state == SkillState::Stale) {
+        "↻"
+    } else {
+        "✓"
+    }
 }
 
 impl App {
@@ -130,6 +153,7 @@ impl App {
     /// `None` in plain mode, so Herdr's machines tree never sees it.
     pub(crate) fn machine_lines(&self) -> BTreeMap<ClientEndpointId, MachineLine> {
         let latest = self.latest_release();
+        let summaries = self.panel_summaries();
         let mut out = BTreeMap::new();
         for endpoint in &self.projection.endpoints {
             let line = match &endpoint.endpoint_id {
@@ -138,6 +162,7 @@ impl App {
                     &self.machine_backlot(None),
                     latest.as_deref(),
                     self.machine_stage_running(None),
+                    skill_mark(summaries.iter().find(|ms| ms.machine.is_none())),
                 ),
                 ClientEndpointId::Remote(name) => {
                     let hc = self
@@ -153,6 +178,11 @@ impl App {
                         &self.machine_backlot(Some(name)),
                         latest.as_deref(),
                         self.machine_stage_running(Some(name)),
+                        skill_mark(
+                            summaries
+                                .iter()
+                                .find(|ms| ms.machine.as_deref() == Some(name.as_str())),
+                        ),
                     )
                 }
             };

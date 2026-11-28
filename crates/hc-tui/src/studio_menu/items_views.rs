@@ -96,6 +96,11 @@ impl StudioMenu {
             // S1: the stage output stays reachable without its tab
             // stealing the focus — the log opens read-only.
             out.push(item("Stage log".to_owned(), Some('l'), StudioAct::StageLog));
+            out.push(item(
+                "Agent skill…".to_owned(),
+                Some('a'),
+                StudioAct::MachineSkill,
+            ));
         }
         if self.finished_count > 0 {
             out.push(item(

@@ -240,6 +240,9 @@ pub(crate) fn render_settings_overlay_with_shadow(
         SettingsSection::Studio => {
             render_studio(buffer, content, settings, palette, &mut choice_hits);
         }
+        SettingsSection::AgentSkill => {
+            render_agent_skill(buffer, content, settings, palette, &mut choice_hits);
+        }
     }
 
     let installable = settings.integrations.iter().any(integration_needs_install);
@@ -502,6 +505,97 @@ fn render_studio(
             palette,
         );
         hits.push((rect, row));
+    }
+}
+
+/// The Agent Skill tab: a flat, scrolling machine/agent tree. Enter
+/// installs (or replaces a foreign row after its second confirmation);
+/// `u` uninstalls the selected row.
+fn render_agent_skill(
+    buffer: &mut Buffer,
+    area: Rect,
+    settings: &SettingsOverlay,
+    palette: &Palette,
+    hits: &mut Vec<(Rect, usize)>,
+) {
+    use crate::chrome::settings::{SkillSettingsRow, skill_rows};
+    let bg = overlay_bg(palette);
+    put_text(
+        buffer,
+        area.x,
+        area.y,
+        area.width,
+        "agent skill",
+        Style::default()
+            .fg(palette.text)
+            .bg(bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    put_text(
+        buffer,
+        area.x,
+        area.y + 1,
+        area.width,
+        "enter install · u uninstall · foreign rows ask twice",
+        Style::default().fg(palette.overlay1).bg(bg),
+    );
+    let rows = skill_rows(settings);
+    let list = Rect::new(
+        area.x,
+        area.y + 3,
+        area.width,
+        area.height.saturating_sub(3),
+    );
+    let visible = usize::from(list.height).max(1);
+    let scroll = settings.selected.saturating_sub(visible.saturating_sub(1));
+    for (line, (index, row)) in rows
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible)
+        .enumerate()
+    {
+        let rect = Rect::new(list.x, list.y + line as u16, list.width, 1);
+        let label = match row {
+            SkillSettingsRow::AllMachines => "install on all machines".to_owned(),
+            SkillSettingsRow::Machine { label, agents, .. } => {
+                if agents.is_empty() {
+                    format!("{label} — current")
+                } else {
+                    format!("{label} — install {} agent rows", agents.len())
+                }
+            }
+            SkillSettingsRow::UnknownMachine { label } => {
+                format!("{label} — unknown (no stage skill state)")
+            }
+            SkillSettingsRow::Agent {
+                agent,
+                dir,
+                state,
+                machine,
+                ..
+            } => {
+                let confirm =
+                    settings.skill_confirm.as_ref() == Some(&(machine.clone(), agent.clone()));
+                let action = match state {
+                    backlot_model::summary::SkillState::Foreign if confirm => {
+                        "enter again to replace"
+                    }
+                    backlot_model::summary::SkillState::Foreign => "enter replace…",
+                    _ => "enter install · u uninstall",
+                };
+                format!("  {agent:<13} {:<8} {dir} — {action}", state.as_str())
+            }
+        };
+        draw_choice(
+            buffer,
+            rect,
+            &label,
+            index == settings.selected,
+            false,
+            palette,
+        );
+        hits.push((rect, index));
     }
 }
 

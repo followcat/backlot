@@ -229,6 +229,7 @@ async fn the_machine_menu_offers_its_valid_actions() {
             "Restart the stage",
             "Stop the stage…",
             "Stage log",
+            "Agent skill…",
             "New studio here",
             "Connect machine",
             "Rename machine",
@@ -240,7 +241,8 @@ async fn the_machine_menu_offers_its_valid_actions() {
     assert_eq!(items[1].act, StudioAct::StageRestart);
     assert_eq!(items[2].act, StudioAct::StageStop);
     assert_eq!(items[3].act, StudioAct::StageLog);
-    assert_eq!(items[4].act, StudioAct::NewStudio);
+    assert_eq!(items[4].act, StudioAct::MachineSkill);
+    assert_eq!(items[5].act, StudioAct::NewStudio);
     assert!(
         items.iter().all(|it| it.dim.is_none()),
         "online — {items:?}"

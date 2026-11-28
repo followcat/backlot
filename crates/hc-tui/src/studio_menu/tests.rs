@@ -231,6 +231,7 @@ fn a_running_stage_machine_menu_restarts_then_stops_the_stage() {
             "Restart the stage",
             "Stop the stage…",
             "Stage log",
+            "Agent skill…",
             "New studio here",
             "Connect machine",
             "Rename machine",

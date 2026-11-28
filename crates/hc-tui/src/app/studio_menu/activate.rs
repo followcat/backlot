@@ -284,6 +284,9 @@ impl App {
             // official installer on the target machine (managed
             // binaries refuse first), restart chains stop → start,
             // and the endpoint ops map to the existing machine calls.
+            StudioAct::MachineSkill => {
+                self.open_agent_skill_settings(menu.machine().map(str::to_owned));
+            }
             StudioAct::MachineInstall => {
                 self.machine_install(menu.machine().map(str::to_owned));
             }
