@@ -11,6 +11,7 @@ mod args_card;
 mod args_decide;
 mod args_design;
 mod args_hwood;
+mod args_skill;
 mod args_source;
 mod args_studio;
 mod args_studio_check;
@@ -154,6 +155,8 @@ mod server_service;
 mod service;
 pub mod signals;
 mod signin;
+pub mod skill;
+mod skill_agents;
 mod stage;
 mod stage_accounts;
 mod stagelog;
@@ -432,6 +435,8 @@ mod server_service_tests;
 
 #[cfg(test)]
 mod signals_tests;
+#[cfg(test)]
+mod skill_tests;
 #[cfg(test)]
 mod stagelog_tests;
 #[cfg(test)]

@@ -180,6 +180,26 @@ The full walkthrough, with the cast file's every key, permission prompts, recove
 the files live, is [docs/studio/guide.md](docs/studio/guide.md). Hollywood is set up in
 [docs/studio/hollywood.md](docs/studio/hollywood.md).
 
+## Let your agent drive backlot
+
+backlot ships a skill in the open Agent Skills format — the same file lives at
+`skills/backlot/SKILL.md` — so a coding agent you already use can find your studios, read the
+ledger and act in your seat.
+
+```sh
+backlot skill install
+```
+
+It writes `<dir>/backlot/SKILL.md` for every agent it detects on this machine — Claude Code,
+Codex, Cline, pi, Cursor, Devin, Command Code, OpenCode, Antigravity and Gemini CLI — records
+what it wrote, and refreshes those copies when a new backlot starts. `backlot skill status` says
+whether each copy is current or stale, `backlot skill show` prints it, and `backlot skill
+uninstall` removes only the copies backlot wrote. Without backlot installed,
+`npx skills add followcat/backlot` installs the same file.
+
+An agent identifies itself with `BACKLOT_VIA=<agent>` (or `--via <agent>`) when it acts `--as
+user`; the ledger records `agent:<agent>`, and the records show `user (via claude-code)`.
+
 ## The client
 
 backlot is also the terminal you work in. The default prefix is `Ctrl+B`:

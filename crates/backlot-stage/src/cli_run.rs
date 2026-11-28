@@ -183,6 +183,11 @@ pub(crate) fn run_stdin_with_host(
         } => {
             return crate::guide::run(topic.as_deref(), grep.as_deref());
         }
+        // `skill` writes the agent skill file in the person's home —
+        // local files only, no core, no ledger.
+        Cmd::Skill(scmd) => {
+            return crate::skill::run(scmd, env);
+        }
         // `repos` reads the directory itself; `in_use_studio` needs
         // the ledger base, which `repos::run` resolves best-effort.
         Cmd::Repos {

@@ -35,12 +35,20 @@ fn a_topic_prints_its_file() {
         "the guide topic's first line is wrong:\n{}",
         out.lines().next().unwrap_or_default()
     );
-    // Every topic prints something with the file's own heading.
+    // The agent skill opens on frontmatter; its listing line is titled
+    // by the heading after it, not by the `---` line.
+    let agents = ok(&env, "guide agents");
+    assert!(
+        agents.lines().any(|l| l == "# backlot"),
+        "the agents topic has no '# backlot' heading"
+    );
+    // Every topic prints something with the file's own heading — the
+    // agent skill opens on frontmatter, its heading follows.
     for name in guide::names() {
         let text = ok(&env, &format!("guide {name}"));
         assert!(
-            text.starts_with('#'),
-            "'{name}' does not open with a heading"
+            text.lines().any(|l| l.starts_with("# ")),
+            "'{name}' has no heading"
         );
         assert!(!text.trim().is_empty(), "'{name}' is empty");
     }
@@ -94,9 +102,9 @@ fn parser_shape() {
     assert!(help.contains("--grep"), "{help}");
 }
 
-/// The compiled topic set is exactly the files in `docs/studio/` — a
-/// new doc that is not embedded fails here, so the binary never ships
-/// a partial set.
+/// The compiled topic set is every file in `docs/studio/` plus the
+/// agent skill — a new doc that is not embedded fails here, so the
+/// binary never ships a partial set.
 #[test]
 fn every_doc_file_is_embedded() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/studio");
@@ -113,5 +121,17 @@ fn every_doc_file_is_embedded() {
     on_disk.sort();
     let mut embedded: Vec<String> = guide::names().map(String::from).collect();
     embedded.sort();
-    assert_eq!(embedded, on_disk, "docs/studio and the guide disagree");
+    for name in &on_disk {
+        assert!(
+            embedded.contains(name),
+            "docs/studio/{name}.md is not embedded in the guide"
+        );
+    }
+    let extra: Vec<&String> = embedded.iter().filter(|n| !on_disk.contains(n)).collect();
+    assert_eq!(
+        extra.len(),
+        1,
+        "only the agent skill sits beside docs/studio"
+    );
+    assert_eq!(extra[0].as_str(), "agents");
 }

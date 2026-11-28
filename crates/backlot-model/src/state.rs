@@ -462,6 +462,10 @@ pub struct Message {
     /// create owes from then.
     #[serde(default)]
     pub ts_ms: u64,
+    /// `agent:<name>` when a coding agent wrote it for the person (the
+    /// `BACKLOT_VIA`/`--via` record); `"doc"` for the server queue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
     /// When the `message.delivered` landed — a nudge's escalation
     /// clock starts there. `None` on logs that predate it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -50,7 +50,10 @@ part of this step.
 
 ## Events
 
-Every event has `v`, `seq`, `ts_ms`, `kind`, and `by` (the role and session). `v` is the ledger
+Every event has `v`, `seq`, `ts_ms`, `kind`, and `by` (the role, the session and an optional
+`via`). `by.via` is `doc` for an event submitted through the server queue, or `agent:<name>` when a
+coding agent acted for the person with `BACKLOT_VIA`/`--via`; `backlot msg show` and the panel's
+reader then name `user (via claude-code)`. `v` is the ledger
 schema version — `1` today. Lines written before versioning carry no `v` and read as `v: 1`;
 a `v` newer than the binary's `LEDGER_VERSION` is refused with a corrupt `"ledger event version vN is newer than supported v1; upgrade backlot"` error, and malformed JSON, missing envelope fields (`seq`, `ts_ms`, `by`, `kind`), known kinds with invalid payloads, or `v: 0` return a line-numbered corrupt error (an unterminated trailing line without a newline is ignored on read as a torn write and truncated before any append).
 

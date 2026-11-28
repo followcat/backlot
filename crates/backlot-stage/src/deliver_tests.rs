@@ -37,6 +37,7 @@ fn message(seq: u64, to: &str, delivered: bool) -> Message {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     }
 }
@@ -125,6 +126,7 @@ fn the_digest_orders_by_label_then_seq() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     };
     let mut state = StudioState::default();
@@ -202,6 +204,7 @@ fn the_plan_request_says_what_is_wanted() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     });
     let out = outbox(&state, dir());
@@ -498,6 +501,7 @@ fn notices_are_owed_once_per_source_event() {
             dropped: false,
             dropped_reason: None,
             ts_ms: 0,
+            via: None,
             delivered_ms: None,
         });
     }

@@ -111,6 +111,7 @@ fn question_notice_body_and_staleness() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     };
     assert_eq!(

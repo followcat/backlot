@@ -21,6 +21,10 @@ pub struct StudioExchange {
     pub seq: u64,
     /// Sender role (`user`, `producer`, `hollywood`, …).
     pub who: String,
+    /// The coding agent that wrote it for the person (`claude-code`
+    /// when the event carried `agent:claude-code`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
     /// Recipient role (`user`, `producer`, `hollywood`, …).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
@@ -49,6 +53,22 @@ pub struct StudioExchange {
 enum RawTurn<'a> {
     Message(&'a Message),
     Report(&'a crate::state::ReportRecord),
+}
+
+/// `user (via claude-code)` for a sender an agent acted for; `who`
+/// alone otherwise.
+pub fn sender_label(who: &str, via: Option<&str>) -> String {
+    match via {
+        Some(agent) => format!("{who} (via {agent})"),
+        None => who.to_string(),
+    }
+}
+
+/// The agent an event's `via` names — `None` for the server queue
+/// (`"doc"`) and for a missing value.
+fn agent_of(via: Option<&str>) -> Option<String> {
+    via.and_then(|v| v.strip_prefix("agent:"))
+        .map(str::to_string)
 }
 
 impl RawTurn<'_> {
@@ -132,6 +152,7 @@ pub fn studio_exchange(
                 StudioExchange {
                     seq: m.seq,
                     who: cap(&m.from),
+                    via: agent_of(m.via.as_deref()),
                     to: Some(cap(&m.to)),
                     kind: Some("tell".into()),
                     ask: m.purpose.as_deref() == Some("ask"),
@@ -159,6 +180,7 @@ pub fn studio_exchange(
                 StudioExchange {
                     seq: r.seq,
                     who: cap(&r.from),
+                    via: None,
                     to: Some(cap(&r.to)),
                     kind: Some("report".into()),
                     ask: false,
