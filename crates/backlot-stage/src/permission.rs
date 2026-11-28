@@ -73,14 +73,23 @@ impl Stage {
                         let env = crate::cli::Env {
                             vars: self.env_vars.clone(),
                         };
-                        let grants = match target {
+                        let (grants, readonly_command) = match target {
                             crate::permit_cmd::Target::Shell(command) => {
                                 if !crate::permit_auto::screen_matches(w.runner, text, &command) {
                                     return None;
                                 }
-                                crate::permit_auto::covering_shell_grants(
-                                    state, role, &command, &env,
-                                )?
+                                if crate::permit_auto::readonly_shell(
+                                    state, role, dir, &command, &env,
+                                ) {
+                                    (Vec::new(), command)
+                                } else {
+                                    (
+                                        crate::permit_auto::covering_shell_grants(
+                                            state, role, &command, &env,
+                                        )?,
+                                        String::new(),
+                                    )
+                                }
                             }
                             crate::permit_cmd::Target::Edit(path) => {
                                 let repo = state.studio.as_ref()?.repo.clone();
@@ -90,26 +99,42 @@ impl Stage {
                                 if !crate::permit_auto::edit_screen_matches(text, &path, &rule) {
                                     return None;
                                 }
-                                crate::permit_auto::covering_edit_grant(state, role, &rule)?
+                                (
+                                    crate::permit_auto::covering_edit_grant(state, role, &rule)?,
+                                    String::new(),
+                                )
                             }
                         };
                         let key = crate::permit_auto::allow_key(w.runner)?;
-                        Some((grants, key))
+                        Some((grants, key, readonly_command))
                     });
-                    if let Some((grants, key)) = auto {
+                    if let Some((grants, key, readonly_command)) = auto {
                         if self
                             .driver
                             .keys(&self.client, &w.term.address, &[key])
                             .await
                             .is_ok()
                         {
-                            record(
-                                dir,
-                                EventKind::PermitUsed {
-                                    grants,
-                                    role: role.into(),
-                                },
-                            )?;
+                            if readonly_command.is_empty() {
+                                record(
+                                    dir,
+                                    EventKind::PermitUsed {
+                                        grants,
+                                        role: role.into(),
+                                    },
+                                )?;
+                            } else {
+                                let line = crate::readonly_hook::auto_line(
+                                    &readonly_command,
+                                    &area,
+                                    w.runner,
+                                    now_ms,
+                                );
+                                crate::hook::append(
+                                    &crate::signals::signals_path(dir, role),
+                                    &line,
+                                );
+                            }
                             self.blocked_since.borrow_mut().remove(&pair);
                         } else {
                             self.raise_permission(dir, role, w.runner, text, request, &area)

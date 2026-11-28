@@ -27,6 +27,31 @@ fn fixed_covers(rule: &str) -> bool {
     crate::permit_cmd::fixed_covers(rule)
 }
 
+/// Whether the complete command is provably read-only for this studio
+/// role. Guard classification runs first, exactly as grant coverage does.
+pub(crate) fn readonly_shell(
+    state: &StudioState,
+    role: &str,
+    dir: &Path,
+    command: &str,
+    env: &crate::cli::Env,
+) -> bool {
+    let Some(studio) = state.studio.as_ref() else {
+        return false;
+    };
+    let area = crate::workareas::role_dir(dir, &studio.repo, role, studio.no_git);
+    if !matches!(
+        crate::guard_shell::classify_command_line(command, &studio.push, &area, env),
+        crate::guard_rules::GuardVerdict::Allow
+    ) {
+        return false;
+    }
+    let role_dir = dir.join("roles").join(role);
+    let roots = crate::readonly_cmd::roots(dir, Path::new(&studio.repo), &role_dir, &area);
+    let home = env.get("HOME").map(std::path::PathBuf::from);
+    crate::readonly_cmd::check_command(command, &area, &roots, home.as_deref()).is_ok()
+}
+
 /// The active edit grant exactly matching a canonical edit rule.
 pub(crate) fn covering_edit_grant(
     state: &StudioState,
@@ -65,7 +90,13 @@ pub(crate) fn covering_shell_grants_in(
     let derived = crate::permit_rules::coverage(command).ok()?;
     let mut used = Vec::new();
     for segment in derived {
-        if fixed_covers(&segment.rule) {
+        // Step 2's provably read-only classifier owns the fixed shell
+        // readers now: their file arguments must stay inside the role's
+        // roots. `backlot msg show` is the one remaining fixed command —
+        // it is backlot's own ledger reader, not a filesystem glob.
+        if fixed_covers(&segment.rule)
+            && crate::permit_cmd::strip_git_location(&segment.rule) == "backlot msg show"
+        {
             continue;
         }
         let grant = grants.iter().find(|g| {

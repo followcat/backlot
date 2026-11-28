@@ -139,6 +139,11 @@ mod question;
 mod queue_status;
 mod range;
 mod ratelimit;
+mod readonly_args;
+pub(crate) mod readonly_cmd;
+mod readonly_fileargs;
+mod readonly_hook;
+mod readonly_path;
 mod reasons;
 pub mod reconcile;
 mod relabel;
@@ -404,6 +409,8 @@ mod range_cmd_tests;
 mod range_tests;
 #[cfg(test)]
 mod readonly_audit_tests;
+#[cfg(test)]
+mod readonly_cmd_tests;
 #[cfg(test)]
 mod recast_cmd_tests;
 #[cfg(test)]

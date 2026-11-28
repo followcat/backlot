@@ -86,7 +86,7 @@ fn once(why: impl Into<String>) -> Derivation {
     Derivation::OnceOnly(why.into())
 }
 
-fn assignment(word: &str) -> bool {
+pub(crate) fn assignment(word: &str) -> bool {
     let Some((name, _)) = word.split_once('=') else {
         return false;
     };
@@ -203,7 +203,7 @@ fn sed_write_or_exec(args: &[String]) -> bool {
     !scripts.iter().all(|script| plain_sed_print(script))
 }
 
-fn exec_action(prog: &str, args: &[String]) -> bool {
+pub(crate) fn exec_action(prog: &str, args: &[String]) -> bool {
     match prog {
         "find" => args.iter().any(|a| {
             matches!(
