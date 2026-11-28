@@ -167,6 +167,8 @@ pub struct HollywoodState {
     /// Every `role.approval`, in seq order — the user's answers to
     /// Hollywood's own prompts.
     pub approvals: Vec<HApproval>,
+    /// Active remembered permission grants by id.
+    pub permits: BTreeMap<String, crate::event::PermitRecord>,
     /// Hollywood's own terminal record — nothing before the first
     /// `role.state`.
     pub role: HWRole,
@@ -391,6 +393,36 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 r.losses.clear();
             }
         },
+        HollywoodKind::PermitGranted {
+            id,
+            scope,
+            role,
+            permit_kind,
+            rule,
+            outward,
+            from,
+            runner,
+        } => {
+            state.permits.insert(
+                id.clone(),
+                crate::event::PermitRecord {
+                    id: id.clone(),
+                    scope: *scope,
+                    role: role.clone(),
+                    kind: *permit_kind,
+                    rule: rule.clone(),
+                    outward: *outward,
+                    from: *from,
+                    runner: runner.clone(),
+                    seq: e.seq,
+                    ts_ms: e.ts_ms,
+                },
+            );
+        }
+        HollywoodKind::PermitRevoked { id, .. } => {
+            state.permits.remove(id);
+        }
+        HollywoodKind::PermitUsed { .. } => {}
         HollywoodKind::RoleApproval { decision } => state.approvals.push(HApproval {
             seq: e.seq,
             ts_ms: e.ts_ms,

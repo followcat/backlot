@@ -36,6 +36,8 @@ fn producer_role(summary: &StudioSummary) -> Option<MenuRole> {
         attention_seq: None,
         attention_user: false,
         can_answer_prompt: true,
+        attention_target: None,
+        permits: Vec::new(),
     })
 }
 
@@ -66,6 +68,10 @@ pub(crate) struct MenuRole {
     /// Whether the runner can answer its own prompt — `false` hides the
     /// `Allow`/`Deny` items, which would send nothing.
     pub can_answer_prompt: bool,
+    /// The uncapped prompt target used by the approval dialog.
+    pub attention_target: Option<String>,
+    /// Active permission grants shown by `Permissions…`.
+    pub permits: Vec<backlot_model::summary::PermitSummary>,
 }
 
 impl From<&RoleSummary> for MenuRole {
@@ -83,6 +89,11 @@ impl From<&RoleSummary> for MenuRole {
             attention_seq: role.attention_seq,
             attention_user: role.attention_user,
             can_answer_prompt: role.can_answer_prompt,
+            attention_target: role
+                .attention_target
+                .clone()
+                .or(role.attention_detail.clone()),
+            permits: role.permits.clone(),
         }
     }
 }
@@ -198,6 +209,9 @@ pub(crate) enum StudioAct {
     TaskSheet,
     /// `y`/`d` on a user-owned prompt — `backlot approve` direct.
     Decide(bool),
+    /// Allow and remember this prompt for a role or the studio.
+    /// Read the grants reaching this role (`backlot permit list --role`).
+    Permissions,
     /// D9's override — a director-routed prompt the user answers
     /// after the confirm dialog.
     DirOverride(bool),
@@ -594,6 +608,8 @@ impl StudioMenu {
                 attention_seq: None,
                 attention_user: false,
                 can_answer_prompt: true,
+                attention_target: None,
+                permits: Vec::new(),
             }),
             task: None,
             card: None,
@@ -659,6 +675,8 @@ impl StudioMenu {
                 attention_seq: None,
                 attention_user: false,
                 can_answer_prompt: true,
+                attention_target: None,
+                permits: Vec::new(),
             }),
             ..StudioMenu::lot()
         }
@@ -683,6 +701,8 @@ impl StudioMenu {
                 attention_seq: None,
                 attention_user: false,
                 can_answer_prompt: true,
+                attention_target: None,
+                permits: Vec::new(),
             }),
             ..StudioMenu::lot()
         }

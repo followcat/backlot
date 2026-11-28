@@ -8,6 +8,22 @@
 use crate::action::{Action, mark};
 use crate::studio::StudioKey;
 
+/// `permit revoke --id <id>` — remove one remembered rule.
+pub(crate) fn permit_revoke(key: &StudioKey, id: &str) -> Action {
+    let mut a = action(
+        format!("revoking permission {id}"),
+        "permission revoked".into(),
+        "revoke permission".into(),
+        key,
+        mark::role(key, id),
+    );
+    a.argv = studio_argv(
+        &["permit".into(), "revoke".into(), "--id".into(), id.into()],
+        key,
+    );
+    a
+}
+
 /// `backlot <command> --studio <id> --as user` on `machine` — the
 /// shared tail every studio call carries (§4).
 pub(crate) fn studio_argv(command: &[String], studio: &StudioKey) -> Vec<String> {
@@ -211,6 +227,40 @@ pub(crate) fn decide(key: &StudioKey, role: &str, allow: bool) -> Action {
             "--person".into(),
             role.into(),
             "--decision".into(),
+            word.into(),
+        ],
+        key,
+    );
+    a
+}
+
+/// `approve --person <role> --decision allow --scope role|studio` — the
+/// server derives the exact narrow rule from the saved prompt.
+pub(crate) fn decide_scoped(
+    key: &StudioKey,
+    role: &str,
+    scope: backlot_stage::args::ApprovalScope,
+) -> Action {
+    let word = match scope {
+        backlot_stage::args::ApprovalScope::Role => "role",
+        backlot_stage::args::ApprovalScope::Studio => "studio",
+        backlot_stage::args::ApprovalScope::Once => "once",
+    };
+    let mut a = action(
+        format!("remembering allow for {role}"),
+        format!("remembered allow for {role} ({})", key.id),
+        format!("remember allow {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &[
+            "approve".into(),
+            "--person".into(),
+            role.into(),
+            "--decision".into(),
+            "allow".into(),
+            "--scope".into(),
             word.into(),
         ],
         key,
@@ -549,6 +599,33 @@ pub(crate) fn hollywood_approve(allow: bool) -> Action {
             "--person".into(),
             "hollywood".into(),
             "--decision".into(),
+            word.into(),
+        ]),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `approve --person hollywood --decision allow --scope role|studio`.
+pub(crate) fn hollywood_approve_scoped(scope: backlot_stage::args::ApprovalScope) -> Action {
+    let word = match scope {
+        backlot_stage::args::ApprovalScope::Role => "role",
+        backlot_stage::args::ApprovalScope::Studio => "studio",
+        backlot_stage::args::ApprovalScope::Once => "once",
+    };
+    Action {
+        label: "remembering hollywood allow".into(),
+        done: "remembered hollywood allow".into(),
+        name: "remember hollywood allow".into(),
+        mark: mark::hollywood(),
+        argv: plain_argv(&[
+            "approve".into(),
+            "--person".into(),
+            "hollywood".into(),
+            "--decision".into(),
+            "allow".into(),
+            "--scope".into(),
             word.into(),
         ]),
         machine: None,

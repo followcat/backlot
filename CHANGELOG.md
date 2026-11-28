@@ -10,6 +10,10 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Remembered permission grants.** You can now allow a narrow permission-prompt command once, for a role, or for the studio; backlot writes active grants to the runner's native permission rules, safely auto-answers later covered prompts, and lists or revokes grants with `backlot permit`.
+
 ## 0.4.34 — 2026-11-28
 
 ### Added
@@ -31,7 +35,6 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Changed
 
 - The README and a new project page at https://followcat.github.io/backlot/ show the current release, with new screenshots and animations.
-
 ## 0.4.31 — 2026-11-28
 
 ### Fixed

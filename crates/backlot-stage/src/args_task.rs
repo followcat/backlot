@@ -508,6 +508,7 @@ pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
 pub(crate) fn approve(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut person = None;
     let mut decision = None;
+    let mut scope = crate::args::ApprovalScope::Once;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_APPROVE)));
@@ -530,6 +531,24 @@ pub(crate) fn approve(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                     usage(format!("bad --decision '{v}', want allow|deny"), U_APPROVE)
                 })?)
             }
+            "--scope" => {
+                let v = it.value("--scope", U_APPROVE)?;
+                scope = crate::args::ApprovalScope::parse(&v).ok_or_else(|| {
+                    usage(
+                        format!("bad --scope '{v}', want once|role|studio"),
+                        U_APPROVE,
+                    )
+                })?;
+            }
+            _ if eq(&arg, "--scope").is_some() => {
+                let v = eq(&arg, "--scope").unwrap_or_default();
+                scope = crate::args::ApprovalScope::parse(v).ok_or_else(|| {
+                    usage(
+                        format!("bad --scope '{v}', want once|role|studio"),
+                        U_APPROVE,
+                    )
+                })?;
+            }
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_APPROVE)),
         }
     }
@@ -538,6 +557,7 @@ pub(crate) fn approve(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
         Cmd::Approve {
             person: person.ok_or_else(|| usage("missing --person", U_APPROVE))?,
             decision: decision.ok_or_else(|| usage("missing --decision", U_APPROVE))?,
+            scope,
         },
     ))
 }
@@ -796,4 +816,70 @@ pub(crate) fn flags_only(
         return Err(usage("--all and --studio do not mix", u));
     }
     Ok((std::mem::take(common), make(json, all)))
+}
+
+/// `permit list [--role <role>] [--json]` — read-only, but person-only:
+/// grants are the person's security policy, not a role's to inspect.
+pub(crate) fn permit_list(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut role = None;
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((
+                std::mem::take(common),
+                Cmd::Help(crate::args_usage::U_PERMIT),
+            ));
+        }
+        if common_flag(it, common, &arg, crate::args_usage::U_PERMIT)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--role" => role = Some(it.value("--role", crate::args_usage::U_PERMIT)?),
+            _ if eq(&arg, "--role").is_some() => role = eq(&arg, "--role").map(String::from),
+            _ => {
+                return Err(usage(
+                    format!("unexpected argument '{arg}'"),
+                    crate::args_usage::U_PERMIT,
+                ));
+            }
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Permit(crate::args::PermitCmd::List { role, json }),
+    ))
+}
+
+/// `permit revoke --id <id>` — the person withdraws one active grant.
+pub(crate) fn permit_revoke(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut id = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((
+                std::mem::take(common),
+                Cmd::Help(crate::args_usage::U_PERMIT),
+            ));
+        }
+        if common_flag(it, common, &arg, crate::args_usage::U_PERMIT)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--id" => id = Some(it.value("--id", crate::args_usage::U_PERMIT)?),
+            _ if eq(&arg, "--id").is_some() => id = eq(&arg, "--id").map(String::from),
+            _ if id.is_none() => id = Some(arg),
+            _ => {
+                return Err(usage(
+                    format!("unexpected argument '{arg}'"),
+                    crate::args_usage::U_PERMIT,
+                ));
+            }
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Permit(crate::args::PermitCmd::Revoke {
+            id: id.ok_or_else(|| usage("missing --id", crate::args_usage::U_PERMIT))?,
+        }),
+    ))
 }

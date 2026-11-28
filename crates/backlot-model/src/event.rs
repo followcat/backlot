@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub use crate::design::{DesignGate, DesignQuestion, DesignSlot, EntrySource, SignMode};
+pub use crate::permit::{PermitKind, PermitRecord, PermitScope};
 pub use crate::progress::{
     MAX_PROGRESS_CHARS, MAX_RUNNING_CHARS, age_short, normalize_progress_text,
 };
@@ -830,6 +831,29 @@ pub enum EventKind {
         task: Option<String>,
         text: String,
     },
+    /// `permit.granted`: the person remembered an allowed prompt as a
+    /// narrow rule. `role` is set exactly on `scope == role` and holds
+    /// the fixed role, `hollywood`, or the actor candidate name.
+    #[serde(rename = "permit.granted")]
+    PermitGranted {
+        id: String,
+        scope: PermitScope,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+        permit_kind: PermitKind,
+        rule: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        outward: bool,
+        from: u64,
+        runner: String,
+    },
+    /// `permit.revoked`: the person withdrew a remembered grant.
+    #[serde(rename = "permit.revoked")]
+    PermitRevoked { id: String, reason: String },
+    /// `permit.used`: the stage auto-answered a covered prompt instead
+    /// of raising an attention. `grants` names the grant ids used.
+    #[serde(rename = "permit.used")]
+    PermitUsed { grants: Vec<String>, role: String },
     /// `role.approval`: a permission-prompt decision (D9). Refused
     /// unless `role` has an open `permission prompt` attention.
     #[serde(rename = "role.approval")]
@@ -998,6 +1022,9 @@ impl EventKind {
             EventKind::OutwardRequested { .. } => "outward.requested",
             EventKind::OutwardCompleted { .. } => "outward.completed",
             EventKind::RoleProgress { .. } => "role.progress",
+            EventKind::PermitGranted { .. } => "permit.granted",
+            EventKind::PermitRevoked { .. } => "permit.revoked",
+            EventKind::PermitUsed { .. } => "permit.used",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::StudioReopened { .. } => "studio.reopened",

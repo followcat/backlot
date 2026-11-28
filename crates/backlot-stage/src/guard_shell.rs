@@ -2,10 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-#[cfg(test)]
 use backlot_model::event::PushPolicy;
 
-#[cfg(test)]
 use crate::cli::Env;
 use crate::guard_git::{GitContext, classify_git};
 use crate::guard_rules::{GuardMatch, GuardVerdict, cap_command, classify_with_context};
@@ -23,7 +21,6 @@ pub(crate) fn refused_command_line(line: &str) -> Option<String> {
 }
 
 /// Classify a shell command line under the 3-way guard model.
-#[cfg(test)]
 pub(crate) fn classify_command_line(
     line: &str,
     policy: &PushPolicy,

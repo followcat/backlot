@@ -65,7 +65,7 @@ fn base_rules() -> String {
         "Bash(backlot *)".to_string(),
         "Read(//home/user/state/studios/acme-shop/**)".to_string(),
     ];
-    for cmd in crate::runners::READ_ONLY {
+    for cmd in crate::runners::native_read_only() {
         rules.push(format!("Bash({cmd})"));
         rules.push(format!("Bash({cmd} *)"));
     }
@@ -299,7 +299,7 @@ fn claude_allowed_tools_pair() {
         let rules: Vec<&str> = l.argv[at + 1].split(',').collect();
         assert_eq!(rules[0], "Bash(backlot *)");
         assert_eq!(rules[1], "Read(//home/user/state/studios/acme-shop/**)");
-        for cmd in crate::runners::READ_ONLY {
+        for cmd in crate::runners::native_read_only() {
             assert!(
                 rules.contains(&format!("Bash({cmd})").as_str()),
                 "missing `{cmd}`: {:?}",
@@ -415,7 +415,7 @@ fn claude_pre_allows_per_role() {
         .unwrap();
         let at = l.argv.iter().position(|a| a == "--allowedTools").unwrap();
         // 2 base + 2 per read-only command + 4 writes.
-        let want = 2 + 2 * crate::runners::READ_ONLY.len() + 4;
+        let want = 2 + 2 * crate::runners::native_read_only().count() + 4;
         assert_eq!(
             l.argv[at + 1].split(',').count(),
             want,
@@ -875,4 +875,44 @@ fn a_replaced_binary_names_the_live_path() {
         claude::live_exe(PathBuf::from("/usr/bin/backlot"), exists),
         PathBuf::from("/usr/bin/backlot")
     );
+}
+
+/// The fixed `rg` read remains covered by backlot's whole-argv
+/// auto-answer, but no runner gets a native prefix that would also
+/// cover `--pre` or another later exec-capable flag.
+#[test]
+fn exec_capable_fixed_reads_stay_out_of_native_allow_lists() {
+    assert!(crate::permit_cmd::fixed_covers("rg"));
+    let checks = [];
+    let claude_rules: Vec<String> =
+        claude::allowed_tools("/home/user/state/studios/acme-shop", "producer", &checks)
+            .split(',')
+            .map(str::to_string)
+            .collect();
+    for (runner, rules, forbidden) in [
+        ("devin", devin::allow_rules(), vec!["Exec(rg)"]),
+        (
+            "cmd",
+            cmd::allow_rules("producer", &checks),
+            vec!["Shell(rg:*)"],
+        ),
+        (
+            "cursor",
+            cursor::allow_rules("producer", &checks),
+            vec!["Shell(rg)"],
+        ),
+        (
+            "cline",
+            cline::allow_commands("producer", &checks),
+            vec!["rg"],
+        ),
+        ("claude", claude_rules, vec!["Bash(rg)", "Bash(rg *)"]),
+    ] {
+        for rule in forbidden {
+            assert!(
+                !rules.iter().any(|r| r == rule),
+                "{runner} natively allows `{rule}`: {rules:?}"
+            );
+        }
+    }
 }

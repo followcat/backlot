@@ -46,6 +46,47 @@ pub(super) fn map(
             id: *id,
             reason: reason.clone(),
         }),
+        Cmd::Approve {
+            person,
+            decision,
+            scope,
+        } => {
+            let (person, decision, scope) = (person.clone(), *decision, *scope);
+            let scope = match scope {
+                crate::args::ApprovalScope::Once => "once",
+                crate::args::ApprovalScope::Role => "role",
+                crate::args::ApprovalScope::Studio => "studio",
+            }
+            .to_string();
+            if person == backlot_model::hollywood::HOLLYWOOD {
+                return Ok(MappedCmd::Action(ReqAction::Approve {
+                    studio: None,
+                    person,
+                    decision,
+                    scope,
+                }));
+            }
+            with_studio(common, env, move |studio| ReqAction::Approve {
+                studio: Some(studio),
+                person,
+                decision,
+                scope,
+            })
+        }
+        Cmd::Permit(crate::args::PermitCmd::List { role, .. }) => {
+            let role = role.clone();
+            with_studio(common, env, move |studio| ReqAction::PermitList {
+                studio,
+                role,
+            })
+        }
+        Cmd::Permit(crate::args::PermitCmd::Revoke { id }) => {
+            let id = id.clone();
+            with_studio(common, env, move |studio| ReqAction::PermitRevoke {
+                studio,
+                id,
+            })
+        }
         Cmd::AttentionClear { target } => {
             let target = *target;
             with_studio(common, env, move |studio| ReqAction::AttentionClear {

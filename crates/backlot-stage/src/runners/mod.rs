@@ -39,11 +39,14 @@ pub use probe::{installed, supported};
 pub(crate) use prompt::prompt_detail;
 pub(crate) use work::work_state;
 
-/// The read-only commands **every** role is pre-allowed on every
-/// runner that has an allow list — the forensic reads a role needs
-/// to understand a repo, a delivery or its own state without
-/// stopping at a prompt (field notes 1126 §5: a producer's `git log
-/// --stat` asked the person). Nothing here writes, moves or deletes:
+/// The read-only commands whose coverage **every** role gets without
+/// a remembered grant — the forensic reads a role needs to understand
+/// a repo, a delivery or its own state without stopping at a prompt
+/// (field notes 1126 §5: a producer's `git log --stat` asked the
+/// person). Most are written to a runner's native allow list; the
+/// exec-flag-capable families named by [`ledger_only_shell`] stay
+/// logical-only and are answered by backlot after a whole-argv check.
+/// Nothing here writes, moves or deletes in its covered form:
 /// `git branch` is absent on purpose — `git branch -D` would come
 /// with the bare prefix — and only its two listing forms are named,
 /// which git refuses to combine with a delete (measured: `git branch
@@ -70,6 +73,23 @@ pub const READ_ONLY: &[&str] = &[
 /// Extra read-only diagnostic commands pre-allowed in the `"worktree"`
 /// profile (`ls`, `wc` and `head` are already in [`READ_ONLY`]).
 pub const WORKTREE_DIAGNOSTICS: &[&str] = &["which", "nproc", "df", "free", "test", "ps", "tail"];
+
+/// Whether a shell rule's program can carry exec- or write-capable
+/// flags after the prefix a runner stores. Those rules are covered by
+/// backlot's whole-argv auto-answer but are never written natively.
+pub(crate) fn ledger_only_shell(rule: &str) -> bool {
+    let prog = rule.split_whitespace().next().unwrap_or_default();
+    let prog = prog.rsplit('/').next().unwrap_or(prog);
+    matches!(prog, "find" | "fd" | "rg" | "sort" | "tar" | "sed")
+}
+
+/// The fixed read-only rules narrow enough for a native runner prefix.
+pub(crate) fn native_read_only() -> impl Iterator<Item = &'static str> {
+    READ_ONLY
+        .iter()
+        .copied()
+        .filter(|rule| !ledger_only_shell(rule))
+}
 
 /// Runners whose `"worktree"` `permission_profile` emits the exact same
 /// settings/flags as `"standard"`.
@@ -399,6 +419,94 @@ pub fn decide_start(
     }
 }
 
+/// Add active grants to a planned launch's native permission surface.
+/// Revocation needs no removal pass: every start/resume rebuilds these
+/// lists from active grants only. Shell rules use each runner's native
+/// form; edit grants use only measured exact path forms (cursor's
+/// `Write(<path>)`, claude's `Edit(<path>)`); other runners rely on the
+/// auto-answer.
+pub fn apply_permits(
+    launch: &mut Launch,
+    runner: &str,
+    permits: &[backlot_model::event::PermitRecord],
+) {
+    let rules: Vec<&str> = permits
+        .iter()
+        .filter(|p| p.kind == backlot_model::event::PermitKind::Shell)
+        .map(|p| p.rule.as_str())
+        .collect();
+    let edits: Vec<&str> = permits
+        .iter()
+        .filter(|p| p.kind == backlot_model::event::PermitKind::Edit)
+        .map(|p| p.rule.as_str())
+        .collect();
+    if rules.is_empty() && edits.is_empty() {
+        return;
+    }
+    let clean = |r: &str| !r.contains(['(', ')', ',', '*', '?', '[', ']', '{', '}', '\\']);
+    let native_shell = |r: &&str| clean(r) && !ledger_only_shell(r);
+    match runner {
+        "devin" => {
+            if let Some(Prep::Devin(prep)) = launch.prep.as_mut() {
+                for rule in rules.into_iter().filter(native_shell) {
+                    prep.allow.push(format!("Exec({rule})"));
+                }
+            }
+        }
+        "cmd" => {
+            if let Some(Prep::Cmd(prep)) = launch.prep.as_mut() {
+                for rule in rules
+                    .into_iter()
+                    .filter(|r| native_shell(r) && !r.contains(':'))
+                {
+                    prep.allow.push(format!("Shell({rule}:*)"));
+                }
+            }
+        }
+        "cursor" => {
+            if let Some(Prep::Cursor(prep)) = launch.prep.as_mut() {
+                for rule in rules
+                    .into_iter()
+                    .filter(|r| native_shell(r) && !r.contains(':'))
+                {
+                    prep.allow.push(format!("Shell({rule})"));
+                }
+                // cursor's own picker offers `Add Write(<path>) to allowlist?`;
+                // that exact measured form is safe for a canonical file path.
+                for path in edits.iter().filter(|p| clean(p)) {
+                    prep.allow.push(format!("Write({path})"));
+                }
+            }
+        }
+        "agy" => {
+            if let Some(Prep::Agy(prep)) = launch.prep.as_mut() {
+                for rule in rules.iter().copied().filter(native_shell) {
+                    if !prep.allow.iter().any(|existing| existing == rule) {
+                        prep.allow.push(rule.to_string());
+                    }
+                }
+            }
+        }
+        "claude" => {
+            let Some(at) = launch.argv.iter().position(|a| a == "--allowedTools") else {
+                return;
+            };
+            let Some(value) = launch.argv.get_mut(at + 1) else {
+                return;
+            };
+            for rule in rules.into_iter().filter(native_shell) {
+                value.push_str(&format!(",Bash({rule}),Bash({rule} *)"));
+            }
+            // Claude Code's permission language uses Edit(<path>) for its
+            // file-edit tool; exact canonical paths carry no glob suffix.
+            for path in edits.iter().filter(|p| clean(p)) {
+                value.push_str(&format!(",Edit({path})"));
+            }
+        }
+        _ => {}
+    }
+}
+
 /// The runner's plan for `identity` in `ctx`, or why it cannot run.
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.runner.as_str() {
@@ -550,6 +658,8 @@ mod dialog_tests;
 mod fake_runner_tests;
 #[cfg(test)]
 mod normalise_tests;
+#[cfg(test)]
+mod permit_apply_tests;
 #[cfg(test)]
 mod readonly_tests;
 #[cfg(test)]

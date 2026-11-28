@@ -446,10 +446,15 @@ fn role_lifecycle_items(
     allow_close: bool,
 ) -> Vec<StudioItem> {
     let mut out = vec![item(
+        "Permissions…".to_owned(),
+        None,
+        StudioAct::Permissions,
+    )];
+    out.push(item(
         format!("Restart {}", role.name),
         Some('r'),
         StudioAct::Restart,
-    )];
+    ));
     // An actor recasts onto a new identity; the task, its terminal and
     // its work area stay. `e` is free on an actor row (a fixed seat's
     // `Close`, which actors keep, is `c`).

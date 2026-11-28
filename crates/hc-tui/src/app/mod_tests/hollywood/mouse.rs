@@ -234,6 +234,7 @@ async fn a_prompts_allow_chip_decides_it() {
         rect.x + 1,
         rect.y,
     ));
+    key(&mut app, hc_vt::Key::Enter);
     let argv = recorded.lock().unwrap();
     assert_eq!(argv.len(), 1, "{argv:?}");
     let line = argv[0].join(" ");
@@ -487,6 +488,7 @@ async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
         chip_rect.x + 1,
         chip_rect.y + 1,
     ));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),

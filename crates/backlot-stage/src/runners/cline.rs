@@ -253,7 +253,7 @@ pub(crate) fn allow_commands_for(role: &str, checks: &[CheckDecl], readonly: boo
         return out;
     }
     add(&mut out, "backlot");
-    for cmd in super::READ_ONLY {
+    for cmd in super::native_read_only() {
         add(&mut out, cmd);
     }
     let is_actor = actor_task(role).is_some();

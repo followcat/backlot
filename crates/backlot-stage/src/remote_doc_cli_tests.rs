@@ -221,7 +221,6 @@ fn non_b1a_verbs_refuse_with_not_available_when_server_named_remotely() {
     };
 
     for line in [
-        "approve --person producer --decision allow",
         "task takeover --task t1 --reason mine",
         "req revise --file /home/user/req.md --summary s",
         "plan publish --kind plan --file /home/user/plan.md",
@@ -438,4 +437,57 @@ fn remote_hollywood_switch_cancel_and_status_travel_over_doc_queue() {
     let ok = run_cli("hollywood setup --runner fake --model model-b --effort high --force-offline")
         .unwrap();
     assert!(ok.contains("[hollywood]"), "{ok}");
+}
+
+#[test]
+fn approve_and_permit_verbs_map_to_server_actions() {
+    let dir = TestDir::new("blrem-map-permit");
+    let env = Env {
+        vars: BTreeMap::from([(
+            "XDG_CONFIG_HOME".into(),
+            dir.as_ref().to_string_lossy().into_owned(),
+        )]),
+    };
+
+    let action_for = |line: &str| {
+        let (common, cmd) = args::parse(&words(line)).unwrap();
+        match map_cmd(&common, &cmd, &env, None).unwrap() {
+            MappedCmd::Action(a) => a,
+            MappedCmd::NeedsStudio(mk) => mk("acme-shop".into()),
+            MappedCmd::Unsupported => panic!("unsupported: {line}"),
+        }
+    };
+
+    assert_eq!(
+        action_for("--studio acme-shop approve --person actor-alice --decision allow --scope role"),
+        ReqAction::Approve {
+            studio: Some("acme-shop".into()),
+            person: "actor-alice".into(),
+            decision: backlot_model::event::ApprovalDecision::Allow,
+            scope: "role".into(),
+        }
+    );
+    assert_eq!(
+        action_for("approve --person hollywood --decision allow --scope role"),
+        ReqAction::Approve {
+            studio: None,
+            person: "hollywood".into(),
+            decision: backlot_model::event::ApprovalDecision::Allow,
+            scope: "role".into(),
+        }
+    );
+    assert_eq!(
+        action_for("--studio acme-shop permit list --role actor-alice"),
+        ReqAction::PermitList {
+            studio: "acme-shop".into(),
+            role: Some("actor-alice".into()),
+        }
+    );
+    assert_eq!(
+        action_for("--studio acme-shop permit revoke --id p7"),
+        ReqAction::PermitRevoke {
+            studio: "acme-shop".into(),
+            id: "p7".into(),
+        }
+    );
 }

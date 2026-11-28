@@ -109,8 +109,7 @@ pub fn parse_action_value(value: &Value) -> Result<ReqAction, String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "missing action kind".to_string())?;
     match tag {
-        "approve" | "permission" | "dialog" | "answer" | "prompt" | "prompt-answer"
-        | "role-approval" => {
+        "permission" | "dialog" | "answer" | "prompt" | "prompt-answer" | "role-approval" => {
             return Err(
                 "prompts and dialogs must be answered in the agent terminal, not via request doc"
                     .into(),
@@ -123,8 +122,26 @@ pub fn parse_action_value(value: &Value) -> Result<ReqAction, String> {
         }
         _ => {}
     }
-    serde_json::from_value::<ReqAction>(value.clone())
-        .map_err(|e| format!("unsupported or malformed action '{tag}': {e}"))
+    let action = serde_json::from_value::<ReqAction>(value.clone())
+        .map_err(|e| format!("unsupported or malformed action '{tag}': {e}"))?;
+    if let ReqAction::Approve {
+        studio,
+        person,
+        scope,
+        ..
+    } = &action
+    {
+        if !matches!(scope.as_str(), "once" | "role" | "studio") {
+            return Err(format!("unsupported approval scope '{scope}'"));
+        }
+        if person == "hollywood" && studio.is_some() {
+            return Err("Hollywood approval carries no studio".into());
+        }
+        if person != "hollywood" && studio.is_none() {
+            return Err("studio approval needs a studio".into());
+        }
+    }
+    Ok(action)
 }
 
 fn de_card_id<'de, D>(deserializer: D) -> Result<u64, D::Error>
@@ -145,6 +162,10 @@ where
             .parse::<u64>()
             .map_err(|_| serde::de::Error::custom(format!("bad card id '{s}'"))),
     }
+}
+
+fn approval_scope_once() -> String {
+    "once".into()
 }
 
 /// Typed B1a person actions accepted over `plugin.backlot.req`.
@@ -180,6 +201,23 @@ pub enum ReqAction {
         #[serde(alias = "seq")]
         target: u64,
     },
+    /// `approve` through the server: `scope` is once, role or studio.
+    Approve {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        studio: Option<String>,
+        person: String,
+        decision: crate::event::ApprovalDecision,
+        #[serde(default = "approval_scope_once")]
+        scope: String,
+    },
+    /// `permit list` through the server.
+    PermitList {
+        studio: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+    },
+    /// `permit revoke` through the server.
+    PermitRevoke { studio: String, id: String },
     AskAcknowledge {
         studio: String,
         role: String,

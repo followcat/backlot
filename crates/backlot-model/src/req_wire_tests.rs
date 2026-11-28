@@ -75,8 +75,26 @@ fn additive_fields_ignored_on_req_res_cat_and_event_by() {
 
 #[test]
 fn unknown_and_refused_action_tags_fail_cleanly() {
+    // `approve` is now a typed, scoped server action; malformed scope is
+    // rejected below. Raw prompt/dialog aliases remain forbidden.
+    let ok = parse_action_value(&json!({
+        "kind": "approve",
+        "studio": "acme-shop",
+        "person": "director",
+        "decision": "allow",
+        "scope": "once"
+    }));
+    assert!(ok.is_ok(), "typed approve parses: {ok:?}");
+    let bad_scope = parse_action_value(&json!({
+        "kind": "approve",
+        "studio": "acme-shop",
+        "person": "director",
+        "decision": "allow",
+        "scope": "always"
+    }))
+    .unwrap_err();
+    assert!(bad_scope.contains("scope"), "{bad_scope}");
     for tag in [
-        "approve",
         "permission",
         "dialog",
         "answer",

@@ -365,6 +365,64 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             }
             Ok(())
         }
+        HollywoodKind::PermitGranted {
+            id,
+            scope,
+            role: permit_role,
+            rule,
+            ..
+        } => {
+            if role != "user" {
+                return Err(role_bound(role, "the user"));
+            }
+            if id.trim().is_empty() {
+                return Err(HRefusal::BadCard("a permit id is empty".into()));
+            }
+            if state.permits.contains_key(id) {
+                return Err(HRefusal::BadCard(format!("permit '{id}' already exists")));
+            }
+            if *scope != crate::event::PermitScope::Role
+                || permit_role.as_deref() != Some(HOLLYWOOD)
+            {
+                return Err(HRefusal::BadCard(
+                    "Hollywood permits are role-scoped to hollywood".into(),
+                ));
+            }
+            if rule.trim().is_empty() {
+                return Err(HRefusal::BadCard("a permit rule is empty".into()));
+            }
+            Ok(())
+        }
+        HollywoodKind::PermitRevoked { id, .. } => {
+            if role != "user" {
+                return Err(role_bound(role, "the user"));
+            }
+            if state.permits.contains_key(id) {
+                Ok(())
+            } else {
+                Err(HRefusal::BadCard(format!("no active permit '{id}'")))
+            }
+        }
+        HollywoodKind::PermitUsed {
+            grants,
+            role: used_role,
+        } => {
+            if role != "stage" {
+                return Err(role_bound(role, "the stage"));
+            }
+            if used_role != HOLLYWOOD {
+                return Err(HRefusal::BadCard(
+                    "a Hollywood permit use names another role".into(),
+                ));
+            }
+            if grants.iter().all(|id| state.permits.contains_key(id)) {
+                Ok(())
+            } else {
+                Err(HRefusal::BadCard(
+                    "a permit use names a missing grant".into(),
+                ))
+            }
+        }
         // A prompt on Hollywood's own screen is the user's (D9): only
         // the user records the answer the stage then sends.
         HollywoodKind::RoleApproval { .. } => {

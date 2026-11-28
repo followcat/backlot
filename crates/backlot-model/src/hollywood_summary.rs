@@ -63,6 +63,9 @@ pub struct HollywoodSummary {
     /// about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention_detail: Option<String>,
+    /// The uncapped prompt target used for remembered-permission choices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_target: Option<String>,
     /// Whether Hollywood's runner can answer its own prompt — false
     /// for a runner with no approval key, where the client offers
     /// `answer in its terminal (Enter)`. Absent on documents an older
@@ -266,7 +269,8 @@ pub fn hollywood_section_with_activity(
         .flatten()
         .filter(|d| !d.is_empty())
         .map(|d| cap(&d));
-    let prompt = live.then_some(prompt).flatten().map(cap);
+    let raw_prompt = live.then_some(prompt).flatten();
+    let prompt = raw_prompt.map(cap);
     HollywoodSummary {
         state: cap(role_state),
         runner: runner.map(cap),
@@ -284,6 +288,7 @@ pub fn hollywood_section_with_activity(
             .then(|| format!("{PERMISSION_PROMPT} — needs the user")),
         attention_user: prompt.is_some(),
         attention_detail: prompt,
+        attention_target: raw_prompt.map(str::to_string),
         can_answer_prompt: runner.is_none_or(crate::caps::can_answer_prompt),
         headline: state.last_headline().map(cap_headline),
         restarted_ms: state.role.restarted_ms,

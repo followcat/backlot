@@ -120,6 +120,9 @@ mod paths;
 mod paths_tests;
 mod permission;
 mod permit;
+mod permit_auto;
+mod permit_cmd;
+pub mod permit_rules;
 mod person_only;
 mod proc_guard;
 #[cfg(test)]
@@ -379,6 +382,8 @@ mod outward_card_tests;
 mod outward_exec_tests;
 #[cfg(test)]
 mod permit_cmd_tests;
+#[cfg(test)]
+mod permit_rules_tests;
 #[cfg(test)]
 mod permit_tests;
 #[cfg(test)]

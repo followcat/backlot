@@ -456,7 +456,9 @@ fn check_backlot_args(args: &[String], role: Option<&str>) -> Option<String> {
         ["card", "apply" | "cancel", ..] => {
             Some("self-approval blocked (backlot card apply|cancel)".into())
         }
-        ["perms", "revoke", ..] => Some("self-approval blocked (backlot perms revoke)".into()),
+        ["perms", "revoke", ..] | ["permit", "revoke", ..] => {
+            Some("self-approval blocked (backlot permit revoke)".into())
+        }
         ["server", "run" | "start" | "stop" | "adopt" | "service", ..] => {
             Some("server control is the person's (backlot server)".into())
         }

@@ -312,7 +312,7 @@ async fn unknown_action_approve_outward_and_prompt_attention_refusals() {
 
     let q = vec![
         json!({"req_id": "bad-unknown", "ts_ms": now_ms, "action": {"kind": "no-such-verb"}}),
-        json!({"req_id": "bad-approve", "ts_ms": now_ms, "action": {"kind": "approve", "studio": "acme-shop", "person": "director", "decision": "allow"}}),
+        json!({"req_id": "bad-approve", "ts_ms": now_ms, "action": {"kind": "approve", "studio": "acme-shop", "person": "director", "decision": "allow", "scope": "always"}}),
         json!({"req_id": "bad-shell", "ts_ms": now_ms, "action": {"kind": "shell", "cmd": "rm -rf /"}}),
         json!({"req_id": "bad-prompt-clear", "ts_ms": now_ms, "action": {"kind": "attention-clear", "studio": "acme-shop", "target": 2}}),
         json!({"req_id": "bad-question-clear", "ts_ms": now_ms, "action": {"kind": "attention-clear", "studio": "acme-shop", "target": 3}}),

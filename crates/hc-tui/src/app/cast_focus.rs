@@ -472,7 +472,15 @@ impl App {
             return;
         }
         if r.attention_user {
-            self.run_action(crate::studio_cmds::decide(&studio, &r.role, allow));
+            self.approval_open_studio(
+                &studio,
+                &r.role,
+                &r.name,
+                r.attention_target
+                    .as_deref()
+                    .or(r.attention_detail.as_deref()),
+                !allow,
+            );
         } else if r.attention_seq.is_some() {
             self.studio_dialog = Some(crate::studio_dialog::StudioDialog::dir_override(
                 &studio, &r.role, allow,

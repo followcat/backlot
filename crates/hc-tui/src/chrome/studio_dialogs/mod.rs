@@ -187,16 +187,20 @@ fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
     );
 }
 
+mod approval;
 mod archived;
 mod confirm;
 mod design_sign;
 mod kinds;
 mod lifecycle;
+mod permissions;
+use approval::render_approval;
 use archived::render_restore;
 use confirm::render_confirm;
 use design_sign::render_design_sign;
 use kinds::{render_reason, render_revise, render_tell};
 use lifecycle::{render_cast_edit, render_recast, render_restart};
+use permissions::render_permissions;
 
 /// One render entry — the app hands the `modal_band()` rect so a
 /// beside dock's border is never crossed (A6.2).
@@ -238,6 +242,8 @@ pub(crate) fn render_styled(
         StudioDialog::Reason(d) => render_reason(b, band, d, palette, mode),
         StudioDialog::Confirm(d) => render_confirm(b, band, d, palette, mode),
         StudioDialog::DesignSign(d) => render_design_sign(b, band, d, palette, mode),
+        StudioDialog::Approval(d) => render_approval(b, band, d, palette, mode),
+        StudioDialog::Permissions(d) => render_permissions(b, band, d, palette, mode),
         StudioDialog::Tell(d) => render_tell(b, band, d, palette, mode),
         StudioDialog::Revise(d) => render_revise(b, band, d, palette, mode),
         StudioDialog::Restart(d) => render_restart(b, band, d, palette, mode),

@@ -355,6 +355,7 @@ fn cline_hook_blocks_self_approval_backlot_env_and_mutations() {
         "backlot card cancel c1",
         "backlot --studio acme-shop card apply c1",
         "backlot perms revoke r1",
+        "backlot permit revoke r1",
         "backlot approve --person actor-t1-c1 --decision allow",
     ] {
         let (cancel, _, _) = run_as(&dir, "actor-t1-c1", &commands(&[cmd]));

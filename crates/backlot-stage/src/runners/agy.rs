@@ -84,6 +84,9 @@ pub struct AgyPrep {
     /// Work-area path to add to `trustedWorkspaces`, or `None` when
     /// `[stage] answer_trust` is off.
     pub trusted_workspace: Option<PathBuf>,
+    /// Remembered shell command stems to write as `command(<stem>)`
+    /// entries in `permissions.allow`.
+    pub allow: Vec<String>,
     /// When true, deny git write commands in `.agy-settings.json`.
     pub readonly: bool,
 }
@@ -176,12 +179,26 @@ fn deny_rules(readonly: bool) -> Vec<String> {
         .collect()
 }
 
-fn permissions_json(existing: &str, readonly: bool) -> String {
+fn permissions_json(existing: &str, readonly: bool, extra_allow: &[String]) -> String {
     let mut map = serde_json::from_str::<serde_json::Value>(existing)
         .ok()
         .and_then(|v| v.get("permissions").and_then(|p| p.as_object()).cloned())
         .unwrap_or_default();
     map.insert("deny".into(), serde_json::json!(deny_rules(readonly)));
+    if !extra_allow.is_empty() {
+        let mut allow = map
+            .get("allow")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for rule in extra_allow {
+            let native = format!("command({rule})");
+            if !allow.iter().any(|v| v.as_str() == Some(native.as_str())) {
+                allow.push(serde_json::Value::String(native));
+            }
+        }
+        map.insert("allow".into(), serde_json::Value::Array(allow));
+    }
     serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_default()
 }
 
@@ -210,21 +227,32 @@ pub(crate) fn settings_content(
     existing: Option<&[u8]>,
     trusted_workspace: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    settings_content_for(existing, trusted_workspace, false)
+    settings_content_for(existing, trusted_workspace, false, &[])
 }
 
 fn settings_content_for(
     existing: Option<&[u8]>,
     trusted_workspace: Option<&str>,
     readonly: bool,
+    extra_allow: &[String],
 ) -> Result<Vec<u8>, String> {
     let fresh = || {
         let mut obj = serde_json::Map::new();
         obj.insert("toolPermission".into(), serde_json::json!("always-proceed"));
-        obj.insert(
-            "permissions".into(),
-            serde_json::json!({ "deny": deny_rules(readonly) }),
-        );
+        let mut permissions = serde_json::Map::new();
+        permissions.insert("deny".into(), serde_json::json!(deny_rules(readonly)));
+        if !extra_allow.is_empty() {
+            permissions.insert(
+                "allow".into(),
+                serde_json::json!(
+                    extra_allow
+                        .iter()
+                        .map(|rule| format!("command({rule})"))
+                        .collect::<Vec<_>>()
+                ),
+            );
+        }
+        obj.insert("permissions".into(), serde_json::Value::Object(permissions));
         if let Some(cwd) = trusted_workspace {
             obj.insert("trustedWorkspaces".into(), serde_json::json!([cwd]));
         }
@@ -242,7 +270,7 @@ fn settings_content_for(
         // A file that is not a JSON object is healed, not preserved.
         return fresh();
     };
-    let perms = permissions_json(trimmed, readonly);
+    let perms = permissions_json(trimmed, readonly, extra_allow);
     let Some(with_perms) = splice_permissions(&with_tp, &perms) else {
         return fresh();
     };
@@ -283,7 +311,12 @@ pub fn prepare(p: &AgyPrep) -> Result<Option<super::PrepNote>, String> {
             .to_string_lossy()
             .into_owned()
     });
-    let bytes = settings_content_for(existing.as_deref(), trusted.as_deref(), p.readonly)?;
+    let bytes = settings_content_for(
+        existing.as_deref(),
+        trusted.as_deref(),
+        p.readonly,
+        &p.allow,
+    )?;
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
 
     const REL: &str = ".agents/hooks.json";
@@ -457,6 +490,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
                 .join(ctx.role)
                 .join("signals.jsonl"),
             trusted_workspace: ctx.answer_trust.then(|| PathBuf::from(ctx.cwd)),
+            allow: Vec::new(),
             readonly,
         })),
     })

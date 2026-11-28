@@ -149,6 +149,7 @@ pub fn wants_json(cmd: &Cmd) -> bool {
         | Cmd::StudioRestore { json, .. }
         | Cmd::Repos { json, .. }
         | Cmd::Runners { json } => *json,
+        Cmd::Permit(crate::args::PermitCmd::List { json, .. }) => *json,
         Cmd::StudioCast(crate::args::CastCmd::Show { json })
         | Cmd::StudioCast(crate::args::CastCmd::Set { json, .. })
         | Cmd::Hollywood(crate::args::HollywoodCmd::Switch { json, .. })

@@ -25,6 +25,9 @@ pub fn hconfirm(event: &HollywoodEvent) -> String {
         HollywoodKind::Reported { headline, .. } => format!(" \"{headline}\""),
         HollywoodKind::MessageSent { to, .. } => format!(" → {to}"),
         HollywoodKind::RoleState { state, .. } => format!(" {state:?}"),
+        HollywoodKind::PermitGranted { id, .. } => format!(" {id}"),
+        HollywoodKind::PermitRevoked { id, .. } => format!(" {id}"),
+        HollywoodKind::PermitUsed { grants, .. } => format!(" {}", grants.join(",")),
         HollywoodKind::RoleApproval { decision } => format!(" {decision:?}"),
         HollywoodKind::MessageDelivered { target }
         | HollywoodKind::MessageDropped { target, .. } => format!(" #{target}"),

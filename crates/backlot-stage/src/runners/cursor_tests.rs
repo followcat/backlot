@@ -58,7 +58,6 @@ fn rules_per_role() {
         "Shell(git branch --list)",
         "Shell(git branch --show-current)",
         "Shell(ls)",
-        "Shell(rg)",
         "Shell(wc)",
         "Shell(head)",
         "Shell(backlot msg show)",

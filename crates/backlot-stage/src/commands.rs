@@ -395,6 +395,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioCast(_)
         | Cmd::StudioCheck(_)
         | Cmd::PermsRevoke { .. }
+        | Cmd::Permit(_)
         | Cmd::Server(..)
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
@@ -792,7 +793,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         // `approve` answers an open `permission prompt` attention on
         // the person — the model refuses when none is open (D9: no
         // prompt answered without a recorded decision).
-        Cmd::Approve { person, decision } => {
+        Cmd::Approve { person, decision, .. } => {
             person_gate(caller)?;
             Ok(Box::new(move |_, _| {
                 Ok(pending(

@@ -10,9 +10,11 @@ use crate::studio_menu::StudioMenu;
 
 use super::App;
 
+mod approval;
 mod design_sign;
 mod keys;
 mod lifecycle;
+mod permissions;
 mod restore;
 
 impl App {

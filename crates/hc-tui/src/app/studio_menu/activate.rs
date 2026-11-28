@@ -47,7 +47,25 @@ impl App {
             }
             StudioAct::Decide(allow) => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
-                    self.run_action(studio_cmds::decide(key, &role.role, allow));
+                    self.approval_open_studio(
+                        key,
+                        &role.role,
+                        &role.name,
+                        role.attention_target.as_deref(),
+                        !allow,
+                    );
+                }
+            }
+            StudioAct::Permissions => {
+                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                    self.studio_dialog = Some(crate::studio_dialog::StudioDialog::Permissions(
+                        crate::studio_dialog::PermissionsDialog {
+                            key: key.clone(),
+                            name: role.name.clone(),
+                            permits: role.permits.clone(),
+                            selected: 0,
+                        },
+                    ));
                 }
             }
             StudioAct::DirOverride(allow) => {

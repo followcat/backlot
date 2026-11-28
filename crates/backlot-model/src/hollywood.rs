@@ -183,6 +183,28 @@ pub enum HollywoodKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// The person remembered a permission for Hollywood itself. Scope is
+    /// always `role` with role key `hollywood`; Hollywood has no studio.
+    #[serde(rename = "permit.granted")]
+    PermitGranted {
+        id: String,
+        scope: crate::event::PermitScope,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+        permit_kind: crate::event::PermitKind,
+        rule: String,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        outward: bool,
+        from: u64,
+        runner: String,
+    },
+    /// The person withdrew one remembered permission.
+    #[serde(rename = "permit.revoked")]
+    PermitRevoked { id: String, reason: String },
+    /// The stage auto-answered a covered prompt instead of leaving it
+    /// for the person. `role` is `hollywood`.
+    #[serde(rename = "permit.used")]
+    PermitUsed { grants: Vec<String>, role: String },
     /// The user's answer to a permission prompt on Hollywood's own
     /// screen — the same decision a studio role's prompt records. The
     /// stage sends the runner's one-time allow key, never "don't ask
@@ -252,6 +274,9 @@ impl HollywoodKind {
             HollywoodKind::Reported { .. } => "hollywood.reported",
             HollywoodKind::MessageSent { .. } => "message.sent",
             HollywoodKind::RoleState { .. } => "role.state",
+            HollywoodKind::PermitGranted { .. } => "permit.granted",
+            HollywoodKind::PermitRevoked { .. } => "permit.revoked",
+            HollywoodKind::PermitUsed { .. } => "permit.used",
             HollywoodKind::RoleApproval { .. } => "role.approval",
             HollywoodKind::MessageDelivered { .. } => "message.delivered",
             HollywoodKind::MessageDropped { .. } => "message.dropped",

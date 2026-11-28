@@ -91,7 +91,7 @@ pub(crate) const ENTRIES: &[PersonOnlyEntry] = &[
     },
     PersonOnlyEntry {
         kind: GuardKind::PermsRevoke,
-        bullet: "Revoke permissions (`backlot perms revoke <seq>`).",
+        bullet: "List or revoke remembered permissions (`backlot permit list`, `backlot permit revoke --id <id>`).",
     },
     PersonOnlyEntry {
         kind: GuardKind::ServerControl,
