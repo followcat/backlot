@@ -707,9 +707,19 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
         "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n du -sh /home/user/acme-shop\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
     );
 
-    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0),
+    )
+    .await
+    .expect("first covered-prompt sample timed out");
     assert!(fake.lock().unwrap().keys.is_empty());
-    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 2_000).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 2_000),
+    )
+    .await
+    .expect("covered-prompt auto-answer sample timed out");
     assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
     assert!(events(&dir, "attention.raised").is_empty());
     let used = events(&dir, "permit.used");
@@ -722,22 +732,27 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
         _ => unreachable!(),
     }
 
-    // A different command under the same grant shape is not the same
-    // prompt: no key and no permit use until the person decides.
+    // A different command on screen is not the prompt the hook
+    // signal named: no key and no permit use until the person decides.
     fake.lock().unwrap().keys.clear();
-    fake.lock().unwrap().screen = fake
+    let changed = fake
         .lock()
         .unwrap()
         .screen
         .replace("du -sh /home/user/acme-shop", "du -sh /home/user/other");
-    fs::write(
-        sig_dir.join("signals.jsonl"),
-        "{\"ts_ms\":2,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\
-         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"du -sh /home/user/other\"}}\n",
+    fake.lock().unwrap().screen = changed;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 3_000),
     )
-    .unwrap();
-    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 3_000).await;
-    sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 5_000).await;
+    .await
+    .expect("replacement-prompt first sample timed out");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 5_000),
+    )
+    .await
+    .expect("replacement-prompt second sample timed out");
     assert!(fake.lock().unwrap().keys.is_empty());
     assert_eq!(events(&dir, "permit.used").len(), 1);
 }
