@@ -424,24 +424,36 @@ pub fn apply_permits(
         return;
     }
     let clean = |r: &str| !r.contains(['(', ')', ',', '*', '?', '[', ']', '{', '}', '\\']);
+    let ledger_only = |r: &str| {
+        let prog = r.split_whitespace().next().unwrap_or_default();
+        let prog = prog.rsplit('/').next().unwrap_or(prog);
+        matches!(prog, "find" | "fd" | "rg" | "sort" | "tar" | "sed")
+    };
+    let native_shell = |r: &&str| clean(r) && !ledger_only(r);
     match runner {
         "devin" => {
             if let Some(Prep::Devin(prep)) = launch.prep.as_mut() {
-                for rule in rules {
+                for rule in rules.into_iter().filter(native_shell) {
                     prep.allow.push(format!("Exec({rule})"));
                 }
             }
         }
         "cmd" => {
             if let Some(Prep::Cmd(prep)) = launch.prep.as_mut() {
-                for rule in rules.into_iter().filter(|r| clean(r) && !r.contains(':')) {
+                for rule in rules
+                    .into_iter()
+                    .filter(|r| native_shell(r) && !r.contains(':'))
+                {
                     prep.allow.push(format!("Shell({rule}:*)"));
                 }
             }
         }
         "cursor" => {
             if let Some(Prep::Cursor(prep)) = launch.prep.as_mut() {
-                for rule in rules.into_iter().filter(|r| clean(r) && !r.contains(':')) {
+                for rule in rules
+                    .into_iter()
+                    .filter(|r| native_shell(r) && !r.contains(':'))
+                {
                     prep.allow.push(format!("Shell({rule})"));
                 }
                 // cursor's own picker offers `Add Write(<path>) to allowlist?`;
@@ -453,7 +465,7 @@ pub fn apply_permits(
         }
         "agy" => {
             if let Some(Prep::Agy(prep)) = launch.prep.as_mut() {
-                for rule in rules.iter().copied().filter(|r| clean(r)) {
+                for rule in rules.iter().copied().filter(native_shell) {
                     if !prep.allow.iter().any(|existing| existing == rule) {
                         prep.allow.push(rule.to_string());
                     }
@@ -467,7 +479,7 @@ pub fn apply_permits(
             let Some(value) = launch.argv.get_mut(at + 1) else {
                 return;
             };
-            for rule in rules.into_iter().filter(|r| clean(r)) {
+            for rule in rules.into_iter().filter(native_shell) {
                 value.push_str(&format!(",Bash({rule}),Bash({rule} *)"));
             }
             // Claude Code's permission language uses Edit(<path>) for its

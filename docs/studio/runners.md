@@ -650,4 +650,4 @@ When you approve a shell prompt with `--scope role` or `--scope studio`, backlot
 
 Edit grants store one canonical file path inside the role worktree or studio repository. cursor writes the measured exact `Write(<path>)` form and claude writes `Edit(<path>)`; cmd, devin and agy have no exact measured path form in this step, so their edit grants are enforced by backlot's auto-answer rather than a native file rule. Paths containing `..`, secrets such as `.env` or `.ssh`, or paths outside the role/studio roots cannot be remembered.
 
-Rules carrying runner syntax or glob metacharacters are not written natively; they still exist in the ledger for backlot's own coverage check. Guards and deny rules always win over an allow rule.
+Rules carrying runner syntax or glob metacharacters are not written natively; they still exist in the ledger for backlot's own coverage check. Rules for `find`, `fd`, `rg`, `sort`, `tar` and `sed` are ledger-only for every runner: a native prefix rule cannot exclude their later exec- or write-capable flags, while backlot's coverage check inspects the whole argument vector. Guards and deny rules always win over an allow rule.

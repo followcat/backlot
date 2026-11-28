@@ -116,3 +116,69 @@ fn apply_permits_rewrites_claude_allowed_tools() {
     assert!(tools.contains("Bash(git diff *)"), "{tools}");
     assert!(tools.contains("Edit(/home/user/repo/src/a.rs)"), "{tools}");
 }
+
+#[test]
+fn exec_capable_rule_families_stay_ledger_only_and_devin_rules_are_cleaned() {
+    for rule in ["find", "fd", "rg", "sort", "tar tzf", "sed -n"] {
+        let permits = vec![permit(PermitKind::Shell, rule)];
+        for runner in ["devin", "cmd", "cursor", "agy"] {
+            let prep = match runner {
+                "devin" => Prep::Devin(super::devin::DevinPrep {
+                    config: PathBuf::from("/tmp/config.json"),
+                    signals: PathBuf::from("/tmp/signals.jsonl"),
+                    allow: Vec::new(),
+                    readonly: false,
+                }),
+                "cmd" => Prep::Cmd(super::cmd::CmdPrep {
+                    settings: PathBuf::from("/tmp/settings.json"),
+                    allow: Vec::new(),
+                    additional_dirs: Vec::new(),
+                    global_mcp: PathBuf::from("/tmp/mcp.json"),
+                    signals: PathBuf::from("/tmp/signals.jsonl"),
+                    readonly: false,
+                }),
+                "cursor" => Prep::Cursor(super::cursor::CursorPrep {
+                    root: PathBuf::from("/tmp/cursor"),
+                    project: "p".into(),
+                    allow: Vec::new(),
+                    global_mcp: PathBuf::from("/tmp/mcp.json"),
+                    readonly: false,
+                }),
+                _ => Prep::Agy(super::agy::AgyPrep {
+                    settings: PathBuf::from("/tmp/a.json"),
+                    hooks: PathBuf::from("/tmp/hooks.json"),
+                    signals: PathBuf::from("/tmp/signals.jsonl"),
+                    trusted_workspace: None,
+                    allow: Vec::new(),
+                    readonly: false,
+                }),
+            };
+            let mut launch = launch(prep);
+            apply_permits(&mut launch, runner, &permits);
+            match launch.prep.unwrap() {
+                Prep::Devin(p) => assert!(p.allow.is_empty(), "{runner} wrote {rule}"),
+                Prep::Cmd(p) => assert!(p.allow.is_empty(), "{runner} wrote {rule}"),
+                Prep::Cursor(p) => assert!(p.allow.is_empty(), "{runner} wrote {rule}"),
+                Prep::Agy(p) => assert!(p.allow.is_empty(), "{runner} wrote {rule}"),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    let permits = vec![permit(PermitKind::Shell, "cargo test *")];
+    let mut devin = launch(Prep::Devin(super::devin::DevinPrep {
+        config: PathBuf::from("/tmp/config.json"),
+        signals: PathBuf::from("/tmp/signals.jsonl"),
+        allow: Vec::new(),
+        readonly: false,
+    }));
+    apply_permits(&mut devin, "devin", &permits);
+    let Prep::Devin(p) = devin.prep.unwrap() else {
+        panic!()
+    };
+    assert!(
+        p.allow.is_empty(),
+        "metacharacters reached Devin: {:?}",
+        p.allow
+    );
+}
