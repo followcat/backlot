@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.34 — 2026-11-28
+
 ### Added
 
 - **backlot now keeps the agent skill in step on every machine.** Each stage publishes whether the copies it can see are current, stale, missing, foreign or absent; the machines tree marks that state, one notice offers Enter to install missing or stale copies and `d` to dismiss it until the machine's backlot version changes, and Settings gains an **agent skill** section for machine-by-machine install, uninstall and confirmed replacement of foreign copies ([docs/studio/guide.md](docs/studio/guide.md), [docs/studio/panel.md](docs/studio/panel.md), [docs/studio/requests.md](docs/studio/requests.md)).
