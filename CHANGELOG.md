@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.33 — 2026-11-28
+
 ### Changed
 
 - The agent skill tells a studio role or Hollywood that it is not the person: it keeps to its role prompt, since backlot refuses `--as user` from a role terminal.
