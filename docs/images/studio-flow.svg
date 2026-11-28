@@ -34,6 +34,8 @@
   <text x="64" y="164" class="h" fill="#8892ad">A STUDIO</text>
   <text x="170" y="164" class="s">the cast initializes it — and can change later</text>
 
+  <rect x="50" y="184" width="462" height="216" rx="8" fill="none" stroke="#f0b24a" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.85"/>
+
   <g>
     <rect x="60" y="196" width="120" height="64" rx="6" fill="none" stroke="#ece5d3" stroke-width="1.5"/>
     <text x="120" y="233" class="n" text-anchor="middle">You</text>
@@ -82,12 +84,12 @@
     <path d="M920 262V332H600V284" marker-end="url(#a)"/>
   </g>
   <text x="200" y="182" class="s" text-anchor="middle">requirement</text>
-  <text x="280" y="296" class="s" text-anchor="middle">opening discussion until the design is final</text>
   <text x="360" y="182" class="s" text-anchor="middle">dispatch</text>
   <text x="520" y="182" class="s" text-anchor="middle">cast</text>
   <text x="680" y="182" class="s" text-anchor="middle">deliver</text>
   <text x="1000" y="182" class="s" text-anchor="middle">accepted</text>
   <text x="760" y="352" class="s" text-anchor="middle">changes requested: rework, a capped number of rounds</text>
+  <text x="286" y="394" class="l" text-anchor="middle" fill="#f0b24a">opening discussion until the design is final</text>
   <text x="440" y="296" class="s" text-anchor="middle">each actor in its</text>
   <text x="440" y="312" class="s" text-anchor="middle">own git worktree</text>
   <path d="M506 300H520Q530 300 530 290V270H538" class="w" stroke-dasharray="3 3"/>
