@@ -47,6 +47,7 @@ pub mod req_catalog;
 pub mod req_results;
 pub mod req_wire;
 pub mod roles;
+pub mod skill_summary;
 pub mod state;
 pub mod steps;
 mod studio_exchange;

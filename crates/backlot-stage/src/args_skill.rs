@@ -11,9 +11,9 @@ pub(crate) fn skill(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), F
     };
     match sub.as_str() {
         "install" => install(common, it),
-        "status" | "show" | "uninstall" => {
+        "status" => status(common, it),
+        "show" | "uninstall" => {
             let cmd = match sub.as_str() {
-                "status" => SkillCmd::Status,
                 "show" => SkillCmd::Show,
                 _ => SkillCmd::Uninstall,
             };
@@ -63,4 +63,24 @@ fn split_agents(value: &str) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .map(String::from)
         .collect()
+}
+
+fn status(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_SKILL)));
+        }
+        if common_flag(it, common, &arg, U_SKILL)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_SKILL)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Skill(SkillCmd::Status { json }),
+    ))
 }

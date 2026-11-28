@@ -27,6 +27,7 @@ pub use crate::hollywood_summary::{
     QueueStatus, hollywood_section, hollywood_section_with_activity, hollywood_section_with_work,
     studio_outward_cards,
 };
+pub use crate::skill_summary::{AgentSkillSummary, SkillAgentSummary, SkillState};
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, sender_label, studio_exchange, studio_exchange_files,
 };
@@ -447,6 +448,10 @@ pub struct Summary {
     /// that carried no id — the document then says only its version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backlot_build: Option<String>,
+    /// The machine-local Agent Skill state. Additive: documents an
+    /// older stage wrote have none, and older clients ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_skill: Option<AgentSkillSummary>,
 }
 
 impl Summary {
@@ -848,5 +853,6 @@ pub fn summary_with_running(
         hollywood: None,
         backlot_version: None,
         backlot_build: None,
+        agent_skill: None,
     }
 }

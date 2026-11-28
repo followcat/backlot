@@ -360,6 +360,10 @@ pub(crate) struct Stage {
     /// Persistent per-account quota state mirrored to `<state_dir>/accounts.json`.
     pub(crate) accounts: std::cell::RefCell<crate::accounts_store::AccountsFile>,
     pub(crate) accounts_loaded: std::cell::Cell<bool>,
+    /// The machine-local Agent Skill report, recomputed at start and
+    /// every ten minutes rather than on every one-second tick.
+    pub(crate) skill_cache:
+        std::cell::RefCell<Option<(u64, backlot_model::summary::AgentSkillSummary)>>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -812,6 +816,36 @@ impl Stage {
             || self.hprevious_until_ms.get().is_some()
     }
 
+    /// Recompute the machine-local Agent Skill state now — after an
+    /// install or uninstall, so the same summary publish carries it.
+    pub(crate) fn refresh_skill_state(&self) {
+        let env = Env {
+            vars: self.env_vars.clone(),
+        };
+        let report = crate::skill_status::report(&env);
+        crate::stagelog::stage_log!("agent skill state refreshed");
+        self.skill_cache
+            .replace(Some((crate::live::now_ms(), report)));
+    }
+
+    /// The cached skill report, recomputed at stage start and every
+    /// ten minutes. File stats stay off the one-second studio tick.
+    fn skill_state_at(&self, now_ms: u64) -> backlot_model::summary::AgentSkillSummary {
+        const SKILL_SCAN_EVERY_MS: u64 = 10 * 60 * 1000;
+        let cached = self.skill_cache.borrow().clone();
+        if let Some((stamped, report)) = cached
+            && now_ms.saturating_sub(stamped) < SKILL_SCAN_EVERY_MS
+        {
+            return report;
+        }
+        let env = Env {
+            vars: self.env_vars.clone(),
+        };
+        let report = crate::skill_status::report(&env);
+        self.skill_cache.replace(Some((now_ms, report.clone())));
+        report
+    }
+
     /// The `backlot` document's view: cached states, most recently
     /// changed first (the summary keeps live studios and lets old
     /// finished ones drop off). A broken studio with no loaded state
@@ -892,6 +926,7 @@ impl Stage {
         // build id joins it when the build provided one (S2).
         s.backlot_version = Some(env!("CARGO_PKG_VERSION").to_string());
         s.backlot_build = option_env!("BACKLOT_BUILD_ID").map(str::to_owned);
+        s.agent_skill = Some(self.skill_state_at(now_ms));
         // U2: each role's workarea — the pure `role_dir` answer over
         // the studio dir, so a studio shell opens where the person it
         // was focused on works. Waiting rows get theirs too: the dir
@@ -1142,6 +1177,7 @@ impl Stage {
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
+            skill_cache: std::cell::RefCell::new(None),
             started_ms: 0,
         }
     }
@@ -1291,6 +1327,7 @@ async fn run_impl(
         hlast_handoff: std::cell::RefCell::new(None),
         accounts: std::cell::RefCell::new(Default::default()),
         accounts_loaded: std::cell::Cell::new(false),
+        skill_cache: std::cell::RefCell::new(None),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

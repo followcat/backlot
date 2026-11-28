@@ -157,6 +157,7 @@ pub mod signals;
 mod signin;
 pub mod skill;
 mod skill_agents;
+mod skill_status;
 mod stage;
 mod stage_accounts;
 mod stagelog;
@@ -269,6 +270,8 @@ mod doc_req_card_tests;
 mod doc_req_cast_tests;
 #[cfg(test)]
 mod doc_req_fake_core;
+#[cfg(test)]
+mod doc_req_skill_tests;
 #[cfg(test)]
 mod doc_req_studio_json_tests;
 #[cfg(test)]
@@ -435,6 +438,8 @@ mod server_service_tests;
 
 #[cfg(test)]
 mod signals_tests;
+#[cfg(test)]
+mod skill_stage_tests;
 #[cfg(test)]
 mod skill_tests;
 #[cfg(test)]

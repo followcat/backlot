@@ -43,7 +43,7 @@ pub(crate) fn generated(version: &str) -> String {
 }
 
 /// The version an installed copy names, `None` for a foreign file.
-fn marker_version(content: &str) -> Option<&str> {
+pub(crate) fn marker_version(content: &str) -> Option<&str> {
     content
         .lines()
         .find_map(|l| l.strip_prefix(MARKER))
@@ -85,6 +85,11 @@ fn save_manifest(env: &Env, paths: &[PathBuf]) -> Result<(), Fail> {
         .map_err(|e| Fail::refused(format!("{}: {e}", path.display())))
 }
 
+/// The machine-local status report, shared by the TUI's local view.
+pub fn status_report(env: &Env) -> backlot_model::summary::AgentSkillSummary {
+    crate::skill_status::report(env)
+}
+
 /// The run for one `backlot skill` subcommand.
 pub(crate) fn run(cmd: SkillCmd, env: &Env) -> Result<String, Fail> {
     match cmd {
@@ -93,7 +98,7 @@ pub(crate) fn run(cmd: SkillCmd, env: &Env) -> Result<String, Fail> {
             dry_run,
             force,
         } => install(&agents, dry_run, force, env),
-        SkillCmd::Status => status(env),
+        SkillCmd::Status { json } => status(env, json),
         SkillCmd::Show => Ok(SKILL.to_string()),
         SkillCmd::Uninstall => uninstall(env),
     }
@@ -144,7 +149,7 @@ fn label(group: &[&Agent]) -> String {
 
 /// `backlot skill install`: write `<dir>/backlot/SKILL.md` for every
 /// detected agent (or only the named ones) and record the paths.
-fn install(named: &[String], dry_run: bool, force: bool, env: &Env) -> Result<String, Fail> {
+pub fn install(named: &[String], dry_run: bool, force: bool, env: &Env) -> Result<String, Fail> {
     let agents = targets(named, env)?;
     if agents.is_empty() {
         return Ok(
@@ -245,40 +250,35 @@ fn display(path: &Path, env: &Env) -> String {
     }
 }
 
-/// `backlot skill status`: where a copy is installed and whether it is
-/// current, stale or foreign.
-fn status(env: &Env) -> Result<String, Fail> {
-    let mut out = String::new();
-    let mut rows = 0;
-    for (dir, group) in by_dir(&AGENTS.iter().collect::<Vec<_>>()) {
-        let file = expand(&dir.to_string_lossy(), env)
-            .join("backlot")
-            .join("SKILL.md");
-        let Ok(existing) = fs::read_to_string(&file) else {
-            continue;
-        };
-        rows += 1;
-        let state = match marker_version(&existing) {
-            Some(found) if found == version() => "current",
-            Some(_) => "stale",
-            None => "foreign",
-        };
-        let _ = writeln!(out, "{state:<8}{} ({})", display(&file, env), label(&group));
+/// `backlot skill status`: one row per known agent, or the same
+/// report as JSON.
+fn status(env: &Env, json: bool) -> Result<String, Fail> {
+    let report = crate::skill_status::report(env);
+    if json {
+        let text = serde_json::to_string_pretty(&report)
+            .map_err(|e| Fail::refused(format!("skill status json: {e}")))?;
+        return Ok(format!("{text}\n"));
     }
-    if rows == 0 {
-        return Ok("no installed skill — run `backlot skill install`\n".to_string());
-    }
-    if out.contains("stale") {
-        out.push_str("run `backlot skill install` to refresh stale copies\n");
-    }
-    Ok(out)
+    Ok(crate::skill_status::text(&report, env))
 }
 
 /// `backlot skill uninstall`: remove only the copies backlot wrote.
 fn uninstall(env: &Env) -> Result<String, Fail> {
+    uninstall_agents(&[], env)
+}
+
+/// Uninstall the named agents' copies (or every known agent's when
+/// `named` is empty). Agents sharing one skills directory share the
+/// removal, exactly as they share the installed file.
+pub fn uninstall_agents(named: &[String], env: &Env) -> Result<String, Fail> {
+    let agents: Vec<&Agent> = if named.is_empty() {
+        AGENTS.iter().collect()
+    } else {
+        targets(named, env)?
+    };
     let mut out = String::new();
     let mut removed = 0;
-    for (dir, group) in by_dir(&AGENTS.iter().collect::<Vec<_>>()) {
+    for (dir, group) in by_dir(&agents) {
         let file = expand(&dir.to_string_lossy(), env)
             .join("backlot")
             .join("SKILL.md");

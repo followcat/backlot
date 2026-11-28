@@ -369,6 +369,31 @@ pub enum ReqAction {
     },
     /// `design start round`: reject `--suggest-skip` and start Round 1 immediately.
     DesignStartRound { studio: String },
+    /// Install or refresh the machine-local Agent Skill for the named
+    /// agents (or every detected agent when the list is empty). `force`
+    /// is the CLI's `--force`: it replaces a foreign copy.
+    #[serde(rename = "skill.install")]
+    SkillInstall {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        agents: Vec<String>,
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        force: bool,
+        /// The declared caller when a CLI bridge submits this for a role.
+        /// The TUI leaves it empty, which is the person's path; a named
+        /// role is refused by the stage.
+        #[serde(default, rename = "as", skip_serializing_if = "Option::is_none")]
+        as_role: Option<String>,
+    },
+    /// Uninstall the machine-local Agent Skill for the named agents
+    /// (or every known agent when the list is empty). Foreign copies
+    /// are always left alone.
+    #[serde(rename = "skill.uninstall")]
+    SkillUninstall {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        agents: Vec<String>,
+        #[serde(default, rename = "as", skip_serializing_if = "Option::is_none")]
+        as_role: Option<String>,
+    },
 }
 
 /// Ack document written solely by the stage (`plugin.backlot.res`).

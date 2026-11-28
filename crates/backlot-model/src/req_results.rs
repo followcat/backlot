@@ -332,3 +332,12 @@ pub struct DesignStartRoundResult {
     pub doc_file: String,
     pub seq: u64,
 }
+
+/// Result of `skill.install` / `skill.uninstall`: the command's text
+/// plus the refreshed machine-local status the stage republishes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillResult {
+    pub action: String,
+    pub output: String,
+    pub skill: crate::skill_summary::AgentSkillSummary,
+}

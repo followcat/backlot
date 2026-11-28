@@ -82,6 +82,7 @@ fn summary(studio: &str, roles: Vec<RoleSummary>) -> Summary {
         hollywood: None,
         backlot_version: None,
         backlot_build: None,
+        agent_skill: None,
         accounts: Vec::new(),
     }
 }

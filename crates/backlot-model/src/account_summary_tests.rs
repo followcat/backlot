@@ -127,6 +127,7 @@ fn summary_accounts_stay_quiet_across_same_as_and_old_readers_ignore_them() {
         }),
         backlot_version: None,
         backlot_build: None,
+        agent_skill: None,
     };
     let mut b = a.clone();
     b.updated_ms = 25_000;
