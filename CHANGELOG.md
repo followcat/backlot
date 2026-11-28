@@ -10,6 +10,8 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.36 — 2026-11-28
+
 ### Added
 
 - **Provably read-only shell commands pass without asking.** backlot now proves narrow read-only command lines, lets hook-capable runners allow them before a prompt, auto-answers them on other runners, and shows the recent auto-allows with `backlot permit log --role <role>`.
