@@ -124,38 +124,83 @@ fn redirection(word: &str) -> Option<bool> {
     None
 }
 
+fn short_cluster_has(arg: &str, flag: char) -> bool {
+    arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains(flag)
+}
+
+fn plain_sed_print(script: &str) -> bool {
+    !script.trim().is_empty()
+        && script.split([';', '\n']).all(|piece| {
+            let piece = piece.trim();
+            !piece.is_empty()
+                && piece.strip_suffix('p').is_some_and(|address| {
+                    address
+                        .chars()
+                        .all(|c| c.is_ascii_digit() || c == ',' || c == '$')
+                })
+        })
+}
+
 fn sed_write_or_exec(args: &[String]) -> bool {
-    let mut script = None;
+    let mut scripts = Vec::new();
+    let mut positional_script = false;
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
-        if a == "-e" || a == "--expression" || a == "-f" || a == "--file" {
-            if a == "-e" || a == "--expression" {
-                script = args.get(i + 1).map(String::as_str);
-            } else {
+        if a == "-e" || a == "--expression" {
+            let Some(script) = args.get(i + 1) else {
                 return true;
-            }
+            };
+            scripts.push(script.clone());
             i += 2;
             continue;
         }
-        if a == "-i" || a == "--in-place" || a.starts_with("-i") || a.starts_with("--in-place=") {
+        if let Some(script) = a.strip_prefix("--expression=") {
+            scripts.push(script.to_string());
+            i += 1;
+            continue;
+        }
+        if a.starts_with('-') && !a.starts_with("--") {
+            let cluster = &a[1..];
+            // In-place editing and script files are never safe. A clustered
+            // `-e` cannot be separated reliably from the other short flags,
+            // so only the unclustered `-e script` forms are inspectable.
+            if cluster.contains('i') || cluster.contains('f') {
+                return true;
+            }
+            if cluster.contains('e') {
+                if !a.starts_with("-e") {
+                    return true;
+                }
+                if cluster.len() > 1 {
+                    scripts.push(cluster[1..].to_string());
+                }
+                i += 1;
+                continue;
+            }
+        }
+        if a == "-f"
+            || a == "--file"
+            || a.starts_with("--file=")
+            || a == "-i"
+            || a == "--in-place"
+            || a.starts_with("--in-place=")
+        {
             return true;
         }
-        if !a.starts_with('-') && script.is_none() {
-            script = Some(a);
+        if !a.starts_with('-') && !positional_script {
+            positional_script = true;
+            scripts.push(a.to_string());
         }
         i += 1;
     }
-    let Some(script) = script else {
+    if scripts.is_empty() {
         return false;
-    };
-    // Only a plain line-address print is reliably side-effect free (`-n '1,160p'`).
+    }
+    // Only plain line-address prints are reliably side-effect free (`-n '1,160p'`).
     // Every other sed program is conservatively once-only: `e` executes a shell
     // command and `w`/`W` write files, including inside addresses and branches.
-    !(script.ends_with('p')
-        && script[..script.len() - 1]
-            .chars()
-            .all(|c| c.is_ascii_digit() || c == ',' || c == '$'))
+    !scripts.iter().all(|script| plain_sed_print(script))
 }
 
 fn exec_action(prog: &str, args: &[String]) -> bool {
@@ -167,7 +212,9 @@ fn exec_action(prog: &str, args: &[String]) -> bool {
             ) || a.starts_with("-fprint")
         }),
         "fd" => args.iter().any(|a| {
-            matches!(a.as_str(), "-x" | "--exec" | "-X" | "--exec-batch")
+            matches!(a.as_str(), "--exec" | "--exec-batch")
+                || short_cluster_has(a, 'x')
+                || short_cluster_has(a, 'X')
                 || a.starts_with("--exec=")
                 || a.starts_with("--exec-batch=")
         }),
@@ -175,24 +222,28 @@ fn exec_action(prog: &str, args: &[String]) -> bool {
         "sort" => args.iter().any(|a| {
             a == "--compress-program"
                 || a.starts_with("--compress-program=")
-                || a == "-o"
+                || short_cluster_has(a, 'o')
                 || a == "--output"
                 || a.starts_with("--output=")
         }),
-        "tar" => args.iter().any(|a| {
-            a == "--to-command"
-                || a.starts_with("--to-command=")
-                || a == "-I"
-                || a == "--use-compress-program"
-                || a.starts_with("--use-compress-program=")
-                || a == "--checkpoint-action"
-                || a.starts_with("--checkpoint-action=")
-                || a == "-F"
-                || a == "--info-script"
-                || a.starts_with("--info-script=")
-                || a == "--new-volume-script"
-                || a.starts_with("--new-volume-script=")
-        }),
+        "tar" => {
+            args.first().is_some_and(|mode| {
+                !mode.starts_with('-') && (mode.contains('I') || mode.contains('F'))
+            }) || args.iter().any(|a| {
+                a == "--to-command"
+                    || a.starts_with("--to-command=")
+                    || short_cluster_has(a, 'I')
+                    || a == "--use-compress-program"
+                    || a.starts_with("--use-compress-program=")
+                    || a == "--checkpoint-action"
+                    || a.starts_with("--checkpoint-action=")
+                    || short_cluster_has(a, 'F')
+                    || a == "--info-script"
+                    || a.starts_with("--info-script=")
+                    || a == "--new-volume-script"
+                    || a.starts_with("--new-volume-script=")
+            })
+        }
         "sed" => sed_write_or_exec(args),
         "git" => args.iter().any(|a| {
             a == "--ext-diff"
@@ -378,7 +429,7 @@ fn segment_rule(words: &[String]) -> Result<DerivedRule, String> {
             if mode.starts_with("--") {
                 return Err("long tar modes are too broad to remember".into());
             }
-            format!("tar {}", mode.trim_start_matches('-'))
+            format!("{} {}", prog, mode.trim_start_matches('-'))
         }
         "pip" | "pip3" => {
             let sub = clean
