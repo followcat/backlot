@@ -499,7 +499,7 @@ pub(crate) fn role_summary(
                 id: p.id.clone(),
                 rule: p.rule.clone(),
                 permit_kind: p.kind,
-                scope: p.scope.clone(),
+                scope: p.scope,
                 outward: p.outward,
                 runner: p.runner.clone(),
                 seq: p.seq,
