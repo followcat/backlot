@@ -34,14 +34,18 @@ pub(crate) fn readonly_shell(
     role: &str,
     dir: &Path,
     command: &str,
+    cwd: Option<&Path>,
     env: &crate::cli::Env,
 ) -> bool {
     let Some(studio) = state.studio.as_ref() else {
         return false;
     };
+    let Some(cwd) = cwd else {
+        return false;
+    };
     let area = crate::workareas::role_dir(dir, &studio.repo, role, studio.no_git);
     if !matches!(
-        crate::guard_shell::classify_command_line(command, &studio.push, &area, env),
+        crate::guard_shell::classify_command_line(command, &studio.push, cwd, env),
         crate::guard_rules::GuardVerdict::Allow
     ) {
         return false;
@@ -49,7 +53,7 @@ pub(crate) fn readonly_shell(
     let role_dir = dir.join("roles").join(role);
     let roots = crate::readonly_cmd::roots(dir, Path::new(&studio.repo), &role_dir, &area);
     let home = env.get("HOME").map(std::path::PathBuf::from);
-    crate::readonly_cmd::check_command(command, &area, &roots, home.as_deref()).is_ok()
+    crate::readonly_cmd::check_command(command, cwd, &roots, home.as_deref()).is_ok()
 }
 
 /// The active edit grant exactly matching a canonical edit rule.

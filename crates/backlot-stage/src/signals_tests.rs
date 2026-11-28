@@ -43,6 +43,7 @@ fn sig(event: &str, ts_ms: u64) -> Signal {
         event: event.into(),
         notification_type: None,
         error: None,
+        cwd: None,
         tool_name: None,
         tool_input: None,
     }

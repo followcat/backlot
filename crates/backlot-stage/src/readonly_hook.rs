@@ -80,14 +80,15 @@ pub(crate) fn decision(
     runner: &str,
     payload: &serde_json::Value,
     env: &crate::cli::Env,
-    _hook_cwd: &Path,
     ts_ms: u64,
 ) -> Option<(String, String)> {
     let command = shell_command(runner, payload)?;
+    let cwd = PathBuf::from(crate::hook::payload_cwd(payload)?.trim());
     let (studio_dir, _role) = crate::guard::studio_role_from_env(env)?;
     let info = crate::guard::load_studio_guard_info(env);
     let work_area = info.work_area.clone()?;
-    let ctx = crate::guard_git::GitContext::from_info(&info, &info.policy, &work_area, env);
+    let role_dir = info.role_dir.clone()?;
+    let ctx = crate::guard_git::GitContext::from_info(&info, &info.policy, &cwd, env);
     if !matches!(
         crate::guard_shell::classify_command_line_with_ctx(&command, &ctx).verdict,
         crate::guard_rules::GuardVerdict::Allow
@@ -95,12 +96,11 @@ pub(crate) fn decision(
         return None;
     }
     let repo = info.repo_root.unwrap_or_else(|| PathBuf::from(&studio_dir));
-    let role_dir = info.role_dir?;
     let roots = crate::readonly_cmd::roots(&studio_dir, &repo, &role_dir, &work_area);
     let home = env.get("HOME").map(PathBuf::from);
-    crate::readonly_cmd::check_command(&command, &work_area, &roots, home.as_deref()).ok()?;
+    crate::readonly_cmd::check_command(&command, &cwd, &roots, home.as_deref()).ok()?;
     Some((
         allow_json(runner)?,
-        auto_line(&command, &work_area, runner, ts_ms),
+        auto_line(&command, &cwd, runner, ts_ms),
     ))
 }

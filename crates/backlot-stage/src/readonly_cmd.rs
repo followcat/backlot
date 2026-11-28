@@ -75,6 +75,12 @@ fn shell_words(words: &[String]) -> Result<Vec<String>, &'static str> {
         if w.contains('<') || w.contains('>') {
             return Err("an unrecognised redirection is not read-only");
         }
+        // The shared lexer removes quote information. Since it cannot
+        // distinguish a literal single-quoted dollar from parameter
+        // expansion, every dollar or backtick in a shell word is refused.
+        if w.contains('$') || w.contains('`') {
+            return Err("parameter expansion is not read-only-checkable");
+        }
         out.push(words[i].clone());
         i += 1;
     }
@@ -96,6 +102,7 @@ pub(crate) fn check_command(
     roots: &[PathBuf],
     home: Option<&Path>,
 ) -> Result<(), &'static str> {
+    crate::readonly_path::check_cwd(cwd, roots)?;
     let parsed = split_shell_segments_checked(line).map_err(|_| "unparseable shell syntax")?;
     if parsed.backgrounded {
         return Err("backgrounding is not a read-only command form");

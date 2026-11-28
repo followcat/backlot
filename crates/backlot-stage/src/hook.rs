@@ -82,6 +82,31 @@ fn tool_input(payload: &serde_json::Value, cap: usize) -> Option<serde_json::Val
     (!out.is_empty()).then(|| out.into())
 }
 
+/// The shell cwd a runner hook payload carries, across the payload
+/// spellings backlot's runners use. `None` means the command's real
+/// directory cannot be proven.
+pub(crate) fn payload_cwd(payload: &serde_json::Value) -> Option<&str> {
+    field(payload, "cwd")
+        .or_else(|| field(payload, "workingDirectory"))
+        .or_else(|| field(payload, "workdir"))
+        .or_else(|| {
+            payload
+                .get("tool_input")
+                .or_else(|| payload.get("toolInput"))
+                .and_then(|input| field(input, "cwd"))
+        })
+        .or_else(|| {
+            payload
+                .get("toolCall")
+                .and_then(|tc| tc.get("args"))
+                .and_then(|args| {
+                    field(args, "Cwd")
+                        .or_else(|| field(args, "cwd"))
+                        .or_else(|| field(args, "WorkingDirectory"))
+                })
+        })
+}
+
 /// One signal line for the payload: `ts_ms`, the `hook_event_name`
 /// as `event`, `session_id`, the notification type and
 /// StopFailure's error type when present, and for a
@@ -96,6 +121,7 @@ fn line_for(payload: &serde_json::Value, ts_ms: u64, cap: usize) -> String {
     };
     put("event", field(payload, "hook_event_name"));
     put("session_id", field(payload, "session_id"));
+    put("cwd", payload_cwd(payload));
     put("notification_type", field(payload, "notification_type"));
     // The real payload field is unverified (limits.md); read both
     // spellings.
@@ -154,6 +180,9 @@ fn normalize_payload(runner: Option<&str>, payload: &serde_json::Value) -> serde
     }
     if let Some(sid) = field(payload, "conversationId").or_else(|| field(payload, "session_id")) {
         obj.insert("session_id".into(), sid.into());
+    }
+    if let Some(cwd) = payload_cwd(payload) {
+        obj.insert("cwd".into(), cwd.into());
     }
     if let Some(nt) = field(payload, "notification_type") {
         obj.insert("notification_type".into(), nt.into());
@@ -385,7 +414,7 @@ fn run_io_inner(
     let capture = crate::design_capture::prepare_hook_capture(env, &normalized, ts_ms);
     let runner_name = runner.unwrap_or("claude");
     let allow = if in_role_env(env) {
-        crate::readonly_hook::decision(runner_name, &payload, env, cwd, ts_ms)
+        crate::readonly_hook::decision(runner_name, &payload, env, ts_ms)
     } else {
         None
     };

@@ -59,9 +59,10 @@ fn a_permission_request_writes_one_line() {
         line["tool_input"],
         json!({"command": "cargo test", "description": "run the tests"})
     );
-    // Nothing extra: no transcript_path, no cwd, no prompt.
+    assert_eq!(line["cwd"], "/home/user/acme-shop");
+    // Nothing extra: no transcript_path or prompt.
     let keys: Vec<&String> = line.as_object().unwrap().keys().collect();
-    assert_eq!(keys.len(), 5, "{keys:?}");
+    assert_eq!(keys.len(), 6, "{keys:?}");
 }
 
 #[test]
@@ -244,8 +245,11 @@ fn role_fixture() -> (
     (dir, env, work, studio.join("roles/director/signals.jsonl"))
 }
 
-fn hook_roundtrip(runner: &str, payload: Value) -> (TestDir, std::path::PathBuf, String) {
+fn hook_roundtrip(runner: &str, mut payload: Value) -> (TestDir, std::path::PathBuf, String) {
     let (dir, env, work, signals) = role_fixture();
+    if payload.get("cwd").and_then(|v| v.as_str()) == Some("@work") {
+        payload["cwd"] = work.to_string_lossy().into_owned().into();
+    }
     let argv = vec![
         "--runner".into(),
         runner.into(),
@@ -272,27 +276,27 @@ fn read_only_pre_tool_returns_each_runners_allow() {
     for (runner, payload, want) in [
         (
             "claude",
-            json!({"hook_event_name":"PreToolUse","tool_input":{"command":"ls"}}),
+            json!({"hook_event_name":"PreToolUse","cwd":"@work","tool_input":{"command":"ls"}}),
             "permissionDecision",
         ),
         (
             "cmd",
-            json!({"hook_event_name":"PreToolUse","tool_input":{"command":"ls"}}),
+            json!({"hook_event_name":"PreToolUse","cwd":"@work","tool_input":{"command":"ls"}}),
             "permissionDecision",
         ),
         (
             "devin",
-            json!({"hook_event_name":"PermissionRequest","tool_input":{"command":"ls"}}),
+            json!({"hook_event_name":"PermissionRequest","cwd":"@work","tool_input":{"command":"ls"}}),
             "\"decision\":\"approve\"",
         ),
         (
             "cursor",
-            json!({"hook_event_name":"beforeShellExecution","command":"ls"}),
+            json!({"hook_event_name":"beforeShellExecution","cwd":"@work","command":"ls"}),
             "\"permission\":\"allow\"",
         ),
         (
             "agy",
-            json!({"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"ls"}}}),
+            json!({"hookEventName":"PreToolUse","cwd":"@work","toolCall":{"name":"run_command","args":{"CommandLine":"ls"}}}),
             "\"decision\":\"allow\"",
         ),
     ] {
@@ -308,9 +312,22 @@ fn read_only_pre_tool_returns_each_runners_allow() {
 fn a_secret_readonly_shape_gets_no_hook_allow() {
     let (_dir, signals, out) = hook_roundtrip(
         "claude",
-        json!({"hook_event_name":"PreToolUse","tool_input":{"command":"cat .env"}}),
+        json!({"hook_event_name":"PreToolUse","cwd":"@work","tool_input":{"command":"cat .env"}}),
     );
     assert!(out.is_empty(), "{out}");
     let text = std::fs::read_to_string(signals).unwrap();
     assert!(!text.contains("PermitAutoAllow"), "{text}");
+}
+
+#[test]
+fn a_readonly_hook_needs_the_payload_cwd_inside_the_roots() {
+    for payload in [
+        json!({"hook_event_name":"PreToolUse","tool_input":{"command":"ls"}}),
+        json!({"hook_event_name":"PreToolUse","cwd":"/","tool_input":{"command":"ls"}}),
+    ] {
+        let (_dir, signals, out) = hook_roundtrip("claude", payload);
+        assert!(out.is_empty(), "{out}");
+        let text = std::fs::read_to_string(signals).unwrap();
+        assert!(!text.contains("PermitAutoAllow"), "{text}");
+    }
 }

@@ -3,7 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::readonly_args::{check_all, named_file_values, positionals, short_cluster_has};
+use crate::readonly_args::{
+    check_all, jq_filter_uses_env, named_file_values, positionals, short_cluster_has,
+};
 use crate::readonly_path::obvious_path;
 
 pub(super) fn check_find(
@@ -216,6 +218,12 @@ pub(super) fn check_jq(
     let script_file = args
         .iter()
         .any(|a| a == "-f" || a == "--from-file" || a.starts_with("--from-file="));
+    if !script_file
+        && let Some(filter) = positional.first()
+        && jq_filter_uses_env(filter)
+    {
+        return Err("jq filters cannot read the environment");
+    }
     paths.extend(positional.into_iter().skip(usize::from(!script_file)));
     check_all(paths, cwd, roots, home)
 }

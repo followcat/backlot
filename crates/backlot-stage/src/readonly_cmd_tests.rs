@@ -134,6 +134,17 @@ fn exec_and_write_capable_flags_refuse() {
         "tar -tfarchive.tar",
         "tar tf archive.tar --index-file out",
         "git --paginate log",
+        "ps e",
+        "ps auxe",
+        "ps eww",
+        "ps -o pid,env",
+        "ps -o pid,env:8",
+        "ps -o pid,environment",
+        "ps -oenviron",
+        "ps o pid,environ",
+        "jq -n env",
+        "jq -n '$ENV'",
+        "jq 'env.X'",
     ] {
         no(&fx, line);
     }
@@ -157,6 +168,11 @@ fn shell_shape_escape_hatches_refuse() {
         "cat <<EOF\nx\nEOF",
         "unknown",
         "env ls",
+        "echo $OPENAI_API_KEY",
+        "printf '%s' \"$TOKEN\"",
+        "cat ${HOME}/.zshrc",
+        "cat {f.txt,/etc/passwd}",
+        "cat ~other/.zshrc",
     ] {
         no(&fx, line);
     }
@@ -174,12 +190,49 @@ fn paths_stay_inside_roots_and_secrets_refuse() {
     fs::create_dir_all(&secret).unwrap();
     fs::write(secret.join("id"), "x").unwrap();
     no(&fx, "cat .ssh/id");
+    no(&fx, "cat .ssh/*");
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink("/etc/passwd", fx.cwd.join("outlink")).unwrap();
         no(&fx, "cat outlink");
     }
     ok(&fx, "cat missing-new-file");
+}
+
+#[test]
+fn globs_expand_and_every_match_stays_inside_roots() {
+    let fx = fixture();
+    fs::write(fx.cwd.join("linka"), "x").unwrap();
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink("/etc/passwd", fx.cwd.join("linkout")).unwrap();
+        no(&fx, "cat link*");
+        fs::write(fx.cwd.join("qa"), "x").unwrap();
+        std::os::unix::fs::symlink("/etc/passwd", fx.cwd.join("qb")).unwrap();
+        no(&fx, "cat q?");
+        no(&fx, "cat q[ab]");
+        fs::remove_file(fx.cwd.join("qb")).unwrap();
+    }
+    fs::remove_file(fx.cwd.join("linkout")).unwrap();
+    ok(&fx, "cat link*");
+    ok(&fx, "cat q?");
+    ok(&fx, "cat q[ab]");
+    // A glob with no match is still checked as the literal word.
+    ok(&fx, "cat no-such-*");
+}
+
+#[test]
+fn relative_paths_resolve_against_the_real_cwd() {
+    let fx = fixture();
+    let repo = fx.roots[1].clone();
+    assert!(
+        check_command("cat ../escape", &repo, &fx.roots, Some(&fx.home)).is_err(),
+        "the same relative spelling must escape from the repo cwd"
+    );
+    assert!(
+        check_command("cat ../escape", &fx.cwd, &fx.roots, Some(&fx.home)).is_ok(),
+        "from the role work area it stays inside the studio root"
+    );
 }
 
 fn actor() -> backlot_model::ActorIdentity {
@@ -235,6 +288,34 @@ fn auto_answer_coverage_accepts_readonly_and_refuses_secret() {
         "director",
         &studio_dir,
         "ls",
+        Some(&work),
+        &env,
+    ));
+    assert!(!crate::permit_auto::readonly_shell(
+        &state,
+        "director",
+        &studio_dir,
+        "ls",
+        None,
+        &env,
+    ));
+    assert!(!crate::permit_auto::readonly_shell(
+        &state,
+        "director",
+        &studio_dir,
+        "ls",
+        Some(std::path::Path::new("/")),
+        &env,
+    ));
+    // `repo` is itself a root, but the relative path escapes it. Using
+    // the role work area instead would wrongly keep the path inside
+    // the studio directory.
+    assert!(!crate::permit_auto::readonly_shell(
+        &state,
+        "director",
+        &studio_dir,
+        "cat ../escape",
+        Some(&repo),
         &env,
     ));
     std::fs::write(work.join(".env"), "x").unwrap();
@@ -243,6 +324,7 @@ fn auto_answer_coverage_accepts_readonly_and_refuses_secret() {
         "director",
         &studio_dir,
         "cat .env",
+        Some(&work),
         &env,
     ));
 }

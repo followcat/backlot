@@ -39,6 +39,8 @@ pub struct Signal {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_input: Option<serde_json::Value>,
@@ -115,6 +117,7 @@ fn parse(line: &str, session_id: &str) -> Option<Signal> {
             .and_then(|n| n.as_str())
             .map(String::from),
         error: v.get("error").and_then(|e| e.as_str()).map(String::from),
+        cwd: v.get("cwd").and_then(|c| c.as_str()).map(String::from),
         tool_name: v
             .get("tool_name")
             .and_then(|n| n.as_str())

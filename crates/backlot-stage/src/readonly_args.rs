@@ -96,6 +96,76 @@ pub(super) fn named_file_values(args: &[String], names: &[&str]) -> Vec<String> 
     out
 }
 
+pub(super) fn jq_filter_uses_env(filter: &str) -> bool {
+    let chars: Vec<char> = filter.chars().collect();
+    for i in 0..chars.len() {
+        let dollar_env = chars[i] == '$'
+            && chars.get(i + 1) == Some(&'E')
+            && chars.get(i + 2) == Some(&'N')
+            && chars.get(i + 3) == Some(&'V');
+        let bare_env = chars[i] == 'e'
+            && chars.get(i + 1) == Some(&'n')
+            && chars.get(i + 2) == Some(&'v')
+            && (i == 0 || !chars[i - 1].is_ascii_alphanumeric() && chars[i - 1] != '_')
+            && chars
+                .get(i + 3)
+                .is_none_or(|c| !c.is_ascii_alphanumeric() && *c != '_');
+        if dollar_env || bare_env {
+            return true;
+        }
+    }
+    false
+}
+
+fn format_has_env(spec: &str) -> bool {
+    spec.split(',').any(|field| {
+        let name = field
+            .trim()
+            .split(['=', ':'])
+            .next()
+            .unwrap_or_default()
+            .trim();
+        name.starts_with("env")
+    })
+}
+
+/// `ps` is read-only only when it cannot print process environments.
+/// BSD option letters are words without a leading dash; `e` there asks
+/// for the environment. `-o`/`o` output fields are checked explicitly.
+fn check_ps(
+    args: &[String],
+    cwd: &Path,
+    roots: &[PathBuf],
+    home: Option<&Path>,
+) -> Result<(), &'static str> {
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if matches!(a, "-o" | "o" | "--format") {
+            let Some(spec) = args.get(i + 1) else {
+                return Err("ps output format is incomplete");
+            };
+            if format_has_env(spec) {
+                return Err("ps output format prints process environments");
+            }
+            i += 2;
+            continue;
+        }
+        if let Some(spec) = a.strip_prefix("-o").filter(|v| !v.is_empty()) {
+            if format_has_env(spec) {
+                return Err("ps output format prints process environments");
+            }
+        } else if !a.starts_with('-')
+            && a.chars().all(|c| c.is_ascii_alphabetic())
+            && a.contains('e')
+        {
+            return Err("ps BSD flags print process environments");
+        }
+        i += 1;
+    }
+    check_obvious(args, cwd, roots, home)
+}
+
 pub(crate) fn check_program(
     words: &[String],
     cwd: &Path,
@@ -310,7 +380,8 @@ pub(crate) fn check_program(
                 home,
             )
         }
-        "which" | "echo" | "printf" | "nproc" | "free" | "ps" | "tr" => {
+        "ps" => check_ps(args, cwd, roots, home),
+        "which" | "echo" | "printf" | "nproc" | "free" | "tr" => {
             check_obvious(args, cwd, roots, home)
         }
         _ => Err("program is not in the read-only set"),

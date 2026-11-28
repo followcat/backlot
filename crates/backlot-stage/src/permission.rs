@@ -66,6 +66,9 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
+                    let signal_cwd = request
+                        .and_then(|s| s.cwd.as_deref())
+                        .map(std::path::PathBuf::from);
                     let target = request
                         .and_then(|s| s.tool_input.as_ref())
                         .and_then(crate::permit_cmd::target_from_tool_input);
@@ -79,7 +82,12 @@ impl Stage {
                                     return None;
                                 }
                                 if crate::permit_auto::readonly_shell(
-                                    state, role, dir, &command, &env,
+                                    state,
+                                    role,
+                                    dir,
+                                    &command,
+                                    signal_cwd.as_deref(),
+                                    &env,
                                 ) {
                                     (Vec::new(), command)
                                 } else {
@@ -126,7 +134,7 @@ impl Stage {
                             } else {
                                 let line = crate::readonly_hook::auto_line(
                                     &readonly_command,
-                                    &area,
+                                    signal_cwd.as_deref().unwrap_or(&area),
                                     w.runner,
                                     now_ms,
                                 );
