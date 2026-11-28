@@ -79,7 +79,7 @@ shows its version in the top-left corner and, once a newer release is out, an ar
 with `backlot --upgrade`, which runs the script again. Uninstall by deleting the binary. Details:
 [docs/install.md](docs/install.md).
 
-**v0.4.34 is the current release.** Its interface is the Babylon look: the gilded Lot and Call Sheet, role
+**v0.4.35 is the current release.** Its interface is the Babylon look: the gilded Lot and Call Sheet, role
 badges and dividers, a compose target chip, row menus, opening-design reading and sign-off, desktop notifications
 for questions and cards, and person-only actions made explicit to every role. `main` can be ahead of the latest
 release: [build from source](#build-from-source) for the newest.
