@@ -17,6 +17,8 @@ struct PendingHeredoc {
 
 pub(crate) struct ParsedLine {
     pub segments: Vec<Vec<String>>,
+    /// A single `&` separator appeared — shell backgrounding.
+    pub backgrounded: bool,
     pub pipe_ids: Vec<usize>,
     pub nested: Vec<String>,
     pub heredocs: Vec<Heredoc>,
@@ -26,6 +28,7 @@ pub(crate) fn split_shell_segments_checked(line: &str) -> Result<ParsedLine, &'s
     let mut segs = Vec::new();
     let mut pipe_ids = Vec::new();
     let mut nested = Vec::new();
+    let mut backgrounded = false;
     let mut heredocs = Vec::new();
     let mut pending_heredocs = Vec::new();
     let mut seg = Vec::new();
@@ -72,6 +75,13 @@ pub(crate) fn split_shell_segments_checked(line: &str) -> Result<ParsedLine, &'s
             continue;
         }
         if c == '$' && chars.peek() == Some(&'(') {
+            chars.next();
+            let sub = read_cmd_subst(&mut chars)?;
+            nested.push(sub);
+            has_word = true;
+            continue;
+        }
+        if matches!(c, '<' | '>') && chars.peek() == Some(&'(') {
             chars.next();
             let sub = read_cmd_subst(&mut chars)?;
             nested.push(sub);
@@ -156,10 +166,16 @@ pub(crate) fn split_shell_segments_checked(line: &str) -> Result<ParsedLine, &'s
                 flush_word(&mut seg, &mut word, &mut has_word);
                 flush_seg(&mut segs, &mut pipe_ids, &mut seg, pipe_id);
             }
+            '&' if word.ends_with('>') || word.ends_with('<') => {
+                word.push(c);
+                has_word = true;
+            }
             '&' | '|' => {
                 let doubled = chars.peek() == Some(&c);
                 if doubled {
                     chars.next();
+                } else if c == '&' {
+                    backgrounded = true;
                 }
                 flush_word(&mut seg, &mut word, &mut has_word);
                 flush_seg(&mut segs, &mut pipe_ids, &mut seg, pipe_id);
@@ -183,6 +199,7 @@ pub(crate) fn split_shell_segments_checked(line: &str) -> Result<ParsedLine, &'s
     flush_seg(&mut segs, &mut pipe_ids, &mut seg, pipe_id);
     Ok(ParsedLine {
         segments: segs,
+        backgrounded,
         pipe_ids,
         nested,
         heredocs,

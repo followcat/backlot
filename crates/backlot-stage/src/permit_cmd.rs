@@ -105,7 +105,9 @@ pub(crate) fn secret_path(path: &Path) -> bool {
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default();
     lower.contains("/.ssh/")
+        || lower.ends_with("/.ssh")
         || lower.contains("/.gnupg/")
+        || lower.ends_with("/.gnupg")
         || lower.contains("/.config/secrets/")
         || lower.ends_with("/.docker/config.json")
         || lower.ends_with("/.kube/config")
@@ -113,6 +115,22 @@ pub(crate) fn secret_path(path: &Path) -> bool {
         || leaf.starts_with(".env.")
         || leaf == "credentials"
         || leaf == "auth.json"
+        || lower.contains("/.claude/")
+        || lower.ends_with("/.claude")
+        || lower.contains("/.cursor/")
+        || lower.ends_with("/.cursor")
+        || lower.contains("/.commandcode/")
+        || lower.ends_with("/.commandcode")
+        || lower.contains("/.gemini/")
+        || lower.ends_with("/.gemini")
+        || lower.contains("/.config/cursor/")
+        || lower.ends_with("/.config/cursor")
+        || lower.contains("/.config/antigravity/")
+        || lower.ends_with("/.config/antigravity")
+        || lower.contains("/.config/devin/")
+        || lower.ends_with("/.config/devin")
+        || lower.contains("/.local/share/devin/")
+        || lower.ends_with("/.local/share/devin")
 }
 
 fn deepest_canonical(path: &Path) -> PathBuf {
@@ -361,6 +379,44 @@ pub(crate) fn permit_list_base(
     Ok(permit_json(&state, role))
 }
 
+fn permit_log_json(dir: &Path, role: &str) -> serde_json::Value {
+    let path = crate::signals::signals_path(dir, role);
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return serde_json::Value::Array(Vec::new());
+    };
+    let mut rows: Vec<serde_json::Value> = text
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|v| v.get("event").and_then(|e| e.as_str()) == Some("PermitAutoAllow"))
+        .collect();
+    if rows.len() > 100 {
+        rows = rows.split_off(rows.len() - 100);
+    }
+    rows.reverse();
+    serde_json::Value::Array(rows)
+}
+
+/// Recent read-only auto-allows for a validated user caller.
+pub(crate) fn permit_log_base(
+    base: &Path,
+    caller: &crate::cli::Caller,
+    role: &str,
+) -> Result<serde_json::Value, Fail> {
+    if caller.role != "user" {
+        return Err(Fail::refused("permit administration is the user's"));
+    }
+    if role.is_empty()
+        || role.len() > 64
+        || !role
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+    {
+        return Err(Fail::usage("bad role name"));
+    }
+    let dir = store::studio_dir(base, &caller.studio);
+    Ok(permit_log_json(&dir, role))
+}
+
 /// Revoke one grant for a validated user caller; the server queue shares this.
 pub(crate) fn permit_revoke_base(
     base: &Path,
@@ -432,6 +488,30 @@ pub(crate) fn permit(
                 }
                 if out.is_empty() {
                     out.push_str("no active permits\n");
+                }
+                Ok(out)
+            }
+        }
+        PermitCmd::Log { role, json } => {
+            let value = permit_log_base(base, &caller, role)?;
+            if *json {
+                Ok(format!(
+                    "{}\n",
+                    serde_json::to_string_pretty(&value).unwrap_or_default()
+                ))
+            } else {
+                let mut out = String::new();
+                for row in value.as_array().into_iter().flatten() {
+                    out.push_str(&format!(
+                        "{} {} {} {}\n",
+                        row["ts_ms"].as_u64().unwrap_or_default(),
+                        row["decision"].as_str().unwrap_or("allow"),
+                        row["reason"].as_str().unwrap_or_default(),
+                        row["command"].as_str().unwrap_or_default(),
+                    ));
+                }
+                if out.is_empty() {
+                    out.push_str("no read-only auto-allows\n");
                 }
                 Ok(out)
             }

@@ -61,6 +61,7 @@ impl ApprovalScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PermitCmd {
     List { role: Option<String>, json: bool },
+    Log { role: String, json: bool },
     Revoke { id: String },
 }
 
@@ -709,6 +710,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "design" => args_design::design(&mut common, &mut it),
         "permit" => match it.next().as_deref() {
             Some("list") => args_task::permit_list(&mut common, &mut it),
+            Some("log") => args_task::permit_log(&mut common, &mut it),
             Some("revoke") => args_task::permit_revoke(&mut common, &mut it),
             Some("-h" | "--help") => Ok((common, Cmd::Help(crate::args_usage::U_PERMIT))),
             Some(s) => Err(usage(

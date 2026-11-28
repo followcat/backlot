@@ -877,6 +877,10 @@ Hollywood’s own prompts use the same dialog and `--scope role`; because Hollyw
 
 The stage writes active grants into the runner's own permission file or argv on every start and resume. Revoked grants are simply absent the next time. When a later prompt is already covered by active grants plus the built-in read-only rules, the stage sends the runner's ordinary allow key and records `permit.used` instead of raising an attention. It never auto-answers a once-only command, a changed prompt, or anything a backlot guard would stop.
 
+### Read-only commands
+
+A command line that backlot can prove is read-only does not wait for a permission prompt at all where the runner's pre-tool hook can allow it; on runners whose hooks cannot allow, the same proof lets the stage's auto-answer cover the prompt without a remembered grant. The proof is deliberately narrow: every shell segment must be a known read-only program (`ls`, `cat`, `rg`, `find`, `jq`, `git log` and the like) with write- or exec-capable flags refused; the program must be a bare name; redirections other than `/dev/null` and file-descriptor duplication, substitutions, heredocs, backgrounding and assignments refuse it; and every file path must resolve inside the role's worktree, the studio repository, the studio directory or the role's temporary directory without naming a secret. These auto-allows are not grants and do not enter the ledger. The hook or stage appends them to `roles/<role>/signals.jsonl`, and you can inspect the recent ones with `backlot permit log --role actor-t1-c1 --studio acme-shop --as user` (add `--json` for the raw rows).
+
 ## Restarting a stuck role
 
 `close` only releases a held actor; `reopen` needs a closed seat; `recast` changes the identity.

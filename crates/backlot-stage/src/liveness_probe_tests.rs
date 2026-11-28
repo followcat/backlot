@@ -114,6 +114,7 @@ fn restart_keeps_stall_open_until_newer_evidence() {
         event: "UserPromptSubmit".into(),
         notification_type: None,
         error: None,
+        cwd: None,
         tool_name: None,
         tool_input: None,
     };

@@ -80,6 +80,13 @@ pub(super) fn map(
                 role,
             })
         }
+        Cmd::Permit(crate::args::PermitCmd::Log { role, .. }) => {
+            let role = role.clone();
+            with_studio(common, env, move |studio| ReqAction::PermitLog {
+                studio,
+                role,
+            })
+        }
         Cmd::Permit(crate::args::PermitCmd::Revoke { id }) => {
             let id = id.clone();
             with_studio(common, env, move |studio| ReqAction::PermitRevoke {

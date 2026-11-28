@@ -82,6 +82,31 @@ fn tool_input(payload: &serde_json::Value, cap: usize) -> Option<serde_json::Val
     (!out.is_empty()).then(|| out.into())
 }
 
+/// The shell cwd a runner hook payload carries, across the payload
+/// spellings backlot's runners use. `None` means the command's real
+/// directory cannot be proven.
+pub(crate) fn payload_cwd(payload: &serde_json::Value) -> Option<&str> {
+    field(payload, "cwd")
+        .or_else(|| field(payload, "workingDirectory"))
+        .or_else(|| field(payload, "workdir"))
+        .or_else(|| {
+            payload
+                .get("tool_input")
+                .or_else(|| payload.get("toolInput"))
+                .and_then(|input| field(input, "cwd"))
+        })
+        .or_else(|| {
+            payload
+                .get("toolCall")
+                .and_then(|tc| tc.get("args"))
+                .and_then(|args| {
+                    field(args, "Cwd")
+                        .or_else(|| field(args, "cwd"))
+                        .or_else(|| field(args, "WorkingDirectory"))
+                })
+        })
+}
+
 /// One signal line for the payload: `ts_ms`, the `hook_event_name`
 /// as `event`, `session_id`, the notification type and
 /// StopFailure's error type when present, and for a
@@ -96,6 +121,7 @@ fn line_for(payload: &serde_json::Value, ts_ms: u64, cap: usize) -> String {
     };
     put("event", field(payload, "hook_event_name"));
     put("session_id", field(payload, "session_id"));
+    put("cwd", payload_cwd(payload));
     put("notification_type", field(payload, "notification_type"));
     // The real payload field is unverified (limits.md); read both
     // spellings.
@@ -154,6 +180,9 @@ fn normalize_payload(runner: Option<&str>, payload: &serde_json::Value) -> serde
     }
     if let Some(sid) = field(payload, "conversationId").or_else(|| field(payload, "session_id")) {
         obj.insert("session_id".into(), sid.into());
+    }
+    if let Some(cwd) = payload_cwd(payload) {
+        obj.insert("cwd".into(), cwd.into());
     }
     if let Some(nt) = field(payload, "notification_type") {
         obj.insert("notification_type".into(), nt.into());
@@ -383,13 +412,26 @@ fn run_io_inner(
     let normalized = normalize_payload(runner, &payload);
     let line = file.as_ref().map(|_| line_with_cap(&normalized, ts_ms));
     let capture = crate::design_capture::prepare_hook_capture(env, &normalized, ts_ms);
+    let runner_name = runner.unwrap_or("claude");
+    let allow = if in_role_env(env) {
+        crate::readonly_hook::decision(runner_name, &payload, env, ts_ms)
+    } else {
+        None
+    };
 
     if !is_agy {
         if let (Some(f), Some(l)) = (file, line) {
             append(&f, &l);
+            if let Some((_, auto)) = &allow {
+                append(&f, auto);
+            }
         }
         if let Some((f, l)) = capture {
             append(&f, &l);
+        }
+        if let Some((json, _)) = allow {
+            let _ = writeln!(stdout, "{json}");
+            let _ = stdout.flush();
         }
         return ExitCode::SUCCESS;
     }
@@ -400,11 +442,17 @@ fn run_io_inner(
     } else {
         None
     };
+    let auto = if is_pre_tool && refused.is_none() {
+        allow.map(|(_, line)| line)
+    } else {
+        None
+    };
 
     let worker_env = crate::cli::Env {
         vars: env.vars.clone(),
     };
     let refused_for_worker = refused.clone();
+    let auto_for_worker = auto.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         #[cfg(test)]
@@ -414,6 +462,9 @@ fn run_io_inner(
         }
         if let (Some(f), Some(l)) = (file, line) {
             append(&f, &l);
+            if let Some(auto) = auto_for_worker {
+                append(&f, &auto);
+            }
         }
         if let Some((f, l)) = capture {
             append(&f, &l);

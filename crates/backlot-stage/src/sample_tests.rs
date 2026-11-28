@@ -685,7 +685,7 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
                     scope: backlot_model::event::PermitScope::Role,
                     role: Some("actor-a".into()),
                     permit_kind: backlot_model::event::PermitKind::Shell,
-                    rule: "du -sh".into(),
+                    rule: "npm run docs:build".into(),
                     outward: false,
                     from: 1,
                     runner: "claude".into(),
@@ -700,10 +700,10 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
     fs::write(
         sig_dir.join("signals.jsonl"),
         "{\"ts_ms\":1,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\
-         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"du -sh /home/user/acme-shop\"}}\n",
+         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"npm run docs:build\"}}\n",
     )
     .unwrap();
-    fake.lock().unwrap().screen = "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n du -sh /home/user/acme-shop\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
+    fake.lock().unwrap().screen = "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n npm run docs:build\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
         .to_string();
 
     tokio::time::timeout(
@@ -738,7 +738,7 @@ async fn a_grant_covered_prompt_autoanswers_instead_of_raising() {
         .lock()
         .unwrap()
         .screen
-        .replace("du -sh /home/user/acme-shop", "du -sh /home/user/other");
+        .replace("npm run docs:build", "npm run lint");
     fake.lock().unwrap().screen = changed;
     tokio::time::timeout(
         std::time::Duration::from_secs(3),
@@ -1546,4 +1546,138 @@ async fn ten_hits_in_one_window_raise_one_attention_and_later_reset_raises_next(
         .cloned()
         .collect();
     assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+/// Fix round 1: a hook signal with no cwd cannot prove where the
+/// command runs, so the read-only shortcut does not answer it.
+#[tokio::test]
+async fn a_readonly_prompt_without_a_signal_cwd_is_not_autoanswered() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("bl-acme-shop-t1".into()),
+                    actor: Some(actor()),
+                    session_id: Some("fake-t1".into()),
+                    reason: None,
+                    prompt_hash: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let sig_dir = dir.join("roles").join("actor-t1-c1");
+    fs::create_dir_all(&sig_dir).unwrap();
+    fs::write(
+        sig_dir.join("signals.jsonl"),
+        "{\"ts_ms\":1,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}\n",
+    )
+    .unwrap();
+    fake.lock().unwrap().screen = "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n ls\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n".into();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0),
+    )
+    .await
+    .expect("first cwdless-prompt sample timed out");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 2_000),
+    )
+    .await
+    .expect("cwdless-prompt sample timed out");
+    assert!(fake.lock().unwrap().keys.is_empty());
+    assert!(!events(&dir, "attention.raised").is_empty());
+}
+
+/// Step 2: a provably read-only command needs no remembered grant;
+/// the same shape on a secret path is not answered.
+#[tokio::test]
+async fn a_readonly_prompt_autoanswers_without_a_grant_but_a_secret_does_not() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("bl-acme-shop-t1".into()),
+                    actor: Some(actor()),
+                    session_id: Some("fake-t1".into()),
+                    reason: None,
+                    prompt_hash: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let sig_dir = dir.join("roles").join("actor-t1-c1");
+    fs::create_dir_all(&sig_dir).unwrap();
+    let signals = sig_dir.join("signals.jsonl");
+    let work = dir.join("work/t1");
+    fs::create_dir_all(&work).unwrap();
+    let signal_for = |command: &str| {
+        format!(
+            "{{\"ts_ms\":1,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\"cwd\":\"{}\",\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"{command}\"}}}}\n",
+            work.display()
+        )
+    };
+    let screen_for = |command: &str| {
+        format!(
+            "compact\n────────────────────────────────────────\n Bash command\n╌╌╌╌╌╌\n {command}\n╌╌╌╌╌╌\n Do you want to proceed?\n ❯ 1. Yes\n  2. Yes, and don't ask again\n  3. No\n"
+        )
+    };
+    fs::write(&signals, signal_for("ls")).unwrap();
+    fake.lock().unwrap().screen = screen_for("ls");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0),
+    )
+    .await
+    .expect("first read-only sample timed out");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 2_000),
+    )
+    .await
+    .expect("read-only auto-answer sample timed out");
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+    assert!(events(&dir, "permit.used").is_empty());
+    assert!(events(&dir, "attention.raised").is_empty());
+    let text = fs::read_to_string(&signals).unwrap();
+    assert!(text.contains("PermitAutoAllow"), "{text}");
+
+    fs::write(work.join(".env"), "x").unwrap();
+    fake.lock().unwrap().keys.clear();
+    fs::write(&signals, signal_for("cat .env")).unwrap();
+    fake.lock().unwrap().screen = screen_for("cat .env");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 3_000),
+    )
+    .await
+    .expect("first secret-prompt sample timed out");
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "claude", t0 + 5_000),
+    )
+    .await
+    .expect("secret-prompt sample timed out");
+    assert!(fake.lock().unwrap().keys.is_empty());
+    assert!(!events(&dir, "attention.raised").is_empty());
 }

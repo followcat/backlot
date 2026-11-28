@@ -216,6 +216,8 @@ pub enum ReqAction {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         role: Option<String>,
     },
+    /// `permit log` through the server.
+    PermitLog { studio: String, role: String },
     /// `permit revoke` through the server.
     PermitRevoke { studio: String, id: String },
     AskAcknowledge {

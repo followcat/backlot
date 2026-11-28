@@ -36,6 +36,21 @@ and the docs test fails when this drifts.
 | fake | required (low, medium, high) | `FAKE_MODEL` | not carried | none | terminal name | stage answers | screen block, hook | `enter` | `esc` | screen only | UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification, Stop, StopFailure |
 <!-- END GENERATED runner-caps -->
 
+## Pre-tool hook allow decisions
+
+These rows are **from docs/code, not probed live**. The 2026-11-28 review deliberately did not run a
+logged-in runner or copy any credential into a scratch home. "Skips prompt" therefore means the
+runner's documented hook protocol has an explicit allow decision which its permission flow honours;
+where the protocol or wiring is uncertain, backlot relies on the step-1 auto-answer instead.
+
+| Runner | Hook event wired by backlot | Exact allow output | Skips prompt? |
+|---|---|---|---|
+| Claude Code | `PreToolUse` in the session `--settings` file | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"provably read-only command"}}` | Yes — Claude Code's public hook reference says `allow` skips the interactive permission prompt, while managed deny/ask rules still apply |
+| Command Code | `PreToolUse` in `.commandcode/settings.json` | Same nested `hookSpecificOutput` JSON as Claude Code | Unclear — the public schema accepts `"allow"`, but the bundled implementation's visible decision logic handles `"deny"`; the auto-answer is the relied-on path |
+| Devin | `PermissionRequest` in `.devin/config.local.json` | `{"decision":"approve","reason":"provably read-only command"}` | Yes — Devin's public hook reference uses top-level `decision: "approve"` for a permission request |
+| cursor-agent | `beforeShellExecution` in the workdir's `.cursor/hooks.json` | `{"permission":"allow","user_message":"provably read-only command"}` | Yes in the bundled hook implementation; auto-answer remains the fallback where project hooks are unavailable |
+| agy | `PreToolUse` in `.agents/hooks.json` | `{"decision":"allow"}` | Yes — measured hook protocol: empty stdout or this decision allows, while `deny` blocks. agy roles already run with `toolPermission: always-proceed`, so the important fail-safe is that backlot never emits `deny` for a read-only command |
+
 Screen detection exists only on the followcat core and covers each agent partially (`docs/screen-status.md` in that core).
 On official hc, an agent that does not report status has none, so the stage's own screen sampling matters there. Running
 backlot on official hc is intended but has not been verified.

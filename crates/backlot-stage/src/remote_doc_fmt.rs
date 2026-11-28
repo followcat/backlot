@@ -150,6 +150,28 @@ pub fn format_ack_json(action: &ReqAction, ack: ResAck, json: bool) -> Result<St
                 out.trim_end().to_string()
             }
         }
+        ReqAction::PermitLog { .. } => {
+            let rows: serde_json::Value = parse_res(&ack)?;
+            if json {
+                serde_json::to_string_pretty(&rows)
+                    .map_err(|e| Fail::refused(format!("permit log: {e}")))?
+            } else {
+                let mut out = String::new();
+                for row in rows.as_array().into_iter().flatten() {
+                    out.push_str(&format!(
+                        "{} {} {} {}\n",
+                        row["ts_ms"].as_u64().unwrap_or_default(),
+                        row["decision"].as_str().unwrap_or("allow"),
+                        row["reason"].as_str().unwrap_or_default(),
+                        row["command"].as_str().unwrap_or_default()
+                    ));
+                }
+                if out.is_empty() {
+                    out.push_str("no read-only auto-allows\n");
+                }
+                out.trim_end().to_string()
+            }
+        }
         ReqAction::AttentionClear { .. } => {
             verbs_fmt::format_attention_clear(&parse_res::<AttentionClearResult>(&ack)?)
         }

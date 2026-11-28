@@ -210,7 +210,8 @@ pub(crate) fn prep_signals_file(prep: &Prep) -> Option<&std::path::Path> {
         Prep::Agy(p) => Some(&p.signals),
         Prep::Cmd(p) => Some(&p.signals),
         Prep::Devin(p) => Some(&p.signals),
-        Prep::Cursor(_) | Prep::Cline(_) => None,
+        Prep::Cursor(p) => Some(&p.signals),
+        Prep::Cline(_) => None,
     }
 }
 

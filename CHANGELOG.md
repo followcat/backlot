@@ -15,6 +15,7 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 ### Added
 
 - **Remembered permission grants.** You can now allow a narrow permission-prompt command once, for a role, or for the studio; backlot writes active grants to the runner's native permission rules, safely auto-answers later covered prompts, and lists or revokes grants with `backlot permit`.
+- **Provably read-only shell commands pass without asking.** backlot now proves narrow read-only command lines, lets hook-capable runners allow them before a prompt, auto-answers them on other runners, and shows the recent auto-allows with `backlot permit log --role <role>`.
 
 ### Changed
 

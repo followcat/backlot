@@ -118,6 +118,11 @@ pub(crate) fn dispatch_action(base: &Path, env: &Env, action: ReqAction) -> Resu
                 role.as_deref(),
             )?)
         }
+        ReqAction::PermitLog { studio, role } => {
+            let studio = cli::check_studio_name(&studio)?;
+            let caller = Caller::doc_user(&studio);
+            to_json(crate::permit_cmd::permit_log_base(base, &caller, &role)?)
+        }
         ReqAction::PermitRevoke { studio, id } => {
             let studio = cli::check_studio_name(&studio)?;
             let caller = Caller::doc_user(&studio);

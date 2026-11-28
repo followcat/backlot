@@ -222,3 +222,50 @@ pub(crate) fn hooks_member_json(
 
     serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_default()
 }
+
+fn is_backlot_hook(item: &serde_json::Value) -> bool {
+    item.get("command")
+        .and_then(|v| v.as_str())
+        .is_some_and(|c| c.contains(" hook --runner ") || c.contains(" hook --file "))
+}
+
+/// Build or splice cursor's native `<cwd>/.cursor/hooks.json`. Cursor
+/// takes flat hook entries (no Claude matcher group); only the shell
+/// gate is wired, because the read-only classifier answers shell commands.
+pub(crate) fn cursor_hooks_content(existing: Option<&[u8]>, signals: &Path) -> Vec<u8> {
+    let cmd = hook_command("cursor", signals);
+    let hook = serde_json::json!({
+        "type": "command",
+        "command": cmd,
+        "timeout": 5,
+    });
+    let mut hooks = existing
+        .and_then(|b| std::str::from_utf8(b).ok())
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok())
+        .and_then(|v| v.get("hooks").and_then(|h| h.as_object()).cloned())
+        .unwrap_or_default();
+    let mut entries: Vec<serde_json::Value> = hooks
+        .get("beforeShellExecution")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|h| !is_backlot_hook(h))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    entries.push(hook);
+    hooks.insert(
+        "beforeShellExecution".into(),
+        serde_json::Value::Array(entries),
+    );
+    let hooks_json = serde_json::to_string(&serde_json::Value::Object(hooks)).unwrap_or_default();
+    let fresh = || format!("{{\"version\":1,\"hooks\":{hooks_json}}}\n").into_bytes();
+    let Some(text) = existing.and_then(|b| std::str::from_utf8(b).ok()) else {
+        return fresh();
+    };
+    match splice_member(text.trim(), "hooks", &hooks_json) {
+        Some(spliced) => format!("{spliced}\n").into_bytes(),
+        None => fresh(),
+    }
+}
