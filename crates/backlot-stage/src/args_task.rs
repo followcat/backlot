@@ -851,6 +851,42 @@ pub(crate) fn permit_list(common: &mut Common, it: &mut It) -> Result<(Common, C
     ))
 }
 
+/// `permit log --role <role> [--json]` — recent read-only auto-allows,
+/// person-only for the same reason as `permit list`.
+pub(crate) fn permit_log(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut role = None;
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((
+                std::mem::take(common),
+                Cmd::Help(crate::args_usage::U_PERMIT),
+            ));
+        }
+        if common_flag(it, common, &arg, crate::args_usage::U_PERMIT)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--role" => role = Some(it.value("--role", crate::args_usage::U_PERMIT)?),
+            _ if eq(&arg, "--role").is_some() => role = eq(&arg, "--role").map(String::from),
+            _ => {
+                return Err(usage(
+                    format!("unexpected argument '{arg}'"),
+                    crate::args_usage::U_PERMIT,
+                ));
+            }
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Permit(crate::args::PermitCmd::Log {
+            role: role.ok_or_else(|| usage("missing --role", crate::args_usage::U_PERMIT))?,
+            json,
+        }),
+    ))
+}
+
 /// `permit revoke --id <id>` — the person withdraws one active grant.
 pub(crate) fn permit_revoke(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut id = None;

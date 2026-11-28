@@ -122,6 +122,8 @@ mod permission;
 mod permit;
 mod permit_auto;
 mod permit_cmd;
+#[cfg(test)]
+mod permit_log_tests;
 pub mod permit_rules;
 mod person_only;
 mod proc_guard;
