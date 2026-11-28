@@ -10,9 +10,15 @@ v0.1.20), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.4.32 — 2026-11-28
+
 ### Added
 
 - **Your coding agent can drive your studios.** backlot now ships a skill that Claude Code, Codex, Cursor, Devin, Command Code, OpenCode, Gemini CLI and the rest can read; one command installs it wherever it finds an agent and keeps those copies current when backlot updates. An agent records which one acted, so the ledger and the panel say `user (via claude-code)`.
+
+### Changed
+
+- The README and a new project page at https://followcat.github.io/backlot/ show the current release, with new screenshots and animations.
 
 ## 0.4.31 — 2026-11-28
 
