@@ -18,6 +18,7 @@ use super::{
         IntegrationInfo, IntegrationState, SettingsOverlay, SettingsSection,
         integration_needs_install, normalized_theme_name,
     },
+    text::truncate_end,
 };
 
 #[derive(Default)]
@@ -575,8 +576,16 @@ fn render_agent_skill(
         area.width,
         area.height.saturating_sub(3),
     );
-    let visible = usize::from(list.height).max(1);
-    let scroll = settings.selected.saturating_sub(visible.saturating_sub(1));
+    let capacity = usize::from(list.height).max(1);
+    let visible = if rows.len() > capacity {
+        capacity.saturating_sub(1).max(1)
+    } else {
+        capacity
+    };
+    let scroll = settings
+        .selected
+        .saturating_sub(visible.saturating_sub(1))
+        .min(rows.len().saturating_sub(visible));
     for (line, (index, row)) in rows
         .iter()
         .enumerate()
@@ -603,14 +612,12 @@ fn render_agent_skill(
             } => {
                 format!("  {agent:<13} {:<8} {dir}", state.as_str())
             }
+            SkillSettingsRow::AbsentAgents { agents, .. } => truncate_end(
+                &format!("  not detected: {}", agents.join(", ")),
+                usize::from(list.width.saturating_sub(3)),
+            ),
         };
-        let dim = matches!(
-            row,
-            SkillSettingsRow::Agent {
-                state: backlot_model::summary::SkillState::Absent,
-                ..
-            }
-        );
+        let dim = matches!(row, SkillSettingsRow::AbsentAgents { .. });
         draw_dim_choice(
             buffer,
             rect,
@@ -620,6 +627,16 @@ fn render_agent_skill(
             palette,
         );
         hits.push((rect, index));
+    }
+    if scroll + visible < rows.len() && capacity > 1 {
+        put_text(
+            buffer,
+            list.x,
+            list.y + visible as u16,
+            list.width,
+            " ↓ more",
+            Style::default().fg(palette.overlay0).bg(bg),
+        );
     }
 }
 

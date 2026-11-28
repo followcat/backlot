@@ -6,7 +6,7 @@ use super::endpoint_nav::remote;
 use super::studio_machines::two_machine_studio_app;
 use super::*;
 use crate::chrome::render::MachineSkillMark;
-use crate::chrome::settings::{SettingsSection, SkillSettingsRow, skill_rows};
+use crate::chrome::settings::{SettingsSection, SkillMachineView, SkillSettingsRow, skill_rows};
 use crate::test_support::TestDir;
 use hc_proto::watch::DocKey;
 
@@ -216,7 +216,8 @@ async fn settings_orders_rows_shows_unknown_machines_and_never_clips_hints() {
     let backend = draw_to(&mut app, 80, 36);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("host-b — install 2 agents"), "{text}");
-    assert!(text.contains("~/.config/opencode/skills"), "{text}");
+    assert!(text.contains("not detected: opencode"), "{text}");
+    assert!(!text.contains("~/.config/opencode/skills"), "{text}");
     assert_eq!(text.matches("enter install").count(), 1, "{text}");
     assert_eq!(text.matches("u uninstall").count(), 1, "{text}");
     assert!(!text.contains("u unin…"), "{text}");
@@ -240,7 +241,7 @@ async fn settings_orders_rows_shows_unknown_machines_and_never_clips_hints() {
             _ => None,
         })
         .collect();
-    assert_eq!(row_names, ["cline", "cursor", "codex", "devin", "opencode"]);
+    assert_eq!(row_names, ["cline", "cursor", "codex", "devin"]);
 }
 
 #[tokio::test]
@@ -264,6 +265,71 @@ async fn settings_lists_a_connected_machine_with_no_published_skill_state() {
         "{text}"
     );
     assert!(!text.contains("host-b — install"), "{text}");
+}
+
+#[tokio::test]
+async fn settings_at_120x36_folds_absent_rows_shows_every_machine_and_scrolls() {
+    let mut app = two_machine_studio_app();
+    publish_skill(
+        &mut app,
+        None,
+        "0.4.33",
+        rows(&[
+            ("cursor", "missing"),
+            ("claude-code", "absent"),
+            ("codex", "absent"),
+            ("cline", "absent"),
+            ("pi", "absent"),
+        ]),
+    );
+    publish_skill(
+        &mut app,
+        Some("host-b"),
+        "0.4.33",
+        rows(&[("codex", "current"), ("devin", "absent")]),
+    );
+    app.view
+        .machines
+        .as_mut()
+        .expect("machine list")
+        .push(crate::sidebar::fixture::machine("host-c", "connected"));
+    app.reconcile_published_view();
+
+    app.open_settings_overlay();
+    app.select_settings_section(SettingsSection::AgentSkill);
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("Local — install 1 agent"), "{text}");
+    assert!(text.contains("host-b — current"), "{text}");
+    assert!(
+        text.contains("host-c — unknown (its stage publishes no skill state)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("not detected: claude-code, codex, cline, pi"),
+        "{text}"
+    );
+    assert!(!text.contains("~/.claude/skills"), "{text}");
+
+    if let Some(settings) = app.settings.as_mut() {
+        settings.agent_skill = (0..30)
+            .map(|index| {
+                let name = format!("host-{index}");
+                SkillMachineView {
+                    machine: Some(name.clone()),
+                    label: name,
+                    rows: Vec::new(),
+                    known: true,
+                }
+            })
+            .collect();
+        settings.selected = 0;
+    }
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("↓ more"), "{text}");
+    let last = skill_rows(app.settings.as_ref().unwrap()).len() - 1;
+    app.settings.as_mut().unwrap().selected = last;
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("host-29 — current"), "{text}");
 }
 
 #[tokio::test]

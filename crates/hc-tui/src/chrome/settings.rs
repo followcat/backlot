@@ -123,6 +123,12 @@ pub(crate) enum SkillSettingsRow {
         dir: String,
         state: backlot_model::summary::SkillState,
     },
+    /// One folded, inert row for the agents that are not installed on
+    /// the machine at all. Keeping them out of the tree is what lets
+    /// every machine fit in the overlay.
+    AbsentAgents {
+        agents: Vec<String>,
+    },
 }
 
 pub(crate) fn skill_rows(settings: &SettingsOverlay) -> Vec<SkillSettingsRow> {
@@ -157,13 +163,21 @@ pub(crate) fn skill_rows(settings: &SettingsOverlay) -> Vec<SkillSettingsRow> {
             label: machine.label.clone(),
             agents,
         });
+        let mut absent = Vec::new();
         for row in &machine.rows {
-            out.push(SkillSettingsRow::Agent {
-                machine: machine.machine.clone(),
-                agent: row.agent.clone(),
-                dir: row.dir.clone(),
-                state: row.state,
-            });
+            if row.state == SkillState::Absent {
+                absent.push(row.agent.clone());
+            } else {
+                out.push(SkillSettingsRow::Agent {
+                    machine: machine.machine.clone(),
+                    agent: row.agent.clone(),
+                    dir: row.dir.clone(),
+                    state: row.state,
+                });
+            }
+        }
+        if !absent.is_empty() {
+            out.push(SkillSettingsRow::AbsentAgents { agents: absent });
         }
     }
     out

@@ -489,7 +489,7 @@ impl App {
                 let agents = if uninstall { Vec::new() } else { agents };
                 self.start_skill_action(machine, agents, uninstall, false);
             }
-            SkillSettingsRow::UnknownMachine { .. } => {}
+            SkillSettingsRow::UnknownMachine { .. } | SkillSettingsRow::AbsentAgents { .. } => {}
             SkillSettingsRow::Agent {
                 machine,
                 agent,
