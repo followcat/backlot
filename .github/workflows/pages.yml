@@ -1,0 +1,61 @@
+name: pages
+
+# Publishes the project page from the ref being built. On workflow_dispatch
+# install.sh is taken from the latest published release so it never tracks
+# unreleased commits on main.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - name: Stage the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -eu
+          mkdir -p _site/images
+          cp -R .github/pages/. _site/
+          for img in backlot.png opening.png hollywood.png menu.png compose.png theme.png waiting.gif focus.gif studio-flow.svg; do
+            cp "docs/images/$img" "_site/images/$img"
+          done
+          if [ -n "$RELEASE_TAG" ]; then
+            cp scripts/install.sh _site/install.sh
+          else
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            [ -n "$tag" ] || { echo "could not resolve latest published release tag" >&2; exit 1; }
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag"
+            git show "FETCH_HEAD:scripts/install.sh" > _site/install.sh
+          fi
+          test -s _site/install.sh
+          chmod 755 _site/install.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
