@@ -40,6 +40,10 @@ similar lowercase name matching `[a-z0-9-]{1,32}`.
 verbs: a role's work belongs in that role's own terminal, and running it from outside forges
 that role. To get a role's work done, `tell` that role.
 
+**Inside a studio role, this skill is not yours.** If `BACKLOT_ROLE` is set, you are one of the
+studio's roles or Hollywood. Follow your role prompt and act as that role. backlot refuses
+`--as user` from a role terminal, so read this skill only as a command reference.
+
 ## Read before you act
 
 ```sh
