@@ -156,8 +156,8 @@ Every studio is its own space in the client, its roles are the tabs. A new tab o
 shell* — your own terminal in the focused person's worktree — listed under `shells` in the cast. The
 stage never touches it, and closing it is your call alone.
 
-Rows have menus. On a task the menu carries the task's own actions — tell the actor, revise the work, pause it —
-rather than making you remember a command:
+Rows have menus. On a task the menu carries the task's own actions — inspect its deliveries and reviews,
+change priority, pause it, take it over or abandon it — rather than making you remember a command:
 
 ![A row menu opened with m on a task in the Lot](docs/images/menu.png)
 
