@@ -175,8 +175,8 @@ producer's and director's prompts reach the user.
 
 Per role, on top of the base pair, and only in the argv — nothing is written to any settings file:
 
-- **Every role** gets the shared read-only set — `git status`, `git log`, `git show`, `git diff`,
-  `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`, each bare
+- **Every role** gets the native-safe shared read-only set — `git status`, `git log`, `git show`, `git diff`,
+  `git branch --list`, `git branch --show-current`, `ls`, `wc`, `head`, `backlot msg show`, each bare
   (`Bash(git log)`) and with arguments (`Bash(git log *)`). These are the forensics a role needs to
   understand a repo, a delivery or its own state, so a `git log` never asks a person (field notes
   1126 §5). `git branch` is never a bare rule — only its two listing forms, which git refuses to
@@ -196,14 +196,15 @@ is not yet verified; `limits.md` keeps it for the S9f real-session run.
 
 **A prefix rule sees the command, not its flags — this is a seatbelt, not a sandbox.** Every runner
 here matches an allow rule on the leading words of one plain command, so a rule that names a
-read-only command also permits that command's *write-capable* flags: `rg --pre <cmd>` runs `<cmd>`
-for every file it searches, and `git diff --output=<file>`, `git log --output=<file>` and `git show
---output=<file>` write to `<file>` (measured: `git log --output=x` creates `x`). The read-only set is
-sized to keep honest forensic commands off the prompts, not to stop a hostile role — the ledger's
-role rules, the guard shims and `git` hooks are the layers that refuse outward writes, and they too
-are a seatbelt over a cooperative agent, not an OS sandbox. `rg` stays in the set because its
-`--pre` misuse is a read tool invoked oddly, not a foothold a role gains over the repo it already
-edits; the honest limit is recorded here so nobody mistakes the allow list for containment.
+read-only command also permits that command's later *write-capable* flags: `git diff
+--output=<file>`, `git log --output=<file>` and `git show --output=<file>` write to `<file>`
+(measured: `git log --output=x` creates `x`). `rg` is different: its `--pre` flag executes an
+arbitrary command, so the fixed `rg` coverage is never written as a native prefix; backlot answers
+it only after its own whole-argv check. The native read-only set is sized to keep honest forensic
+commands off the prompts, not to stop a hostile role — the ledger's role rules, the guard shims and
+`git` hooks are the layers that refuse outward writes, and they too are a seatbelt over a
+cooperative agent, not an OS sandbox. The honest limit is recorded here so nobody mistakes the
+allow list for containment.
 
 In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
 command line anchors at the primary working directory per the permissions documentation — it is not
@@ -251,8 +252,8 @@ matches only the command equal to it or starting with it plus a space, the comma
 its executable's basename — so `Shell(backlot)` covers `backlot status`, `Shell(git merge)`
 reaches `git merge …` alone, and there is no starred variant. An existing file keeps every other
 key byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base
-rule is `Shell(backlot)`; **every** role adds the shared read-only set — `git status`, `git log`,
-`git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `rg`, `wc`, `head`,
+rule is `Shell(backlot)`; **every** role adds the native-safe shared read-only set — `git status`, `git log`,
+`git show`, `git diff`, `git branch --list`, `git branch --show-current`, `ls`, `wc`, `head`,
 `backlot msg show` — an actor also `git add` and `git commit`, the director also `git merge`, and both every declared
 check's `run` verbatim. Only `git branch`'s two listing forms are rules; the bare family stays out
 because the matcher's prefix form would also allow `git branch -D`. Nothing broader is written — no `Shell(*)`, no
@@ -289,9 +290,9 @@ directory under `~/.commandcode/projects/` that `--trust` creates.
 The file carries `{"permissions":{"allow":..,"deny":..}}`; an existing file keeps every other
 byte — only the `permissions` value is spliced (the same byte-exact splice as cursor's
 `cli-config.json`). `allow` holds `Shell(...)` rules in the bundle's prefix form — the base
-`Shell(backlot)` covers `backlot status`; **every** role adds the shared read-only set
+`Shell(backlot)` covers `backlot status`; **every** role adds the native-safe shared read-only set
 (`Shell(git status:*)`, `git log`, `git show`, `git diff`, `git branch --list`,
-`git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`); an actor also `Shell(git add:*)` and
+`git branch --show-current`, `ls`, `wc`, `head`, `backlot msg show`); an actor also `Shell(git add:*)` and
 `git commit`, the director also `git merge`, and both every declared check's `run` verbatim as
 `Shell(<run>:*)`. Only `git branch`'s two listing forms are rules — the bare prefix would also
 allow `git branch -D`. Every `&&`/`||`/`;`/pipe subcommand
@@ -369,7 +370,7 @@ Devin takes no argv allow list; `--permission-mode smart` stays the gate. The ro
 read-only set is written instead into the same per-work-area `permissions.allow` (the member the
 file already carries), as one `Exec(<cmd>)` per command in Devin's own rule syntax — `Exec(git
 status)`, `Exec(git log)`, `Exec(git show)`, `Exec(git diff)`, `Exec(git branch --list)`, `Exec(git
-branch --show-current)`, `Exec(ls)`, `Exec(rg)`, `Exec(wc)`, `Exec(head)`, `Exec(backlot msg show)`. Devin's rules are prefix
+branch --show-current)`, `Exec(ls)`, `Exec(wc)`, `Exec(head)`, `Exec(backlot msg show)`. Devin's rules are prefix
 matches (`Exec(ls)` permits `ls -a`, `Exec(grep)` permits `grep -n x`), so a single entry per
 command is the whole rule — there is no ` *` form and no `Bash(...)`, unlike claude. The splice
 replaces only `allow`; any other `permissions` member (`deny` and the rest) keeps its bytes, and
@@ -394,8 +395,8 @@ mask file for MCP. Both are rewritten at every start and resume.
     quote, a backtick between escaped quotes or an escaped newline cannot slip a second command past
     a prefix match;
   - allowed: `run_commands` whose every segment is one of the role's rules — `backlot` plus the
-    shared read-only set (`git status`, `git log`, `git show`, `git diff`, `git branch --list`,
-    `git branch --show-current`, `ls`, `rg`, `wc`, `head`, `backlot msg show`) for **every** role; an actor's `git add`
+    native-safe shared read-only set (`git status`, `git log`, `git show`, `git diff`, `git branch --list`,
+    `git branch --show-current`, `ls`, `wc`, `head`, `backlot msg show`) for **every** role; an actor's `git add`
     and `git commit`; the director's `git merge`; each declared check verbatim. Only `git branch`'s
     two listing forms are rules, never the bare family. A command is split on `;`, `&&`, `||`, `|` and a
     decoded newline, and every part must match on its own; `$`, a backtick, a redirection, or `(` `)`
@@ -599,7 +600,7 @@ When a role runs under `permission_profile = "readonly"` (such as an `--kind aud
 
 | Runner | Native `readonly` configuration | Pre-allow changes | Honest limits |
 |---|---|---|---|
-| Claude Code | Keeps `--permission-mode manual`; `claude-settings.json` adds `"Edit"`, `"Write"`, `"NotebookEdit"` to `permissions.deny` | Keeps `Bash(backlot *)` + read-only rules; drops `Bash(git add)` and `Bash(git commit)` | Read-only shell prefixes (such as `rg --pre` or `git diff --output=...`) are seatbelt, not an OS sandbox; git writes and worktree dirtiness are stopped by `guard` and `deliver` |
+| Claude Code | Keeps `--permission-mode manual`; `claude-settings.json` adds `"Edit"`, `"Write"`, `"NotebookEdit"` to `permissions.deny` | Keeps `Bash(backlot *)` + read-only rules; drops `Bash(git add)` and `Bash(git commit)` | Read-only shell prefixes (such as `git diff --output=...`) are seatbelt, not an OS sandbox; git writes and worktree dirtiness are stopped by `guard` and `deliver` |
 | Codex | Keeps `-s workspace-write -a on-request` (so `backlot deliver --report -` / `progress` can write studio ledger files outside the worktree) | None (no allow list) | Codex relies on `-a on-request` plus stage `guard` (refusing git writes) and `deliver` (refusing any dirty worktree or moved `HEAD`); arbitrary file writes outside git still depend on `deliver` |
 | Devin | Keeps `--permission-mode smart`; `.devin/config.local.json` adds `"Write(*)"` to `permissions.deny` | Keeps read-only `Exec(...)` allow rules (`smart` handles `backlot` identically to `standard`) | `"Write(*)"` denies Devin's write tool and `smart` prompts on unallowed shell commands; arbitrary shell mutations still depend on `guard` and `deliver` |
 | OpenCode | Keeps `--standalone -s <id>`; `OPENCODE_CONFIG_CONTENT` sets `"permission": {"edit": "deny"}` (covers `edit`, `patch`, `write`) | None | Shell commands follow OpenCode defaults; file/git cleanliness at delivery is guaranteed by `guard` and `deliver` |
