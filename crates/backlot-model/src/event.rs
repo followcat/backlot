@@ -41,6 +41,14 @@ impl EventBy {
             via: Some("doc".into()),
         }
     }
+
+    /// `user (via claude-code)` when an agent recorded the event for the
+    /// person; the bare role otherwise. `"doc"` is a transport, not an
+    /// agent, and never shows.
+    pub fn label(&self) -> String {
+        let agent = self.via.as_deref().and_then(|v| v.strip_prefix("agent:"));
+        crate::studio_exchange::sender_label(&self.role, agent)
+    }
 }
 
 /// The complete configuration that did the work (ledger.md "Actor

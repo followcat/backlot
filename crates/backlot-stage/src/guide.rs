@@ -4,7 +4,8 @@
 //! globs for `docs/studio/guide.md` in a bound repo finds nothing and
 //! raises a permission prompt for the trouble. The whole
 //! `docs/studio/` directory travels, one topic per file, so a topic
-//! name is the file's stem. No studio, ledger or core is touched.
+//! name is the file's stem; `agents` is the agent skill the binary also
+//! installs. No studio, ledger or core is touched.
 
 use crate::cli::Fail;
 
@@ -14,10 +15,17 @@ struct Topic {
     body: &'static str,
 }
 
-/// `docs/studio/*.md`, compiled in. A new file is added here too —
-/// the guide test fails until it is, so the binary never silently
-/// ships a partial set.
+/// `docs/studio/*.md`, compiled in, plus the agent skill. A new file is
+/// added here too — the guide test fails until it is, so the binary
+/// never silently ships a partial set.
 const DOCS: &[Topic] = &[
+    // The Agent Skills file, also installed by `backlot skill install`
+    // and found by `npx skills add followcat/backlot` — one text, three
+    // deliveries.
+    Topic {
+        name: "agents",
+        body: include_str!("../../../skills/backlot/SKILL.md"),
+    },
     Topic {
         name: "design",
         body: include_str!("../../../docs/studio/design.md"),
@@ -82,10 +90,12 @@ pub(crate) fn names() -> impl Iterator<Item = &'static str> {
 }
 
 /// The first heading, without its `#` markers — a topic's one-line
-/// title in the listing.
+/// title in the listing. A file that opens on frontmatter (the agent
+/// skill) is titled by the heading after it.
 fn title(body: &str) -> &str {
     body.lines()
-        .next()
+        .find(|line| line.starts_with('#'))
+        .or_else(|| body.lines().next())
         .unwrap_or_default()
         .trim_start_matches('#')
         .trim()

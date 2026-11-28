@@ -575,6 +575,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 dropped: false,
                 dropped_reason: None,
                 ts_ms: ts,
+                via: event.by.via.clone(),
                 delivered_ms: None,
             });
             state

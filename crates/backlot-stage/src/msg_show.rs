@@ -39,6 +39,10 @@ pub(crate) struct MsgView {
     pub seq: u64,
     pub kind: String,
     pub from: String,
+    /// The coding agent that recorded it for the person, if any — the
+    /// `from` line then reads `user (via claude-code)`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
     pub to: String,
     pub ts_ms: u64,
     pub when: String,
@@ -123,7 +127,13 @@ fn build_view(
         studio: studio.to_string(),
         seq: ev.seq,
         kind: String::new(),
-        from: ev.by.role.clone(),
+        from: ev.by.label(),
+        via: ev
+            .by
+            .via
+            .as_deref()
+            .and_then(|v| v.strip_prefix("agent:"))
+            .map(str::to_string),
         to: String::new(),
         ts_ms: ev.ts_ms,
         when: format_when(ev.ts_ms),
@@ -161,6 +171,7 @@ fn build_view(
         EventKind::AskAnswered { role, target } => {
             view.kind = "answer".into();
             view.from = "user".into();
+            view.via = None;
             view.to = role.clone();
             view.in_reply_to = Some(*target);
             view.recorded_by = (ev.by.role != "user").then(|| ev.by.role.clone());
@@ -169,6 +180,7 @@ fn build_view(
         EventKind::AskAcknowledged { role, target } => {
             view.kind = "acknowledged".into();
             view.from = "user".into();
+            view.via = None;
             view.to = role.clone();
             view.in_reply_to = Some(*target);
             view.body = format!("Acknowledged ask #{target} without text reply.");
@@ -184,6 +196,7 @@ fn build_view(
             view.kind = design_slot_kind(*slot).into();
             if *slot == DesignSlot::UserInput {
                 view.from = "user".into();
+                view.via = None;
                 view.recorded_by = (ev.by.role != "user").then(|| ev.by.role.clone());
             }
             view.to = "design".into();

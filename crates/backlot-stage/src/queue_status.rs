@@ -135,6 +135,7 @@ mod tests {
             dropped: false,
             dropped_reason: None,
             ts_ms: 1_000,
+            via: None,
             delivered_ms: None,
         }
     }

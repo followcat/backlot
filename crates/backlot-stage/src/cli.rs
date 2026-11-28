@@ -61,6 +61,7 @@ const COMMANDS: &[&str] = &[
     "runners",
     "repos",
     "guide",
+    "skill",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -148,6 +149,37 @@ pub(crate) fn check_studio_name(name: &str) -> Result<String, Fail> {
     }
 }
 
+/// The acting agent's name: lowercase letters, digits and `-`, 1–32
+/// characters. Anything else could not be told apart from a role in a
+/// record.
+pub fn valid_via(name: &str) -> bool {
+    (1..=32).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// The `via` an event carries: `agent:<name>` on events written
+/// `--as user`, from `--via` (or `BACKLOT_VIA`). Any other caller — a
+/// role, the stage — carries none, so a role cannot claim the person's
+/// seat by setting the variable. A bad name is a usage error.
+pub(crate) fn via_for(common: &Common, env: &Env, role: &str) -> Result<Option<String>, Fail> {
+    let raw = common.via.clone().or_else(|| {
+        env.get("BACKLOT_VIA")
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+    });
+    let Some(name) = raw else {
+        return Ok(None);
+    };
+    if !valid_via(&name) {
+        return Err(Fail::usage(format!(
+            "bad via '{name}': want [a-z0-9-]{{1,32}}"
+        )));
+    }
+    Ok((role == "user").then(|| format!("agent:{name}")))
+}
+
 /// The resolved caller: `BACKLOT_STUDIO`, `BACKLOT_ROLE`,
 /// `BACKLOT_TASK`, overridable by `--studio`, `--as`, `--task`.
 pub struct Caller {
@@ -221,12 +253,13 @@ fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
     if need_task && task.is_none() {
         return Err(Fail::usage("missing task: set BACKLOT_TASK or pass --task"));
     }
+    let via = via_for(common, env, &role)?;
     Ok(Caller {
         studio,
         role,
         task,
         session: env.get("HC_TERMINAL_ID").map(String::from),
-        via: None,
+        via,
     })
 }
 
@@ -398,17 +431,20 @@ pub(crate) fn exec_event(
         | Cmd::Halt { .. }
         | Cmd::Resume { .. }
         | Cmd::Design(crate::args::DesignCmd::Sign { .. })
-        | Cmd::Design(crate::args::DesignCmd::Note { .. }) => Caller {
-            studio: studio_name(&common, env)?,
-            role: common
+        | Cmd::Design(crate::args::DesignCmd::Note { .. }) => {
+            let role = common
                 .role
                 .clone()
                 .or_else(|| env.get("BACKLOT_ROLE").map(String::from))
-                .unwrap_or_else(|| "user".to_string()),
-            task: None,
-            session: env.get("HC_TERMINAL_ID").map(String::from),
-            via: None,
-        },
+                .unwrap_or_else(|| "user".to_string());
+            Caller {
+                studio: studio_name(&common, env)?,
+                via: via_for(&common, env, &role)?,
+                role,
+                task: None,
+                session: env.get("HC_TERMINAL_ID").map(String::from),
+            }
+        }
         Cmd::Progress { source } => {
             check_identity(&common, env)?;
             let env_role = env.get("BACKLOT_ROLE").filter(|s| !s.is_empty());
@@ -461,10 +497,10 @@ pub(crate) fn exec_event(
             }
             Caller {
                 studio,
+                via: via_for(&common, env, &role)?,
                 role,
                 task,
                 session: env.get("HC_TERMINAL_ID").map(String::from),
-                via: None,
             }
         }
         _ => caller(&common, env, needs_task)?,
@@ -711,6 +747,7 @@ pub(crate) fn command_word(args: &[String]) -> Option<usize> {
         "--session",
         "--remote",
         "--server",
+        "--via",
     ];
     let mut i = 0;
     while let Some(arg) = args.get(i) {

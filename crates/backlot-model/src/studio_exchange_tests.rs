@@ -31,6 +31,7 @@ fn msg(
         dropped: false,
         dropped_reason: None,
         ts_ms: seq * 100,
+        via: None,
         delivered_ms: None,
     }
 }

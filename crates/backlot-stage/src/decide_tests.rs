@@ -284,6 +284,7 @@ fn decision_message_delivers_formats_digest_and_drops_on_closed_actor() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 1000,
+        via: None,
         delivered_ms: None,
     });
 
@@ -329,6 +330,7 @@ fn decision_message_delivers_formats_digest_and_drops_on_closed_actor() {
         dropped: false,
         dropped_reason: None,
         ts_ms: 2000,
+        via: None,
         delivered_ms: None,
     };
     closed.messages.push(m);

@@ -38,6 +38,9 @@ does not list.
 
 {{CLI_REFERENCE}}
 
+`backlot guide agents` prints the command reference as an agent skill, for an
+agent that drives backlot outside this terminal.
+
 Anything else stops for the user to approve — a prompt is theirs, never
 yours to answer.
 

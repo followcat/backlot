@@ -165,7 +165,10 @@ pub(super) fn studio_exchange_meta(
     } else {
         ReaderKind::Outcome
     };
-    meta.from = Some(entry.who.clone());
+    meta.from = Some(backlot_model::summary::sender_label(
+        &entry.who,
+        entry.via.as_deref(),
+    ));
     meta.to = entry.to.clone();
     meta.dropped_reason = entry.dropped_reason.clone();
     meta.task = entry.task.clone();

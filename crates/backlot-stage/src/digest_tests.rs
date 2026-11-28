@@ -33,6 +33,7 @@ fn message(
         dropped: false,
         dropped_reason: None,
         ts_ms: 0,
+        via: None,
         delivered_ms: None,
     }
 }

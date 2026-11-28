@@ -12,8 +12,9 @@ been verified; read it before trusting a studio with real work.
 ## Reading backlot's own docs
 
 These files ship inside the binary. `backlot guide` lists the topics — one per file in
-`docs/studio/` — and `backlot guide <topic>` prints one whole; `--grep <word>` narrows either to
-the matching lines, over every topic when no topic is named:
+`docs/studio/`, plus `agents`, the skill backlot installs for coding agents — and `backlot guide
+<topic>` prints one whole; `--grep <word>` narrows either to the matching lines, over every topic
+when no topic is named:
 
 ```sh
 backlot guide
@@ -21,11 +22,61 @@ backlot guide guide
 backlot guide runners --grep permission
 ```
 
-The topics are `design`, `guide`, `hollywood`, `ledger`, `limits`, `panel`, `plan`, `progress`,
-`requests`, `requirements`, `runners`, `server` and `testing`. A role is told to read them from
-here, never to search the disk: `docs/studio/` is not in its work area, and a search only stops at
-a permission prompt. Nothing is read from disk at run time — the text is compiled in — and the
-command needs no studio, ledger or core.
+The topics are `agents`, `design`, `guide`, `hollywood`, `ledger`, `limits`, `metrics`, `panel`,
+`plan`, `progress`, `requests`, `requirements`, `runners`, `server` and `testing`. A role is told
+to read them from here, never to search the disk: `docs/studio/` is not in its work area, and a
+search only stops at a permission prompt. Nothing is read from disk at run time — the text is
+compiled in — and the command needs no studio, ledger or core.
+
+## Letting a coding agent drive backlot
+
+backlot carries one skill in the open Agent Skills format — `skills/backlot/SKILL.md` in the
+repository, `backlot guide agents` in the binary, and one command to install it wherever a coding
+agent looks:
+
+```sh
+backlot skill install
+backlot skill install --agent claude-code,codex --dry-run
+backlot skill status
+backlot skill show
+backlot skill uninstall
+```
+
+`install` writes `<dir>/backlot/SKILL.md` for every agent it detects — its binary on `PATH` or its
+config directory present — or only the `--agent` names. `--dry-run` prints the plan and writes
+nothing; `--force` replaces a `backlot/SKILL.md` that is not backlot's. The global directories are:
+
+| agent | global dir |
+|---|---|
+| claude-code | `~/.claude/skills` |
+| codex, cline, pi | `~/.agents/skills` |
+| cursor | `~/.cursor/skills` |
+| devin | `~/.config/devin/skills` |
+| command-code | `~/.commandcode/skills` |
+| opencode | `~/.config/opencode/skills` |
+| antigravity | `~/.gemini/config/skills` |
+| gemini-cli | `~/.gemini/skills` |
+
+Agents that share a directory share one file. A written copy carries
+`metadata.generated-by: backlot <version>` in its frontmatter; a file without that marker is never
+overwritten unless `--force`. `status` says whether each installed copy is current, stale or
+foreign, and `uninstall` removes only the copies backlot wrote. `install` records the paths in
+`$XDG_STATE_HOME/backlot/skills.json` (`~/.local/state/backlot/skills.json` by default); when the
+client or the stage starts on a new version it rewrites the stale copies that manifest lists. It
+never writes a new place by itself, so `backlot --upgrade` refreshes them on the next start.
+
+An external agent may do what the person can, but the person-only actions only when the person
+asked for that action in the conversation — the skill says exactly that. The ledger records which
+agent acted: `BACKLOT_VIA=<agent>` or `--via <agent>` sets `by.via` to `agent:<agent>` on events
+written `--as user`, and `backlot msg show` plus the panel's reader then name `user (via
+claude-code)`. The name must match `[a-z0-9-]{1,32}`:
+
+```sh
+BACKLOT_VIA=claude-code backlot tell producer --text "Add search." --studio acme-shop --as user
+backlot --via claude-code tell producer --text "Add search." --studio acme-shop --as user
+```
+
+## What you need
 
 ## What you need
 

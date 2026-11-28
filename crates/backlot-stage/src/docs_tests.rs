@@ -80,7 +80,7 @@ fn section<'a>(text: &'a str, heading: &str) -> &'a str {
 }
 
 /// Shell-style words: whitespace splits, quotes group.
-fn shell_words(line: &str) -> Vec<String> {
+pub(crate) fn shell_words(line: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut w = String::new();
     let mut quote = None;
@@ -107,7 +107,7 @@ fn shell_words(line: &str) -> Vec<String> {
 /// so a documented command parses exactly like a typed one. A `<...>`
 /// the table does not know becomes `x`, which fails the test whenever
 /// the flag's value is typed — add it to the table, never to a branch.
-fn substitute(token: &str) -> String {
+pub(crate) fn substitute(token: &str) -> String {
     let token = token.trim_end_matches('.');
     let token = if token.contains('|') && !token.contains('<') {
         token.split('|').next().unwrap_or(token)
